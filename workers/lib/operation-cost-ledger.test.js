@@ -1,11 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
-import { OperationCostLedger } from "./operation-cost-ledger.js"
+import { OperationCostLedger, REPLICA_DAILY_ADMISSION } from "./operation-cost-ledger.js"
 import { OperationCostExecutor } from "./operation-cost-executor.js"
 import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 
 const DAILY_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
+const ADMITTED_WRITES = REPLICA_DAILY_ADMISSION.rows_written
 
 function fixture() {
   const db = new DatabaseSync(":memory:")
@@ -114,6 +115,25 @@ test("the account check counts shared writes once the provider's sample provably
   }
 })
 
+// 2026-10-06: this ledger admitted replica work up to the whole operator day on a
+// private 2,500-request cap, beside the B-1026 tier table, and stopped an 870-gene
+// Image Lab batch. Replica work now sheds at its tier's share like the rest.
+test("replica work is shed at its tier's share of the operator day", () => {
+  const f = fixture()
+  try {
+    assert.ok(REPLICA_DAILY_ADMISSION.rows_read < D1_OPERATOR_DAILY_LIMITS.reads)
+    f.ledger.register(f.input)
+    f.ledger.readOtherUsage = () => ({
+      rows_read: REPLICA_DAILY_ADMISSION.rows_read,
+      rows_written: 0,
+      requests: 0,
+    })
+    assert.throws(() => f.ledger.reserve(f.step()), /COST_SHARED_DAILY_LIMIT/)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("capacity includes retained uncertain reservations and legacy usage without refunding either", () => {
   const f = fixture()
   try {
@@ -124,9 +144,9 @@ test("capacity includes retained uncertain reservations and legacy usage without
     const snapshot = f.ledger.capacitySnapshot()
     assert.equal(snapshot.used.rows_read, 133)
     assert.equal(snapshot.used.rows_written, 9)
-    assert.equal(snapshot.remaining.rows_read, 1_000_000 - 133)
-    assert.equal(snapshot.remaining.rows_written, DAILY_WRITES - 9)
-    assert.equal(snapshot.limits.requests, 2400)
+    assert.equal(snapshot.remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read - 133)
+    assert.equal(snapshot.remaining.rows_written, ADMITTED_WRITES - 9)
+    assert.equal(snapshot.limits.requests, REPLICA_DAILY_ADMISSION.requests - 100)
     assert.deepEqual(f.ledger.readPlan(f.input.id), before)
     f.ledger.readOtherUsage = () => ({ rows_read: NaN, rows_written: 0, requests: 0 })
     assert.throws(() => f.ledger.capacitySnapshot(), /COST_SHARED_USAGE_UNAVAILABLE/)
@@ -429,14 +449,17 @@ test("expired continuations inherit spending and unknown reservations without re
 test("a multi-day forecast never enlarges the daily allocation or resets accumulated spending", () => {
   const f = fixture()
   try {
-    const prediction = { rows_read: 100, rows_written: (DAILY_WRITES * 3) / 2, requests: 10 }
+    const prediction = { rows_read: 100, rows_written: (ADMITTED_WRITES * 3) / 2, requests: 10 }
     let plan = f.ledger.register({ ...f.input, prediction })
-    assert.equal(plan.ceiling.rows_written, DAILY_WRITES * 3)
+    assert.equal(plan.ceiling.rows_written, ADMITTED_WRITES * 3)
     for (let day = 0; day < 3; day++) {
       f.ledger.reserve(
-        f.step({ id: plan.id, bound: { rows_read: 1, rows_written: DAILY_WRITES, requests: 1 } }),
+        f.step({
+          id: plan.id,
+          bound: { rows_read: 1, rows_written: ADMITTED_WRITES, requests: 1 },
+        }),
       )
-      assert.equal(f.ledger.readPlan(plan.id).used.rows_written, (day + 1) * DAILY_WRITES)
+      assert.equal(f.ledger.readPlan(plan.id).used.rows_written, (day + 1) * ADMITTED_WRITES)
       assert.throws(
         () =>
           f.ledger.reserve(
