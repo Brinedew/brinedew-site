@@ -96,6 +96,7 @@ import {
   d1CriticalityOfRouteFamily,
   d1CriticalityShedBy,
   d1OperationalAllowance,
+  FREE_PLAN_DAILY_LIMITS,
 } from "../shared/iconoplasm-d1-budget-policy.js"
 
 // B-1026: the write-heavy admin limiter is the batch tier's write share, with
@@ -1223,7 +1224,8 @@ const ICONOPLASM_SYNC_GOVERNOR_BINDING = "ICONOPLASM_SYNC_GOVERNOR"
 const ICONOPLASM_SYNC_GOVERNOR_ID = "global"
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV =
   "ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED"
-const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT = 10_000
+const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT =
+  FREE_PLAN_DAILY_LIMITS.queue_operations
 const ICONOPLASM_QUEUE_MAX_DELAY_SECONDS = 24 * 60 * 60
 const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
   "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
@@ -2662,7 +2664,7 @@ function iconoplasmDurableObjectRowsWrittenFreeTierSaturatedReport(budgets) {
     1,
     Number(budgets?.cycleInfo?.daysRemainingInCycle || 1) || 1,
   )
-  const knownRowsWrittenFloor = 100000
+  const knownRowsWrittenFloor = FREE_PLAN_DAILY_LIMITS.do_rows_written
   return {
     snapshot: {
       day_key: dayKey,

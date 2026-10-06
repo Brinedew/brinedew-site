@@ -6300,6 +6300,15 @@
     return "ok"
   }
 
+  // Every free-plan wall comes from the snapshot, which bakes it from
+  // shared/iconoplasm-d1-budget-policy.js (B-1037). No number here: a missing one
+  // shows the meter without a wall instead of a stale copy.
+  function freePlanLimit(report, meter) {
+    var limits = report && report.freePlanDailyLimits ? report.freePlanDailyLimits : null
+    var value = limits ? safeNum(limits[meter]) : 0
+    return value > 0 ? value : null
+  }
+
   function pressurePointRow(key, label, used, limit, unit, source, href, note) {
     var hasUsage = used != null && Number.isFinite(safeNum(used))
     var hasLimit = limit != null && Number.isFinite(safeNum(limit)) && safeNum(limit) > 0
@@ -6357,7 +6366,7 @@
         "d1_reads",
         "D1 rows read today",
         currentDay.rowsRead,
-        5000000,
+        freePlanLimit(report, "rows_read"),
         "rows",
         "baked",
         linkFor("d1", "/workers/d1"),
@@ -6367,7 +6376,7 @@
         "d1_writes",
         "D1 rows written today",
         currentDay.rowsWritten,
-        100000,
+        freePlanLimit(report, "rows_written"),
         "rows",
         "baked",
         linkFor("d1", "/workers/d1"),
@@ -6387,7 +6396,7 @@
         "workers_requests",
         "Workers requests today",
         workersCurrentDay.requests,
-        workers.dailyLimitRequests || 100000,
+        freePlanLimit(report, "requests"),
         "requests",
         workersCurrentDay.date ? "baked" : "not baked yet",
         "/workers-and-pages",
@@ -6397,7 +6406,7 @@
         "workers_observability",
         "Workers observability events today",
         observabilityCurrentDay.eventCount,
-        workersObservability.dailyLimitEvents || 200000,
+        freePlanLimit(report, "workers_log_events"),
         "events",
         observabilityCurrentDay.date ? "baked" : "not baked yet",
         "/workers-and-pages/observability",
@@ -6407,7 +6416,7 @@
         "kv_reads",
         "Workers KV reads today",
         kvCurrentDay.readRequests,
-        kv.dailyLimitReads || 100000,
+        freePlanLimit(report, "kv_reads"),
         "ops",
         kvCurrentDay.date ? "baked" : "not baked yet",
         "/workers/kv/namespaces",
@@ -6417,7 +6426,7 @@
         "kv_writes",
         "Workers KV writes today",
         kvCurrentDay.writeRequests,
-        kv.dailyLimitWritesListsDeletes || 1000,
+        freePlanLimit(report, "kv_writes"),
         "ops",
         kvCurrentDay.date ? "baked" : "not baked yet",
         "/workers/kv/namespaces",
@@ -6427,7 +6436,7 @@
         "kv_deletes",
         "Workers KV deletes today",
         kvCurrentDay.deleteRequests,
-        kv.dailyLimitWritesListsDeletes || 1000,
+        freePlanLimit(report, "kv_deletes"),
         "ops",
         kvCurrentDay.date ? "baked" : "not baked yet",
         "/workers/kv/namespaces",
@@ -6437,7 +6446,7 @@
         "kv_lists",
         "Workers KV lists today",
         kvCurrentDay.listRequests,
-        kv.dailyLimitWritesListsDeletes || 1000,
+        freePlanLimit(report, "kv_lists"),
         "ops",
         kvCurrentDay.date ? "baked" : "not baked yet",
         "/workers/kv/namespaces",
@@ -6447,7 +6456,7 @@
         "queues_ops",
         "Queues billable operations today",
         queuesCurrentDay.billableOperations,
-        queues.dailyLimitBillableOperations || 10000,
+        freePlanLimit(report, "queue_operations"),
         "ops",
         queuesCurrentDay.date ? "baked" : "not baked yet",
         "/workers/queues",
@@ -6457,7 +6466,7 @@
         "do_rows_written",
         "Durable Object rows written today",
         durableCurrentDay.rowsWritten,
-        durableCurrentDay.rowsWrittenDailyLimit || durableObjects.dailyLimitRowsWritten || 100000,
+        freePlanLimit(report, "do_rows_written"),
         "rows",
         "baked",
         linkFor("durable", "/workers/durable-objects"),
@@ -6477,7 +6486,7 @@
         "pages_functions",
         "Pages Functions requests today",
         pagesCurrentDay.requests,
-        100000,
+        freePlanLimit(report, "requests"),
         "requests",
         pagesCurrentDay.date ? "baked" : "not baked yet",
         "/workers-and-pages",
@@ -6520,7 +6529,11 @@
         label: "D1 reads",
         color: "#b84a26",
         daily: d1Daily.map(function (row) {
-          return { date: row && row.date, value: safeNum(row && row.rowsRead), limit: 5000000 }
+          return {
+            date: row && row.date,
+            value: safeNum(row && row.rowsRead),
+            limit: freePlanLimit(report, "rows_read"),
+          }
         }),
       },
       {
@@ -6528,7 +6541,11 @@
         label: "D1 writes",
         color: "#7d5a2d",
         daily: d1Daily.map(function (row) {
-          return { date: row && row.date, value: safeNum(row && row.rowsWritten), limit: 100000 }
+          return {
+            date: row && row.date,
+            value: safeNum(row && row.rowsWritten),
+            limit: freePlanLimit(report, "rows_written"),
+          }
         }),
       },
       {
@@ -6539,10 +6556,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.rowsWritten),
-            limit:
-              safeNum(row && row.rowsWrittenDailyLimit) ||
-              safeNum(durableObjects.dailyLimitRowsWritten) ||
-              100000,
+            limit: freePlanLimit(report, "do_rows_written"),
           }
         }),
       },
@@ -6554,7 +6568,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.requests),
-            limit: safeNum(workers.dailyLimitRequests) || 100000,
+            limit: freePlanLimit(report, "requests"),
           }
         }),
       },
@@ -6566,7 +6580,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.readRequests),
-            limit: safeNum(kv.dailyLimitReads) || 100000,
+            limit: freePlanLimit(report, "kv_reads"),
           }
         }),
       },
@@ -6578,7 +6592,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.writeRequests),
-            limit: safeNum(kv.dailyLimitWritesListsDeletes) || 1000,
+            limit: freePlanLimit(report, "kv_writes"),
           }
         }),
       },
@@ -6590,7 +6604,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.deleteRequests),
-            limit: safeNum(kv.dailyLimitWritesListsDeletes) || 1000,
+            limit: freePlanLimit(report, "kv_deletes"),
           }
         }),
       },
@@ -6602,7 +6616,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.listRequests),
-            limit: safeNum(kv.dailyLimitWritesListsDeletes) || 1000,
+            limit: freePlanLimit(report, "kv_lists"),
           }
         }),
       },
@@ -6614,7 +6628,7 @@
           return {
             date: row && row.date,
             value: safeNum(row && row.billableOperations),
-            limit: safeNum(queues.dailyLimitBillableOperations) || 10000,
+            limit: freePlanLimit(report, "queue_operations"),
           }
         }),
       },
@@ -6664,7 +6678,11 @@
       color: "#4f7f6d",
       unit: "requests",
       daily: pagesDaily.map(function (row) {
-        return { date: row && row.date, value: safeNum(row && row.requests), limit: 100000 }
+        return {
+          date: row && row.date,
+          value: safeNum(row && row.requests),
+          limit: freePlanLimit(report, "requests"),
+        }
       }),
     }
     byKey.workers_observability = {
@@ -6676,10 +6694,7 @@
         return {
           date: row && row.date,
           value: safeNum(row && row.eventCount),
-          limit:
-            safeNum(row && row.eventLimit) ||
-            safeNum(workersObservability.dailyLimitEvents) ||
-            200000,
+          limit: freePlanLimit(report, "workers_log_events"),
         }
       }),
     }
