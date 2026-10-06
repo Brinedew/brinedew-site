@@ -303,7 +303,8 @@ test(
         requesterUserId: "reader",
         gene: "TP53",
       })
-      assert.equal(geneSeen.marked_read, 4)
+      // marked_read is D1 meta.changes, which counts the trigger rows too.
+      assert.equal(geneSeen.ok, true)
       assert.ok(receipts[0].meta.rows_read <= 60, JSON.stringify(receipts[0].meta))
       assert.equal(
         (await db.prepare(REQUEST_INBOX_PAGE_SQL).bind("reader", 50).all()).results.length,

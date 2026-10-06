@@ -493,6 +493,7 @@ export function createRequestInbox({
     state.ready_requests = state.ready_requests.filter(function (item) {
       return seen.indexOf(item) === -1
     })
+    state.unread_count = Math.max(0, state.unread_count - seen.length)
     renderSidebar()
     return markRead([], false, { gene_symbol: wanted }).catch(function () {})
   }
