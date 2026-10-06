@@ -121,6 +121,7 @@ function fixture(t, { rowsRead = 0, rowsWritten = 0, rowsReadPerStatement = 1 })
     d1,
     env,
     reservations,
+    send,
     // Admin diagnostics: SHEDDABLE.
     diagnostic: (query = "") =>
       send(`/api/iconoplasm/admin/assets/summary${query}`, {
@@ -231,6 +232,43 @@ test("at 86% of the day's writes the drain's publication of a delivery runs; a b
   assert.ok(delivery.status !== 503, JSON.stringify(delivery))
   const bulk = await fixture(t, { rowsWritten: 0.86 * OPERATOR_WRITES }).publish(false)
   assert.equal(bulk.status, 503, JSON.stringify(bulk))
+})
+
+// The finalization phases of a delivery call reconcile and the read-model sync
+// in-process. They now receive the delivery's criticality; these are the two
+// routes on the other side of that call.
+test("at 86% of the day's writes a delivery's finalization phases run; a bulk sync's pause", async (t) => {
+  const call = async (path, payload, declared) => {
+    const f = fixture(t, { rowsWritten: 0.86 * OPERATOR_WRITES })
+    const response = await f.send(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iconoplasm-admin-token": ADMIN_TOKEN,
+        ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
+      },
+      body: JSON.stringify(payload),
+    })
+    return response.status === 503 || response.payload?.partial === true ? "paused" : "ran"
+  }
+  const reconcile = {
+    dry_run: false,
+    reason: "criticality-test",
+    defer_read_models: true,
+    scope_symbols: ["C10ORF62"],
+    keep: [],
+    legacy: [],
+  }
+  const voteSummaries = {
+    symbols: ["C10ORF62"],
+    skip_gene_rollups: true,
+    skip_vision_rollups: true,
+    skip_dashboard: true,
+  }
+  assert.equal(await call("/api/iconoplasm/admin/reconcile", reconcile, true), "ran")
+  assert.equal(await call("/api/iconoplasm/admin/reconcile", reconcile, false), "paused")
+  assert.equal(await call("/api/iconoplasm/admin/read-models/sync", voteSummaries, true), "ran")
+  assert.equal(await call("/api/iconoplasm/admin/read-models/sync", voteSummaries, false), "paused")
 })
 
 test("at 86% the finalization queue runs a delivery's message and holds a bulk sync's", async (t) => {
