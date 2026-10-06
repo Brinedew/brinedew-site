@@ -4,6 +4,8 @@
 // rendering, and interaction wiring. app.js supplies only the shared API,
 // current-user, sidebar-render, and escaping boundaries.
 
+import { caretakerBlotMarkup } from "./caretaker-blot.js?v=c3f1b7bb6e02cbac"
+
 export function createRequestInbox({
   fetchJSON,
   getCurrentUser,
@@ -12,10 +14,10 @@ export function createRequestInbox({
   ensurePortraitSource,
   resolvePortraitUrl,
   navigate,
-  loadGenePortrait,
+  loadCaretakerBlot,
 }) {
   var state = {
-    caretaker_portraits: Object.create(null),
+    caretaker_blots: Object.create(null),
     loaded: false,
     loading: false,
     request_error: false,
@@ -535,41 +537,40 @@ export function createRequestInbox({
     var symbol = String(item.canonical_symbol || "Gene")
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
-    var supervoteUnspent = item.supervote_active !== true
-    // B-862: show the gene, not a letter. The portrait loads once per symbol and
-    // re-renders the sidebar; until then a blank tile holds the space.
-    var portraitUrl = state.caretaker_portraits[symbol]
-    if (portraitUrl === undefined && typeof loadGenePortrait === "function") {
-      state.caretaker_portraits[symbol] = ""
-      void Promise.resolve(loadGenePortrait(symbol))
+    // B-996: the caretaker's gene as its own blot print. Molecular weight and portrait
+    // come from the published gene detail the page already reads, once per symbol;
+    // until it arrives the film prints with the ladder alone.
+    var blot = state.caretaker_blots[symbol]
+    if (blot === undefined && typeof loadCaretakerBlot === "function") {
+      state.caretaker_blots[symbol] = null
+      void Promise.resolve(loadCaretakerBlot(symbol))
         .catch(function () {
-          return ""
+          return null
         })
-        .then(function (url) {
-          if (!url) return
-          state.caretaker_portraits[symbol] = String(url)
+        .then(function (data) {
+          if (!data) return
+          state.caretaker_blots[symbol] = data
           renderSidebar()
         })
     }
+    var suspended = item.assignment_status === "suspended"
     return (
       '<div class="icono-request-inbox__caretaker-item">' +
-      '<a class="icono-request-inbox__item icono-request-inbox__item--caretaker" href="' +
+      '<a class="icono-blot-link" href="' +
       escapeHtml(href) +
       '" data-icono-caretaker-assignment data-icono-caretaker-gene="' +
       escapeHtml(symbol) +
+      '" aria-label="' +
+      escapeHtml(symbol + (suspended ? ", caretaking suspended" : ", caretaker")) +
       '">' +
-      (portraitUrl
-        ? '<img class="icono-request-inbox__caretaker-portrait" src="' +
-          escapeHtml(portraitUrl) +
-          '" alt="" loading="lazy" decoding="async" width="40" height="40">'
-        : '<span class="icono-request-inbox__caretaker-portrait" aria-hidden="true"></span>') +
-      '<span class="icono-request-inbox__copy"><strong>' +
-      escapeHtml(symbol) +
-      "</strong>" +
-      (item.assignment_status === "suspended"
-        ? "<small>Caretaking suspended</small>"
-        : '<span class="icono-caretaker-identity__badge">Caretaker</span>') +
-      "</span></a>" +
+      caretakerBlotMarkup({
+        symbol: symbol,
+        kda: blot && blot.kda,
+        portraitUrl: blot && blot.portraitUrl,
+        escapeHtml: escapeHtml,
+      }) +
+      "</a>" +
+      (suspended ? '<small class="icono-blot-status">Caretaking suspended</small>' : "") +
       (unread
         ? '<a class="icono-request-inbox__caretaker-comments" href="' +
           escapeHtml(
@@ -582,11 +583,6 @@ export function createRequestInbox({
           "</strong> new " +
           (unread === 1 ? "comment" : "comments") +
           "</a>"
-        : "") +
-      (supervoteUnspent && item.assignment_status === "active"
-        ? '<a class="icono-request-inbox__caretaker-supervote-alert" href="' +
-          escapeHtml("/gene/" + encodeURIComponent(symbol)) +
-          '" data-icono-caretaker-supervote-alert title="Unspent: long-press any vote button to cast your 10× supervote" aria-label="10× supervote unspent. Long-press any vote button to cast it.">10×</a>'
         : "") +
       "</div>"
     )

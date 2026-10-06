@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=138cab33bb1ae3f4"
+import { createRequestInbox } from "./request-inbox.js?v=0e59e84dba1256a7"
 import { portraitDelivery } from "./portrait-delivery.js?v=ff977190616ab7ee"
 import {
   createEmulsionFavoriteStore,
@@ -1007,11 +1007,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     navigate: function (href, link) {
       navigateTo(href, link)
     },
-    // B-862: the caretaker card shows its gene's portrait. Signed-in caretakers
-    // only, once per symbol, through the same static gene detail the page reads.
-    loadGenePortrait: function (symbol) {
+    // B-996: the caretaker's blot print needs the gene's portrait and molecular
+    // weight. Signed-in caretakers only, once per symbol, through the same static
+    // gene detail the page reads (no extra request when the gene page is open).
+    loadCaretakerBlot: function (symbol) {
       return fetchGeneDetail(symbol).then(function (detail) {
-        return detail ? publishedPortraitUrl(detail, "thumb") : ""
+        if (!detail) return null
+        var kda = Number(detail.molecular_weight_kda)
+        return {
+          portraitUrl: publishedPortraitUrl(detail, "medium") || "",
+          kda: kda > 0 ? kda : 0,
+        }
       })
     },
   })
