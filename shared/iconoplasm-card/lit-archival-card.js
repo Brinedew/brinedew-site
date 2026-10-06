@@ -1,15 +1,15 @@
 import { html, nothing, render } from "lit"
 import { unsafeHTML } from "lit/directives/unsafe-html.js"
 
-import { symbolBreakParts } from "./symbol-breaks.js"
+import { symbolLines, symbolSegment } from "./symbol-breaks.js"
 
 function imageOnlySymbol(symbol) {
-  const { parts, longest } = symbolBreakParts(symbol)
+  const lines = symbolLines(symbol)
   return html`<div
     class="icono-label-symbol icono-image-only-symbol"
-    style=${"--icono-symbol-segment:" + longest}
+    style=${"--icono-symbol-segment:" + symbolSegment(lines)}
   >
-    ${parts.map((part, index) => (index ? html`<wbr />${part}` : part))}
+    ${lines.map((line, index) => (index ? html`<br />${line}` : line))}
   </div>`
 }
 

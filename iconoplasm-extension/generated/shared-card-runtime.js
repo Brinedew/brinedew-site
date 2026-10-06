@@ -9306,17 +9306,28 @@
   }
 
   // shared/iconoplasm-card/symbol-breaks.js
-  var BREAK_AFTER_NUMBER = /(?<=\d)(?=[A-Za-z]{2})/;
-  var ANY_BREAK = /(?<=-)|(?<=\d)(?=[A-Za-z]{2})/;
-  function symbolBreakParts(symbol) {
+  var SPLIT_FROM = 10;
+  function bestSplit(text, isBreak, minLine) {
+    let best = null;
+    for (let index = minLine; index <= text.length - minLine; index += 1) {
+      if (!isBreak(index)) continue;
+      const imbalance = Math.abs(text.length - 2 * index);
+      if (!best || imbalance < best.imbalance) best = { index, imbalance };
+    }
+    return best;
+  }
+  function symbolLines(symbol) {
     const text = String(symbol || "");
-    const parts = text.split(BREAK_AFTER_NUMBER);
-    const pieces = text.split(ANY_BREAK);
-    return { parts, longest: Math.max(1, ...pieces.map((piece) => piece.length)) };
+    if (text.length < SPLIT_FROM) return [text];
+    const split = bestSplit(text, (index) => text[index - 1] === "-", 2) || bestSplit(text, (index) => /\d/.test(text[index - 1]) && /[A-Za-z]/.test(text[index]), 3);
+    return split ? [text.slice(0, split.index), text.slice(split.index)] : [text];
+  }
+  function symbolSegment(lines) {
+    return Math.max(1, ...lines.map((line) => line.length));
   }
   function imageOnlySymbolHtml(symbol, escapeHtml) {
-    const { parts, longest } = symbolBreakParts(symbol);
-    return '<div class="icono-label-symbol icono-image-only-symbol" style="--icono-symbol-segment:' + longest + '">' + parts.map(escapeHtml).join("<wbr>") + "</div>";
+    const lines = symbolLines(symbol);
+    return '<div class="icono-label-symbol icono-image-only-symbol" style="--icono-symbol-segment:' + symbolSegment(lines) + '">' + lines.map(escapeHtml).join("<br>") + "</div>";
   }
 
   // shared/iconoplasm-card/shared-card-runtime.js

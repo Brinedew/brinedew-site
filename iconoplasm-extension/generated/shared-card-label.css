@@ -379,10 +379,10 @@
   opacity: 1;
 }
 
-/* B-1038: the name keeps at least 9 characters of width beside the symbol. A symbol
-   too long for the rest takes two lines at its breaks (symbol-breaks.js: after a
-   hyphen, between a number and the letters after it); one with no break shrinks
-   just enough to fit. The name never runs under the symbol. */
+/* B-1038: the name keeps at least 9 characters of width beside the symbol, and takes
+   whatever the symbol leaves. A long symbol arrives as two explicit lines
+   (symbol-breaks.js), so its box is as wide as its longer line and no gap opens
+   between name and symbol; one that can't split shrinks just enough to fit. */
 .icono-image-only-caption-row {
   display: grid;
   grid-template-columns: minmax(9ch, 1fr) auto;
@@ -393,16 +393,14 @@
 
 .icono-image-only-overlay .icono-image-only-symbol {
   color: rgba(253, 245, 232, 0.96);
-  /* 104cqw over the longest unbreakable piece keeps a 10- or 11-letter symbol on its
-     line; shorter pieces keep the full size. */
+  /* 104cqw over the symbol's longest line keeps a 10- or 11-letter line inside the
+     card; shorter lines keep the full size. */
   font-size: min(clamp(2rem, 11cqw, 3.75rem), calc(104cqw / var(--icono-symbol-segment, 1)));
   line-height: 0.9;
   letter-spacing: -0.05em;
   text-align: right;
   justify-self: end;
-  min-inline-size: 0;
-  overflow-wrap: normal;
-  text-wrap: balance;
+  white-space: nowrap;
   text-shadow:
     0 1px 0 rgba(13, 9, 7, 0.4),
     0 8px 18px rgba(8, 5, 4, 0.38);
