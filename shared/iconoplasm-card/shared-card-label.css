@@ -402,6 +402,51 @@
     0 8px 18px rgba(8, 5, 4, 0.38);
 }
 
+/* B-1038: once caption-layout.js has measured the caption with Pretext, the name is
+   a stack of measured lines that flows around the symbol, and the symbol sits
+   bottom-right on one line. The flex layout above stays for pages without
+   JavaScript. */
+/* The name rests on the card's bottom edge beside the symbol, never at the top of
+   the symbol's height: a one-line name sits level with the symbol's foot. */
+.icono-image-only-caption-row--flowed {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  position: relative;
+}
+
+.icono-image-only-overlay .icono-image-only-caption-row--flowed .icono-image-only-name {
+  flex: none;
+  min-inline-size: 0;
+  max-inline-size: none;
+}
+
+.icono-image-only-caption-line {
+  display: block;
+  white-space: nowrap;
+}
+
+.icono-image-only-overlay
+  .icono-image-only-caption-row--flowed[data-icono-caption-mode="beside"]
+  .icono-image-only-symbol {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.icono-image-only-overlay
+  .icono-image-only-caption-row--flowed[data-icono-caption-mode="above"]
+  .icono-image-only-symbol {
+  display: block;
+  align-self: flex-end;
+  margin: 0.15em 0 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .icono-image-only-overlay .icono-image-only-name {
   color: rgba(250, 238, 222, 0.92);
   font-size: clamp(0.9rem, 3.2cqw, 1.12rem);
