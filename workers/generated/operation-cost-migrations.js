@@ -1,5 +1,5 @@
 // Generated from reviewed migrations; never accept caller SQL.
-export const TAGGERIZER_DAILY_CALLS_MIGRATION_NAME = "0115_taggerizer_daily_calls.sql"
-export const TAGGERIZER_DAILY_CALLS_MIGRATION_STATEMENTS = Object.freeze([
-  "CREATE TABLE IF NOT EXISTS icono_taggerizer_daily_calls (\n  day TEXT NOT NULL,\n  account_id TEXT NOT NULL,\n  calls INTEGER NOT NULL DEFAULT 0 CHECK (calls >= 0),\n  PRIMARY KEY (day, account_id)\n);"
+export const REQUEST_INBOX_UNREAD_PAGE_MIGRATION_NAME = "0116_request_inbox_unread_page.sql"
+export const REQUEST_INBOX_UNREAD_PAGE_MIGRATION_STATEMENTS = Object.freeze([
+  "CREATE INDEX IF NOT EXISTS idx_icono_request_inbox_unread_page ON icono_request_inbox_members (requester_user_id, created_at DESC, notification_id DESC) WHERE unread = 1;"
 ])

@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=0e59e84dba1256a7"
+import { createRequestInbox } from "./request-inbox.js?v=a93c766ce525533c"
 import { portraitDelivery } from "./portrait-delivery.js?v=ff977190616ab7ee"
 import {
   createEmulsionFavoriteStore,
@@ -9630,6 +9630,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
       }
+      // B-1029: the gene page is where requested results are seen.
+      void requestInbox.noteGeneViewed(normalizedSymbol(g.symbol || symbol))
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(g && g.symbol ? g.symbol : symbol),
         error: false,

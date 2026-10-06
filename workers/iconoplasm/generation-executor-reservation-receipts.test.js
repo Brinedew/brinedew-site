@@ -538,7 +538,7 @@ test("a completion of n requests, delivered to one requester, writes what the re
       point.units >= point.wrote,
       `${point.count} requests under-reserved: ${JSON.stringify(points)}`,
     )
-  // Three rows once and 40 for each request (a group of one saves four). The
+  // Three rows once and 41 for each request (a group of one saves four). The
   // constants are what was measured, not an estimate: at the largest completion,
   // one group, they are exact. The reservation is larger by the groups it allows
   // for, which the settle-series test below measures.

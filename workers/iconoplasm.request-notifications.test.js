@@ -1142,12 +1142,15 @@ test("an ambiguous Discord message POST is terminal and never retried", async ()
   }
 })
 
-test("request inbox groups one publication and gene into one bounded receipt", async () => {
+// B-1029: the Ready list holds unread results only, one entry per gene. Failure
+// modes: a seen result lingers; one gene splits across its batches; the merged
+// count is not the sum of its images.
+test("request inbox shows unread results only, one entry per gene with its batches merged", async () => {
   const readyRequests = Array.from({ length: 20 }, (_, index) => ({
     id: index + 1,
     request_id: index + 1,
     notification_id: index + 1,
-    unread: index === 0,
+    unread: index < 7 || index % 2 === 0,
     fulfillment_publication_id:
       index < 6 ? "pub-hpn-six" : index === 6 ? "pub-hpn-next" : `pub-${index}`,
     fulfillment_group_size: index < 6 ? 6 : 1,
@@ -1161,9 +1164,9 @@ test("request inbox groups one publication and gene into one bounded receipt", a
     fetchJSON: async () => ({
       ok: true,
       authenticated: true,
-      unread_count: 1,
+      unread_count: 13,
       ready_count: 20,
-      unread_group_count: 1,
+      unread_group_count: 8,
       ready_group_count: 15,
       open_count: 0,
       cancelled_count: 1,
@@ -1177,71 +1180,90 @@ test("request inbox groups one publication and gene into one bounded receipt", a
   await inbox.refresh()
 
   const markup = inbox.panelMarkup()
-  assert.equal((markup.match(/data-icono-request-receipt/g) || []).length, 15)
-  assert.equal((markup.match(/data-icono-request-id=/g) || []).length, 18)
-  assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 2)
-  assert.match(markup, /data-icono-request-publication-id="pub-hpn-six"/)
-  assert.match(markup, /data-icono-request-notification-ids="1,2,3,4,5,6"/)
+  // HPN plus the six unread GENE8, GENE10 ... GENE18; the read odd ones are gone.
+  assert.equal((markup.match(/data-icono-request-receipt/g) || []).length, 7)
+  assert.equal((markup.match(/<strong>HPN<\/strong>/g) || []).length, 1)
+  assert.doesNotMatch(markup, /GENE9|GENE11/)
+  assert.match(markup, /data-icono-request-notification-ids="1,2,3,4,5,6,7"/)
+  assert.match(markup, /receipt-count" aria-label="7 images">7</)
+  assert.match(markup, />\+3<\/span>/)
   assert.match(markup, /class="icono-thumbnail-viewport-image"/)
-  assert.match(markup, /receipt-count" aria-label="6 images">6</)
-  assert.match(markup, />\+2<\/span>/)
   assert.doesNotMatch(markup, /<em>ready<\/em>|Completed|View all|Random default/)
   assert.match(markup, /data-icono-request-group="ready" open/)
-  assert.match(markup, />15<\/span>/)
+  assert.match(markup, /group-count">7<\/span>/)
   assert.match(markup, /Cancelled <span>1<\/span>/)
 })
 
-test("request inbox receipt click acknowledges the durable group instead of one preview", async () => {
+// B-1029: a result is seen once its gene page opens, however the person got there.
+// Failure modes: a receipt click and the page view both post; a page view posts
+// when nothing of that gene is unread; a page that opens before the inbox has
+// loaded never marks; a gene's results stay listed after its page opened.
+test("opening a gene page marks its results seen; a receipt click only navigates", async () => {
+  const unreadHpn = {
+    request_id: 7,
+    notification_id: 7,
+    unread: true,
+    fulfillment_publication_id: "pub-hpn",
+    gene_symbol: "HPN",
+    gene_url: "/gene/HPN",
+  }
   const payload = {
     ok: true,
     authenticated: true,
-    unread_count: 3,
-    ready_count: 3,
-    unread_group_count: 1,
-    ready_group_count: 1,
+    unread_count: 1,
+    ready_count: 1,
     open_count: 0,
     cancelled_count: 0,
-    ready_requests: [],
+    ready_requests: [unreadHpn],
     open_requests: [],
   }
-  const calls = []
-  const interactionOrder = []
+  const posts = []
+  let navigated = ""
   const inbox = createRequestInbox({
     fetchJSON: async (url, options) => {
-      interactionOrder.push(url)
-      calls.push({ url, options })
-      return payload
+      if (url === "/api/iconoplasm/notifications/read") {
+        posts.push(JSON.parse(options.body))
+        payload.ready_requests = []
+        payload.unread_count = 0
+        return { ok: true }
+      }
+      return url.startsWith("/api/iconoplasm/notifications")
+        ? JSON.parse(JSON.stringify(payload))
+        : { ok: true, caretaker: null }
     },
     getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
     renderSidebar() {},
     escapeHtml: (value) => String(value ?? ""),
-    navigate: (href, link) => {
-      interactionOrder.push("navigate:" + href)
-      assert.equal(link, receipt)
+    navigate: (href) => {
+      navigated = href
     },
   })
-  const attributes = {
-    "data-icono-request-notification-ids": "7,8,9",
-    "data-icono-request-publication-id": "pub-hpn-three",
-    "data-icono-request-gene-symbol": "HPN",
-    href: "/gene/HPN",
-  }
+
+  // The gene page renders before the inbox has loaded: the mark waits for the load.
+  await inbox.noteGeneViewed("HPN")
+  assert.equal(posts.length, 0)
+  await inbox.refresh()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(posts, [
+    { notification_ids: [], fulfillment_publication_id: "", gene_symbol: "HPN", all: false },
+  ])
+  assert.doesNotMatch(inbox.panelMarkup(), /<strong>HPN<\/strong>/)
+
+  // Nothing unread for this gene: no request.
+  await inbox.noteGeneViewed("TP53")
+  assert.equal(posts.length, 1)
+
+  // A receipt click navigates and leaves the marking to the page view.
   const handlers = {}
   const receipt = {
-    getAttribute(name) {
-      return attributes[name] || ""
-    },
-    addEventListener(name, handler) {
+    getAttribute: (name) => ({ href: "/gene/HPN" })[name] || "",
+    addEventListener: (name, handler) => {
       handlers[name] = handler
     },
   }
   inbox.wire({
-    querySelector() {
-      return null
-    },
-    querySelectorAll(selector) {
-      return selector === "[data-icono-request-receipt]" ? [receipt] : []
-    },
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === "[data-icono-request-receipt]" ? [receipt] : []),
   })
   let prevented = false
   handlers.click({
@@ -1249,19 +1271,9 @@ test("request inbox receipt click acknowledges the durable group instead of one 
       prevented = true
     },
   })
-  const acknowledgement = calls.find((call) => call.url === "/api/iconoplasm/notifications/read")
   assert.equal(prevented, true)
-  assert.deepEqual(interactionOrder.slice(0, 2), [
-    "navigate:/gene/HPN",
-    "/api/iconoplasm/notifications/read",
-  ])
-  assert.ok(acknowledgement)
-  assert.deepEqual(JSON.parse(acknowledgement.options.body), {
-    notification_ids: [7, 8, 9],
-    fulfillment_publication_id: "pub-hpn-three",
-    gene_symbol: "HPN",
-    all: false,
-  })
+  assert.equal(navigated, "/gene/HPN")
+  assert.equal(posts.length, 1)
 })
 
 test("signed-out inbox performs zero caretaker or generation requests", async () => {
@@ -1356,9 +1368,9 @@ test("account switch and remount discard stale responses from both inbox feeds",
     ),
   )
   await first
-  assert.match(inbox.panelMarkup(), /publication_NEW/)
+  assert.match(inbox.panelMarkup(), /data-icono-request-gene-symbol="NEW"/)
   assert.match(inbox.caretakerPanelMarkup(), /assignment_NEW/)
-  assert.doesNotMatch(inbox.panelMarkup(), /publication_OLD/)
+  assert.doesNotMatch(inbox.panelMarkup(), /data-icono-request-gene-symbol="OLD"/)
   assert.doesNotMatch(inbox.caretakerPanelMarkup(), /assignment_OLD/)
 
   const remountFirst = inbox.refresh()

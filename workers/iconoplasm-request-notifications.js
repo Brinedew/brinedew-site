@@ -6,6 +6,7 @@
 
 import {
   REQUEST_INBOX_COUNTS_SQL,
+  REQUEST_INBOX_MARK_GENE_READ_SQL,
   REQUEST_INBOX_PAGE_SQL,
 } from "./iconoplasm/request-inbox-queries.js"
 import { readPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
@@ -218,6 +219,11 @@ export async function markRequestNotificationsRead(
          AND read_at IS NULL`,
     )
       .bind(requesterId, boundedText(fulfillmentPublicationId, 255), geneSymbol(gene))
+      .run()
+  } else if (geneSymbol(gene)) {
+    const symbol = geneSymbol(gene)
+    response = await env.ICONOPLASM_DB.prepare(REQUEST_INBOX_MARK_GENE_READ_SQL)
+      .bind(requesterId, symbol, symbol, requesterId, symbol)
       .run()
   } else {
     const ids = Array.from(

@@ -3,7 +3,11 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { requestInboxCounterMigration } from "../../scripts/generate-request-inbox-counters.mjs"
-import { REQUEST_INBOX_COUNTS_SQL, REQUEST_INBOX_PAGE_SQL } from "./request-inbox-queries.js"
+import {
+  REQUEST_INBOX_COUNTS_SQL,
+  REQUEST_INBOX_MARK_GENE_READ_SQL,
+  REQUEST_INBOX_PAGE_SQL,
+} from "./request-inbox-queries.js"
 import { createRequire } from "node:module"
 import { markRequestNotificationsRead } from "../iconoplasm-request-notifications.js"
 
@@ -26,6 +30,12 @@ function database() {
   )
   return db
 }
+
+// B-1029: the unread-only page and the mark-gene-read update ride this index.
+const UNREAD_PAGE_INDEX = readFileSync(
+  new URL("../../migrations-iconoplasm/0116_request_inbox_unread_page.sql", import.meta.url),
+  "utf8",
+)
 
 function assertExact(db) {
   // Independent JS oracle, including the original live identity joins and
@@ -134,6 +144,7 @@ test("inbox counts and newest-page plans do not traverse growing notification hi
   const db = database()
   try {
     db.exec(requestInboxCounterMigration())
+    db.exec(UNREAD_PAGE_INDEX)
     db.exec(`WITH RECURSIVE ids(n) AS (VALUES(10) UNION ALL SELECT n+1 FROM ids WHERE n<10010)
       INSERT INTO icono_generation_requests(id,requester_user_id,gene_symbol,fulfilled_asset_sha256,status)
       SELECT n,'user','TP53','a','fulfilled' FROM ids`)
@@ -143,13 +154,26 @@ test("inbox counts and newest-page plans do not traverse growing notification hi
     const plans = [
       db.prepare("EXPLAIN QUERY PLAN " + REQUEST_INBOX_COUNTS_SQL).all("user"),
       db.prepare("EXPLAIN QUERY PLAN " + REQUEST_INBOX_PAGE_SQL).all("user", 50),
+      db
+        .prepare("EXPLAIN QUERY PLAN " + REQUEST_INBOX_MARK_GENE_READ_SQL)
+        .all("user", "TP53", "TP53", "user", "TP53"),
     ]
+    // The gene-seen update looks up its receipts by primary key, never by gene.
+    assert.ok(
+      plans[2].some((r) => /icono_request_notifications USING INTEGER PRIMARY KEY/.test(r.detail)),
+      JSON.stringify(plans[2]),
+    )
     for (const rows of plans) {
       assert.ok(rows.some((r) => /SEARCH/.test(r.detail)))
       assert.ok(rows.every((r) => !/SCAN|TEMP B-TREE/.test(r.detail)))
     }
     assert.equal(db.prepare(REQUEST_INBOX_COUNTS_SQL).get("user").ready_count, 10004)
     assert.equal(db.prepare(REQUEST_INBOX_PAGE_SQL).all("user", 50).length, 50)
+    // Seen results leave the page: only the unread remainder is returned.
+    db.exec("UPDATE icono_request_notifications SET read_at='seen' WHERE id < 10000")
+    const page = db.prepare(REQUEST_INBOX_PAGE_SQL).all("user", 50)
+    assert.equal(page.length, 11)
+    assert.ok(page.every((row) => row.read_at === null))
   } finally {
     db.close()
   }
@@ -270,6 +294,28 @@ test(
         19999,
       )
       assert.ok(duplicate.meta.rows_written < read.meta.rows_written)
+
+      // B-1029 at 10x-100x use: a long read history must not raise the cost of a
+      // sidebar load or of opening a gene page. 19,996 of 20,000 results seen.
+      await db
+        .prepare("UPDATE icono_request_notifications SET read_at = 'seen' WHERE id <= 19995")
+        .run()
+      const unreadPage = await db.prepare(REQUEST_INBOX_PAGE_SQL).bind("reader", 50).all()
+      assert.equal(unreadPage.results.length, 4)
+      assert.ok(unreadPage.meta.rows_read <= 60, JSON.stringify(unreadPage.meta))
+      receipts.length = 0
+      const geneSeen = await markRequestNotificationsRead(env, {
+        requesterUserId: "reader",
+        gene: "TP53",
+      })
+      // marked_read is D1 meta.changes, which counts the trigger rows too.
+      assert.equal(geneSeen.ok, true)
+      assert.ok(receipts[0].meta.rows_read <= 60, JSON.stringify(receipts[0].meta))
+      assert.equal(
+        (await db.prepare(REQUEST_INBOX_PAGE_SQL).bind("reader", 50).all()).results.length,
+        0,
+      )
+      t.diagnostic(JSON.stringify({ unreadPage: unreadPage.meta, geneSeen: receipts[0].meta }))
     } finally {
       local.close()
       await runtime.dispose()
