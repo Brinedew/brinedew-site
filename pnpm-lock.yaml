@@ -18,6 +18,9 @@ importers:
       '@antv/x6':
         specifier: 3.1.8
         version: 3.1.8
+      '@chenglou/pretext':
+        specifier: 0.0.9
+        version: 0.0.9
       '@clack/prompts':
         specifier: ^0.11.0
         version: 0.11.0
@@ -324,6 +327,9 @@ packages:
 
   '@bufbuild/protobuf@2.14.0':
     resolution: {integrity: sha512-C3UGsiCwSprE2NKIIFA3hCDlpXTMCAXRZuEVp88L1GY36Y41+rYL5fryE+nOFhp4p4JPQvdV8PQ4DWgHgeTE+w==}
+
+  '@chenglou/pretext@0.0.9':
+    resolution: {integrity: sha512-vInlpC//3vjRfWTs78k2BBIq/0bUdpjIp8TIn9fXe0NvnChhTQZfjioVzERQQbkQvCVpPpw7PDOrTWMHpq27VA==}
 
   '@clack/core@0.5.0':
     resolution: {integrity: sha512-p3y0FIOwaYRUPRcMO7+dlmLh8PSRcrjuTndsiA0WAFbWES0mLZlrjVoBRZ9DzkPFJZG6KGkJmoEAY0ZcVWTkow==}
@@ -3940,6 +3946,8 @@ snapshots:
       '@babel/helper-validator-identifier': 7.29.7
 
   '@bufbuild/protobuf@2.14.0': {}
+
+  '@chenglou/pretext@0.0.9': {}
 
   '@clack/core@0.5.0':
     dependencies:
