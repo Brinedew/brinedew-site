@@ -227,6 +227,7 @@ export function createRequestInbox({
         if (!payload || !payload.ok) return null
         state.caretaker_loaded = true
         state.caretaker = payload.caretaker || null
+        rememberCaretakerSymbol(accountKey, caretakerSymbol())
         chooseActiveGroup()
         renderSidebar()
         return payload
@@ -826,8 +827,34 @@ export function createRequestInbox({
     renderSidebar()
   }
 
-  // The gene this account already looks after, once the sidebar has loaded it.
+  // B-1027: the gene page draws its caretaker button before caretaker/me answers. It
+  // used to guess "Become a … caretaker" and shrink to "Switch to …" a moment later,
+  // a jump everyone with a gene saw on every page. This browser remembers the
+  // account's last known gene so the first paint already has the right words. A
+  // per-viewer convenience: if storage is blocked, the old guess comes back.
+  var CARETAKER_SYMBOL_STORAGE_KEY = "icono:caretaker-symbol:v1"
+
+  function rememberCaretakerSymbol(accountKey, symbol) {
+    try {
+      localStorage.setItem(
+        CARETAKER_SYMBOL_STORAGE_KEY,
+        JSON.stringify({ account: accountKey, symbol: symbol }),
+      )
+    } catch (_) {}
+  }
+
+  function rememberedCaretakerSymbol() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(CARETAKER_SYMBOL_STORAGE_KEY) || "null")
+      if (saved && saved.account === currentAccountKey()) return String(saved.symbol || "")
+    } catch (_) {}
+    return ""
+  }
+
+  // The gene this account looks after: live once the sidebar has loaded it, and
+  // until then the one this browser last saw for this account.
   function caretakerSymbol() {
+    if (!state.caretaker_loaded) return rememberedCaretakerSymbol()
     return String((state.caretaker && state.caretaker.canonical_symbol) || "")
   }
 
