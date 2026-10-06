@@ -56,13 +56,13 @@ test("the actual governor exposes and exhausts the capped allowance, not just th
     dailyBurstMultiplier: 3,
   }
   const exhausted = governor.snapshot("2026-08-27", "2026-08-07", budgets, 11)
-  assert.equal(exhausted.rows_written_daily_smart_limit, 20_000)
+  assert.equal(exhausted.rows_written_daily_smart_limit, 70_000)
   assert.equal(exhausted.rows_read_daily_smart_limit, 1_000_000)
   assert.equal(exhausted.rows_written_daily_remaining, 0)
   assert.equal(exhausted.exhausted, true)
   today = { rows_read: 0, rows_written: 0 }
   const nextDay = governor.snapshot("2026-08-28", "2026-08-07", budgets, 10)
-  assert.equal(nextDay.rows_written_daily_remaining, 20_000)
+  assert.equal(nextDay.rows_written_daily_remaining, 70_000)
   assert.equal(nextDay.exhausted, false)
 })
 
@@ -71,6 +71,6 @@ test("operator allocation preserves account headroom regardless of historical mo
     d1OperationalAllowance({ resource: "reads", monthlyLimit: 24_000_000_000 }),
     1_000_000,
   )
-  assert.equal(d1OperationalAllowance({ resource: "writes", monthlyLimit: 40_000_000 }), 20_000)
+  assert.equal(d1OperationalAllowance({ resource: "writes", monthlyLimit: 40_000_000 }), 70_000)
   assert.equal(d1OperationalAllowance({ resource: "reads", monthlyLimit: 100 }), 100)
 })
