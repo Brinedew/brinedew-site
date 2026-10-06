@@ -344,6 +344,50 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   )
 })
 
+// B-1037: on 2026-10-06 an 870-gene Image Lab batch died four times on a private 2,500
+// request cap in the replica cost ledger that never read the tier table. Every daily
+// allowance now lives in shared/iconoplasm-d1-budget-policy.js, and this fails when a
+// new one is written as a number anywhere else, so the next bypass is caught here
+// instead of by a dead run.
+test("B-1037 every daily limit is a number only in the one budget policy", () => {
+  // Product rules priced in their own units, not copies of a provider meter: each
+  // states its cost against the policy's free-plan numbers in its own comment.
+  const productRules = new Map([
+    ["workers/iconoplasm/votes/vote-guards.js", "VOTE_DAILY_LIMIT"],
+    ["workers/iconoplasm/caretaker/taggerizer.js", "TAGGERIZER_DAILY_LIMIT"],
+  ])
+  const named =
+    /(?:\b(?:const|let|var)\s+|\$)([A-Za-z_]\w*)\s*=\s*(?:Object\.freeze\(\s*)?\(?\s*[1-9]/g
+  const property = /\b(\w*daily\w*limit\w*|\w*limit\w*daily\w*)\)?\s*(?::|\|\|)\s*[1-9]/gi
+  const found = []
+  for (const root of ["workers", "shared", "scripts", "quartz/static"]) {
+    for (const entry of readdirSync(path.join(REPOSITORY_ROOT, root), { recursive: true })) {
+      const file = `${root}/${String(entry).replaceAll("\\", "/")}`
+      if (!/\.(m?js|ps1)$/.test(file)) continue
+      if (/node_modules\/|\.test\.|\.e2e\.|\/generated\/|test-helpers\//.test(file)) continue
+      if (file === "shared/iconoplasm-d1-budget-policy.js") continue
+      const source = readRepositoryFile(file).replace(/^\s*(?:\/\/|\*|#).*$/gm, "")
+      const lineOf = (index) => source.slice(0, index).split("\n").length
+      for (const match of source.matchAll(named)) {
+        const name = match[1].toUpperCase()
+        if (!/DAILY|PER_?DAY/.test(name) || !/LIMIT|CAP|CEILING|ALLOWANCE|BUDGET|MAX/.test(name)) {
+          continue
+        }
+        if (productRules.get(file) === match[1]) continue
+        found.push(`${file}:${lineOf(match.index)} ${match[1]}`)
+      }
+      for (const match of source.matchAll(property)) {
+        found.push(`${file}:${lineOf(match.index)} ${match[1]}`)
+      }
+    }
+  }
+  assert.deepEqual(
+    found,
+    [],
+    "import these from shared/iconoplasm-d1-budget-policy.js instead of restating them",
+  )
+})
+
 // ARCHITECTURE FENCE [IPD-005]
 test("IPD-005 uses the per-database wall and a verified cold archive", () => {
   const config = readRepositoryFile(
