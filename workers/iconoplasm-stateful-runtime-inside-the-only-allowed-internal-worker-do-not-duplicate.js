@@ -18685,12 +18685,6 @@ async function callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDu
   if (!adminToken) {
     throw new Error("ICONOPLASM_ADMIN_TOKEN is required for internal finalization work")
   }
-  // A player's delivery stays critical through the phases it calls in-process
-  // (reconcile, read models). Without this the inner route ran as batch and
-  // paused the delivery at 85% one phase after the gateway let it in.
-  const outer = env?.[ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]?.attribution
-  const critical =
-    d1CriticalityOfRouteFamily(outer?.route_family, outer?.declared_criticality) === "critical"
   const request = new Request(
     `https://the-only-allowed-internal-stateful-worker-do-not-duplicate${path}`,
     {
@@ -18698,7 +18692,6 @@ async function callIconoplasmAdminRouteInsideTheOnlyAllowedStatefulWorkerDoNotDu
       headers: {
         Authorization: `Bearer ${adminToken}`,
         "Content-Type": "application/json",
-        ...(critical ? { "x-iconoplasm-criticality": "critical" } : {}),
       },
       body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(payload || {}),
     },
