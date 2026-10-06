@@ -2838,10 +2838,15 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   if (snapshot?.exhausted) {
     throw new IconoplasmD1DailyBudgetExceededError(snapshot)
   }
-  // The limiter answers first for its own routes: its refusal carries the
+  // The limiter answers first for its own batch routes: its refusal carries the
   // write-cap detail Website Ops shows. Same share, so the decision is the same.
+  // A delivery declared critical is not batch: only the tier check decides it,
+  // at the whole day (B-1026). Before 2026-10-06 the limiter cut it at 85%.
   const mutationLimiter = {
-    active: isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family),
+    active:
+      isIconoplasmHighRiskAdminMutationRouteFamily(attribution?.route_family) &&
+      d1CriticalityOfRouteFamily(attribution?.route_family, attribution?.declared_criticality) !==
+        "critical",
     chunkSlowZoneRows: iconoplasmMutationLimiterChunkSlowZoneRows(snapshot),
     targetDailyPercent: iconoplasmMutationLimiterTargetDailyPercent(env),
     targetRowsWrittenCeiling: iconoplasmMutationLimiterTargetRowsWrittenCeiling(snapshot, env),

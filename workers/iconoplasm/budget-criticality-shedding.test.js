@@ -6,6 +6,7 @@ import {
   handleIconoplasmSyncFinalizationQueue,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { realBudgetLedger } from "../test-helpers/reservation-receipts-harness.js"
+import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 
 // B-1026. On 2026-10-05 batch work and then one 151k-read storage audit spent the
 // whole operator ledger (1,000,000 reads), and the lane that delivers players'
@@ -32,7 +33,8 @@ import { realBudgetLedger } from "../test-helpers/reservation-receipts-harness.j
 const ADMIN_TOKEN = "founder-secret"
 const GENERATION_TOKEN = "generation-secret"
 const ORIGIN = "https://the-only-allowed-internal-stateful-worker-do-not-duplicate"
-const OPERATOR_READS = 1_000_000
+const OPERATOR_READS = D1_OPERATOR_DAILY_LIMITS.reads
+const OPERATOR_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
 
 const quiet = (t) => {
   const original = [console.log, console.warn, console.error]
@@ -76,16 +78,17 @@ function billingD1(rowsReadPerStatement = 1) {
   }
 }
 
-// The real ledger with today's operator usage already at `rowsRead`.
-function fixture(t, { rowsRead, rowsReadPerStatement = 1 }) {
+// The real ledger with today's operator usage already at `rowsRead` and `rowsWritten`.
+function fixture(t, { rowsRead = 0, rowsWritten = 0, rowsReadPerStatement = 1 }) {
   quiet(t)
   const ledger = realBudgetLedger(0)
   t.after(() => ledger.close())
   const day = new Date().toISOString().slice(0, 10)
   ledger.owner.state.storage.sql.exec(
-    "INSERT INTO daily_budget_usage (day_key, cycle_key, rows_read, rows_written) VALUES (?, '', ?, 0)",
+    "INSERT INTO daily_budget_usage (day_key, cycle_key, rows_read, rows_written) VALUES (?, '', ?, ?)",
     day,
     rowsRead,
+    rowsWritten,
   )
   const reservations = []
   const namespace = {
@@ -216,6 +219,18 @@ test("at 86% the drain's publication of a delivery runs; the same call from a bu
     rowsRead: 0.61 * OPERATOR_READS,
   }).diagnosticDeclaringCritical()
   assert.ok(shed(diagnostic), JSON.stringify(diagnostic))
+})
+
+// 2026-10-06: the admin mutation limiter answers before the tier check, at the
+// same 85%, for its own route families. Those include the routes a delivery is
+// published through, so a player's portrait sat paused from about 10:20 UTC
+// while the tiers said it had the whole day. The read-side test above never saw
+// it: the limiter watches rows written.
+test("at 86% of the day's writes the drain's publication of a delivery runs; a bulk sync waits", async (t) => {
+  const delivery = await fixture(t, { rowsWritten: 0.86 * OPERATOR_WRITES }).publish(true)
+  assert.ok(delivery.status !== 503, JSON.stringify(delivery))
+  const bulk = await fixture(t, { rowsWritten: 0.86 * OPERATOR_WRITES }).publish(false)
+  assert.equal(bulk.status, 503, JSON.stringify(bulk))
 })
 
 test("at 86% the finalization queue runs a delivery's message and holds a bulk sync's", async (t) => {
