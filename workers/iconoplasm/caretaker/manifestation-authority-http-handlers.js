@@ -172,6 +172,7 @@ async function readCaretakerSwitchCooldown(db, switchPolicy, browserSession, acc
   return {
     available_at: new Date(availableMs).toISOString(),
     retry_after_seconds: Math.ceil((availableMs - nowMs) / 1000),
+    cooldown_seconds: seconds,
   }
 }
 
@@ -244,7 +245,11 @@ async function readCaretakerClaimAvailability(
       reason,
       mode: switchFrom && reason == null ? "switch" : "claim",
       switch_from: switchFrom,
-      ...(cooldown ? { available_at: cooldown.available_at } : {}),
+      // B-1027: the page shows the cooldown on the button itself, with its timer and
+      // how much of the wait has passed, instead of hiding the button.
+      ...(cooldown
+        ? { available_at: cooldown.available_at, cooldown_seconds: cooldown.cooldown_seconds }
+        : {}),
       gene_revision: Number(head.gene_revision || 0),
       entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
       terms: terms

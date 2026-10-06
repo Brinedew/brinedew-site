@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=57f5e7ab757064af"
+import { createRequestInbox } from "./request-inbox.js?v=466b0d02747c4538"
 import { portraitDelivery } from "./portrait-delivery.js?v=ff977190616ab7ee"
 import {
   createEmulsionFavoriteStore,
@@ -443,6 +443,53 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return "cmd_" + globalThis.crypto.randomUUID().replaceAll("-", "").toLowerCase()
   }
 
+  // Time left on a cooldown, read at a glance: m:ss under an hour, then hours, then days.
+  function cooldownLeftText(ms) {
+    var seconds = Math.max(0, Math.ceil(ms / 1000))
+    if (seconds < 3600)
+      return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0")
+    var hours = Math.floor(seconds / 3600)
+    if (hours < 24) return hours + "h " + Math.floor((seconds % 3600) / 60) + "m"
+    return Math.floor(hours / 24) + "d " + (hours % 24) + "h"
+  }
+
+  // B-1027: a switch on cooldown keeps its button, disabled, with a shade that drains
+  // as the wait passes and the time left on it, like an ability cooldown in a MOBA.
+  // It used to vanish, and a caretaker read that as a bug.
+  function renderCaretakerClaimCooldown(target, symbol, claim, onReady) {
+    var endsAt = Date.parse(claim.available_at || "")
+    if (!Number.isFinite(endsAt)) {
+      target.replaceChildren()
+      return
+    }
+    var total = Math.max(1, Number(claim.cooldown_seconds) || 0) * 1000
+    var label = claim.switch_from ? "Switch to " + symbol : "Become a " + symbol + " caretaker"
+    target.innerHTML =
+      '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn icono-caretaker-claim-btn--cooldown" disabled>' +
+      '<span class="icono-caretaker-claim-btn__sweep" aria-hidden="true"></span><span>' +
+      esc(label) +
+      '</span><span class="icono-caretaker-claim-btn__timer" role="timer"></span></button>'
+    var button = target.querySelector("button")
+    var sweep = button.querySelector(".icono-caretaker-claim-btn__sweep")
+    var timer = button.querySelector(".icono-caretaker-claim-btn__timer")
+    var interval = 0
+    function tick() {
+      if (!button.isConnected) return clearInterval(interval)
+      var left = endsAt - Date.now()
+      if (left <= 0) {
+        clearInterval(interval)
+        onReady()
+        return
+      }
+      var text = cooldownLeftText(left)
+      timer.textContent = text
+      sweep.style.setProperty("--cooldown-left", Math.min(1, left / total).toFixed(4))
+      button.setAttribute("aria-label", label + ", available in " + text)
+    }
+    interval = setInterval(tick, 1000)
+    tick()
+  }
+
   function hydrateCaretakerClaimAction(container, genePayload) {
     var target = container && container.querySelector("[data-icono-caretaker-claim-action]")
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
@@ -451,6 +498,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       String(currentUser.account_id || currentUser.id || currentUser.user_id || "") + ":" + symbol
     if (target.getAttribute("data-icono-caretaker-claim-signature") === signature) return
     target.setAttribute("data-icono-caretaker-claim-signature", signature)
+    // B-1027: the button appears with the page, disabled while availability loads,
+    // instead of popping in a second later.
+    var knownCaretakerSymbol = requestInbox.caretakerSymbol()
+    if (knownCaretakerSymbol !== symbol) {
+      target.innerHTML =
+        '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn" disabled aria-busy="true"><span>' +
+        esc(knownCaretakerSymbol ? "Switch to " + symbol : "Become a " + symbol + " caretaker") +
+        "</span></button>"
+    }
     fetchAuthedJSON(
       "/api/iconoplasm/caretaker/genes/" +
         encodeURIComponent(symbol) +
@@ -459,6 +515,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       { cache: "no-store" },
     )
       .then(function (payload) {
+        if (payload?.enabled && payload.claim?.reason === "switch_cooldown") {
+          renderCaretakerClaimCooldown(target, symbol, payload.claim, function () {
+            target.removeAttribute("data-icono-caretaker-claim-signature")
+            hydrateCaretakerClaimAction(container, genePayload)
+          })
+          return
+        }
         if (!payload?.enabled || !payload.claim?.available || !payload.claim?.terms) {
           target.replaceChildren()
           return
