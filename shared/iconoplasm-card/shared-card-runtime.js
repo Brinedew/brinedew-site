@@ -1,3 +1,4 @@
+import { layoutImageOnlyCaptions, watchImageOnlyCaptions } from "./caption-layout.js"
 import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
@@ -2609,6 +2610,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
   }
 
   startRoughLoopObserver()
+  watchImageOnlyCaptions(global)
 
   global.IconoplasmCardShared = {
     __meta: {
@@ -2623,6 +2625,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     resolveApiBase: resolveApiBase,
     fetchJSON: fetchJSON,
     escapeHtml: escapeHtml,
+    layoutImageOnlyCaptions: layoutImageOnlyCaptions,
     normalizedSymbol: normalizedSymbol,
     uniqueDisplayValues: uniqueDisplayValues,
     normalizeCardVariant: normalizeCardVariant,
