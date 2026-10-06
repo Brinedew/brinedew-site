@@ -3,7 +3,10 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { OperationCostLedger, REPLICA_DAILY_ADMISSION } from "./operation-cost-ledger.js"
 import { OperationCostExecutor } from "./operation-cost-executor.js"
-import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
+import {
+  D1_OPERATOR_DAILY_LIMITS,
+  OPERATOR_DAILY_REQUEST_LIMIT,
+} from "../../shared/iconoplasm-d1-budget-policy.js"
 
 const DAILY_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
 const ADMITTED_WRITES = REPLICA_DAILY_ADMISSION.rows_written
@@ -496,15 +499,18 @@ test("control traffic shares the request allocation and remains available after 
   const f = fixture()
   try {
     f.ledger.register(f.input)
-    f.db.prepare("UPDATE operation_cost_days SET requests=2399").run()
+    const admitted = REPLICA_DAILY_ADMISSION.requests - 100
+    const setRequests = (n) => f.db.prepare("UPDATE operation_cost_days SET requests=?").run(n)
+    const requests = () => f.db.prepare("SELECT requests FROM operation_cost_days").get().requests
+    setRequests(admitted - 1)
     f.ledger.recordControlRequest()
     assert.throws(() => f.ledger.reserve(f.step()), /SHARED_DAILY_LIMIT/)
     f.ledger.recordControlRequest()
-    assert.equal(f.db.prepare("SELECT requests FROM operation_cost_days").get().requests, 2401)
-    f.db.prepare("UPDATE operation_cost_days SET requests=2499").run()
+    assert.equal(requests(), admitted + 1)
+    setRequests(OPERATOR_DAILY_REQUEST_LIMIT - 1)
     f.ledger.recordControlRequest()
     assert.throws(() => f.ledger.recordControlRequest(), /SHARED_DAILY_LIMIT/)
-    assert.equal(f.db.prepare("SELECT requests FROM operation_cost_days").get().requests, 2500)
+    assert.equal(requests(), OPERATOR_DAILY_REQUEST_LIMIT)
   } finally {
     f.db.close()
   }
@@ -684,14 +690,15 @@ test("absent, stale, future or exhausted account telemetry causes zero reservati
 
 test("different operations cannot each claim the same remaining daily allocation", () => {
   const f = fixture()
+  const half = Math.floor(REPLICA_DAILY_ADMISSION.rows_read / 2)
   for (let i = 0; i < 2; i++) {
     f.ledger.register({
       ...f.input,
       id: `operation-${i}`,
-      prediction: { rows_read: 500_000, rows_written: 0, requests: 1 },
+      prediction: { rows_read: half, rows_written: 0, requests: 1 },
     })
     f.ledger.reserve(
-      f.step({ id: `operation-${i}`, bound: { rows_read: 500_000, rows_written: 0, requests: 1 } }),
+      f.step({ id: `operation-${i}`, bound: { rows_read: half, rows_written: 0, requests: 1 } }),
     )
   }
   f.ledger.register({ ...f.input, id: "operation-3" })
@@ -702,7 +709,11 @@ test("different operations cannot each claim the same remaining daily allocation
 test("earlier spending in the existing authority ledger cannot become a second allowance during cutover", () => {
   const f = fixture()
   f.ledger.register(f.input)
-  f.ledger.readOtherUsage = () => ({ rows_read: 999_995, rows_written: 0, requests: 0 })
+  f.ledger.readOtherUsage = () => ({
+    rows_read: REPLICA_DAILY_ADMISSION.rows_read - 5,
+    rows_written: 0,
+    requests: 0,
+  })
   assert.throws(() => f.ledger.reserve(f.step()), /SHARED_DAILY_LIMIT/)
   f.ledger.readOtherUsage = () => null
   assert.throws(() => f.ledger.reserve(f.step()), /SHARED_USAGE_UNAVAILABLE/)
