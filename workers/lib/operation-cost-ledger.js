@@ -1,7 +1,12 @@
 // ARCHITECTURE FENCE [IPD-012]: reserve before dispatch; unknown outcomes retain
 // their reservation. This ledger is internal to the existing budget authority.
 // A caller-supplied bound is NOT proof that an arbitrary SQL query is bounded.
-import { D1_OPERATOR_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
+import {
+  D1_CRITICALITY_SHARES,
+  D1_OPERATOR_DAILY_LIMITS,
+  OPERATOR_DAILY_REQUEST_LIMIT,
+  d1CriticalityOfRouteFamily,
+} from "../../shared/iconoplasm-d1-budget-policy.js"
 import { KV_COST_METERS, KV_OPERATOR_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
 import { MUTATION_ANALYTICS_LAG_MS } from "./iconoplasm-mutation-lane-reservations.js"
 
@@ -9,8 +14,20 @@ const METERS = ["rows_read", "rows_written", "requests"]
 const LIMITS = {
   rows_read: D1_OPERATOR_DAILY_LIMITS.reads,
   rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
-  requests: 2_500,
+  requests: OPERATOR_DAILY_REQUEST_LIMIT,
 }
+// Replica work (the workstation's material reads, pulls and revision appends) can
+// all be redone after the reset, so it is shed at its tier's share of the operator
+// day like the rest of the operator ledger (B-1026), never at a private number.
+export const REPLICA_CRITICALITY = d1CriticalityOfRouteFamily("authority_replica")
+export const REPLICA_DAILY_ADMISSION = Object.freeze(
+  Object.fromEntries(
+    METERS.map((meter) => [
+      meter,
+      Math.floor(LIMITS[meter] * D1_CRITICALITY_SHARES[REPLICA_CRITICALITY]),
+    ]),
+  ),
+)
 export const ACCOUNT_CEILINGS = Object.freeze({
   rows_read: 3_500_000,
   rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
@@ -168,7 +185,10 @@ export class OperationCostLedger {
     const used = Object.fromEntries(
       METERS.map((meter) => [meter, (usage?.[meter] ?? 0) + other[meter]]),
     )
-    const limits = { ...LIMITS, requests: LIMITS.requests - CONTROL_REQUEST_HEADROOM }
+    const limits = {
+      ...REPLICA_DAILY_ADMISSION,
+      requests: REPLICA_DAILY_ADMISSION.requests - CONTROL_REQUEST_HEADROOM,
+    }
     // This is a bounded Durable Object diagnostic: registrations are capped at
     // 500/day and every plan document is already retained for receipt recovery.
     // Aggregate day usage remains authoritative. This detail only explains the
@@ -367,6 +387,8 @@ export class OperationCostLedger {
         Number.isSafeInteger(other?.requests) && other.requests >= 0,
         "COST_SHARED_USAGE_UNAVAILABLE",
       )
+      // Control requests settle work already admitted, so they may use the whole
+      // day, past the replica tier's share.
       requireValue(
         (usage?.requests || 0) + other.requests < LIMITS.requests,
         "COST_SHARED_DAILY_LIMIT",
@@ -565,7 +587,7 @@ export class OperationCostLedger {
         if (meter !== "requests" && bound.rows_read === 0 && bound.rows_written === 0) continue
         requireValue(
           usage[meter] + otherUsage[meter] + bound[meter] <=
-            LIMITS[meter] - (meter === "requests" ? CONTROL_REQUEST_HEADROOM : 0),
+            REPLICA_DAILY_ADMISSION[meter] - (meter === "requests" ? CONTROL_REQUEST_HEADROOM : 0),
           "COST_SHARED_DAILY_LIMIT",
         )
         // Operator work stays additive to account telemetry, except shared-counter

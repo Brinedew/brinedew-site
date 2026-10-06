@@ -4,6 +4,7 @@ import { createRequire } from "node:module"
 import { fileURLToPath } from "node:url"
 import esbuild from "esbuild"
 import { inspectReleaseSchema } from "../../scripts/inspect-operation-cost-release.mjs"
+import { REPLICA_DAILY_ADMISSION } from "../lib/operation-cost-ledger.js"
 
 const require = createRequire(import.meta.url)
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"))
@@ -93,7 +94,7 @@ test(
       }
       const discovery = await send("")
       assert.ok(discovery.features.includes("shared-capacity-snapshot"))
-      assert.equal((await send("/capacity")).remaining.rows_read, 1_000_000)
+      assert.equal((await send("/capacity")).remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read)
       for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
         const adapter = discovery.adapters.find(
           (item) => item.id === `${resource}-migration-inventory`,
