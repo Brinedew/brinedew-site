@@ -77,7 +77,8 @@ const SHEDDABLE_ROUTE_FAMILIES = new Set([
 // Between claiming and completing a lease, the drain publishes the generated
 // portrait through the same routes a bulk sync uses. Only the caller knows which
 // it is, so the caller declares it, as in Google SRE's design, where criticality
-// travels with the request. Only these steps may be declared critical.
+// travels with the request. Only these steps may be declared critical. The last
+// two are the finalization phases a delivery calls in-process.
 export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
   new Set([
     "admin_ingest",
@@ -86,6 +87,8 @@ export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
     "admin_finalization_enqueue",
     "admin_finalization_process",
     "background_sync_finalization",
+    "admin_reconcile",
+    "admin_read_models",
   ]),
 )
 
