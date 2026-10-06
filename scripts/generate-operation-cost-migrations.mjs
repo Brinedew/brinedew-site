@@ -45,18 +45,7 @@ export function reviewedMigrationStatements(directory, name, expectedTriggers, e
 // the generated `<PREFIX>_MIGRATION_NAME` and `<PREFIX>_MIGRATION_STATEMENTS`.
 // The entry is deleted once the deploy shows the migration applied.
 function pendingMigrations() {
-  return [
-    [
-      "REQUEST_INBOX_UNREAD_PAGE",
-      "0116_request_inbox_unread_page.sql",
-      reviewedMigrationStatements(
-        "migrations-iconoplasm",
-        "0116_request_inbox_unread_page.sql",
-        0,
-        1,
-      ),
-    ],
-  ]
+  return []
 }
 
 function output() {
