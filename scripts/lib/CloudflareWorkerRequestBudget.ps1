@@ -10,11 +10,19 @@ $script:CloudflareWorkerRequestBudgetLockTimeoutSeconds = 10
 # This file reads them through Node instead of keeping copies; a copy here once held
 # the old 2,500-request cap after the Website had moved on. No policy, no request.
 function Get-IconoplasmBudgetPolicy {
-    $policyPath = Join-Path $PSScriptRoot '..' '..' 'shared' 'iconoplasm-d1-budget-policy.js'
-    $policyUrl = ([Uri] (Resolve-Path -LiteralPath $policyPath -ErrorAction Stop).Path).AbsoluteUri
-    # The URL goes inside the snippet: Node received no extra argument under pwsh on Linux.
-    $reader = "const p = await import('$policyUrl'); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))"
-    $json = & node --input-type=module -e $reader
+    $policyPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' 'shared' 'iconoplasm-d1-budget-policy.js') -ErrorAction Stop).Path
+    # Node turns the plain path into a file URL itself, and the path travels in the
+    # environment: on Linux CI, pwsh dropped a trailing Node argument and .NET's
+    # [Uri] produced an unusable URL.
+    $reader = "import { pathToFileURL } from 'node:url'; const p = await import(pathToFileURL(process.env.ICONOPLASM_BUDGET_POLICY_PATH).href); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))"
+    $previousPath = $env:ICONOPLASM_BUDGET_POLICY_PATH
+    $env:ICONOPLASM_BUDGET_POLICY_PATH = $policyPath
+    try {
+        $json = & node --input-type=module -e $reader
+    }
+    finally {
+        $env:ICONOPLASM_BUDGET_POLICY_PATH = $previousPath
+    }
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string] $json)) {
         throw 'The Iconoplasm budget policy could not be read; no operator request was sent.'
     }
