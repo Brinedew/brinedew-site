@@ -44,6 +44,8 @@ export function createRequestInbox({
   var caretakerDossierSignatures = Object.create(null)
   var requestRefreshVersion = 0
   var caretakerRefreshVersion = 0
+  // B-1029: a gene page that opened before the inbox loaded; marked seen after the load.
+  var pendingViewedGene = ""
 
   function currentAccountKey() {
     var user = getCurrentUser()
@@ -119,6 +121,7 @@ export function createRequestInbox({
   function reset() {
     invalidateInflight()
     caretakerDossierSignatures = Object.create(null)
+    pendingViewedGene = ""
     state.loaded = false
     state.loading = false
     state.request_error = false
@@ -189,6 +192,7 @@ export function createRequestInbox({
           return Math.max(highest, Number((item && item.notification_id) || 0) || 0)
         }, previousHighWater)
         renderSidebar()
+        if (pendingViewedGene) void noteGeneViewed(pendingViewedGene)
         if (opts.announce && previousHighWater > 0 && newestUnread) {
           showFulfilledNotice(newestUnread)
         }
@@ -409,48 +413,88 @@ export function createRequestInbox({
     )
   }
 
-  // ARCHITECTURE FENCE [IPD-006] — mirror Discord's durable receipt boundary.
-  // A repeated gene is grouped only inside the same workstation publication;
-  // adjacent rows and timestamps are never treated as generation identity.
+  // B-1029: the Ready list holds unread results only, one entry per gene. Every
+  // unread batch of a gene merges into it and its count is the sum of their
+  // images; the result leaves once the gene's page has been opened. Discord's
+  // receipt keeps its own per-publication boundary (IPD-006) in the worker.
   function groupReadyRequests(items) {
     var groups = []
     var byKey = Object.create(null)
     var requests = Array.isArray(items) ? items : []
     for (var index = 0; index < requests.length; index++) {
       var item = requests[index] || {}
-      var publicationId = String(item.fulfillment_publication_id || "").trim()
+      if (item.unread !== true) continue
       var symbol = String(item.gene_symbol || "")
         .trim()
         .toUpperCase()
       var notificationId = Number(item.notification_id || 0) || 0
       var requestId = Number(item.request_id || item.id || 0) || 0
-      var key =
-        publicationId && symbol
-          ? publicationId + "\u001f" + symbol
-          : "ungrouped:" + (notificationId || requestId || index)
+      var key = symbol || "ungrouped:" + (notificationId || requestId || index)
       var group = byKey[key]
       if (!group) {
         group = {
           key: key,
-          fulfillment_publication_id: publicationId,
           gene_symbol: symbol,
           gene_url: item.gene_url || "/",
           expected_size: 0,
-          unread: false,
+          unread: true,
           items: [],
         }
         byKey[key] = group
         groups.push(group)
       }
       group.items.push(item)
-      group.expected_size = Math.max(
-        group.expected_size,
-        Number(item.fulfillment_group_size || 0) || 0,
-        group.items.length,
-      )
-      group.unread = group.unread || item.unread === true
+      group.expected_size = group.items.length
     }
     return groups
+  }
+
+  function unreadItemsFor(symbol) {
+    var wanted = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    return (Array.isArray(state.ready_requests) ? state.ready_requests : []).filter(
+      function (item) {
+        return (
+          item &&
+          item.unread === true &&
+          String(item.gene_symbol || "")
+            .trim()
+            .toUpperCase() === wanted
+        )
+      },
+    )
+  }
+
+  // B-1029: a result counts as seen once its gene page opens, however the person got
+  // there (sidebar, Discord link, search). The page's own inbox load can finish after
+  // the gene renders, so the symbol waits for that load. Results that arrive while the
+  // page stays open are not marked: the person has not seen them yet.
+  function noteGeneViewed(symbol) {
+    var wanted = String(symbol || "")
+      .trim()
+      .toUpperCase()
+    if (!wanted || !getCurrentUser()) return Promise.resolve(null)
+    if (!state.loaded) {
+      pendingViewedGene = wanted
+      return Promise.resolve(null)
+    }
+    pendingViewedGene = ""
+    var loadedUnread = (Array.isArray(state.ready_requests) ? state.ready_requests : []).filter(
+      function (item) {
+        return item && item.unread === true
+      },
+    ).length
+    // Unread results beyond the loaded page may belong to this gene too.
+    if (!unreadItemsFor(wanted).length && state.unread_count <= loadedUnread) {
+      return Promise.resolve(null)
+    }
+    var seen = unreadItemsFor(wanted)
+    state.ready_requests = state.ready_requests.filter(function (item) {
+      return seen.indexOf(item) === -1
+    })
+    renderSidebar()
+    return markRead([], false, { gene_symbol: wanted }).catch(function () {})
   }
 
   function fulfilledReceiptMarkup(group) {
@@ -497,9 +541,7 @@ export function createRequestInbox({
       (group.unread ? " icono-request-inbox__item--unread" : "") +
       '" href="' +
       escapeHtml(group.gene_url || "/") +
-      '" data-icono-request-receipt data-icono-request-publication-id="' +
-      escapeHtml(group.fulfillment_publication_id || "") +
-      '" data-icono-request-gene-symbol="' +
+      '" data-icono-request-receipt data-icono-request-gene-symbol="' +
       escapeHtml(group.gene_symbol || "") +
       '" data-icono-request-notification-ids="' +
       escapeHtml(notificationIds.join(",")) +
@@ -601,8 +643,9 @@ export function createRequestInbox({
     var readyGroups = groupReadyRequests(readyRequests)
     var openRequests = Array.isArray(state.open_requests) ? state.open_requests : []
     var unread = Math.max(0, Number(state.unread_count || 0) || 0)
-    var unreadGroupCount = Math.max(0, Number(state.unread_group_count || 0) || 0)
-    var readyGroupCount = Math.max(readyGroups.length, Number(state.ready_group_count || 0) || 0)
+    var shownUnread = readyGroups.reduce(function (sum, group) {
+      return sum + group.items.length
+    }, 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
     var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
     var html =
@@ -622,16 +665,15 @@ export function createRequestInbox({
         "Try again when this panel refreshes.</div>"
     } else if (state.loading && !state.loaded) {
       readyContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
-    } else if (!readyRequests.length) {
+    } else if (!readyGroups.length) {
       readyContent +=
-        '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong>' +
-        "Finished requests will stay here.</div>"
-    } else if (readyGroupCount > readyGroups.length) {
+        '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong></div>'
+    } else if (unread > shownUnread) {
       readyContent +=
         '<div class="icono-request-inbox__limit-note">' +
-        escapeHtml(String(readyGroups.length)) +
+        escapeHtml(String(shownUnread)) +
         " of " +
-        escapeHtml(String(readyGroupCount)) +
+        escapeHtml(String(unread)) +
         " shown.</div>"
     }
 
@@ -657,7 +699,13 @@ export function createRequestInbox({
         escapeHtml(String(openCount)) +
         " shown.</div>"
     }
-    html += requestGroupMarkup("ready", "Ready", readyGroupCount, unreadGroupCount, readyContent)
+    html += requestGroupMarkup(
+      "ready",
+      "Ready",
+      readyGroups.length,
+      readyGroups.length,
+      readyContent,
+    )
     html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
     html += "</div>"
     if (cancelledCount) {
@@ -725,15 +773,7 @@ export function createRequestInbox({
         if (link._iconoRequestInboxWired) return
         link._iconoRequestInboxWired = true
         link.addEventListener("click", function (event) {
-          var ids = String(link.getAttribute("data-icono-request-notification-ids") || "")
-            .split(",")
-            .map(function (value) {
-              return Number.parseInt(value, 10) || 0
-            })
-            .filter(Boolean)
-          var publicationId = link.getAttribute("data-icono-request-publication-id") || ""
-          var symbol = link.getAttribute("data-icono-request-gene-symbol") || ""
-          if (!ids.length && !(publicationId && symbol)) return
+          // Opening the gene page marks its results seen (noteGeneViewed).
           event.preventDefault()
           var href = link.getAttribute("href") || "/"
           if (typeof navigate === "function") {
@@ -741,10 +781,6 @@ export function createRequestInbox({
           } else {
             window.location.assign(href)
           }
-          void markRead(ids, false, {
-            fulfillment_publication_id: publicationId,
-            gene_symbol: symbol,
-          }).catch(function () {})
         })
       })(links[i])
     }
@@ -793,6 +829,7 @@ export function createRequestInbox({
     caretakerPanelMarkup,
     panelMarkup,
     noteCaretakerDossier,
+    noteGeneViewed,
     refresh: refreshForLifecycle,
     reset,
     start,

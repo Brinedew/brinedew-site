@@ -1,8 +1,8 @@
 import { createMigrationInventoryCostAdapter } from "./operation-cost-migration-inventory.js"
-import { createSchemaTableMigrationCostAdapter } from "./operation-cost-schema-table-migration-adapter.js"
+import { createSchemaIndexMigrationCostAdapter } from "./operation-cost-schema-index-migration-adapter.js"
 import {
-  TAGGERIZER_DAILY_CALLS_MIGRATION_NAME,
-  TAGGERIZER_DAILY_CALLS_MIGRATION_STATEMENTS,
+  REQUEST_INBOX_UNREAD_PAGE_MIGRATION_NAME,
+  REQUEST_INBOX_UNREAD_PAGE_MIGRATION_STATEMENTS,
 } from "../generated/operation-cost-migrations.js"
 
 // The three inventories read each database's migration journal and schema
@@ -14,11 +14,11 @@ import {
 export function createMigrationOperationCostAdapters(env, identities) {
   return new Map([
     [
-      "iconoplasm-migration-0115",
-      createSchemaTableMigrationCostAdapter({
+      "iconoplasm-migration-0116",
+      createSchemaIndexMigrationCostAdapter({
         db: env.ICONOPLASM_DB,
-        name: TAGGERIZER_DAILY_CALLS_MIGRATION_NAME,
-        statements: TAGGERIZER_DAILY_CALLS_MIGRATION_STATEMENTS,
+        name: REQUEST_INBOX_UNREAD_PAGE_MIGRATION_NAME,
+        statements: REQUEST_INBOX_UNREAD_PAGE_MIGRATION_STATEMENTS,
         ...identities,
       }),
     ],
