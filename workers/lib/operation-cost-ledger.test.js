@@ -82,6 +82,38 @@ function enableKv(f, overrides = {}) {
   })
 }
 
+// B-1035, 2026-10-06: the B-994 rewrite batch (about 78 rows a gene) was counted
+// twice, once in the shared counter and again inside the provider's account
+// sample, and would have stopped at about half its 535 genes.
+test("the account check counts shared writes once the provider's sample provably holds them", () => {
+  const f = fixture()
+  try {
+    const shared = Math.floor(DAILY_WRITES * 0.6)
+    f.ledger.readOtherUsage = () => ({ rows_read: 0, rows_written: shared, requests: 0 })
+    f.ledger.readAccountUsage = () => ({ ...f.readAccountUsage(), rows_written: shared })
+    const plan = f.ledger.register({
+      ...f.input,
+      prediction: { rows_read: 10, rows_written: 5_000, requests: 4 },
+      expires_at: f.readAccountUsage().measured_at + 3_600_000,
+    })
+    const bound = { rows_read: 1, rows_written: 1_000, requests: 1 }
+    assert.throws(
+      () => f.ledger.reserve(f.step({ id: plan.id, bound })),
+      /COST_ACCOUNT_HEADROOM_LIMIT/,
+    )
+    f.advance(10 * 60_000)
+    assert.throws(
+      () => f.ledger.reserve(f.step({ id: plan.id, step_id: "step-2", bound })),
+      /COST_ACCOUNT_HEADROOM_LIMIT/,
+    )
+    f.advance(6 * 60_000)
+    f.ledger.reserve(f.step({ id: plan.id, step_id: "step-3", bound }))
+    assert.equal(f.ledger.readPlan(plan.id).used.rows_written, 1_000)
+  } finally {
+    f.db.close()
+  }
+})
+
 test("capacity includes retained uncertain reservations and legacy usage without refunding either", () => {
   const f = fixture()
   try {
