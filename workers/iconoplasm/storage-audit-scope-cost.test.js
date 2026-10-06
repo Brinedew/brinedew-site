@@ -6,6 +6,7 @@ import test from "node:test"
 import {
   fetchAdminAssetRepairScope,
   selectStorageAuditQueueRowsToProcess,
+  writeStorageAuditQueueInspectionResults,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
@@ -20,7 +21,9 @@ const { Miniflare, convertV4MiniflareOptions } = createRequire(
 // 1. it reads other genes' rows, so its cost grows with the whole catalogue;
 // 2. it misses the requested gene: no queue rows, or stale flags left on them;
 // 3. it rewrites or deletes other genes' queue rows;
-// 4. the row picker hands back another gene's assets.
+// 4. the row picker hands back another gene's assets;
+// 5. recording the inspection results checks every queue row: on 2026-10-06 a
+//    DLK2 audit read 454,629 production rows to record 8 results.
 
 // The production schema as the migrations leave it: tables, the rows the
 // migrations seed (the maintained summary counts row among them), then
@@ -90,7 +93,7 @@ async function addUnrelated(db, from, genes) {
 }
 
 test(
-  "a storage audit or repair scoped to one gene costs the same beside 2,000 or 12,000 unrelated genes",
+  "a storage audit or repair scoped to one gene, results recorded, costs the same beside 2,000 or 12,000 unrelated genes",
   { timeout: 180000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -135,12 +138,33 @@ test(
           requestedSymbols: ["DLK2"],
           limit: 100,
         })
+        // Record a result for every DLK2 queue row, as an audit pass does, so
+        // each measured call writes (the picker skips rows already recorded).
+        const dlk2 = (
+          await db.prepare("SELECT * FROM icono_storage_audit_queue WHERE gene_symbol='DLK2'").all()
+        ).results
+        await writeStorageAuditQueueInspectionResults(
+          env,
+          dlk2.map((row) => ({
+            ok: true,
+            symbol: row.gene_symbol,
+            asset_sha256: row.asset_sha256,
+            storage_complete: true,
+            regional_divergence: false,
+            missing_renditions: [],
+            is_current: row.is_current,
+            is_stale: row.is_stale,
+            is_legacy: row.is_legacy,
+            status: row.asset_status,
+            created_at: row.created_at,
+          })),
+        )
         return { cost: meter.finish(), scope, picked }
       }
 
       // The first call also builds the persisted summary once; measure the
       // second, which is what an operator's repeated clicks cost.
-      await scoped()
+      const first = await scoped()
       const small = await scoped()
 
       // 2. Every DLK2 asset is queued, the stale flag is corrected, and
@@ -160,10 +184,10 @@ test(
           [sha(3), 0],
         ],
       )
-      assert.ok(small.picked.length > 0)
+      assert.ok(first.picked.length > 0)
       assert.ok(
-        small.picked.every((r) => r.gene_symbol === "DLK2"),
-        JSON.stringify(small.picked),
+        first.picked.every((r) => r.gene_symbol === "DLK2"),
+        JSON.stringify(first.picked),
       )
       assert.ok(small.scope.rows.every((r) => r.symbol === "DLK2"))
 

@@ -15174,7 +15174,7 @@ async function inspectAdminAssetStorageRows(
   return out
 }
 
-async function writeStorageAuditQueueInspectionResults(env, rows) {
+export async function writeStorageAuditQueueInspectionResults(env, rows) {
   if (!env.ICONOPLASM_DB) return 0
   const successRows = []
   const retryRows = []
@@ -15356,7 +15356,12 @@ async function writeStorageAuditQueueInspectionResults(env, rows) {
            attempts = 0,
            next_attempt_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
-       WHERE EXISTS (
+       -- B-1020: the IN filter lets SQLite seek the queue's primary key. With
+       -- the correlated EXISTS alone it checked every queue row: 450,059 rows
+       -- read to record DLK2's 8 results (2026-10-06, production and the
+       -- nightly copy agree).
+       WHERE icono_storage_audit_queue.gene_symbol IN (SELECT gene_symbol FROM incoming_results)
+         AND EXISTS (
          SELECT 1
          FROM incoming_results ir
          WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
@@ -15490,7 +15495,12 @@ async function writeStorageAuditQueueInspectionResults(env, rows) {
              LIMIT 1
            ), icono_storage_audit_queue.next_attempt_at),
            updated_at = CURRENT_TIMESTAMP
-       WHERE EXISTS (
+       -- B-1020: the IN filter lets SQLite seek the queue's primary key. With
+       -- the correlated EXISTS alone it checked every queue row: 450,059 rows
+       -- read to record DLK2's 8 results (2026-10-06, production and the
+       -- nightly copy agree).
+       WHERE icono_storage_audit_queue.gene_symbol IN (SELECT gene_symbol FROM incoming_results)
+         AND EXISTS (
          SELECT 1
          FROM incoming_results ir
          WHERE ir.gene_symbol = icono_storage_audit_queue.gene_symbol
