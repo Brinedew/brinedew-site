@@ -78,7 +78,8 @@ const SHEDDABLE_ROUTE_FAMILIES = new Set([
 // portrait through the same routes a bulk sync uses. Only the caller knows which
 // it is, so the caller declares it, as in Google SRE's design, where criticality
 // travels with the request. Only these steps may be declared critical. The last
-// two are the finalization phases a delivery calls in-process.
+// two are the reconcile and read-model calls the workstation makes during a
+// delivery's publication (it declares every admin call of that publication).
 export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
   new Set([
     "admin_ingest",
