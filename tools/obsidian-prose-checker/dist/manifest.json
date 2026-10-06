@@ -1,0 +1,9 @@
+{
+  "id": "brinedew-prose-checker",
+  "name": "Brinedew Prose Checker",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.7",
+  "description": "Local Harper grammar plus deliberate whole-document prose checks by atomic AI agents.",
+  "author": "Vladimir",
+  "isDesktopOnly": true
+}

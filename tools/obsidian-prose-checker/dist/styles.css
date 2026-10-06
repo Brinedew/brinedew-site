@@ -1,0 +1,110 @@
+.bpc-status-bar {
+  cursor: var(--cursor);
+}
+
+.bpc-progress-view {
+  padding: var(--size-4-4);
+}
+
+.bpc-progress-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--size-4-3);
+  margin-bottom: var(--size-4-4);
+}
+
+.bpc-progress-icon {
+  color: var(--color-purple);
+  margin-top: 0.25rem;
+}
+
+.bpc-progress-header h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.bpc-progress-summary,
+.bpc-progress-meta,
+.bpc-agent-picker-definition {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bpc-progress-controls,
+.bpc-consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-4);
+}
+
+.bpc-progress-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+}
+
+.bpc-progress-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--size-4-3);
+  align-items: start;
+  padding: var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary-alt);
+}
+
+.bpc-progress-row.is-running .bpc-progress-status {
+  color: var(--color-purple);
+  animation: bpc-spin 1.2s linear infinite;
+}
+
+.bpc-progress-row.is-complete .bpc-progress-status {
+  color: var(--color-green);
+}
+
+.bpc-progress-row.is-failed .bpc-progress-status,
+.bpc-progress-error {
+  color: var(--text-error);
+}
+
+.bpc-progress-details {
+  min-width: 0;
+}
+
+.bpc-progress-agent,
+.bpc-agent-picker-label {
+  font-weight: var(--font-semibold);
+}
+
+.bpc-progress-error {
+  margin-top: var(--size-4-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bpc-progress-row-actions button {
+  padding: var(--size-4-1);
+}
+
+.bpc-agent-picker-definition {
+  margin-top: var(--size-4-1);
+  line-height: var(--line-height-tight);
+}
+
+@keyframes bpc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .bpc-progress-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .bpc-progress-row-actions {
+    grid-column: 2;
+  }
+}
