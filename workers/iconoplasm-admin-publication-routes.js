@@ -150,7 +150,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     // Reserve more write headroom than this table normally consumes before
     // each atomic D1 transaction. The metered database wrapper rejects the
     // whole batch before execution if it could cross either a hard quota or
-    // the configured 90% mutation ceiling, then records actual D1 metadata.
+    // the admin mutation limiter's share, then records actual D1 metadata.
     // This preserves exact guard authority without paying one network round
     // trip for every catalog row.
     for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
