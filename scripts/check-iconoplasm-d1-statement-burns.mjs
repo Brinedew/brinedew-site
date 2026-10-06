@@ -21,7 +21,9 @@
 // what a failing export retried every two hours looks like.
 import { pathToFileURL } from "node:url"
 
-export const BUDGETED_BACKUP_READ_CEILING = 1_000_000
+import { FREE_PLAN_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+
+export const BUDGETED_BACKUP_READ_CEILING = FREE_PLAN_DAILY_LIMITS.rows_read / 5
 
 // backup-d1-rotation.mjs quotes every identifier as "name" with "" escapes.
 const BACKUP_IDENTIFIER = String.raw`"(?:[^"]|"")+"`

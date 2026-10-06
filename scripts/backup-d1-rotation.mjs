@@ -51,6 +51,7 @@ import { createGzip } from "node:zlib"
 import { DatabaseSync } from "node:sqlite"
 
 import { readAccountBudget } from "./lib/cloudflare-account-budget.mjs"
+import { FREE_PLAN_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 
 export const BACKUP_ROTATION = Object.freeze([
   { name: "iconoplasm", id: "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" },
@@ -63,7 +64,7 @@ export const BACKUP_ROTATION = Object.freeze([
   },
 ])
 
-const DAILY_READ_CAP = 5_000_000
+const DAILY_READ_CAP = FREE_PLAN_DAILY_LIMITS.rows_read
 const DAY_MS = 86_400_000
 const quote = (name) => `"${String(name).replaceAll('"', '""')}"`
 
