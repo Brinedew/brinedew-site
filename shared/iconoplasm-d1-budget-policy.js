@@ -17,6 +17,14 @@ export const FREE_D1_DAILY_LIMITS = Object.freeze({ reads: 5_000_000, writes: 10
 // owner queues about 800 portraits at once. It matches the online-migration ceiling.
 export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes: 70_000 })
 
+// Workers requests the operator's cost ledger may spend in a day, shed by the
+// tiers below like the D1 allowance. A busy day measured on 2026-10-06: a 670-gene
+// rewrite batch plus replica pulls spent the old 2,500, and an 870-gene Image Lab
+// batch fetches each gene's prose and Tags (about 1,740 more). 10,000 is 10% of the
+// Free plan's 100,000; the ledger's account ceiling still refuses operator work
+// first when readers fill the account.
+export const OPERATOR_DAILY_REQUEST_LIMIT = 10_000
+
 export function d1OperationalAllowance(options) {
   return Math.min(d1DailyAllowance(options), D1_OPERATOR_DAILY_LIMITS[options.resource])
 }

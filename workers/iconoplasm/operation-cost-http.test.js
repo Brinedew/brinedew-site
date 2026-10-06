@@ -7,6 +7,7 @@ import {
   runAdmittedCatalogPreparation,
 } from "../../scripts/run-admitted-catalog-initialization.mjs"
 import { createOperationCostAuthority, OPERATION_COST_ROUTE_PREFIX } from "./operation-cost-http.js"
+import { REPLICA_DAILY_ADMISSION } from "../lib/operation-cost-ledger.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 function fixture({
@@ -184,7 +185,7 @@ test("capacity is admin-only, uncached and consumes no D1 queries", async () => 
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
     const value = await response.json()
-    assert.equal(value.remaining.rows_read, 1_000_000)
+    assert.equal(value.remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read)
     assert.equal(value.used.requests, 1)
     const replica = f.request("/capacity")
     replica.headers.set("x-iconoplasm-cost-principal", "replica")
@@ -384,7 +385,7 @@ test("real Worker gateway authenticates before authority/provider access and for
     capacityRequest.headers.set("x-iconoplasm-admin-token", "test-only")
     const capacity = await gateway(capacityRequest, env)
     assert.equal(capacity.status, 200)
-    assert.equal((await capacity.json()).remaining.rows_read, 1_000_000)
+    assert.equal((await capacity.json()).remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read)
     assert.equal(forwards, 2)
     assert.equal(f.calls.length, 0)
   } finally {
