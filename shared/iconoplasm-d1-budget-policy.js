@@ -49,13 +49,12 @@ export const D1_CRITICALITY_SHARES = Object.freeze({
   sheddable: 0.6,
 })
 
-// Player-requested portraits, and moderation that can't wait for the reset:
-// suspending a caretaker, and publishing, rejecting or removing a portrait
-// (admin_gallery_mutation*, one family for every gallery action).
-const CRITICAL_ROUTE_FAMILIES = new Set([
-  "authority_generation_executor",
-  "admin_caretaker_mutation",
-])
+// The tier is decided by who is waiting for the request, not by who sent it.
+// Readers, votes and caretaker saves never enter this ledger. Inside it, only a
+// player's portrait delivery has someone waiting right now: claiming the lease
+// and completing it. Moderation, publication housekeeping, replication and
+// rewrites can all be redone after the reset.
+const CRITICAL_ROUTE_FAMILIES = new Set(["authority_generation_executor"])
 
 // Admin diagnostics and summaries: a person can press the button again tomorrow.
 const SHEDDABLE_ROUTE_FAMILIES = new Set([
@@ -71,11 +70,26 @@ const SHEDDABLE_ROUTE_FAMILIES = new Set([
   "admin_gallery",
 ])
 
-// Everything else in the ledger is batch (ingest, publication, replication,
-// rewrites, finalization): it retries after the reset.
-export function d1CriticalityOfRouteFamily(routeFamily) {
+// Between claiming and completing a lease, the drain publishes the generated
+// portrait through the same routes a bulk sync uses. Only the caller knows which
+// it is, so the caller declares it, as in Google SRE's design, where criticality
+// travels with the request. Only these steps may be declared critical.
+export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
+  new Set([
+    "admin_ingest",
+    "admin_catalog_upsert",
+    "admin_catalog_reconcile",
+    "admin_finalization_enqueue",
+    "admin_finalization_process",
+    "background_sync_finalization",
+  ]),
+)
+
+// Everything else in the ledger is batch: it retries after the reset.
+export function d1CriticalityOfRouteFamily(routeFamily, declaredCriticality = null) {
   const family = String(routeFamily || "").trim()
-  if (CRITICAL_ROUTE_FAMILIES.has(family) || family.startsWith("admin_gallery_mutation"))
+  if (CRITICAL_ROUTE_FAMILIES.has(family)) return "critical"
+  if (declaredCriticality === "critical" && D1_CRITICALITY_DECLARABLE_FAMILIES.has(family))
     return "critical"
   if (SHEDDABLE_ROUTE_FAMILIES.has(family)) return "sheddable"
   return "sheddable_plus"

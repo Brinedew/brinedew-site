@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway,
+  handleIconoplasmSyncFinalizationQueue,
+} from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { realBudgetLedger } from "../test-helpers/reservation-receipts-harness.js"
 
 // B-1026. On 2026-10-05 batch work and then one 151k-read storage audit spent the
@@ -15,8 +18,10 @@ import { realBudgetLedger } from "../test-helpers/reservation-receipts-harness.j
 // 2. A diagnostic admitted just under 60% keeps querying past it (the audit was
 //    two statements of 100k and 50k).
 // 3. Batch runs past 85%.
-// 4. A delivery, or moderation (rejecting a portrait), is refused below 100%:
-//    the bug this replaces.
+// 4. A delivery is refused below 100%: the bug this replaces. That includes
+//    publishing the generated portrait, which uses the same routes as a bulk
+//    sync; only the drain knows it is a delivery, so it says so.
+// 4b. Anyone else claims that: a bulk sync, a diagnostic, an uncredentialed call.
 // 5. A refused request still touches D1, or a refused claim holds a write
 //    reservation that crowds the next delivery.
 // 6. The refusal doesn't say which tier was shed, so nobody can tell a
@@ -111,6 +116,7 @@ function fixture(t, { rowsRead, rowsReadPerStatement = 1 }) {
   }
   return {
     d1,
+    env,
     reservations,
     // Admin diagnostics: SHEDDABLE.
     diagnostic: (query = "") =>
@@ -124,7 +130,25 @@ function fixture(t, { rowsRead, rowsReadPerStatement = 1 }) {
         headers: { "Content-Type": "application/json", "x-iconoplasm-admin-token": ADMIN_TOKEN },
         body: "{}",
       }),
-    // Moderation, pulling a portrait: CRITICAL.
+    // Publishing a generated portrait: batch unless the drain declares a delivery.
+    publish: (declared) =>
+      send("/api/iconoplasm/admin/finalization/enqueue", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-iconoplasm-admin-token": ADMIN_TOKEN,
+          ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
+        },
+        body: JSON.stringify({ rows: [], reason: "criticality-test" }),
+      }),
+    diagnosticDeclaringCritical: () =>
+      send("/api/iconoplasm/admin/assets/summary", {
+        headers: {
+          "x-iconoplasm-admin-token": ADMIN_TOKEN,
+          "x-iconoplasm-criticality": "critical",
+        },
+      }),
+    // Moderation, pulling a portrait: batch, it can wait for the reset.
     moderation: () =>
       send("/api/iconoplasm/admin/reject", {
         method: "POST",
@@ -178,7 +202,59 @@ test("at 86% batch is refused and holds no reservation, while a delivery still r
   assert.ok(delivery.d1.calls.length > 0)
 
   const moderation = await fixture(t, { rowsRead: 0.86 * OPERATOR_READS }).moderation()
-  assert.ok(!shed(moderation), JSON.stringify(moderation))
+  assert.ok(shed(moderation), JSON.stringify(moderation))
+  assert.equal(moderation.payload.budget.exhausted_by, "rows_read_sheddable_plus")
+})
+
+test("at 86% the drain's publication of a delivery runs; the same call from a bulk sync waits", async (t) => {
+  const delivery = await fixture(t, { rowsRead: 0.86 * OPERATOR_READS }).publish(true)
+  assert.ok(!shed(delivery), JSON.stringify(delivery))
+  const bulk = await fixture(t, { rowsRead: 0.86 * OPERATOR_READS }).publish(false)
+  assert.ok(shed(bulk), JSON.stringify(bulk))
+  // Only delivery-publication steps may claim it.
+  const diagnostic = await fixture(t, {
+    rowsRead: 0.61 * OPERATOR_READS,
+  }).diagnosticDeclaringCritical()
+  assert.ok(shed(diagnostic), JSON.stringify(diagnostic))
+})
+
+test("at 86% the finalization queue runs a delivery's message and holds a bulk sync's", async (t) => {
+  // A held message is handed to the sync governor to wake after the reset.
+  const run = async (drainScoped) => {
+    const env = fixture(t, { rowsRead: 0.86 * OPERATOR_READS }).env
+    const governorPaths = []
+    const message = {
+      body: {
+        kind: "drain_finalization_ledger",
+        run_id: "criticality-test",
+        symbols: ["C10ORF62"],
+        ...(drainScoped ? { drain_scoped_phases: true } : {}),
+      },
+      ack() {},
+      retry() {},
+    }
+    const queueEnv = {
+      ...env,
+      ICONOPLASM_SYNC_GOVERNOR: {
+        idFromName: (name) => name,
+        get: () => ({
+          fetch: async (request) => {
+            const path = new URL(request.url).pathname
+            governorPaths.push(path)
+            return path === "/permit"
+              ? Response.json({ ok: true, granted: 1, lease_id: "criticality-lease" })
+              : Response.json({ ok: true })
+          },
+        }),
+      },
+    }
+    await handleIconoplasmSyncFinalizationQueue({ messages: [message] }, queueEnv, {
+      waitUntil() {},
+    }).catch(() => null)
+    return governorPaths.some((path) => path.startsWith("/defer-finalization")) ? "held" : "ran"
+  }
+  assert.equal(await run(true), "ran")
+  assert.equal(await run(false), "held")
 })
 
 test("a spent day still refuses deliveries, before reserving any writes", async (t) => {

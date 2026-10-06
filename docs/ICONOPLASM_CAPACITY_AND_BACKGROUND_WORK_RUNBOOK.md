@@ -153,17 +153,26 @@ The operator ledger (the shared daily D1 budget that admin, workstation and
 background routes spend, `D1_OPERATOR_DAILY_LIMITS`) is shed by criticality,
 lowest tier first, after Google SRE's
 [Handling Overload](https://sre.google/sre-book/handling-overload/) and Stripe's
-reserved share for critical requests (B-1026). Each budgeted route family has a
-tier; a request is refused once the day's operator reads or writes reach its
-tier's share, at the start and again before every statement, so a diagnostic
-admitted just under its share stops on its next query:
+reserved share for critical requests (B-1026). A request is refused once the
+day's operator reads or writes reach its tier's share, at the start and again
+before every statement, so a diagnostic admitted just under its share stops on
+its next query.
 
-- critical, refused only when the day is spent: player-requested portraits
-  (`authority_generation_executor`) and moderation (caretaker actions, and
-  publishing, rejecting or removing a portrait);
-- sheddable_plus, refused at 85%: batch work (ingest, publication, replication,
-  system-text rewrites, finalization) and any budgeted family not named
-  otherwise. The write-heavy admin limiter's default target is this same share;
+The tier follows who is waiting for the request. Readers, votes and caretaker
+saves never enter this ledger. Inside it:
+
+- critical, refused only when the day is spent: a player's portrait delivery.
+  That is the lease routes (`authority_generation_executor`) and the publication
+  of that portrait, which shares its routes (ingest, catalog upsert and
+  reconcile, finalization) with bulk syncs. The caller declares a delivery: the
+  workstation sends `X-Iconoplasm-Criticality: critical` while it publishes a
+  generation session, and the finalization queue reads the message's existing
+  `drain_scoped_phases`. Only those routes may be declared critical, and only by
+  a credentialed caller;
+- sheddable_plus, refused at 85%: work nobody is waiting on that must still
+  finish (bulk syncs, replication, rewrites, Tags derivatives, blots,
+  moderation), and any budgeted family not named otherwise. The write-heavy
+  admin limiter's default target is this same share;
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
   coverage, assets, storage audit, repair scope, blots backlog, the gallery
   listing).
