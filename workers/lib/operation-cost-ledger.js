@@ -4,6 +4,7 @@
 import {
   D1_CRITICALITY_SHARES,
   D1_OPERATOR_DAILY_LIMITS,
+  OPERATOR_ACCOUNT_CEILINGS,
   OPERATOR_DAILY_REQUEST_LIMIT,
   d1CriticalityOfRouteFamily,
 } from "../../shared/iconoplasm-d1-budget-policy.js"
@@ -28,11 +29,7 @@ export const REPLICA_DAILY_ADMISSION = Object.freeze(
     ]),
   ),
 )
-export const ACCOUNT_CEILINGS = Object.freeze({
-  rows_read: 3_500_000,
-  rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
-  requests: 75_000,
-})
+export const ACCOUNT_CEILINGS = OPERATOR_ACCOUNT_CEILINGS
 const CONTROL_REQUEST_HEADROOM = 100
 // Shared-usage marks: one per five minutes of activity, so a mark at least one
 // analytics lag old is near at hand during a batch. At most 288 rows a day.
@@ -535,7 +532,7 @@ export class OperationCostLedger {
       // unknown outcome after process death. Receipt lookup is read-only.
       requireValue(!Object.hasOwn(plan.steps, stepId), "COST_STEP_ALREADY_RESERVED")
       // A complete baseline plus event suffix can exceed 128 pages at the
-      // workstation's default page size. The shared 2500-request allowance
+      // workstation's default page size. The day's request allowance
       // still bounds total retained steps across all plans in a day.
       requireValue(Object.keys(plan.steps).length < 1024, "COST_PLAN_STEP_LIMIT")
       const usage = this.row("SELECT * FROM operation_cost_days WHERE day = ?", plan.immutable.day)

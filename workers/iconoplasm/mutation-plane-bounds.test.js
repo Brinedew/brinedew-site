@@ -302,7 +302,7 @@ test("recent reservations accumulate until the background ceiling refuses", (t) 
     assert.equal(
       ledger.reserve({
         day,
-        lane: "publication",
+        lane: "laptop_delivery",
         operation_id: `burst:${index}`,
         units: 10_000,
         ...at,
@@ -312,7 +312,7 @@ test("recent reservations accumulate until the background ceiling refuses", (t) 
   }
   const refused = ledger.reserve({
     day,
-    lane: "publication",
+    lane: "laptop_delivery",
     operation_id: "burst:7",
     units: 1,
     ...at,
@@ -389,7 +389,7 @@ test("user actions are admitted above the background ceiling up to 90 percent", 
     now: "2026-09-30T12:01:00.000Z",
   }
   assert.equal(
-    ledger.reserve({ day, lane: "publication", operation_id: "tier:bg", units: 2, ...at }).ok,
+    ledger.reserve({ day, lane: "laptop_delivery", operation_id: "tier:bg", units: 2, ...at }).ok,
     false,
   )
   assert.equal(
@@ -521,7 +521,7 @@ test("locally recorded writes and recent reservations share the background ceili
 
   const refused = await post("/reserve-mutation-writes", {
     day_key: day,
-    lane: "publication",
+    lane: "laptop_delivery",
     operation_id: "known-headroom:refused",
     units: 1,
   })
@@ -589,7 +589,7 @@ test("staging admission reads the shared account-wide provider observation from 
     PROD_KV: providerObservationKv({ rowsWritten: 50_000 }),
   })
   const response = await reserveThrough(owner, {
-    lane: "publication",
+    lane: "laptop_delivery",
     operationId: "provider-observation:shared-production-kv",
     units: 20_001,
   })
@@ -666,7 +666,8 @@ test("a failed live refresh keeps the last good same-day observation", async (t)
     },
   )
   assert.equal(
-    (await reserveThrough(owner, { lane: "publication", operationId: "good:1", units: 5 })).status,
+    (await reserveThrough(owner, { lane: "laptop_delivery", operationId: "good:1", units: 5 }))
+      .status,
     200,
   )
   owner.providerObservationCheckedAt = 0
@@ -675,7 +676,7 @@ test("a failed live refresh keeps the last good same-day observation", async (t)
     observed_at: new Date(Date.now() - 10 * 60_000).toISOString(),
   }
   const refused = await reserveThrough(owner, {
-    lane: "publication",
+    lane: "laptop_delivery",
     operationId: "good:2",
     units: 6,
   })
@@ -727,7 +728,7 @@ test("unresolved reservations survive indefinitely while old completed identitie
   })
   ledger.reserve({
     day: oldDay,
-    lane: "publication",
+    lane: "laptop_delivery",
     operation_id: "lifecycle:completed",
     units: 7,
   })
@@ -752,7 +753,7 @@ test("unresolved reservations survive indefinitely while old completed identitie
   )
   const replay = ledger.reserve({
     day: "2026-09-19",
-    lane: "publication",
+    lane: "laptop_delivery",
     operation_id: "lifecycle:completed",
     units: 7,
   })
@@ -763,7 +764,7 @@ test("unresolved reservations survive indefinitely while old completed identitie
     () =>
       ledger.reserve({
         day: "2026-09-19",
-        lane: "publication",
+        lane: "laptop_delivery",
         operation_id: "lifecycle:completed",
         units: 8,
       }),
