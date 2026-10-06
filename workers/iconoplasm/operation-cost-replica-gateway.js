@@ -1,5 +1,6 @@
 import { authorizeIconoplasmAuthorityReplicaBearer } from "../iconoplasm-authority-service-auth.js"
 import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
+import { MUTATION_ANALYTICS_LAG_MS } from "../lib/iconoplasm-mutation-lane-reservations.js"
 import {
   OPERATION_COST_ROUTE_PREFIX,
   OPERATION_COST_PRINCIPAL_HEADER,
@@ -9,12 +10,21 @@ import {
   safeErrorResponse,
 } from "./caretaker/manifestation-authority-http-security.js"
 
-// B-978: the operation-cost authority's daily refusals clear at the UTC reset; say so, as every
-// other daily refusal does (B-968), so a client other than the workstation knows when to retry.
-const DAILY_REFUSAL_CODES = new Set(["COST_SHARED_DAILY_LIMIT", "COST_ACCOUNT_HEADROOM_LIMIT"])
+// B-978: the operation-cost authority's daily refusals state when to retry, as every other
+// daily refusal does (B-968). The shared day only clears at the UTC reset. The account check
+// counts up to one analytics lag of recent writes twice, on purpose, so during a heavy batch it
+// refuses early and clears on its own once the provider sample catches up (B-1036): on
+// 2026-10-06 telling the workstation "midnight" for it parked every published rewrite's pull
+// for ten hours while the account sat 10,000 rows under the ceiling.
+function retryAfterSeconds(code) {
+  if (code === "COST_SHARED_DAILY_LIMIT") return secondsUntilCloudflareDailyReset()
+  if (code === "COST_ACCOUNT_HEADROOM_LIMIT")
+    return Math.min(MUTATION_ANALYTICS_LAG_MS / 1000, secondsUntilCloudflareDailyReset())
+  return null
+}
 
 function refuse(code, status) {
-  const retryAfter = DAILY_REFUSAL_CODES.has(code) ? secondsUntilCloudflareDailyReset() : null
+  const retryAfter = retryAfterSeconds(code)
   return Response.json(
     { error: { code }, ...(retryAfter ? { retry_after_seconds: retryAfter } : {}) },
     {
