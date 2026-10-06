@@ -158,6 +158,11 @@ test("inbox counts and newest-page plans do not traverse growing notification hi
         .prepare("EXPLAIN QUERY PLAN " + REQUEST_INBOX_MARK_GENE_READ_SQL)
         .all("user", "TP53", "TP53", "user", "TP53"),
     ]
+    // The gene-seen update looks up its receipts by primary key, never by gene.
+    assert.ok(
+      plans[2].some((r) => /icono_request_notifications USING INTEGER PRIMARY KEY/.test(r.detail)),
+      JSON.stringify(plans[2]),
+    )
     for (const rows of plans) {
       assert.ok(rows.some((r) => /SEARCH/.test(r.detail)))
       assert.ok(rows.every((r) => !/SCAN|TEMP B-TREE/.test(r.detail)))

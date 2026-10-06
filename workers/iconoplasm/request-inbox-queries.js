@@ -32,7 +32,10 @@ export const REQUEST_INBOX_PAGE_SQL = `SELECT n.*,
 // B-1029: opening a gene page marks that gene's results seen, however the person
 // got there. The receipts come from the same unread index, so the cost is the
 // person's unread count (capped), never their history or the gene's popularity.
-export const REQUEST_INBOX_MARK_GENE_READ_SQL = `UPDATE icono_request_notifications
+// NOT INDEXED keeps the planner on primary-key lookups of the ids the unread index
+// returns; left free it chose the gene_symbol index and walked every notification
+// of a popular gene (20,024 rows read for 4 receipts in the workerd measurement).
+export const REQUEST_INBOX_MARK_GENE_READ_SQL = `UPDATE icono_request_notifications NOT INDEXED
   SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
   WHERE id IN (
     SELECT membership.notification_id
