@@ -23,7 +23,9 @@ const check = args.includes("--check")
 const dirArg = args.find((arg) => !arg.startsWith("--"))
 const dir = path.resolve(dirArg || "quartz/static/iconoplasm")
 // Imports of ./generated/ and ./vendor/ files are stamped too; they used to be stamped by hand.
-const STAMP = /(["'(])(\.\/(?:generated\/|vendor\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([a-f0-9]{16})/g
+// Any ?v= value counts, so a placeholder like ?v=0 is reported as stale instead of slipping
+// past both patterns (B-996 shipped one that way).
+const STAMP = /(["'(])(\.\/(?:generated\/|vendor\/)?[A-Za-z0-9._-]+\.(?:js|css))\?v=([A-Za-z0-9]*)/g
 
 // The edge serves /static/iconoplasm/* as immutable, so an import with no stamp is never
 // refreshed for a returning reader. Only the Iconoplasm directory is held to this rule.

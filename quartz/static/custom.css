@@ -27,6 +27,16 @@
     font-display: swap;
   }
 
+  /* Wax China-marker hand of the caretaker blot print (B-996). Apache 2.0, see
+     /static/iconoplasm/caretaker-blot/SOURCES.md. */
+  @font-face {
+    font-family: "Permanent Marker";
+    src: url("/static/iconoplasm/caretaker-blot/PermanentMarker.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
   /* Screen-reader only utility - visually hidden but accessible to screen readers and crawlers */
   .sr-only {
     position: absolute;
@@ -983,20 +993,131 @@
     border-bottom: 0;
   }
 
-  .icono-request-inbox__item--caretaker {
-    grid-template-columns: 30px minmax(0, 1fr);
-    min-height: 56px;
-    padding-right: 4.5rem;
+  /* Caretaker blot print (B-996): the caretaker's gene as its own archival
+     autoradiograph, drawn by caretaker-blot.js from symbol, molecular weight and
+     portrait. Light theme: an aged positive print. Dark theme: the film on a light
+     box (dark plate, glowing bands, white grease pencil). */
+  .icono-blot-link {
+    display: block;
+    padding: 0.35rem 0 1.1rem;
+    text-decoration: none;
   }
 
-  .icono-request-inbox__caretaker-portrait {
+  .icono-blot-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .icono-blot {
+    --ink: 17 21 23;
+    position: relative;
     display: block;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 auto;
-    border-radius: 4px;
-    background: var(--lightgray);
+    width: 170px;
+    max-width: 100%;
+    aspect-ratio: 352 / 440;
+    margin: 0 auto;
+    transform: rotate(-1.4deg);
+    background: url("/static/iconoplasm/caretaker-blot/film-light.webp") center / cover;
+    clip-path: polygon(0 0, 91% 0, 91% 1.4%, 94.5% 3%, 95% 0, 100% 0, 100% 100%, 0 100%);
+    filter: drop-shadow(0 1px 1px rgb(20 12 6 / 0.22)) drop-shadow(0 8px 14px rgb(20 12 6 / 0.22));
+  }
+
+  :root[saved-theme="dark"] .icono-blot {
+    --ink: 232 241 243;
+    background-image: url("/static/iconoplasm/caretaker-blot/film-dark.webp");
+    filter: drop-shadow(0 0 1px rgb(190 220 230 / 0.35))
+      drop-shadow(0 0 16px rgb(150 195 210 / 0.22));
+  }
+
+  .icono-blot__lane {
+    position: absolute;
+    top: 11.4%;
+    width: 8%;
+    height: 66%;
+  }
+
+  .icono-blot__lane--marker {
+    left: 8.5%;
+  }
+
+  .icono-blot__lane--sample {
+    left: 19.9%;
+  }
+
+  .icono-blot__band {
+    position: absolute;
+    left: -6%;
+    right: -6%;
+    border-radius: 40% / 50%;
+    background: linear-gradient(
+      180deg,
+      rgb(var(--ink) / 0) 0%,
+      rgb(var(--ink) / calc(var(--a) * 0.9)) 35%,
+      rgb(var(--ink) / var(--a)) 50%,
+      rgb(var(--ink) / calc(var(--a) * 0.9)) 65%,
+      rgb(var(--ink) / 0) 100%
+    );
+  }
+
+  .icono-blot__photo {
+    position: absolute;
+    left: 33%;
+    top: 11.4%;
+    width: 62.5%;
+    aspect-ratio: 3 / 4;
     object-fit: cover;
+    object-position: 50% 0;
+    filter: grayscale(1) contrast(1.25) brightness(0.95);
+    mix-blend-mode: multiply;
+    opacity: 0.92;
+  }
+
+  :root[saved-theme="dark"] .icono-blot__photo {
+    filter: grayscale(1) contrast(1.4) brightness(0.85) sepia(0.15) hue-rotate(160deg);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+  }
+
+  .icono-blot__wax {
+    position: absolute;
+    color: rgb(var(--ink));
+    font-family: "Permanent Marker", "Caveat", cursive;
+    line-height: 0.9;
+    white-space: nowrap;
+    -webkit-mask-image: url("/static/iconoplasm/caretaker-blot/wax-mask.webp");
+    mask-image: url("/static/iconoplasm/caretaker-blot/wax-mask.webp");
+    -webkit-mask-size: 260px auto;
+    mask-size: 260px auto;
+  }
+
+  .icono-blot__wax span {
+    display: inline-block;
+  }
+
+  .icono-blot__mark {
+    top: 3.2%;
+    font-size: 15px;
+  }
+
+  .icono-blot__mark--marker {
+    left: 9.6%;
+  }
+
+  .icono-blot__mark--sample {
+    left: 22.4%;
+  }
+
+  .icono-blot__symbol {
+    left: 6%;
+    bottom: 4%;
+  }
+
+  .icono-blot-status {
+    display: block;
+    margin: -0.6rem 0 0.75rem;
+    color: var(--secondary);
+    font-size: 0.72rem;
+    text-align: center;
   }
 
   .icono-request-inbox__caretaker-read {
@@ -1035,7 +1156,8 @@
 
   .icono-request-inbox__caretaker-comments {
     display: block;
-    margin: 0 0 0.65rem 2.75rem;
+    margin: -0.5rem 0 0.75rem;
+    text-align: center;
     color: var(--accent);
     font-size: 0.76rem;
     text-decoration: none;
@@ -1044,25 +1166,6 @@
   .icono-request-inbox__caretaker-comments:hover,
   .icono-request-inbox__caretaker-comments:focus-visible {
     text-decoration: underline;
-  }
-
-  .icono-request-inbox__caretaker-supervote-alert {
-    display: inline-block;
-    margin: -0.15rem 0 0.75rem 3.25rem;
-    padding: 0.12rem 0.45rem;
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    color: var(--accent);
-    font-family: "IBM Plex Mono", "Monaspace Xenon Web", monospace;
-    font-size: 0.68rem;
-    font-weight: 600;
-    line-height: 1.45;
-    text-decoration: none;
-  }
-
-  .icono-request-inbox__caretaker-supervote-alert:hover,
-  .icono-request-inbox__caretaker-supervote-alert:focus-visible {
-    color: var(--accent);
   }
 
   .icono-request-inbox__group-body > :last-child {

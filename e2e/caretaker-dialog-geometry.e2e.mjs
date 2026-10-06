@@ -165,15 +165,28 @@ test("the caretaker's own toolbar badge opens the caretaker panel", async (t) =>
       const page = await context.newPage()
       await page.goto(`${HOST}/gene/TP53`)
       if (name === "desktop") {
-        // The sidebar card shows the gene's portrait and badges, not a letter
-        // mark and an instruction sentence.
-        await page.waitForSelector(
-          "[data-icono-caretaker-assignment] img.icono-request-inbox__caretaker-portrait",
-          { timeout: 30_000 },
+        // B-996: the sidebar shows the gene's own blot print: the period ladder's
+        // nine bands, the gene's lane, and the symbol in wax marker. No chips, no
+        // instruction sentence.
+        await page.waitForSelector("[data-icono-caretaker-assignment] .icono-blot", {
+          timeout: 30_000,
+        })
+        const symbol = await page.textContent(".icono-blot__symbol")
+        assert.equal(symbol.replace(/\s+/g, ""), "TP53", "sidebar: symbol written on the print")
+        assert.equal(
+          await page.$$eval(".icono-blot__lane--marker .icono-blot__band", (els) => els.length),
+          9,
+          "sidebar: Broad Range ladder has nine bands",
+        )
+        // A malformed colour (rgb(17, 21, 23 / 0.7)) silently drops the whole gradient, so the
+        // bands exist in the DOM but print nothing. That shipped once in development.
+        assert.match(
+          await page.$eval(".icono-blot__band", (el) => getComputedStyle(el).backgroundImage),
+          /linear-gradient/,
+          "sidebar: ladder bands paint",
         )
         const card = await page.textContent(".icono-request-inbox__caretaker-item")
-        assert.match(card, /Caretaker/, "sidebar: Caretaker badge")
-        assert.match(card, /10×/, "sidebar: supervote chip")
+        assert.doesNotMatch(card, /10×/, "sidebar: no supervote chip on the print")
         assert.doesNotMatch(card, /long-press|Your gene/i, "sidebar: instruction sentence")
       }
       const badge = await page.waitForSelector("button[data-icono-caretaker-open]", {
