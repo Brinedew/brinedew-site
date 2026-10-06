@@ -173,18 +173,37 @@ test("the caretaker's own toolbar badge opens the caretaker panel", async (t) =>
         })
         const symbol = await page.textContent(".icono-blot__symbol")
         assert.equal(symbol.replace(/\s+/g, ""), "TP53", "sidebar: symbol written on the print")
-        assert.equal(
-          await page.$$eval(".icono-blot__lane--marker .icono-blot__band", (els) => els.length),
-          9,
-          "sidebar: Broad Range ladder has nine bands",
-        )
-        // A malformed colour (rgb(17, 21, 23 / 0.7)) silently drops the whole gradient, so the
-        // bands exist in the DOM but print nothing. That shipped once in development.
-        assert.match(
-          await page.$eval(".icono-blot__band", (el) => getComputedStyle(el).backgroundImage),
-          /linear-gradient/,
-          "sidebar: ladder bands paint",
-        )
+        // The lanes are exposed film: each is a rendered mask over the ink, so count the
+        // ladder's bands in the mask itself, as a reader would see them, not in the DOM.
+        const ladder = await page.$eval(".icono-blot__lane--marker", async (lane) => {
+          const style = getComputedStyle(lane)
+          const url = (style.maskImage || style.webkitMaskImage || "").match(/url\("?(.*?)"?\)/)
+          if (!url) return { peaks: 0, maxDensity: 0, ink: style.backgroundColor }
+          const image = new Image()
+          image.src = url[1]
+          await image.decode()
+          const canvas = document.createElement("canvas")
+          canvas.width = image.width
+          canvas.height = image.height
+          const ctx = canvas.getContext("2d")
+          ctx.drawImage(image, 0, 0)
+          const column = ctx.getImageData(Math.floor(image.width / 2), 0, 1, image.height).data
+          let peaks = 0
+          let inside = false
+          let maxDensity = 0
+          for (let y = 0; y < image.height; y++) {
+            const density = column[y * 4 + 3] / 255
+            maxDensity = Math.max(maxDensity, density)
+            if (!inside && density > 0.5) peaks++
+            inside = inside ? density > 0.3 : density > 0.5
+          }
+          return { peaks, maxDensity, ink: style.backgroundColor }
+        })
+        assert.equal(ladder.peaks, 9, "sidebar: Broad Range ladder has nine bands")
+        // A malformed colour once dropped the bands' paint while they stayed in the DOM;
+        // here the bands must be dense in the mask and the ink must be an opaque colour.
+        assert.ok(ladder.maxDensity > 0.8, `sidebar: ladder bands paint (${ladder.maxDensity})`)
+        assert.match(ladder.ink, /^rgb\(\d+, \d+, \d+\)$/, "sidebar: lane ink is opaque")
         const card = await page.textContent(".icono-request-inbox__caretaker-item")
         assert.doesNotMatch(card, /10×/, "sidebar: no supervote chip on the print")
         assert.doesNotMatch(card, /long-press|Your gene/i, "sidebar: instruction sentence")

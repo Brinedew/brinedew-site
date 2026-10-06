@@ -4,7 +4,7 @@
 // rendering, and interaction wiring. app.js supplies only the shared API,
 // current-user, sidebar-render, and escaping boundaries.
 
-import { caretakerBlotMarkup } from "./caretaker-blot.js?v=c3f1b7bb6e02cbac"
+import { caretakerBlotMarkup } from "./caretaker-blot.js?v=0807f7cd3c594d1c"
 
 export function createRequestInbox({
   fetchJSON,
