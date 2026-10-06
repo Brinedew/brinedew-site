@@ -184,6 +184,80 @@ function pressureLedger() {
   return { raw, ledger }
 }
 
+// B-1036, 2026-10-06: the provider sample was missing all day, and the
+// formula added every receipt since midnight to a local tally that already held
+// those operations' real writes. 49,300 written plus 72,380 reserved read as
+// 121,680, and the B-994 rewrites were refused with half the day unused.
+// Failure modes, written first:
+// 1. Completed receipts still count on top of the live tally (the bug).
+// 2. Open receipts stop counting (an operation in flight is unprotected).
+// 3. With a provider sample, recent receipts stop counting (analytics lag).
+// 4. user_action receipts, whose writes are not in the tally, stop counting.
+test("a completed operation counts once: in the live tally, not again as a receipt", (t) => {
+  const { raw, ledger } = pressureLedger()
+  t.after(() => raw.close())
+  const day = "2026-10-06"
+  const now = "2026-10-06T13:40:00.000Z"
+  for (let index = 0; index < 600; index += 1) {
+    const id = `rewrite:${index}`
+    assert.equal(
+      ledger.reserve({ day, lane: "laptop_delivery", operation_id: id, units: 96, now }).ok,
+      true,
+    )
+    ledger.complete({ operation_id: id, completed_at: now })
+  }
+  // 600 x 96 = 57,600 completed receipts; their real writes are in the tally.
+  const next = { day, lane: "laptop_delivery", units: 96, local_rows_written: 49_300, now }
+  assert.equal(ledger.reserve({ ...next, operation_id: "rewrite:600" }).ok, true) // 1
+
+  // 2. Open receipts still count: 49,300 + 20,096 open + 1,000 is over 70,000.
+  for (let index = 0; index < 20; index += 1) {
+    ledger.reserve({ ...next, operation_id: `open:${index}`, units: 1_000 })
+  }
+  const crowded = ledger.reserve({ ...next, operation_id: "rewrite:601", units: 1_000 })
+  assert.equal(crowded.ok, false)
+  assert.equal(crowded.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
+
+  // 3. With a provider sample, receipts made since its window count against it,
+  // completed or not: the sample cannot see them yet.
+  const { raw: raw2, ledger: sampled } = pressureLedger()
+  t.after(() => raw2.close())
+  const observed = { observed_at: "2026-10-06T13:39:00.000Z", now }
+  for (let index = 0; index < 300; index += 1) {
+    const id = `recent:${index}`
+    sampled.reserve({ day, lane: "laptop_delivery", operation_id: id, units: 96, ...observed })
+    sampled.complete({ operation_id: id, completed_at: now })
+  }
+  const lagging = sampled.reserve({
+    day,
+    lane: "laptop_delivery",
+    operation_id: "recent:300",
+    units: 96,
+    provider_rows_written: 41_300,
+    local_rows_written: 0,
+    ...observed,
+  })
+  assert.equal(lagging.ok, false) // 41,300 + 28,800 + 96 is over 70,000
+
+  // 4. user_action receipts always count on the tally side.
+  const { raw: raw3, ledger: votes } = pressureLedger()
+  t.after(() => raw3.close())
+  for (let index = 0; index < 30; index += 1) {
+    const id = `discovery:${index}`
+    votes.reserve({ day, lane: "user_action", operation_id: id, units: 1_000, now })
+    votes.complete({ operation_id: id, completed_at: now })
+  }
+  const background = votes.reserve({
+    day,
+    lane: "laptop_delivery",
+    operation_id: "after-votes",
+    units: 96,
+    local_rows_written: 41_000,
+    now,
+  })
+  assert.equal(background.ok, false) // 41,000 + 30,000 + 96 is over 70,000
+})
+
 // B-897: the old fixed lanes summed every reservation started today at its
 // worst-case size and never subtracted, so 200 retried 50-unit phases parked
 // the laptop lane for a whole UTC day while the provider meter sat at 12%.
