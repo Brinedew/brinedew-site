@@ -402,8 +402,11 @@ test("IPD-012 keeps one manifestation command authority", () => {
   assert.doesNotMatch(deploy, /wrangler\s+d1\s+migrations\s+apply/)
   assert.match(storage, /AccessKey/)
   assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
-  assert.match(requestBudget, /CloudflareWorkerRequestBudgetMaximum = 2500/)
-  assert.match(requestBudget, /CloudflareWorkerRequestTelemetryCeiling = 75000/)
+  // B-1036: the PowerShell budget reads the operator ceilings from the one policy.
+  assert.match(requestBudget, /'shared' 'iconoplasm-d1-budget-policy\.js'/)
+  assert.match(requestBudget, /OPERATOR_ACCOUNT_CEILINGS/)
+  assert.match(requestBudget, /OPERATOR_DAILY_REQUEST_LIMIT/)
+  assert.doesNotMatch(requestBudget, /\b(2500|75000|3500000|70000)\b/)
   assert.match(requestBudget, /workersInvocationsAdaptive/)
   assert.match(requestBudget, /FileShare\]::None/)
 })

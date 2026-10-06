@@ -1,19 +1,8 @@
 import { parseOperationCostAccountUsage } from "../../workers/iconoplasm/operation-cost-account-usage.js"
+import { FREE_PLAN_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 
-export const FREE_DAILY_LIMITS = Object.freeze({
-  rows_read: 5000000,
-  rows_written: 100000,
-  requests: 100000,
-  kv_reads: 100000,
-  kv_writes: 1000,
-  kv_deletes: 1000,
-  kv_lists: 1000,
-  do_rows_read: 5000000,
-  do_rows_written: 100000,
-  do_requests: 100000,
-  do_duration_gb_seconds: 13000,
-  queue_operations: 10000,
-})
+// The free plan's allowances live once, in the budget policy (B-1036).
+export const FREE_DAILY_LIMITS = FREE_PLAN_DAILY_LIMITS
 
 export const ACCOUNT_BUDGET_QUERY = `query AccountBudgetWatch($accountTag:string,$day:Date) {
   viewer { accounts(filter:{accountTag:$accountTag}) {
