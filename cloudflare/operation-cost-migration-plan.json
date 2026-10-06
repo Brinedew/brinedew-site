@@ -15,7 +15,7 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm-authoring/0023_lineage_quota_window_and_unread_indexes.sql": {
+    "iconoplasm-authoring/0022_lineage_quota_window_and_unread_indexes.sql": {
       "online": true,
       "guards": [
         {

@@ -31,7 +31,7 @@ const migration = readFileSync(
 // B-1018: the same caps over the last 30 days instead of a lifetime.
 const windowMigration = readFileSync(
   new URL(
-    "../../../migrations-iconoplasm-authoring/0023_lineage_quota_window_and_unread_indexes.sql",
+    "../../../migrations-iconoplasm-authoring/0022_lineage_quota_window_and_unread_indexes.sql",
     import.meta.url,
   ),
   "utf8",
