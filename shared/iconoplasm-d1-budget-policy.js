@@ -11,7 +11,11 @@ export const FREE_D1_DAILY_LIMITS = Object.freeze({ reads: 5_000_000, writes: 10
 // only its own traffic. Giving it the entire account allowance starves login,
 // readers, migrations and other databases. This allocation is deliberately
 // separate from provider entitlement; historical monthly settings cannot lift it.
-export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes: 20_000 })
+// Writes: 70,000 of the Free plan's 100,000 since 2026-10-06 (B-1035), leaving 30,000
+// for readers, votes and caretaker saves, which this ledger never meters. 20,000 held
+// a regeneration batch to about 250 genes a day (78 rows each, measured) while the
+// owner queues about 800 portraits at once. It matches the online-migration ceiling.
+export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes: 70_000 })
 
 export function d1OperationalAllowance(options) {
   return Math.min(d1DailyAllowance(options), D1_OPERATOR_DAILY_LIMITS[options.resource])

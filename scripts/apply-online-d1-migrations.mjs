@@ -15,6 +15,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
+import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 
 const ROOT = new URL("../", import.meta.url)
 const CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
@@ -23,10 +24,12 @@ export const ONLINE_MIGRATION_DATABASES = Object.freeze({
   iconoplasm: "migrations-iconoplasm",
   "iconoplasm-authoring": "migrations-iconoplasm-authoring",
 })
-// Provider free-plan day: 5M rows read, 100k rows written. Writes stop at the
-// background tier of the Worker's own admission (B-897) so users keep theirs.
-export const MIGRATION_READ_CEILING = 4_500_000
-export const MIGRATION_WRITE_CEILING = 70_000
+// One daily allowance for all operator work (B-1035): migrations are admitted against
+// the same numbers as the operator ledger and its B-1026 tiers, so no path has a
+// budget of its own. It used to have one (4.5M reads, 70k writes against 1M and 20k),
+// which made a one-off bundle look cheaper than the designed outbox route.
+export const MIGRATION_READ_CEILING = D1_OPERATOR_DAILY_LIMITS.reads
+export const MIGRATION_WRITE_CEILING = D1_OPERATOR_DAILY_LIMITS.writes
 
 function requirePrediction(prediction, key) {
   if (
