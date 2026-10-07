@@ -11,6 +11,8 @@ const files = [
   "diagram-studio.js",
   "diagram-document.js",
   "diagram-x6-editor.js",
+  "diagram-studio-icons.js",
+  "diagram-studio.css",
   "generated/x6-runtime.js",
 ]
 
@@ -38,7 +40,7 @@ async function snapshot(root) {
   )
 }
 
-for (const leaf of ["diagram-document.js", "generated/x6-runtime.js"]) {
+for (const leaf of ["diagram-document.js", "diagram-studio.css", "generated/x6-runtime.js"]) {
   test(`editing ${leaf} invalidates the Studio entry import without manual keys`, async (t) => {
     const root = await fixture(t)
     await syncStudioImportVersions(root)
