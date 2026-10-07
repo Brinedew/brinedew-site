@@ -106,7 +106,16 @@ const COMPARTMENT_MARKUP = {
         stroke: "rgba(27,114,105,0.55)",
         strokeWidth: 1.5,
       },
-      label: { refX: "50%", refY: 16, textAnchor: "middle", textVerticalAnchor: "top", fill: TEAL },
+      // Relationships usually enter a nucleus from above, so its name sits at
+      // the lower edge, clear of incoming lines and their KEGG tags.
+      label: {
+        refX: "50%",
+        refY: "100%",
+        refY2: -14,
+        textAnchor: "middle",
+        textVerticalAnchor: "bottom",
+        fill: TEAL,
+      },
     },
   },
   mitochondrion: {
