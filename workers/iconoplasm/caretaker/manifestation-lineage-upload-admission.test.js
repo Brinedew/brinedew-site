@@ -465,7 +465,7 @@ test("B-1018: the window quota seeks its index and every capped input", async (t
   f.migrateWindow()
   const query = windowMigration
     .slice(
-      windowMigration.indexOf("  SELECT CASE\n    WHEN revisions"),
+      windowMigration.indexOf("  SELECT iif(\n    revisions"),
       windowMigration.lastIndexOf("END;"),
     )
     .replaceAll("NEW.caretaker_assignment_id", "?1")
