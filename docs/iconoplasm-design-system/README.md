@@ -56,6 +56,15 @@ There are two surfaces, both built from one shared card system:
 
 The extension's hover card has three styles that mirror the site: **Simple** (compact inline tooltip), **Vintage lab label** (the full printed specimen sheet), and **Blot only** (portrait + symbol overlay).
 
+### The Diagram Studio is a tool, with tool chrome
+
+`/studio` is a pathway diagram editor in the anatomy of draw.io and BioRender: a title row, menus, a toolbar, a shape library, a Format panel, page tabs and a status bar (B-1045). The owner rejected the first studio redesigns as "advertisement posters" and approved the editor mockup "recolored and retextured for our aesthetic" (2026-10-07). An editor has dozens of controls on screen at once, so its chrome follows two rules of its own:
+
+- **Type:** IBM Plex Sans for every label, menu, button and value, at 12 px with sentence-case labels and tabular numerals. IBM Plex Mono only for codes (a hex colour, a PMID). League Spartan 800 only for gene symbols. No Special Elite or Caveat anywhere in the editor: the owner called the typewriter-and-mono version "atrocious font choices" that "make my eyes bleed" (2026-10-07).
+- **Icons:** Lucide line icons (ISC licence, inlined in `diagram-studio-icons.js`) for toolbar and menu commands, because a toolbar of 40 commands can't be told apart by Unicode glyphs. The rest of Iconoplasm stays icon-light (see Iconography).
+
+Colour and material stay Iconoplasm's: cream paper chrome with the ambientCG grain, a greyboard desk, the teal pen as the only accent, the rust stamp for inhibition, and a dark-roast twin in dark mode. The exported figure is always the cream (or white) sheet. Relationship glyphs and names are KEGG's pathway notation.
+
 ---
 
 ## Sources used to build this system
@@ -147,7 +156,7 @@ The metaphor decides which voice a text takes. On real lab paperwork, everything
 
 Iconoplasm is **deliberately icon-light.** Its iconography *is* the printed lab grid and the typographic system. Specifics:
 
-- **No icon font, no icon set (Lucide/Heroicons/etc.), no SVG icon sprite.** The codebase ships none, and none should be added.
+- **No icon font and no icon sprite on reading surfaces** (cards, archive, extension). The one exception is the Diagram Studio's editor chrome, which uses inlined Lucide icons for its toolbar and menus (see "The Diagram Studio is a tool, with tool chrome").
 - **The logo / app icon** (`assets/icon-512.png` and the 16–256 sizes) is the one real mark: a single continuous hand-drawn brown loop on cream forming a winking blot-creature — one round eye (`o`), a dash mouth (`-`), and a little tail. It encodes the whole brand: a **gene as a character**, drawn in the same **rough hand-drawn loop** used by the "rough ellipse" highlight. Use it as the brand mark in chrome.
 - **Unicode as UI glyphs:** the few interface affordances use plain characters — `×` for dismiss/sign-out, `‹ ›` for prev/next, `@` and arrows in catalog text. No decorative iconography.
 - **rough.js** (`generated/rough.js`) generates hand-drawn ellipse strokes for the "rough ellipse" highlight and the circled annotations on cards (e.g. the hand-drawn loop around `SOLUBLE`). This is the closest thing to a generative "icon" in the system.

@@ -1,0 +1,1861 @@
+/* Iconoplasm Diagram Studio (B-1045).
+   Anatomy: draw.io and BioRender (menus, toolbar, shape library, Format
+   panel, page tabs, status bar). Skin: docs/iconoplasm-design-system, as the
+   owner approved it on 2026-10-07: cream specimen paper and dark-roast ink,
+   the teal pen as the one accent, the rust stamp for inhibition.
+   Type: IBM Plex Sans for all chrome and values, IBM Plex Mono only for
+   codes, League Spartan 800 only for gene symbols. No typewriter or
+   handwriting faces in the interface.
+   Assets: IBM Plex Sans (SIL Open Font License 1.1, IBM, via Fontsource);
+   paper-grain.jpg and greyboard.jpg are ambientCG Paper001 and Paper002
+   (CC0); icons are Lucide (ISC), see diagram-studio-icons.js. */
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./studio/IBMPlexSans-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./studio/IBMPlexSans-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./studio/IBMPlexSans-600.woff2") format("woff2");
+}
+
+body.icono-studio-route {
+  overflow: hidden;
+}
+
+.icono-studio {
+  --ics-bg: #d9d2c6;
+  --ics-panel: #f4ede5;
+  --ics-panel-2: #efe6d9;
+  --ics-line: rgba(32, 18, 11, 0.16);
+  --ics-text: #20120b;
+  --ics-muted: rgba(32, 18, 11, 0.64);
+  --ics-icon: #34241b;
+  --ics-hover: rgba(32, 18, 11, 0.07);
+  --ics-accent: #1b7269;
+  --ics-accent-soft: rgba(27, 114, 105, 0.13);
+  --ics-accent-ink: #f6efe4;
+  --ics-field: #fbf7f1;
+  --ics-field-line: rgba(32, 18, 11, 0.24);
+  --ics-stamp: #a24834;
+  --ics-shadow: 0 10px 24px rgba(53, 38, 27, 0.22);
+  --ics-grain-opacity: 0.5;
+  --ics-grain-blend: multiply;
+  --ics-desk-tint: rgba(214, 205, 190, 0.5);
+  --ics-tooltip-bg: #20120b;
+  --ics-tooltip-text: #f4ede5;
+  --ics-library-width: 264px;
+  --ics-format-width: 296px;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: 34px 26px 38px minmax(0, 1fr) 30px 24px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ics-text);
+  background: var(--ics-bg);
+  font:
+    400 12px/16px "IBM Plex Sans",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[saved-theme="dark"] .icono-studio {
+  --ics-bg: #0f0a07;
+  --ics-panel: #1c140f;
+  --ics-panel-2: #231912;
+  --ics-line: rgba(239, 230, 217, 0.12);
+  --ics-text: #efe6d9;
+  --ics-muted: rgba(239, 230, 217, 0.62);
+  --ics-icon: #d9cdbc;
+  --ics-hover: rgba(239, 230, 217, 0.08);
+  --ics-accent: #6fb3a9;
+  --ics-accent-soft: rgba(111, 179, 169, 0.17);
+  --ics-accent-ink: #0f0a07;
+  --ics-field: #150e0a;
+  --ics-field-line: rgba(239, 230, 217, 0.22);
+  --ics-stamp: #d07a63;
+  --ics-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  --ics-grain-opacity: 0.07;
+  --ics-grain-blend: screen;
+  --ics-desk-tint: rgba(15, 10, 7, 0.84);
+  --ics-tooltip-bg: #efe6d9;
+  --ics-tooltip-text: #20120b;
+}
+
+.icono-studio *,
+.icono-studio *::before,
+.icono-studio *::after {
+  box-sizing: border-box;
+}
+
+.icono-studio :is(h1, h2, h3, p, dl, dd, ol) {
+  margin: 0;
+}
+
+.icono-studio :is(button, input, select, textarea) {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.icono-studio button {
+  cursor: pointer;
+}
+
+.icono-studio button:disabled {
+  cursor: default;
+}
+
+.icono-studio a {
+  color: var(--ics-accent);
+}
+
+.icono-studio :focus-visible {
+  outline: 2px solid var(--ics-accent);
+  outline-offset: 1px;
+}
+
+.icono-studio-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.ics-i {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.ics-muted {
+  color: var(--ics-muted);
+}
+
+.ics-small {
+  font-size: 11.5px;
+  line-height: 15px;
+}
+
+.ics-kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--ics-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  color: var(--ics-muted);
+  font:
+    500 10px/14px "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+  text-align: center;
+}
+
+/* ───────── paper on the chrome ───────── */
+
+.ics-titlebar,
+.ics-menubar,
+.ics-toolbar,
+.ics-panel,
+.ics-pagetabs,
+.ics-status {
+  position: relative;
+  isolation: isolate;
+  background: var(--ics-panel);
+}
+
+.ics-titlebar::before,
+.ics-menubar::before,
+.ics-toolbar::before,
+.ics-panel::before,
+.ics-pagetabs::before,
+.ics-status::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("./studio/paper-grain.jpg") 0 0 / 512px;
+  mix-blend-mode: var(--ics-grain-blend);
+  opacity: var(--ics-grain-opacity);
+  pointer-events: none;
+}
+
+/* ───────── title row and menus ───────── */
+
+.ics-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 8px 0 10px;
+}
+
+.ics-home {
+  display: inline-flex;
+  flex: none;
+  border-radius: 2px;
+}
+
+.ics-file-title {
+  min-width: 0;
+  flex: 0 1 360px;
+}
+
+.ics-file-title input {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ics-file-title input:hover {
+  border-color: var(--ics-line);
+}
+
+.ics-file-title input:focus {
+  border-color: var(--ics-accent);
+  outline: none;
+  background: var(--ics-field);
+}
+
+.ics-saved {
+  overflow: hidden;
+  color: var(--ics-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-saved[data-tone="unsaved"] {
+  color: var(--ics-stamp);
+}
+
+.ics-titlebar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ics-menubar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-menu-trigger {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.ics-menu-trigger:hover,
+.ics-menu-trigger[aria-expanded="true"] {
+  background: var(--ics-hover);
+}
+
+/* ───────── buttons and toolbar ───────── */
+
+.ics-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ics-btn:hover:not(:disabled) {
+  border-color: var(--ics-accent);
+}
+
+.ics-btn:disabled {
+  opacity: 0.45;
+}
+
+.ics-btn .ics-i {
+  width: 14px;
+  height: 14px;
+}
+
+.ics-btn-pri {
+  border-color: var(--ics-accent);
+  background: var(--ics-accent);
+  color: var(--ics-accent-ink);
+}
+
+.ics-btn-pri:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.ics-btn-wide {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 0 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ics-line);
+  scrollbar-width: none;
+}
+
+.ics-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.ics-toolbar-end {
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.ics-tb,
+.ics-tdd {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ics-icon);
+}
+
+.ics-tb {
+  width: 28px;
+  padding: 0;
+}
+
+.ics-tdd {
+  padding: 0 3px 0 5px;
+}
+
+.ics-tdd > .ics-i:last-child {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+}
+
+.ics-tb:hover:not(:disabled),
+.ics-tdd:hover:not(:disabled),
+.ics-tdd[aria-expanded="true"] {
+  background: var(--ics-hover);
+}
+
+.ics-tb[aria-pressed="true"],
+.ics-tdd[aria-pressed="true"] {
+  background: var(--ics-accent-soft);
+  color: var(--ics-accent);
+}
+
+.ics-tb:disabled,
+.ics-tdd:disabled {
+  opacity: 0.34;
+}
+
+.ics-tb-small {
+  width: 22px;
+  height: 22px;
+}
+
+.ics-tb-small .ics-i {
+  width: 13px;
+  height: 13px;
+}
+
+.ics-tsep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--ics-line);
+}
+
+.ics-zoom-value {
+  min-width: 38px;
+  text-align: right;
+}
+
+.ics-tdd-text {
+  padding: 0 2px;
+}
+
+.ics-width-sample {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  margin-right: 3px;
+  background: currentColor;
+}
+
+/* ───────── body ───────── */
+
+.ics-body {
+  display: flex;
+  min-height: 0;
+}
+
+.ics-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ics-library {
+  width: var(--ics-library-width);
+  border-right: 1px solid var(--ics-line);
+}
+
+.ics-format {
+  width: var(--ics-format-width);
+  border-left: 1px solid var(--ics-line);
+}
+
+.icono-studio:not(.has-library) .ics-library,
+.icono-studio:not(.has-format) .ics-format {
+  display: none;
+}
+
+.ics-sheet-head {
+  display: none;
+}
+
+/* ───────── library ───────── */
+
+.ics-library-search {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-library-search .icono-search-wrapper {
+  position: relative;
+  max-width: none;
+  margin: 0;
+}
+
+.ics-field {
+  height: 26px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+}
+
+input.ics-field,
+textarea.ics-field {
+  width: 100%;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+input.ics-field:focus,
+textarea.ics-field:focus,
+.ics-search-field:focus-within {
+  border-color: var(--ics-accent);
+  outline: none;
+}
+
+.ics-search-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 6px;
+  color: var(--ics-muted);
+}
+
+.ics-search-field .ics-i {
+  width: 14px;
+  height: 14px;
+}
+
+.ics-library-search .icono-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ics-text);
+  font: inherit;
+}
+
+.ics-library-search .icono-search-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.ics-search-results:not(:empty) {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  left: 0;
+  z-index: 8;
+  max-height: 360px;
+  overflow: auto;
+  padding: 3px 0;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  box-shadow: var(--ics-shadow);
+}
+
+.ics-search-results .icono-search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ics-text);
+  text-align: left;
+}
+
+.ics-search-results .icono-search-result:hover,
+.ics-search-results .icono-search-result.active {
+  background: var(--ics-accent-soft);
+}
+
+.ics-search-results .icono-search-result-media {
+  flex: none;
+  width: 30px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.ics-search-results .icono-search-result-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 8%;
+}
+
+.ics-search-results .icono-search-result-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ics-search-results .icono-search-result-symbol {
+  font:
+    800 13px/15px "League Spartan",
+    "Bahnschrift",
+    sans-serif;
+}
+
+.ics-search-results .icono-search-result-name {
+  overflow: hidden;
+  color: var(--ics-muted);
+  font:
+    400 11.5px/15px "IBM Plex Sans",
+    sans-serif;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ics-sec {
+  padding: 4px 10px 10px;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-sech {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+summary.ics-sech {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary.ics-sech::-webkit-details-marker {
+  display: none;
+}
+
+summary.ics-sech::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin: 0 2px 0 1px;
+  border-right: 1.5px solid var(--ics-muted);
+  border-bottom: 1.5px solid var(--ics-muted);
+  transform: rotate(-45deg);
+  transition: transform 120ms ease-out;
+}
+
+details[open] > summary.ics-sech::before {
+  transform: rotate(45deg);
+}
+
+.ics-sec:not([open]) {
+  padding-bottom: 4px;
+}
+
+.ics-sech-count {
+  margin-left: auto;
+  color: var(--ics-muted);
+  font-weight: 400;
+}
+
+.ics-cast {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 44px);
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.ics-cast-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 44px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.ics-cast-portrait {
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #2a1d15;
+  box-shadow: 0 0 0 1px var(--ics-line);
+}
+
+.ics-cast-portrait img {
+  display: block;
+  width: 100%;
+  height: 150%;
+  object-fit: cover;
+  object-position: 50% 6%;
+}
+
+.ics-cast-symbol {
+  max-width: 44px;
+  overflow: hidden;
+  font:
+    800 9.5px/11px "League Spartan",
+    "Bahnschrift",
+    sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-cast-item:hover .ics-cast-portrait,
+.ics-cast-item.is-selected .ics-cast-portrait {
+  box-shadow: 0 0 0 2px var(--ics-accent);
+}
+
+.ics-empty-note {
+  padding: 2px 0;
+}
+
+.ics-paste {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.ics-textarea {
+  height: auto;
+  min-height: 52px;
+  padding: 5px 6px;
+  resize: vertical;
+  line-height: 16px;
+}
+
+.ics-row-end {
+  justify-content: space-between;
+}
+
+.ics-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.ics-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ics-muted);
+  font-size: 11px;
+  line-height: 13px;
+}
+
+.ics-tile > span {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-tile:hover {
+  border-color: var(--ics-line);
+  background: var(--ics-hover);
+  color: var(--ics-text);
+}
+
+.ics-tile .ics-i {
+  width: 22px;
+  height: 22px;
+  margin: 6px 0;
+  color: var(--ics-icon);
+}
+
+.ics-comp-svg {
+  width: 56px;
+  height: 34px;
+  color: var(--ics-text);
+}
+
+.ics-rels {
+  display: grid;
+  gap: 1px;
+  padding-top: 2px;
+}
+
+.ics-rel {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  height: 25px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  text-align: left;
+}
+
+.ics-rel > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-rel:hover {
+  background: var(--ics-hover);
+}
+
+.ics-rel[aria-pressed="true"] {
+  background: var(--ics-accent-soft);
+}
+
+.ics-glyph {
+  width: 40px;
+  height: 16px;
+  flex: none;
+  overflow: visible;
+  color: var(--ics-text);
+}
+
+.ics-glyph text {
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.ics-templates {
+  padding-top: 4px;
+}
+
+/* ───────── canvas ───────── */
+
+.ics-canvas-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--ics-desk-tint), var(--ics-desk-tint)),
+    url("./studio/greyboard.jpg") 0 0 / 640px;
+}
+
+.ics-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.has-rulers .ics-canvas {
+  top: 18px;
+  left: 18px;
+}
+
+.ics-ruler,
+.ics-ruler-corner {
+  position: absolute;
+  z-index: 2;
+  display: none;
+  background: var(--ics-panel-2);
+}
+
+.has-rulers .ics-ruler,
+.has-rulers .ics-ruler-corner {
+  display: block;
+}
+
+.ics-ruler-top {
+  top: 0;
+  left: 18px;
+  width: calc(100% - 18px);
+  height: 18px;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-ruler-left {
+  top: 18px;
+  left: 0;
+  width: 18px;
+  height: calc(100% - 18px);
+  border-right: 1px solid var(--ics-line);
+}
+
+.ics-ruler-corner {
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  border-right: 1px solid var(--ics-line);
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  transform: translate(-50%, -50%);
+}
+
+.ics-empty[hidden] {
+  display: none;
+}
+
+.ics-minibar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 32px;
+  padding: 0 3px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  box-shadow: var(--ics-shadow);
+}
+
+.ics-minibar[hidden] {
+  display: none;
+}
+
+.ics-minibar .ics-tb {
+  width: 34px;
+  height: 26px;
+}
+
+.ics-minibar .ics-glyph {
+  width: 30px;
+  height: 12px;
+}
+
+.ics-minibar .ics-tsep {
+  height: 16px;
+  margin: 0 2px;
+}
+
+.ics-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 2px;
+  background: var(--ics-tooltip-bg);
+  box-shadow: var(--ics-shadow);
+  color: var(--ics-tooltip-text);
+  font-size: 11.5px;
+  line-height: 15px;
+  pointer-events: none;
+}
+
+.ics-tooltip[hidden] {
+  display: none;
+}
+
+.ics-tooltip strong {
+  font:
+    800 13px/15px "League Spartan",
+    "Bahnschrift",
+    sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.ics-tooltip-meta {
+  opacity: 0.72;
+}
+
+.ics-canvas .x6-graph,
+.ics-canvas .x6-graph-svg {
+  background: transparent;
+}
+
+.ics-canvas .x6-node[data-shape="iconoplasm-page"] {
+  pointer-events: none;
+}
+
+.ics-canvas .x6-node[data-shape="iconoplasm-page"] rect:first-child {
+  filter: drop-shadow(0 1px 0 rgba(32, 18, 11, 0.08)) drop-shadow(0 10px 18px rgba(53, 38, 27, 0.2));
+}
+
+.ics-canvas .x6-node {
+  cursor: move;
+}
+
+.ics-canvas .x6-edge {
+  cursor: pointer;
+}
+
+.ics-canvas .icono-x6-port-body {
+  visibility: hidden;
+  cursor: crosshair;
+}
+
+.ics-canvas .x6-node:hover .icono-x6-port-body,
+.ics-canvas .x6-node-selected .icono-x6-port-body,
+.ics-canvas .x6-graph-svg-stage:has(.x6-edge-connecting) .icono-x6-port-body {
+  visibility: visible;
+}
+
+.ics-canvas .x6-widget-selection-box {
+  border: 1px dashed #1b7269;
+  box-shadow: none;
+}
+
+.ics-canvas .x6-widget-selection-rubberband {
+  border: 1px solid #1b7269;
+  background: rgba(27, 114, 105, 0.1);
+}
+
+.ics-canvas .x6-widget-transform {
+  border: 1px solid #1b7269;
+  box-shadow: none;
+}
+
+.ics-canvas .x6-widget-transform-resize {
+  width: 9px;
+  height: 9px;
+  border: 1px solid #1b7269;
+  border-radius: 1px;
+  background: #fbf7f1;
+}
+
+.ics-canvas.is-pan-tool,
+.ics-canvas.is-pan-tool .x6-node,
+.ics-canvas.x6-graph-pannable {
+  cursor: grab;
+}
+
+.ics-canvas.x6-graph-panning {
+  cursor: grabbing;
+}
+
+/* ───────── Format panel ───────── */
+
+.ics-format-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ics-ptabs {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-ptab {
+  flex: 1;
+  height: 32px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ics-muted);
+  font-weight: 500;
+}
+
+.ics-ptab:hover {
+  color: var(--ics-text);
+}
+
+.ics-ptab[aria-selected="true"] {
+  border-bottom-color: var(--ics-accent);
+  color: var(--ics-text);
+  font-weight: 600;
+}
+
+.ics-pbody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ics-fsec {
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--ics-line);
+}
+
+.ics-fsec .ics-sech {
+  min-height: 24px;
+}
+
+.ics-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  margin-top: 4px;
+}
+
+.ics-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.ics-row-stack .ics-lbl {
+  width: auto;
+}
+
+.ics-lbl {
+  flex: none;
+  width: 70px;
+  color: var(--ics-muted);
+}
+
+.ics-endpoints {
+  margin-top: -2px;
+}
+
+.ics-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ics-pair .ics-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.ics-pair .ics-lbl {
+  width: auto;
+}
+
+.ics-readout {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 6px;
+  color: var(--ics-muted);
+}
+
+.ics-step,
+.ics-select {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+}
+
+.ics-step:focus-within,
+.ics-select:focus-within {
+  border-color: var(--ics-accent);
+}
+
+.ics-step input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 6px;
+  border: 0;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.ics-step input::-webkit-inner-spin-button,
+.ics-step input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.ics-step input:focus {
+  outline: none;
+}
+
+.ics-unit {
+  padding-right: 4px;
+  color: var(--ics-muted);
+  font-size: 11px;
+}
+
+.ics-step-buttons {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-self: stretch;
+  border-left: 1px solid var(--ics-line);
+}
+
+.ics-step-buttons button {
+  flex: 1;
+  width: 15px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ics-muted);
+  font-size: 6.5px;
+  line-height: 1;
+}
+
+.ics-step-buttons button:hover {
+  background: var(--ics-hover);
+  color: var(--ics-text);
+}
+
+.ics-select select {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 22px 0 6px;
+  border: 0;
+  background: transparent;
+  appearance: none;
+}
+
+.ics-select select:focus {
+  outline: none;
+}
+
+.ics-select option {
+  background: var(--ics-field);
+  color: var(--ics-text);
+}
+
+.ics-select > .ics-i {
+  position: absolute;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  color: var(--ics-muted);
+  pointer-events: none;
+}
+
+.ics-select-glyph {
+  display: flex;
+  padding-left: 5px;
+}
+
+.ics-seg {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+}
+
+.ics-seg button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-right: 1px solid var(--ics-line);
+  background: transparent;
+  white-space: nowrap;
+}
+
+.ics-seg button:last-child {
+  border-right: 0;
+}
+
+.ics-seg button:hover {
+  background: var(--ics-hover);
+}
+
+.ics-seg button[aria-pressed="true"] {
+  background: var(--ics-accent-soft);
+  color: var(--ics-accent);
+  font-weight: 600;
+}
+
+.ics-seg .ics-i {
+  width: 14px;
+  height: 14px;
+}
+
+.ics-dash {
+  display: block;
+  width: 24px;
+  height: 0;
+  border-top: 2px solid currentColor;
+}
+
+.ics-dash-dashed {
+  border-top-style: dashed;
+}
+
+.ics-dash-dotted {
+  border-top-style: dotted;
+}
+
+.ics-swatches {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ics-sw {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(32, 18, 11, 0.24);
+  border-radius: 2px;
+  background: var(--sw);
+}
+
+.ics-sw-default {
+  background: linear-gradient(135deg, #20120b 50%, #a24834 50%);
+}
+
+.ics-swatches .ics-sw[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--ics-panel),
+    0 0 0 3.5px var(--ics-accent);
+}
+
+input.ics-hex {
+  width: 74px;
+  height: 22px;
+  font:
+    400 11.5px/20px "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+}
+
+.ics-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.ics-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.ics-check input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--ics-accent);
+}
+
+.ics-range {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.ics-range input,
+.ics-status-zoom input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ics-accent);
+}
+
+.ics-range output {
+  width: 46px;
+  text-align: right;
+}
+
+.ics-button-row {
+  gap: 6px;
+}
+
+.ics-button-row .ics-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.ics-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.ics-icon-grid .ics-tb {
+  width: 100%;
+}
+
+.ics-gene-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ics-gene-head strong {
+  font:
+    800 15px/18px "League Spartan",
+    "Bahnschrift",
+    sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.ics-refs {
+  display: grid;
+  gap: 8px;
+  padding: 2px 0 0 18px;
+}
+
+.ics-refs li {
+  display: grid;
+  gap: 1px;
+}
+
+.ics-ref-edge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font:
+    800 11.5px/15px "League Spartan",
+    "Bahnschrift",
+    sans-serif;
+  letter-spacing: 0.02em;
+  text-align: left;
+}
+
+.ics-ref-edge .ics-glyph {
+  width: 30px;
+  height: 12px;
+}
+
+.ics-ref-id a,
+.ics-ref-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ics-ref-id {
+  font:
+    400 11.5px/15px "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+}
+
+.ics-ref-id .ics-i,
+.ics-ref-link .ics-i {
+  width: 12px;
+  height: 12px;
+}
+
+.ics-ref-note {
+  color: var(--ics-muted);
+}
+
+/* ───────── page tabs and status ───────── */
+
+.ics-pagetabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 6px;
+  border-top: 1px solid var(--ics-line);
+}
+
+.ics-pagetab-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ics-pagetab-wrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.ics-pagetab {
+  height: 24px;
+  max-width: 220px;
+  overflow: hidden;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-bottom-width: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  color: var(--ics-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ics-pagetab:hover {
+  color: var(--ics-text);
+}
+
+.ics-pagetab-wrap.is-active {
+  border: 1px solid var(--ics-line);
+  border-bottom: 2px solid var(--ics-accent);
+  border-radius: 2px 2px 0 0;
+  background: var(--ics-field);
+}
+
+.ics-pagetab-wrap.is-active .ics-pagetab {
+  border-color: transparent;
+  color: var(--ics-text);
+  font-weight: 600;
+}
+
+.ics-pagetab-input {
+  width: 160px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--ics-accent);
+  border-radius: 2px;
+  background: var(--ics-field);
+}
+
+.ics-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
+  border-top: 1px solid var(--ics-line);
+  color: var(--ics-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.ics-status-coords {
+  min-width: 92px;
+}
+
+.ics-status-message {
+  overflow: hidden;
+  color: var(--ics-text);
+  text-overflow: ellipsis;
+}
+
+.ics-status-message[data-tone="error"] {
+  color: var(--ics-stamp);
+}
+
+.ics-status-counts {
+  margin-left: auto;
+}
+
+.ics-status-zoom {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.ics-status-zoom input {
+  width: 90px;
+  flex: none;
+}
+
+.ics-status-zoom > span {
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ───────── menus and dialog ───────── */
+
+.ics-popover-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.ics-menu {
+  position: absolute;
+  min-width: 210px;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  box-shadow: var(--ics-shadow);
+  pointer-events: auto;
+}
+
+.ics-menu-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 14px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ics-text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.ics-menu:has(.ics-glyph) .ics-menu-item,
+.ics-menu:has(.ics-comp-svg) .ics-menu-item {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+
+.ics-menu-item:hover:not(:disabled),
+.ics-menu-item:focus-visible {
+  outline: none;
+  background: var(--ics-accent-soft);
+}
+
+.ics-menu-item:disabled {
+  opacity: 0.4;
+}
+
+.ics-menu-lead {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ics-accent);
+  font-weight: 600;
+}
+
+.ics-menu-lead .ics-i {
+  width: 14px;
+  height: 14px;
+  color: var(--ics-icon);
+}
+
+.ics-menu-lead .ics-comp-svg {
+  width: 40px;
+  height: 24px;
+}
+
+.ics-menu-lead .ics-sw {
+  width: 14px;
+  height: 14px;
+}
+
+.ics-width-line {
+  display: block;
+  width: 30px;
+  height: var(--w);
+  min-height: 0.5px;
+  background: var(--ics-text);
+}
+
+.ics-menu-key {
+  color: var(--ics-muted);
+  font-size: 11px;
+}
+
+.ics-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--ics-line);
+}
+
+.ics-menu-heading {
+  padding: 6px 14px 2px 38px;
+  color: var(--ics-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ics-dialog {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 120px);
+  overflow: auto;
+  padding: 10px 16px 14px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-panel);
+  box-shadow: var(--ics-shadow);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.ics-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ics-dialog-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ics-shortcuts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  align-items: center;
+}
+
+/* ───────── narrower windows ───────── */
+
+@media (max-width: 1180px) {
+  .icono-studio {
+    --ics-library-width: 228px;
+    --ics-format-width: 268px;
+  }
+
+  .ics-tdd-text {
+    display: none;
+  }
+}
+
+/* Phones: the shape library and the Format panel become bottom sheets that
+   the toolbar's panel buttons open, as in draw.io's mobile layout. */
+@media (max-width: 760px) {
+  .icono-studio {
+    grid-template-rows: 40px 30px 42px minmax(0, 1fr) 34px 28px;
+  }
+
+  .icono-studio :is(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .ics-saved,
+  .ics-status-coords,
+  .ics-status-grid,
+  .ics-status-counts,
+  .ics-status-zoom input {
+    display: none;
+  }
+
+  .ics-titlebar .ics-btn span {
+    display: none;
+  }
+
+  .ics-menubar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ics-menu-trigger {
+    flex: none;
+    height: 26px;
+  }
+
+  .ics-tb {
+    width: 34px;
+    height: 34px;
+  }
+
+  .ics-tdd {
+    height: 34px;
+  }
+
+  /* The panel toggles lead the strip, where a thumb finds them. */
+  .ics-toolbar-end {
+    order: -1;
+    margin-left: 0;
+  }
+
+  .ics-toolbar [data-studio-action="fullscreen"] {
+    display: none;
+  }
+
+  .ics-library,
+  .ics-format {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    width: auto;
+    height: min(62vh, 540px);
+    border: 0;
+    border-top: 1px solid var(--ics-field-line);
+    box-shadow: 0 -12px 28px rgba(32, 18, 11, 0.24);
+  }
+
+  .ics-sheet-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    height: 40px;
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--ics-line);
+    font-weight: 600;
+  }
+
+  .ics-cast {
+    grid-template-columns: repeat(auto-fill, 52px);
+  }
+
+  .ics-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ics-rel {
+    height: 34px;
+  }
+
+  .ics-ptab {
+    height: 40px;
+  }
+
+  .ics-row {
+    min-height: 34px;
+  }
+
+  .ics-step,
+  .ics-select,
+  .ics-seg button {
+    height: 32px;
+  }
+
+  .ics-step-buttons button {
+    width: 24px;
+  }
+
+  .ics-menu-item {
+    min-height: 36px;
+  }
+
+  .ics-pagetab {
+    height: 30px;
+  }
+
+  .ics-status {
+    gap: 10px;
+  }
+
+  .ics-status-zoom > span {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  summary.ics-sech::before {
+    transition: none;
+  }
+}

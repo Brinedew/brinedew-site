@@ -283,6 +283,7 @@ if (!extensionOnly) {
   // that fresh HTML loads. The HTML itself is stamped with the release SHA.
   await syncStaticImportVersions(staticRoot, "site-preferences.js", [
     "shared/sidebar-shell.js",
+    "iconoplasm/diagram-studio.js",
     "iconoplasm/app.js",
     "site-settings/app.js",
   ])
