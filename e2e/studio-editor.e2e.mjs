@@ -226,10 +226,18 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     const sheet = await dark.page.evaluate(() => ({
       chrome: getComputedStyle(document.querySelector(".ics-titlebar")).backgroundColor,
       sheet: document.querySelector('[data-cell-id="iconoplasm-page"] rect')?.getAttribute("fill"),
+      // Quartz's base layer sets `fill` on every SVG <text>; a label must keep
+      // its own ink on the cream sheet, not the dark theme's near-white.
+      labelFill: getComputedStyle(
+        [...document.querySelectorAll('[data-shape="edge"] text')].find(
+          (text) => text.textContent === "GEF",
+        ),
+      ).fill,
     }))
     report.dark = sheet
     assert.equal(sheet.sheet, "#f7f1e8")
     assert.equal(sheet.chrome, "rgb(28, 20, 15)")
+    assert.equal(sheet.labelFill, "rgb(32, 18, 11)")
     await dark.page.screenshot({ path: path.join(OUT, "studio-desktop-dark.png") })
     assert.deepEqual(dark.errors, [])
     await dark.context.close()

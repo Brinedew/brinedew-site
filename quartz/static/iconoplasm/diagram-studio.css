@@ -106,11 +106,34 @@ body.icono-studio-route {
   box-sizing: border-box;
 }
 
-.icono-studio :is(h1, h2, h3, p, dl, dd, ol) {
+/* The studio lives inside a Quartz page. Quartz's base layer and the blog
+   layer style bare elements (Crimson Pro on nav, headings and buttons; colour
+   on p, li and a; margins and rounding on img). Unlayered rules win over both
+   layers, and :where() keeps these at class weight so the studio's own
+   classes, later in this file, still decide. */
+.icono-studio :where(h1, h2, h3, p, dl, dd, ol) {
   margin: 0;
 }
 
-.icono-studio :is(button, input, select, textarea) {
+.icono-studio :where(h1, h2, h3, nav, p, li, ol, dl, dt, dd, label, kbd, output, summary, a) {
+  color: inherit;
+  font-family: inherit;
+  line-height: inherit;
+}
+
+.icono-studio :where(a) {
+  color: var(--ics-accent);
+  font-weight: inherit;
+}
+
+.icono-studio :where(img) {
+  max-width: none;
+  margin: 0;
+  border-radius: 0;
+  content-visibility: visible;
+}
+
+.icono-studio :where(button, input, select, textarea) {
   margin: 0;
   color: inherit;
   font: inherit;
@@ -123,10 +146,6 @@ body.icono-studio-route {
 
 .icono-studio button:disabled {
   cursor: default;
-}
-
-.icono-studio a {
-  color: var(--ics-accent);
 }
 
 .icono-studio :focus-visible {

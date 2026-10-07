@@ -21,7 +21,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=66e939078affbb77"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=3e43dcc0c97f72d2"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=ca595fa807fe488d"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=cbda02c72cd81a30"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -32,7 +32,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=b9a577a175c5d929", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=5b8a552c46c0aa89", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]
@@ -542,7 +542,7 @@ function relationshipGlyph(kindId) {
   if (kind.tick) parts += `<path d="M20 5.5v9" stroke="${stroke}" stroke-width="1.4"/>`
   if (kind.slash) parts += `<path d="M20 14.5l4.5-9" stroke="${stroke}" stroke-width="1.4"/>`
   if (kind.tag)
-    parts += `<text x="17" y="6.4" font-size="7" font-weight="600" text-anchor="middle" fill="${stroke}">${escapeHtml(kind.tag)}</text>`
+    parts += `<text x="17" y="6.4" font-size="7" font-weight="600" text-anchor="middle" style="fill:${stroke}">${escapeHtml(kind.tag)}</text>`
   return `<svg class="ics-glyph" viewBox="0 0 40 16" aria-hidden="true">${parts}</svg>`
 }
 

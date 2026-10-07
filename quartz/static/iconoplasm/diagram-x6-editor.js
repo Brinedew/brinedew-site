@@ -26,6 +26,13 @@ const FONT_URLS = {
 const UI_FONT = '"IBM Plex Sans", "Segoe UI", sans-serif'
 const SYMBOL_FONT = '"League Spartan", "Bahnschrift", sans-serif'
 
+// Quartz's base stylesheet sets `fill` on every SVG <text> element, and any
+// stylesheet beats an SVG fill attribute, so on the real site every label
+// took the page's body colour. Text paint therefore goes in an inline style.
+function textFill(colour) {
+  return { fill: colour, style: { fill: colour } }
+}
+
 let runtimePromise = null
 let shapesRegistered = false
 let edgeCounter = 0
@@ -246,7 +253,7 @@ function registerShapes(Graph) {
           fontFamily: SYMBOL_FONT,
           fontWeight: 800,
           fontSize: 20,
-          fill: "#efe6d9",
+          ...textFill("#efe6d9"),
         },
         portrait: {
           refWidth: "100%",
@@ -276,7 +283,7 @@ function registerShapes(Graph) {
         label: {
           fontFamily: UI_FONT,
           fontSize: 18,
-          fill: INK,
+          ...textFill(INK),
           textWrap: { width: -16, height: -12, ellipsis: true },
           textAnchor: "start",
           refX: 8,
@@ -304,6 +311,7 @@ function registerShapes(Graph) {
             fontWeight: 600,
             letterSpacing: 1.3,
             ...spec.attrs.label,
+            ...textFill(spec.attrs.label.fill),
           },
         },
       },
@@ -393,6 +401,7 @@ function textLabel(text, attrs, position) {
         strokeLinejoin: "round",
         pointerEvents: "none",
         ...attrs,
+        ...textFill(attrs.fill),
       },
     },
     position,
@@ -486,7 +495,7 @@ function textAttrs(node) {
       fontSize: node.font_size,
       fontWeight: node.bold ? 600 : 400,
       fontStyle: node.italic ? "italic" : "normal",
-      fill: node.color || INK,
+      ...textFill(node.color || INK),
       textAnchor: node.align === "center" ? "middle" : node.align === "right" ? "end" : "start",
       refX: node.align === "center" ? "50%" : node.align === "right" ? "100%" : 8,
       refX2: node.align === "right" ? -8 : 0,
@@ -503,7 +512,7 @@ function compartmentAttrs(node) {
       attrs.bottom = { fill: node.color }
     }
     if (node.shape === "mitochondrion") attrs.detail = { stroke: node.color }
-    attrs.label.fill = node.color
+    Object.assign(attrs.label, textFill(node.color))
   }
   return attrs
 }
