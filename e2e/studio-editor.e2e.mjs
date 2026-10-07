@@ -81,6 +81,23 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     })
     report.frame = frame
     assert.deepEqual(frame, [0, 0, 1440, 900])
+    // The chrome stacks in rows and the canvas gets the room. A site rule
+    // (Quartz's footer grid-area) once put the editor in two columns and left
+    // the canvas a 26 px strip, while every DOM-level check still passed.
+    const layout = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect()
+      const canvas = box("[data-studio-canvas-area]")
+      return {
+        titleTop: box(".ics-titlebar").top,
+        menuTop: box(".ics-menubar").top,
+        statusBottom: Math.round(box(".ics-status").bottom),
+        canvas: [Math.round(canvas.width), Math.round(canvas.height)],
+      }
+    })
+    report.layout = layout
+    assert.ok(layout.menuTop > layout.titleTop, "menus sit under the title row")
+    assert.equal(layout.statusBottom, 900)
+    assert.ok(layout.canvas[0] >= 800 && layout.canvas[1] >= 650, `canvas ${layout.canvas}`)
 
     // 3. In Plex Sans, with no typewriter face anywhere.
     const type = await page.evaluate(async () => {
@@ -252,6 +269,8 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       report[`phone${phoneWidth}`] = layout
       assert.ok(layout.scroll <= layout.inner, `${phoneWidth}px scrolls sideways`)
       await phone.page.click('.ics-toolbar [data-studio-action="toggle-library"]')
+      // The toggle settles asynchronously (it waits for the editor).
+      await phone.page.locator("[data-studio-library]").waitFor({ state: "visible" })
       const sheetBox = await phone.page.locator("[data-studio-library]").boundingBox()
       assert.ok(sheetBox && sheetBox.width >= phoneWidth - 1)
       await phone.page.screenshot({ path: path.join(OUT, `studio-phone-${phoneWidth}.png`) })

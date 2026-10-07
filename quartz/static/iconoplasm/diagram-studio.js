@@ -32,7 +32,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=5b8a552c46c0aa89", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=3c2e8ee65e99f1a8", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]
@@ -2715,6 +2715,12 @@ function handleStudioKeydown(event) {
 function handleShortcut(event) {
   if (!mountedRoot) return
   if (handleMenuKeydown(event)) return
+  const dialog = mountedRoot.querySelector(".ics-dialog")
+  if (dialog && event.key === "Escape") {
+    event.preventDefault()
+    mountedRoot.querySelector("[data-studio-popover]").innerHTML = ""
+    return
+  }
   if (isTypingTarget(event.target)) return
   if (event.target.closest?.("dialog")) return
   const key = event.key

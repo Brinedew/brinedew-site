@@ -64,6 +64,7 @@ body.icono-studio-route {
   z-index: 60;
   display: grid;
   grid-template-rows: 34px 26px 38px minmax(0, 1fr) 30px 24px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
   color: var(--ics-text);
@@ -124,6 +125,13 @@ body.icono-studio-route {
 .icono-studio :where(a) {
   color: var(--ics-accent);
   font-weight: inherit;
+}
+
+/* Quartz places every <footer> in its page grid's "grid-footer" area. Inside
+   the studio's grid that name doesn't exist, so the browser invented a second
+   column for it and laid the whole editor out side by side (B-1045 E2E). */
+.icono-studio :where(header, footer, nav, aside, section) {
+  grid-area: auto;
 }
 
 .icono-studio :where(img) {
