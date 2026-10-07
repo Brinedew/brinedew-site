@@ -52,7 +52,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=7f05c0284af481cc"
+} from "./diagram-studio.js?v=46278386cfe458a2"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 import {
   ICONOPLASM_HOME_TITLE,

@@ -21,7 +21,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=66e939078affbb77"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=3e43dcc0c97f72d2"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=cbda02c72cd81a30"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=65fab870afe0afd0"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
