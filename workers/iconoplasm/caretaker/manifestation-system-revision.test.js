@@ -14,6 +14,7 @@ import {
   sha256,
   workstationHandler,
 } from "./manifestation-plaintext-test-support.js"
+import { catalogueGeneId } from "./manifestation-authority-service-handlers.js"
 
 // B-1011: the workstation's regenerated text reaches the site through one
 // service command, the standing form of B-994's one-off migration. Ways it can
@@ -212,4 +213,101 @@ test("6: a browser session cannot reach the system revision route", async (t) =>
     viaHuman == null || viaHuman.status >= 400,
     `browser handler answered ${viaHuman?.status}`,
   )
+})
+
+// B-1031: a gene new to the catalogue has no identity and no system text on the
+// site. Ways it can fail, written before the change:
+// 7. the first regeneration is refused (SYSTEM_LINEAGE_NOT_FOUND), so new genes
+//    can never get a text;
+// 8. it registers the gene but the text isn't canonical, or arrives without Tags;
+// 9. a replay seeds a second lineage;
+// 10. a caller registers an ID not derived from the symbol;
+// 11. the next regeneration doesn't append to the seeded lineage.
+test("7-11: a gene new to the catalogue gets its identity and first system text, with Tags", async (t) => {
+  const bunny = installBunnyFake(t)
+  const context = await bootstrap(t, "8311", bunny)
+  const env = bodyEnvironment({ withKey: false })
+  const workstation = workstationHandler(context, env)
+  const symbol = "EXOC1L"
+  const geneId = await catalogueGeneId(symbol)
+  const path = `/api/iconoplasm/authority/genes/${geneId}/system-revisions`
+  const newGene = (commandId, overrides = {}) =>
+    regeneration(context, commandId, {
+      canonical_symbol: symbol,
+      expected_head_version: 0,
+      expected_canonical_revision_id: null,
+      expected_system_revision_id: null,
+      ...overrides,
+    })
+
+  // 10. An ID that isn't derived from the symbol is refused before anything is written.
+  const untouched = counts(context)
+  const forged = await workstation(
+    serviceRequest(`/api/iconoplasm/authority/genes/gene_${"0".repeat(48)}/system-revisions`, {
+      ...(await newGene("service_forged_8311")),
+    }),
+  )
+  assert.equal(forged.status, 400)
+  assert.deepEqual(counts(context), untouched)
+
+  // 7, 8. One regeneration registers the gene and seeds its canonical text with Tags.
+  const body = await newGene("service_new_gene_8311")
+  const response = await workstation(serviceRequest(path, body))
+  assert.ok([200, 202].includes(response.status), `answered ${response.status}`)
+  const result = await readJson(response)
+  assert.equal(result.revision_number, 1)
+  assert.equal(result.canonical_changed, true)
+  const identity = row(
+    context.db,
+    "SELECT canonical_symbol FROM icono_gene_identities WHERE gene_id = ?",
+    geneId,
+  )
+  assert.equal(identity.canonical_symbol, symbol)
+  const geneHead = row(
+    context.db,
+    "SELECT head_version, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
+    geneId,
+  )
+  assert.equal(geneHead.canonical_revision_id, result.manifestation_revision_id)
+  assert.equal(geneHead.head_version, 1)
+  const lineage = row(
+    context.db,
+    `SELECT manifestation_head_revision_id FROM icono_manifestations
+      WHERE gene_id = ? AND origin = 'system_seed' AND status = 'active'`,
+    geneId,
+  )
+  assert.equal(lineage.manifestation_head_revision_id, result.manifestation_revision_id)
+  const tags = row(
+    context.db,
+    "SELECT accepted_derivative_id FROM icono_manifestation_derivative_heads WHERE manifestation_revision_id = ?",
+    result.manifestation_revision_id,
+  )
+  assert.equal(tags.accepted_derivative_id, result.manifestation_derivative_id)
+  const event = row(
+    context.db,
+    "SELECT payload_json FROM icono_manifestation_events ORDER BY event_sequence DESC LIMIT 1",
+  )
+  assert.equal(JSON.parse(event.payload_json).cause, "manifestation.system_seed_created")
+
+  // 9. The same command again replays the first answer and writes nothing.
+  const written = counts(context)
+  const replay = await readJson(await workstation(serviceRequest(path, body)))
+  assert.equal(replay.manifestation_revision_id, result.manifestation_revision_id)
+  assert.deepEqual(counts(context), written)
+
+  // 11. The next regeneration appends revision 2 to the seeded lineage.
+  const next = await readJson(
+    await workstation(
+      serviceRequest(
+        path,
+        await newGene("service_new_gene_next_8311", {
+          expected_head_version: 1,
+          expected_canonical_revision_id: result.manifestation_revision_id,
+          expected_system_revision_id: result.manifestation_revision_id,
+        }),
+      ),
+    ),
+  )
+  assert.equal(next.revision_number, 2)
+  assert.equal(next.canonical_changed, true)
 })

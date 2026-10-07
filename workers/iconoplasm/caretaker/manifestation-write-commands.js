@@ -841,7 +841,25 @@ export async function appendSystemRevisionWithTags(
       ORDER BY created_at ASC LIMIT 1`,
     gene.gene_id,
   )
-  if (!manifestation?.manifestation_head_revision_id) {
+  if (!manifestation) {
+    // B-1031: a gene new to the catalogue has no system text yet; its first
+    // regeneration creates the system lineage as revision 1, with its Tags.
+    return seedFirstSystemRevision(db, {
+      gene,
+      head,
+      storage: rawStorage,
+      tags,
+      expectedHeadVersion,
+      expectedCanonicalRevisionId,
+      revisionId,
+      selectionId,
+      eventUuid,
+      idFactory,
+      now,
+      command: { ...command, actorKind },
+    })
+  }
+  if (!manifestation.manifestation_head_revision_id) {
     throw authorityError("SYSTEM_LINEAGE_NOT_FOUND", "This gene has no system text to revise", 404)
   }
   const expectedHead = normalizeVersion(expectedHeadVersion, "expected_head_version")
@@ -1052,6 +1070,248 @@ export async function appendSystemRevisionWithTags(
         Number(manifestation.row_version),
         manifestation.manifestation_head_revision_id,
       ],
+      statements,
+    })
+  } catch (error) {
+    throw commitFailure(error)
+  }
+}
+
+// B-1031: the first system text of a gene new to the catalogue. Creates the
+// system lineage (the seed manifestation and its revision 1) with the revision's
+// Tags in one command, and selects it as canonical when the gene has no
+// canonical text. The guard refuses if a system lineage appeared meanwhile or
+// the head moved, so two first regenerations can't both seed.
+async function seedFirstSystemRevision(
+  db,
+  {
+    gene,
+    head,
+    storage: rawStorage,
+    tags,
+    expectedHeadVersion,
+    expectedCanonicalRevisionId,
+    revisionId,
+    selectionId,
+    eventUuid,
+    idFactory,
+    now,
+    command,
+  },
+) {
+  const expectedHead = normalizeVersion(expectedHeadVersion, "expected_head_version")
+  const expectedCanonical = normalizeOptionalId(
+    expectedCanonicalRevisionId,
+    "expected_canonical_revision_id",
+  )
+  if (
+    expectedHead !== Number(head.head_version) ||
+    expectedCanonical !== (head.canonical_revision_id || null)
+  ) {
+    throw authorityError(
+      "STALE_AUTHORITY_STATE",
+      "The gene changed since this regeneration was prepared",
+      409,
+    )
+  }
+  const storage = storageFields(rawStorage)
+  const manifestationId = createId(undefined, "manifestation_id", "manifestation", idFactory)
+  const revisionIdNorm = createId(revisionId, "manifestation_revision_id", "revision", idFactory)
+  requireOpaqueObjectLocator(storage, revisionIdNorm)
+  const timestamp = normalizeTimestamp(now)
+  const cmd = commandInputs(command)
+  const derivativeId = createId(
+    tags?.derivativeId,
+    "manifestation_derivative_id",
+    "derivative",
+    idFactory,
+  )
+  const { derivative, statements: derivativeStatements } = manualTagsDerivative(db, {
+    ...tags,
+    derivativeId,
+    revisionId: revisionIdNorm,
+    sourceBodySha256: storage.body_sha256,
+    timestamp,
+  })
+  const derivativeHead = {
+    manifestation_revision_id: revisionIdNorm,
+    accepted_derivative_id: derivativeId,
+    derivative_head_version: 1,
+  }
+  const select = !head.canonical_revision_id
+  const selectionIdNorm = select
+    ? createId(selectionId, "canonical_selection_id", "selection", idFactory)
+    : null
+  const nextHead = select
+    ? {
+        ...head,
+        canonical_manifestation_id: manifestationId,
+        canonical_revision_id: revisionIdNorm,
+        canonical_selection_id: selectionIdNorm,
+        head_version: Number(head.head_version) + 1,
+        gene_revision: Number(head.gene_revision) + 1,
+      }
+    : { ...head, gene_revision: Number(head.gene_revision) + 1 }
+  const manifestation = {
+    manifestation_id: manifestationId,
+    gene_id: gene.gene_id,
+    author_account_id: null,
+    caretaker_assignment_id: null,
+    origin: "system_seed",
+    status: "active",
+    manifestation_head_revision_id: revisionIdNorm,
+    source_manifestation_id: null,
+    row_version: 1,
+    non_withdrawable: 1,
+  }
+  const revision = {
+    manifestation_revision_id: revisionIdNorm,
+    manifestation_id: manifestationId,
+    revision_number: 1,
+    parent_revision_id: null,
+    source_revision_id: null,
+    body_sha256: storage.body_sha256,
+    body_bytes: storage.body_bytes,
+    author_account_id: null,
+    caretaker_assignment_id: null,
+    lifecycle_status: "active",
+    lifecycle_version: 1,
+    created_at: timestamp,
+  }
+  const changedSelection = select
+    ? canonicalSelectionRecord({
+        selectionId: selectionIdNorm,
+        geneId: gene.gene_id,
+        head,
+        nextHead,
+        manifestationId,
+        revisionId: revisionIdNorm,
+        actorAccountId: null,
+        assignmentId: null,
+        reason: "seed",
+        commandId: cmd.commandId,
+        timestamp,
+      })
+    : null
+  const statements = [
+    prepared(
+      db,
+      `INSERT INTO icono_manifestations (
+         manifestation_id, gene_id, origin, status, manifestation_head_revision_id,
+         row_version, non_withdrawable, created_at, updated_at
+       ) VALUES (?, ?, 'system_seed', 'active', NULL, 1, 1, ?, ?)`,
+      manifestationId,
+      gene.gene_id,
+      timestamp,
+      timestamp,
+    ),
+    ...revisionInsertStatements(db, {
+      manifestationId,
+      revisionId: revisionIdNorm,
+      revisionNumber: 1,
+      parentRevisionId: null,
+      sourceRevisionId: null,
+      baseSelectionId: head.canonical_selection_id,
+      actorAccountId: null,
+      assignmentId: null,
+      storage,
+      timestamp,
+    }),
+    prepared(
+      db,
+      `UPDATE icono_manifestations
+          SET manifestation_head_revision_id = ?, updated_at = ?
+        WHERE manifestation_id = ?`,
+      revisionIdNorm,
+      timestamp,
+      manifestationId,
+    ),
+    ...derivativeStatements,
+    prepared(
+      db,
+      `UPDATE icono_manifestation_derivative_heads
+          SET accepted_derivative_id = ?, derivative_head_version = 1, updated_at = ?
+        WHERE manifestation_revision_id = ? AND derivative_head_version = 0`,
+      derivativeId,
+      timestamp,
+      revisionIdNorm,
+    ),
+    select
+      ? prepared(
+          db,
+          `INSERT INTO icono_manifestation_canonical_selections (
+             canonical_selection_id, gene_id, previous_selection_id, previous_revision_id,
+             selected_manifestation_id, selected_revision_id, actor_account_id,
+             caretaker_assignment_id, reason, command_id, head_version, gene_revision, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'seed', ?, ?, ?, ?)`,
+          selectionIdNorm,
+          gene.gene_id,
+          head.canonical_selection_id,
+          head.canonical_revision_id,
+          manifestationId,
+          revisionIdNorm,
+          cmd.commandId,
+          nextHead.head_version,
+          nextHead.gene_revision,
+          timestamp,
+        )
+      : prepared(
+          db,
+          `UPDATE icono_manifestation_heads
+              SET gene_revision = gene_revision + 1, updated_at = ?
+            WHERE gene_id = ? AND gene_revision = ?`,
+          timestamp,
+          gene.gene_id,
+          Number(head.gene_revision),
+        ),
+    eventStatement(db, {
+      eventUuid: createId(eventUuid, "event_uuid", "event", idFactory),
+      commandId: cmd.commandId,
+      geneId: gene.gene_id,
+      geneRevision: nextHead.gene_revision,
+      manifestationId,
+      revisionId: revisionIdNorm,
+      selectionId: selectionIdNorm,
+      payloadJson: eventPayload({
+        cause: "manifestation.system_seed_created",
+        gene,
+        head: nextHead,
+        manifestation,
+        revision,
+        changedSelection,
+        changedDerivative: derivativeSnapshot(derivative),
+        derivativeHead: derivativeHeadSnapshot(derivativeHead),
+      }),
+    }),
+  ]
+  try {
+    return await runCommand({
+      db,
+      ...cmd,
+      commandType: "manifestation.system_revision_append",
+      geneId: gene.gene_id,
+      response: {
+        ok: true,
+        manifestation_id: manifestationId,
+        manifestation_revision_id: revisionIdNorm,
+        revision_number: 1,
+        manifestation_derivative_id: derivativeId,
+        canonical_changed: select,
+        canonical_revision_id: nextHead.canonical_revision_id,
+        canonical_selection_id: nextHead.canonical_selection_id,
+        head_version: nextHead.head_version,
+        gene_revision: nextHead.gene_revision,
+      },
+      guardSql: `INSERT INTO icono_authority_command_guards (command_id, guard_value)
+      SELECT ?, CASE WHEN EXISTS (
+        SELECT 1 FROM icono_manifestation_heads h
+         WHERE h.gene_id = ? AND h.head_version = ? AND h.canonical_revision_id IS ?
+           AND NOT EXISTS (
+             SELECT 1 FROM icono_manifestations m
+              WHERE m.gene_id = h.gene_id AND m.origin = 'system_seed' AND m.status = 'active'
+           )
+      ) THEN 1 ELSE 0 END`,
+      guardParams: [cmd.commandId, gene.gene_id, expectedHead, expectedCanonical],
       statements,
     })
   } catch (error) {
