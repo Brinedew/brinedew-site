@@ -1,11 +1,42 @@
+import {
+  COMPARTMENT_SHAPES,
+  diagramReferences,
+  pageBackgroundColour,
+  relationshipKind,
+} from "./diagram-document.js?v=66e939078affbb77"
+
 const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"
 const TEXT_SHAPE = "iconoplasm-text"
+const PAGE_SHAPE = "iconoplasm-page"
+const PAGE_ID = "iconoplasm-page"
 const PORT_IDS = ["top", "right", "bottom", "left"]
+const INK = "#20120b"
+const TEAL = "#1b7269"
+const RUST = "#a24834"
+const NOTE_FILL = "#f3e3b5"
+const PAPER_FILL = "#fbf7f1"
+const GRAIN_URL = new URL("./studio/paper-grain.jpg", import.meta.url).href
+const FONT_URLS = {
+  "IBM Plex Sans": [
+    [400, new URL("./studio/IBMPlexSans-400.woff2", import.meta.url).href],
+    [600, new URL("./studio/IBMPlexSans-600.woff2", import.meta.url).href],
+  ],
+}
+const UI_FONT = '"IBM Plex Sans", "Segoe UI", sans-serif'
+const SYMBOL_FONT = '"League Spartan", "Bahnschrift", sans-serif'
+
+// Quartz's base stylesheet sets `fill` on every SVG <text> element, and any
+// stylesheet beats an SVG fill attribute, so on the real site every label
+// took the page's body colour. Text paint therefore goes in an inline style.
+function textFill(colour) {
+  return { fill: colour, style: { fill: colour } }
+}
 
 let runtimePromise = null
 let shapesRegistered = false
 let edgeCounter = 0
+let instanceCounter = 0
 
 function loadRuntime() {
   runtimePromise ||= import(X6_RUNTIME_URL)
@@ -17,8 +48,187 @@ function edgeId() {
   return `edge-${Date.now().toString(36)}-${edgeCounter}`
 }
 
+function compartmentShape(id) {
+  return `iconoplasm-compartment-${id}`
+}
+
+// Each compartment is its own registered shape because the SVG elements
+// differ (a band, an ellipse, stacked membranes). Paths use refD, which X6
+// scales to the node box, so resizing never distorts the line weight.
+const COMPARTMENT_MARKUP = {
+  membrane: {
+    markup: ["body", "top", "bottom", "label"],
+    attrs: {
+      body: { refWidth: "100%", refHeight: "100%", fill: "#ece3d3", stroke: "none" },
+      top: { refWidth: "100%", height: 3, fill: "#c9b99d", stroke: "none" },
+      bottom: { refWidth: "100%", height: 3, refY: "100%", y: -3, fill: "#c9b99d", stroke: "none" },
+      // Receptors sit on the left of a membrane band, so its name goes right.
+      label: {
+        textAnchor: "end",
+        refX: "100%",
+        refX2: -14,
+        refY: "50%",
+        textVerticalAnchor: "middle",
+        fill: "#7a5a3e",
+      },
+    },
+  },
+  cytoplasm: {
+    markup: ["body", "label"],
+    attrs: {
+      body: {
+        refWidth: "100%",
+        refHeight: "100%",
+        rx: 22,
+        ry: 22,
+        fill: "rgba(32,18,11,0.025)",
+        stroke: "rgba(32,18,11,0.45)",
+        strokeWidth: 1.5,
+      },
+      label: {
+        textAnchor: "start",
+        refX: 18,
+        refY: 14,
+        textVerticalAnchor: "top",
+        fill: "#7a5a3e",
+      },
+    },
+  },
+  nucleus: {
+    markup: [["ellipse", "body"], "label"],
+    attrs: {
+      body: {
+        refCx: "50%",
+        refCy: "50%",
+        refRx: "50%",
+        refRy: "50%",
+        fill: "rgba(27,114,105,0.07)",
+        stroke: "rgba(27,114,105,0.55)",
+        strokeWidth: 1.5,
+      },
+      label: { refX: "50%", refY: 16, textAnchor: "middle", textVerticalAnchor: "top", fill: TEAL },
+    },
+  },
+  mitochondrion: {
+    markup: [["ellipse", "body"], ["path", "detail"], "label"],
+    attrs: {
+      body: {
+        refCx: "50%",
+        refCy: "50%",
+        refRx: "50%",
+        refRy: "50%",
+        fill: "#fbebe2",
+        stroke: "#cf9b7f",
+        strokeWidth: 1.5,
+      },
+      detail: {
+        refD: "M 10 50 C 18 20 24 80 32 50 S 46 20 54 50 S 68 80 76 50 S 86 22 92 50",
+        fill: "none",
+        stroke: "#cf9b7f",
+        strokeWidth: 1.4,
+        vectorEffect: "non-scaling-stroke",
+      },
+      label: {
+        refX: "50%",
+        refY: "100%",
+        refY2: 8,
+        textAnchor: "middle",
+        textVerticalAnchor: "top",
+        fill: "#9a6248",
+      },
+    },
+  },
+  er: {
+    markup: [["path", "body"], "label"],
+    attrs: {
+      body: {
+        refD: "M 0 12 C 25 2 75 22 100 12 M 0 37 C 25 27 75 47 100 37 M 0 62 C 25 52 75 72 100 62 M 0 87 C 25 77 75 97 100 87",
+        fill: "none",
+        stroke: "#9fb096",
+        strokeWidth: 2.5,
+        vectorEffect: "non-scaling-stroke",
+      },
+      label: {
+        refX: "50%",
+        refY: "100%",
+        refY2: 8,
+        textAnchor: "middle",
+        textVerticalAnchor: "top",
+        fill: "#5f7356",
+      },
+    },
+  },
+  complex: {
+    markup: ["body", "label"],
+    attrs: {
+      body: {
+        refWidth: "100%",
+        refHeight: "100%",
+        rx: 4,
+        ry: 4,
+        fill: "none",
+        stroke: "rgba(32,18,11,0.55)",
+        strokeWidth: 1.2,
+        strokeDasharray: "5 3",
+      },
+      label: {
+        textAnchor: "start",
+        refX: 10,
+        refY: 8,
+        textVerticalAnchor: "top",
+        fill: "#5a4636",
+      },
+    },
+  },
+}
+
+function markupItem(item) {
+  const [tagName, selector] = Array.isArray(item)
+    ? item
+    : [item === "label" ? "text" : "rect", item]
+  return { tagName, selector }
+}
+
+function portGroups() {
+  return Object.fromEntries(
+    PORT_IDS.map((position) => [
+      position,
+      {
+        position,
+        attrs: {
+          circle: {
+            class: "icono-x6-port-body",
+            r: 5,
+            magnet: true,
+            stroke: "#fbf7f1",
+            strokeWidth: 2,
+            fill: TEAL,
+          },
+        },
+      },
+    ]),
+  )
+}
+
 function registerShapes(Graph) {
   if (shapesRegistered) return
+  Graph.registerNode(
+    PAGE_SHAPE,
+    {
+      inherit: "rect",
+      markup: [
+        { tagName: "rect", selector: "sheet" },
+        { tagName: "rect", selector: "grain" },
+        { tagName: "rect", selector: "grid" },
+      ],
+      attrs: {
+        sheet: { refWidth: "100%", refHeight: "100%", fill: PAPER_FILL, stroke: "none" },
+        grain: { refWidth: "100%", refHeight: "100%", opacity: 0.45, stroke: "none" },
+        grid: { refWidth: "100%", refHeight: "100%", stroke: "none" },
+      },
+    },
+    true,
+  )
   Graph.registerNode(
     GENE_SHAPE,
     {
@@ -27,42 +237,38 @@ function registerShapes(Graph) {
       height: 176,
       markup: [
         { tagName: "rect", selector: "body" },
+        { tagName: "text", selector: "fallback" },
         { tagName: "image", selector: "portrait" },
+        { tagName: "rect", selector: "frame" },
       ],
       attrs: {
-        body: {
-          fill: "#ffffff",
-          stroke: "none",
+        body: { refWidth: "100%", refHeight: "100%", fill: "#2a1d15", stroke: "none" },
+        // B-1045: the symbol sits under the portrait, so a node that is still
+        // loading (or whose image failed) reads as the gene, never as a blank box.
+        fallback: {
+          refX: "50%",
+          refY: "50%",
+          textAnchor: "middle",
+          textVerticalAnchor: "middle",
+          fontFamily: SYMBOL_FONT,
+          fontWeight: 800,
+          fontSize: 20,
+          ...textFill("#efe6d9"),
         },
         portrait: {
-          x: 0,
-          y: 0,
           refWidth: "100%",
           refHeight: "100%",
-          preserveAspectRatio: "xMidYMid meet",
+          preserveAspectRatio: "xMidYMid slice",
+        },
+        frame: {
+          refWidth: "100%",
+          refHeight: "100%",
+          fill: "none",
+          stroke: "rgba(32,18,11,0.35)",
+          strokeWidth: 1,
         },
       },
-      ports: {
-        groups: Object.fromEntries(
-          PORT_IDS.map((position) => [
-            position,
-            {
-              position,
-              attrs: {
-                circle: {
-                  class: "icono-x6-port-body",
-                  r: 7,
-                  magnet: true,
-                  stroke: "#ffffff",
-                  strokeWidth: 3,
-                  fill: "#1b7269",
-                },
-              },
-            },
-          ]),
-        ),
-        items: PORT_IDS.map((group) => ({ id: group, group })),
-      },
+      ports: { groups: portGroups(), items: PORT_IDS.map((group) => ({ id: group, group })) },
     },
     true,
   )
@@ -73,218 +279,467 @@ function registerShapes(Graph) {
       width: 260,
       height: 88,
       attrs: {
-        body: {
-          fill: "transparent",
-          stroke: "transparent",
-        },
+        body: { fill: "transparent", stroke: "transparent", rx: 2, ry: 2 },
         label: {
-          fontFamily: "Newsreader, serif",
-          fontSize: 24,
-          fill: "#2f241d",
-          textWrap: { width: -24, height: -18, ellipsis: true },
+          fontFamily: UI_FONT,
+          fontSize: 18,
+          ...textFill(INK),
+          textWrap: { width: -16, height: -12, ellipsis: true },
           textAnchor: "start",
-          refX: 12,
-          refY: 12,
-          yAlignment: "top",
+          refX: 8,
+          refY: 6,
+          textVerticalAnchor: "top",
         },
       },
     },
     true,
   )
+  for (const shape of COMPARTMENT_SHAPES) {
+    const spec = COMPARTMENT_MARKUP[shape.id]
+    Graph.registerNode(
+      compartmentShape(shape.id),
+      {
+        inherit: "rect",
+        width: shape.width,
+        height: shape.height,
+        markup: spec.markup.map(markupItem),
+        attrs: {
+          ...spec.attrs,
+          label: {
+            fontFamily: UI_FONT,
+            fontSize: 13,
+            fontWeight: 600,
+            letterSpacing: 1.3,
+            ...spec.attrs.label,
+            ...textFill(spec.attrs.label.fill),
+          },
+        },
+      },
+      true,
+    )
+  }
   shapesRegistered = true
 }
 
-function markerFor(kind) {
-  if (kind === "inhibition") {
+function edgeColour(edge) {
+  return edge.color || (relationshipKind(edge.kind).head === "bar" ? RUST : INK)
+}
+
+function dashFor(edge) {
+  const pattern = edge.pattern || (relationshipKind(edge.kind).dashed ? "dashed" : "solid")
+  const width = edge.width || 1.5
+  if (pattern === "dashed") return `${Math.max(4, width * 4)} ${Math.max(3, width * 2.5)}`
+  if (pattern === "dotted") return `0.1 ${Math.max(3, width * 2.4)}`
+  return ""
+}
+
+function markerFor(edge) {
+  const kind = relationshipKind(edge.kind)
+  const colour = edgeColour(edge)
+  const size = edge.head_size || 8
+  if (kind.head === "bar") {
     return {
       tagName: "path",
-      d: "M 0 -10 L 0 10",
-      refX: 0,
-      refY: 0,
+      d: `M 0 ${-size} L 0 ${size}`,
       fill: "none",
-      stroke: "#b23a2b",
-      strokeWidth: 3,
-      strokeLinecap: "butt",
+      stroke: colour,
+      strokeWidth: Math.max(2, (edge.width || 1.5) * 1.4),
+      strokeOpacity: edge.opacity,
     }
   }
-  if (kind === "association") return null
-  return { name: "block", width: 12, height: 9, fill: "#1b7269", stroke: "#1b7269" }
-}
-
-function edgeAttrs(kind, selected = false) {
-  const stroke = kind === "activation" ? "#1b7269" : kind === "inhibition" ? "#b23a2b" : "#171717"
-  return {
-    line: {
-      stroke,
-      strokeWidth: selected ? 4 : 3,
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      strokeDasharray: "",
-      targetMarker: markerFor(kind),
-    },
-  }
-}
-
-function edgeLabels(label, background) {
-  if (!label) return []
-  return [
-    {
-      attrs: {
-        label: {
-          text: label,
-          fill: "#171717",
-          fontFamily: "IBM Plex Mono, monospace",
-          fontSize: 14,
-          paintOrder: "stroke",
-          stroke: background,
-          strokeWidth: 7,
-          strokeLinejoin: "round",
-        },
-      },
-      position: { distance: 0.5, offset: -12 },
-    },
-  ]
-}
-
-function graphNodes(document) {
-  return document.nodes.map((node) => {
-    if (node.type === "text") {
-      return {
-        id: node.id,
-        shape: TEXT_SHAPE,
-        x: node.x,
-        y: node.y,
-        width: node.width,
-        height: node.height,
-        label: node.text,
-        attrs: {
-          label: {
-            text: node.text,
-            fontSize: node.font_size,
-            textAnchor:
-              node.align === "center" ? "middle" : node.align === "right" ? "end" : "start",
-            refX: node.align === "center" ? "50%" : node.align === "right" ? "100%" : 12,
-            refX2: node.align === "right" ? -12 : 0,
-          },
-        },
-        data: { ...node, itemType: "text" },
-      }
-    }
-    // B-846: cdn_url serves the same immutable bytes without a Worker request,
-    // so a shared or embedded diagram costs Iconoplasm nothing per view.
-    const imageUrl = node.asset.cdn_url || node.asset.immutable_url || node.asset.canonical_url
+  if (kind.head === "arrow") {
     return {
+      name: "block",
+      width: size * 1.25,
+      height: size,
+      fill: colour,
+      stroke: colour,
+      strokeWidth: 1,
+      fillOpacity: edge.opacity,
+      strokeOpacity: edge.opacity,
+    }
+  }
+  return null
+}
+
+function edgeAttrs(edge, selected = false) {
+  const width = edge.width || 1.5
+  return {
+    wrap: {
+      stroke: selected ? "rgba(27,114,105,0.24)" : "transparent",
+      strokeWidth: Math.max(10, width + 9),
+      strokeLinecap: "round",
+    },
+    line: {
+      stroke: edgeColour(edge),
+      strokeWidth: width,
+      strokeOpacity: edge.opacity ?? 1,
+      strokeLinecap: dashFor(edge).startsWith("0.1") ? "round" : "butt",
+      strokeLinejoin: "round",
+      strokeDasharray: dashFor(edge),
+      targetMarker: markerFor(edge),
+    },
+  }
+}
+
+function labelOffset(edge, hasTag) {
+  const lift = edge.label_size * 0.7 + 7 + (hasTag ? 14 : 0)
+  if (edge.label_position === "on") return 0
+  return edge.label_position === "below" ? lift : -lift
+}
+
+function textLabel(text, attrs, position) {
+  return {
+    markup: [{ tagName: "text", selector: "label" }],
+    attrs: {
+      label: {
+        text,
+        textAnchor: "middle",
+        textVerticalAnchor: "middle",
+        fontFamily: UI_FONT,
+        paintOrder: "stroke",
+        strokeLinejoin: "round",
+        pointerEvents: "none",
+        ...attrs,
+        ...textFill(attrs.fill),
+      },
+    },
+    position,
+  }
+}
+
+function glyphLabel(d, colour, distance, width) {
+  return {
+    markup: [{ tagName: "path", selector: "glyph" }],
+    attrs: {
+      glyph: {
+        d,
+        fill: "none",
+        stroke: colour,
+        strokeWidth: Math.max(1.5, width),
+        pointerEvents: "none",
+      },
+    },
+    position: { distance, options: { keepGradient: true } },
+  }
+}
+
+// KEGG prints modification tags (+p, -u, e) above the middle of the line,
+// a tick across a dissociation and a slash across a missing interaction.
+function edgeLabels(edge, background) {
+  const kind = relationshipKind(edge.kind)
+  const colour = edgeColour(edge)
+  const labels = []
+  if (kind.tag) {
+    labels.push(
+      textLabel(
+        kind.tag,
+        {
+          fill: colour,
+          fontSize: 12,
+          fontWeight: 600,
+          stroke: background,
+          strokeWidth: 4,
+          fillOpacity: edge.opacity,
+        },
+        { distance: 0.5, offset: -10 },
+      ),
+    )
+  }
+  if (kind.tick) labels.push(glyphLabel("M 0 -7 L 0 7", colour, 0.5, edge.width))
+  if (kind.slash) labels.push(glyphLabel("M -5 8 L 5 -8", colour, 0.62, edge.width))
+  if (edge.label) {
+    labels.push(
+      textLabel(
+        edge.label,
+        {
+          fill: edge.color || INK,
+          fontSize: edge.label_size,
+          fontWeight: 500,
+          stroke: edge.label_background ? background : "none",
+          strokeWidth: edge.label_background ? 6 : 0,
+          fillOpacity: edge.opacity,
+        },
+        { distance: 0.5, offset: labelOffset(edge, Boolean(kind.tag)) },
+      ),
+    )
+  }
+  return labels
+}
+
+function routerFor(edge) {
+  return edge.routing === "orthogonal"
+    ? { name: "orth", args: { padding: 14 } }
+    : { name: "normal" }
+}
+
+function connectorFor(edge) {
+  if (edge.routing === "curved") return { name: "smooth" }
+  if (edge.jumps && edge.jumps !== "none")
+    return { name: "jumpover", args: { type: edge.jumps, size: 5 } }
+  return edge.routing === "orthogonal"
+    ? { name: "rounded", args: { radius: 8 } }
+    : { name: "normal" }
+}
+
+function textAttrs(node) {
+  const fill = node.fill === "note" ? NOTE_FILL : node.fill === "paper" ? PAPER_FILL : "transparent"
+  return {
+    body: {
+      fill,
+      stroke: node.fill === "none" ? "transparent" : "rgba(32,18,11,0.18)",
+      filter: node.fill === "note" ? "drop-shadow(0 2px 3px rgba(53,38,27,0.18))" : "none",
+    },
+    label: {
+      text: node.text,
+      fontSize: node.font_size,
+      fontWeight: node.bold ? 600 : 400,
+      fontStyle: node.italic ? "italic" : "normal",
+      ...textFill(node.color || INK),
+      textAnchor: node.align === "center" ? "middle" : node.align === "right" ? "end" : "start",
+      refX: node.align === "center" ? "50%" : node.align === "right" ? "100%" : 8,
+      refX2: node.align === "right" ? -8 : 0,
+    },
+  }
+}
+
+function compartmentAttrs(node) {
+  const attrs = { label: { text: String(node.label || "").toUpperCase() } }
+  if (node.color) {
+    attrs.body = { stroke: node.color }
+    if (node.shape === "membrane") {
+      attrs.top = { fill: node.color }
+      attrs.bottom = { fill: node.color }
+    }
+    if (node.shape === "mitochondrion") attrs.detail = { stroke: node.color }
+    Object.assign(attrs.label, textFill(node.color))
+  }
+  return attrs
+}
+
+function graphNodes(document, gridVisible, defsIds) {
+  const page = {
+    id: PAGE_ID,
+    shape: PAGE_SHAPE,
+    x: 0,
+    y: 0,
+    width: document.width,
+    height: document.height,
+    zIndex: -1000,
+    attrs: {
+      sheet: { fill: pageBackgroundColour(document) },
+      grain: { fill: `url(#${defsIds.grain})` },
+      grid: { fill: `url(#${defsIds.grid})`, visibility: gridVisible ? "visible" : "hidden" },
+    },
+    data: { itemType: "page" },
+  }
+  const nodes = document.nodes.map((node, index) => {
+    const base = {
       id: node.id,
-      shape: GENE_SHAPE,
       x: node.x,
       y: node.y,
       width: node.width,
       height: node.height,
+      zIndex: node.type === "compartment" ? index + 1 : 2000 + index,
+      data: { ...node, itemType: node.type },
+    }
+    if (node.type === "text") return { ...base, shape: TEXT_SHAPE, attrs: textAttrs(node) }
+    if (node.type === "compartment")
+      return { ...base, shape: compartmentShape(node.shape), attrs: compartmentAttrs(node) }
+    // B-846: cdn_url serves the same immutable bytes without a Worker request,
+    // so a shared or embedded diagram costs Iconoplasm nothing per view.
+    const imageUrl = node.asset.cdn_url || node.asset.immutable_url || node.asset.canonical_url
+    return {
+      ...base,
+      shape: GENE_SHAPE,
       attrs: {
+        fallback: { text: node.symbol, fontSize: Math.max(12, Math.round(node.width / 6.5)) },
         portrait: { xlinkHref: imageUrl, href: imageUrl },
       },
-      data: { ...node, itemType: "gene" },
     }
   })
+  return [page, ...nodes]
 }
 
-function graphEdges(document) {
-  return document.edges.map((edge) => ({
+function graphEdge(edge, background) {
+  return {
     id: edge.id,
     shape: "edge",
     source: { cell: edge.from },
     target: { cell: edge.to },
-    router: { name: "normal" },
-    connector: { name: "smooth" },
-    attrs: edgeAttrs(edge.kind),
-    labels: edgeLabels(edge.label, document.background),
+    vertices: edge.vertices || [],
+    router: routerFor(edge),
+    connector: connectorFor(edge),
+    attrs: edgeAttrs(edge),
+    labels: edgeLabels(edge, background),
+    zIndex: 1000,
     data: { ...edge, itemType: "relationship" },
-  }))
+  }
 }
 
 function documentFromGraph(graph, baseDocument) {
-  const nodes = graph.getNodes().map((cell) => {
-    const data = cell.getData() || {}
-    const position = cell.getPosition()
-    const size = cell.getSize()
-    if (data.itemType === "text") {
+  const nodes = graph
+    .getNodes()
+    .filter((cell) => cell.getData()?.itemType !== "page")
+    .sort((left, right) => (left.getZIndex() || 0) - (right.getZIndex() || 0))
+    .map((cell) => {
+      const { itemType, ...data } = cell.getData() || {}
+      const position = cell.getPosition()
+      const size = cell.getSize()
       return {
         ...data,
         id: cell.id,
-        type: "text",
-        text: String(cell.attr("label/text") || data.text || ""),
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
+        type: itemType,
+        x: Math.round(position.x),
+        y: Math.round(position.y),
+        width: Math.round(size.width),
+        height: Math.round(size.height),
       }
-    }
-    return {
-      ...data,
-      id: cell.id,
-      type: "gene",
-      label: String(data.label || data.symbol || ""),
-      x: position.x,
-      y: position.y,
-      width: size.width,
-      height: size.height,
-    }
-  })
+    })
   const nodeIds = new Set(nodes.map((node) => node.id))
   const edges = graph
     .getEdges()
     .map((cell) => {
       const source = cell.getSourceCellId()
       const target = cell.getTargetCellId()
-      const data = cell.getData() || {}
+      const { itemType, ...data } = cell.getData() || {}
       if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) return null
       return {
+        ...data,
         id: cell.id,
         type: "relationship",
         from: source,
         to: target,
-        kind: data.kind || "activation",
-        label: data.label || "",
+        vertices: cell.getVertices().map((point) => ({ x: point.x, y: point.y })),
       }
     })
     .filter(Boolean)
   return { ...baseDocument, nodes, edges }
 }
 
-function decorateSelection(graph, selectedCells) {
-  for (const edge of graph.getEdges()) {
-    edge.attr(edgeAttrs(edge.getData()?.kind || "activation", selectedCells.includes(edge)), {
-      overwrite: true,
-    })
-    edge.removeTools()
-  }
-  const selectedEdge = selectedCells.find((cell) => cell.isEdge())
-  if (selectedEdge) {
-    selectedEdge.addTools([
-      { name: "vertices", args: { snapRadius: 20 } },
-      { name: "source-arrowhead" },
-      { name: "target-arrowhead" },
-      { name: "button-remove", args: { distance: -28 } },
-    ])
-  }
+function svgElement(tagName, attributes, parent) {
+  const element = window.document.createElementNS("http://www.w3.org/2000/svg", tagName)
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value))
+  parent?.append(element)
+  return element
 }
 
-export async function createDiagramEditor({ container, document, onChange, onSelect }) {
-  const { Export, Graph, History, Keyboard, Selection, Snapline, Transform } = await loadRuntime()
+function installPatterns(graph, ids, gridSize) {
+  const defs = graph.view.defs
+  defs.querySelector(`#${ids.grid}`)?.remove()
+  defs.querySelector(`#${ids.grain}`)?.remove()
+  const grid = svgElement(
+    "pattern",
+    { id: ids.grid, width: gridSize * 5, height: gridSize * 5, patternUnits: "userSpaceOnUse" },
+    defs,
+  )
+  const minor = Array.from({ length: 5 }, (_, step) => step * gridSize)
+  svgElement(
+    "path",
+    {
+      d: minor.map((at) => `M ${at} 0 V ${gridSize * 5} M 0 ${at} H ${gridSize * 5}`).join(" "),
+      fill: "none",
+      stroke: "rgba(27,114,105,0.07)",
+      "stroke-width": 1,
+    },
+    grid,
+  )
+  svgElement(
+    "path",
+    {
+      d: `M 0 0 V ${gridSize * 5} M 0 0 H ${gridSize * 5}`,
+      fill: "none",
+      stroke: "rgba(27,114,105,0.14)",
+      "stroke-width": 1,
+    },
+    grid,
+  )
+  const grain = svgElement(
+    "pattern",
+    { id: ids.grain, width: 512, height: 512, patternUnits: "userSpaceOnUse" },
+    defs,
+  )
+  const image = svgElement(
+    "image",
+    { width: 512, height: 512, preserveAspectRatio: "none", style: "mix-blend-mode:multiply" },
+    grain,
+  )
+  image.setAttribute("href", GRAIN_URL)
+}
+
+let embeddedFontsPromise = null
+
+// A PNG is drawn from the SVG inside an <img>, which cannot see the page's
+// web fonts, so the export embeds the two Plex Sans weights it uses.
+function embeddedFontCss() {
+  embeddedFontsPromise ||= Promise.all(
+    Object.entries(FONT_URLS).flatMap(([family, weights]) =>
+      weights.map(async ([weight, url]) => {
+        const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer())
+        let binary = ""
+        for (let index = 0; index < bytes.length; index += 0x8000)
+          binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+        return `@font-face{font-family:"${family}";font-weight:${weight};src:url(data:font/woff2;base64,${btoa(binary)}) format("woff2")}`
+      }),
+    ),
+  )
+    .then((faces) => faces.join(""))
+    .catch(() => {
+      embeddedFontsPromise = null
+      return ""
+    })
+  return embeddedFontsPromise
+}
+
+export async function createDiagramEditor({
+  container,
+  document,
+  onChange,
+  onSelect,
+  onView,
+  onPointer,
+  onHover,
+  gridVisible = true,
+  snap = true,
+  sizeHost = null,
+}) {
+  const runtime = await loadRuntime()
+  // The studio keeps the one undo history (document snapshots) and the
+  // keyboard shortcuts, so X6's History and Keyboard plugins stay unused.
+  const { Export, Graph, Selection, Snapline, Transform } = runtime
   registerShapes(Graph)
 
+  instanceCounter += 1
+  const defsIds = { grid: `icono-grid-${instanceCounter}`, grain: `icono-grain-${instanceCounter}` }
   let baseDocument = document
   let applyingDocument = false
   let activeRelationshipKind = "activation"
+  let showGrid = gridVisible
+  let snapping = snap
+
+  const isPage = (cell) => cell?.getData?.()?.itemType === "page"
+  const itemType = (cell) => cell?.getData?.()?.itemType
 
   const graph = new Graph({
     container,
     width: Math.max(1, container.clientWidth || document.width),
     height: Math.max(1, container.clientHeight || document.height),
-    background: { color: document.background },
-    grid: false,
-    panning: { enabled: true, eventTypes: ["rightMouseDown", "mouseWheelDown"] },
-    mousewheel: { enabled: true, modifiers: ["ctrl", "meta"], minScale: 0.35, maxScale: 2.5 },
+    background: false,
+    // Synchronous rendering: an export or a test never races a half-drawn page.
+    async: false,
+    grid: { size: snap ? 10 : 1, visible: false },
+    panning: { enabled: true, eventTypes: ["leftMouseDown", "rightMouseDown", "mouseWheel"] },
+    mousewheel: {
+      enabled: true,
+      modifiers: ["ctrl", "meta"],
+      minScale: 0.1,
+      maxScale: 4,
+      factor: 1.1,
+    },
+    interacting: {
+      nodeMovable: (view) => !isPage(view.cell),
+      edgeLabelMovable: false,
+    },
     connecting: {
       allowBlank: false,
       allowEdge: false,
@@ -292,72 +747,66 @@ export async function createDiagramEditor({ container, document, onChange, onSel
       allowMulti: true,
       allowNode: false,
       highlight: true,
-      snap: { radius: 48 },
+      snap: { radius: 40 },
       anchor: "center",
-      connectionPoint: "boundary",
+      connectionPoint: { name: "boundary", args: { offset: 3 } },
       router: { name: "normal" },
-      connector: { name: "smooth" },
+      connector: { name: "normal" },
       validateConnection({ sourceCell, targetCell, sourcePort, targetPort }) {
         return Boolean(
           sourceCell &&
           targetCell &&
           sourceCell.id !== targetCell.id &&
-          sourceCell.getData()?.itemType === "gene" &&
-          targetCell.getData()?.itemType === "gene" &&
+          itemType(sourceCell) === "gene" &&
+          itemType(targetCell) === "gene" &&
           sourcePort &&
           targetPort,
         )
       },
       createEdge() {
-        const kind = activeRelationshipKind
-        return graph.createEdge({
-          id: edgeId(),
-          shape: "edge",
-          router: { name: "normal" },
-          connector: { name: "smooth" },
-          attrs: edgeAttrs(kind),
-          data: { itemType: "relationship", kind, label: "" },
-        })
+        return graph.createEdge({ id: edgeId(), shape: "edge", zIndex: 1000 })
       },
     },
     highlighting: {
       magnetAdsorbed: {
         name: "stroke",
-        args: { attrs: { fill: "#ffffff", stroke: "#1b7269", strokeWidth: 4 } },
+        args: { attrs: { fill: "#fbf7f1", stroke: TEAL, strokeWidth: 3 } },
       },
     },
   })
 
-  const history = new History({ enabled: true, stackSize: 80 })
-  graph.use(history)
-  graph.use(new Keyboard({ enabled: true, global: false }))
-  graph.use(
-    new Selection({
-      enabled: true,
-      rubberband: true,
-      multiple: true,
-      movable: true,
-      pointerEvents: "none",
-      showNodeSelectionBox: true,
-      showEdgeSelectionBox: true,
-    }),
-  )
-  graph.use(new Snapline({ enabled: true, sharp: true, tolerance: 10 }))
+  const selection = new Selection({
+    enabled: true,
+    rubberband: true,
+    multiple: true,
+    movable: true,
+    pointerEvents: "none",
+    showNodeSelectionBox: true,
+    showEdgeSelectionBox: false,
+    filter: (cell) => !isPage(cell),
+  })
+  graph.use(selection)
+  const snapline = new Snapline({ enabled: snap, sharp: true, tolerance: 8 })
+  graph.use(snapline)
   graph.use(
     new Transform({
       rotating: false,
       resizing: {
-        enabled: (node) => node.getData()?.itemType === "text",
-        minWidth: 120,
-        minHeight: 48,
-        maxWidth: 900,
-        maxHeight: 500,
-        orthogonal: false,
+        enabled: (node) => !isPage(node),
+        minWidth: (node) => (itemType(node) === "gene" ? 72 : itemType(node) === "text" ? 60 : 40),
+        minHeight: (node) => (itemType(node) === "gene" ? 96 : itemType(node) === "text" ? 28 : 24),
+        maxWidth: (node) =>
+          itemType(node) === "gene" ? 240 : itemType(node) === "text" ? 900 : 4000,
+        maxHeight: (node) =>
+          itemType(node) === "gene" ? 320 : itemType(node) === "text" ? 500 : 4000,
+        preserveAspectRatio: (node) => itemType(node) === "gene",
+        orthogonal: true,
         restrict: false,
       },
     }),
   )
   graph.use(new Export())
+  installPatterns(graph, defsIds, 10)
 
   const emitChange = () => {
     if (applyingDocument) return
@@ -366,98 +815,233 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     onChange?.(next)
   }
 
-  graph.on("selection:changed", ({ selected }) => {
-    decorateSelection(graph, selected)
-    graph.clearTransformWidgets()
-    const textNode = selected.length === 1 ? selected[0] : null
-    if (textNode?.isNode() && textNode.getData()?.itemType === "text") {
-      graph.createTransformWidget(textNode)
+  const selectedEdgeIds = new Set()
+  function decorateSelection(selectedCells) {
+    for (const edge of graph.getEdges()) {
+      const selected = selectedCells.includes(edge)
+      const wasSelected = selectedEdgeIds.has(edge.id)
+      if (selected !== wasSelected)
+        edge.attr("wrap", edgeAttrs(edge.getData() || {}, selected).wrap, { silent: true })
+      if (!selected) edge.removeTools()
     }
-    onSelect?.(selected.length === 1 ? selected[0].id : "")
+    selectedEdgeIds.clear()
+    for (const cell of selectedCells) if (cell.isEdge()) selectedEdgeIds.add(cell.id)
+    const selectedEdge = selectedCells.length === 1 ? selectedCells[0] : null
+    if (selectedEdge?.isEdge()) {
+      const handles = { snapRadius: 12, attrs: { fill: TEAL, stroke: "#fbf7f1" } }
+      selectedEdge.addTools([
+        selectedEdge.getData()?.routing === "orthogonal"
+          ? { name: "segments", args: handles }
+          : { name: "vertices", args: handles },
+        { name: "source-arrowhead", args: { attrs: { fill: "#fbf7f1", stroke: TEAL } } },
+        { name: "target-arrowhead", args: { attrs: { fill: "#fbf7f1", stroke: TEAL } } },
+      ])
+    }
+  }
+
+  graph.on("selection:changed", ({ selected }) => {
+    decorateSelection(selected)
+    graph.clearTransformWidgets()
+    const only = selected.length === 1 ? selected[0] : null
+    if (only?.isNode() && !isPage(only)) graph.createTransformWidget(only)
+    if (!applyingDocument) onSelect?.(selected.map((cell) => cell.id))
   })
-  graph.on("node:change:position", emitChange)
-  graph.on("node:change:size", emitChange)
+  graph.on("node:moved", emitChange)
+  graph.on("node:resized", emitChange)
   graph.on("node:removed", emitChange)
-  graph.on("edge:connected", ({ edge }) => {
-    edge.setData({ itemType: "relationship", kind: activeRelationshipKind, label: "" })
-    edge.attr(edgeAttrs(activeRelationshipKind), { overwrite: true })
+  graph.on("edge:connected", ({ edge, isNew }) => {
+    // Dragging an existing arrowhead to another gene keeps the relationship.
+    if (!isNew) {
+      emitChange()
+      return
+    }
+    const data = {
+      itemType: "relationship",
+      kind: activeRelationshipKind,
+      label: "",
+      color: "",
+      width: 1.5,
+      pattern: "",
+      routing: "straight",
+      jumps: "none",
+      head_size: 8,
+      opacity: 1,
+      label_position: "above",
+      label_size: 14,
+      label_background: true,
+      vertices: [],
+      evidence: { reference: "", note: "" },
+    }
+    edge.setData(data, { overwrite: true })
+    applyEdge(edge, data)
     emitChange()
+    graph.cleanSelection()
     graph.select(edge)
   })
   graph.on("edge:removed", emitChange)
-  graph.on("edge:change:vertices", emitChange)
-  graph.on("edge:change:source", emitChange)
-  graph.on("edge:change:target", emitChange)
+  graph.on("edge:change:vertices", () => {
+    if (!applyingDocument) emitChange()
+  })
   graph.on("blank:click", () => graph.cleanSelection())
   graph.on("cell:dblclick", ({ cell }) => {
-    if (cell.getData()?.itemType === "text") onSelect?.(cell.id, { edit: true })
+    if (itemType(cell) === "text" || itemType(cell) === "relationship")
+      onSelect?.([cell.id], { edit: true })
+  })
+  graph.on("node:mouseenter", ({ node }) => {
+    if (itemType(node) === "gene") onHover?.(node.id)
+  })
+  graph.on("node:mouseleave", () => onHover?.(""))
+  graph.on("scale", () => onView?.())
+  graph.on("translate", () => onView?.())
+  graph.on("resize", () => onView?.())
+  graph.on("node:change:position", () => onView?.())
+  graph.on("edge:change:vertices", () => onView?.())
+  container.addEventListener("pointermove", (event) => {
+    const point = graph.clientToLocal(event.clientX, event.clientY)
+    onPointer?.({ x: Math.round(point.x), y: Math.round(point.y) })
   })
 
-  graph.bindKey(["backspace", "delete"], () => {
-    const cells = graph.getSelectedCells()
-    if (cells.length) graph.removeCells(cells)
-    return false
-  })
-  graph.bindKey(["ctrl+z", "meta+z"], () => {
-    graph.undo()
-    return false
-  })
-  graph.bindKey(["ctrl+shift+z", "meta+shift+z", "ctrl+y", "meta+y"], () => {
-    graph.redo()
-    return false
-  })
+  function selectedNodes() {
+    return graph.getSelectedCells().filter((cell) => cell.isNode() && !isPage(cell))
+  }
+
+  function nudge(dx, dy) {
+    const nodes = selectedNodes()
+    if (!nodes.length) return
+    for (const node of nodes) node.translate(dx, dy)
+    emitChange()
+  }
+
+  function applyEdge(edge, data) {
+    edge.setRouter(routerFor(data))
+    edge.setConnector(connectorFor(data))
+    edge.attr(edgeAttrs(data, selectedEdgeIds.has(edge.id)), { overwrite: true })
+    edge.setLabels(edgeLabels(data, pageBackgroundColour(baseDocument)))
+  }
+
+  // Only fields in the patch move or resize the cell: the data copy of x and
+  // y goes stale as soon as someone drags the node.
+  function applyNode(node, data, patch) {
+    if (patch.x !== undefined || patch.y !== undefined) {
+      const position = node.getPosition()
+      node.position(patch.x ?? position.x, patch.y ?? position.y)
+    }
+    if (data.itemType !== "gene" && (patch.width !== undefined || patch.height !== undefined)) {
+      const size = node.getSize()
+      node.resize(patch.width ?? size.width, patch.height ?? size.height)
+    }
+    if (data.itemType === "text") node.setAttrs(textAttrs(data))
+    if (data.itemType === "compartment") {
+      node.setAttrs(compartmentAttrs(data))
+      // The shape is the registered X6 shape; changing it means a new cell.
+      if (node.shape !== compartmentShape(data.shape)) return false
+    }
+    if (data.itemType === "gene" && patch.width !== undefined) {
+      node.attr("fallback/fontSize", Math.max(12, Math.round(patch.width / 6.5)))
+      node.resize(patch.width, Math.round(patch.width * (4 / 3)))
+    }
+    return true
+  }
 
   function fitDiagram() {
-    graph.zoomToFit({ padding: 56, maxScale: 1 })
-    graph.centerContent()
+    if (!container.clientWidth || !container.clientHeight) return
+    graph.zoomToRect(
+      { x: -40, y: -40, width: baseDocument.width + 80, height: baseDocument.height + 80 },
+      { maxScale: 1.5, minScale: 0.1 },
+    )
   }
 
-  async function setDocument(nextDocument, { fit = false, cleanHistory = false } = {}) {
+  function fitSelection() {
+    const cells = graph.getSelectedCells()
+    if (!cells.length) return fitDiagram()
+    const box = graph.getCellsBBox(cells)
+    if (box) graph.zoomToRect(box.inflate(60), { maxScale: 2, minScale: 0.1 })
+  }
+
+  // Reloading the graph keeps (or sets) the selection quietly and reports it
+  // once, so the studio's panels render a single time per document.
+  async function setDocument(nextDocument, { fit = false, select } = {}) {
     applyingDocument = true
+    const sameSize =
+      baseDocument.width === nextDocument.width && baseDocument.height === nextDocument.height
     baseDocument = nextDocument
-    history.disable()
+    const selectedIds = Array.isArray(select)
+      ? select
+      : graph.getSelectedCells().map((cell) => cell.id)
     graph.cleanSelection()
     graph.clearTransformWidgets()
+    selectedEdgeIds.clear()
     graph.clearCells({ silent: true })
-    graph.fromJSON({ nodes: graphNodes(nextDocument), edges: graphEdges(nextDocument) })
-    graph.drawBackground({ color: nextDocument.background })
-    history.enable()
-    if (cleanHistory) history.clean()
+    const background = pageBackgroundColour(nextDocument)
+    graph.fromJSON({
+      nodes: graphNodes(nextDocument, showGrid, defsIds),
+      edges: nextDocument.edges.map((edge) => graphEdge(edge, background)),
+    })
+    const keep = selectedIds.map((id) => graph.getCellById(id)).filter(Boolean)
+    if (keep.length) graph.select(keep)
     applyingDocument = false
-    if (fit && nextDocument.nodes.length) fitDiagram()
+    onSelect?.(keep.map((cell) => cell.id))
+    if (fit || !sameSize) fitDiagram()
+    onView?.()
   }
 
-  await setDocument(document, { fit: true, cleanHistory: true })
+  await setDocument(document, { fit: true, select: [] })
 
-  const resizeObserver = new ResizeObserver(() => {
-    graph.resize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight))
-  })
-  resizeObserver.observe(container)
+  // X6 pins the container to inline pixel sizes, so watching the container
+  // itself never sees a panel open or close. The studio passes the canvas
+  // area as `sizeHost`; the graph fills it, less the container's ruler offset.
+  function syncSize() {
+    const host = sizeHost || container
+    const width = Math.max(1, host.clientWidth - (sizeHost ? container.offsetLeft : 0))
+    const height = Math.max(1, host.clientHeight - (sizeHost ? container.offsetTop : 0))
+    if (width !== graph.options.width || height !== graph.options.height) {
+      graph.resize(width, height)
+      onView?.()
+    }
+  }
+  const resizeObserver = new ResizeObserver(syncSize)
+  resizeObserver.observe(sizeHost || container)
+  syncSize()
 
-  function x6ExportOptions() {
+  function exportOptions(stylesheet = "") {
     const snapshot = documentFromGraph(graph, baseDocument)
     const metadata = JSON.stringify({
       schema_version: snapshot.schema_version,
       title: snapshot.title,
+      notation: "KEGG pathway notation",
       assets: snapshot.nodes
         .filter((node) => node.type === "gene")
         .map((node) => ({ node_id: node.id, symbol: node.symbol, ...node.asset })),
+      references: diagramReferences(snapshot),
     })
     return {
       preserveDimensions: { width: snapshot.width, height: snapshot.height },
       viewBox: { x: 0, y: 0, width: snapshot.width, height: snapshot.height },
-      copyStyles: true,
+      copyStyles: false,
+      stylesheet,
       beforeSerialize(svg) {
-        const namespace = "http://www.w3.org/2000/svg"
-        const background = window.document.createElementNS(namespace, "rect")
-        background.setAttribute("width", String(snapshot.width))
-        background.setAttribute("height", String(snapshot.height))
-        background.setAttribute("fill", snapshot.background)
+        svg.querySelector(`[data-cell-id="${PAGE_ID}"]`)?.remove()
+        svg.querySelector(`#${defsIds.grid}`)?.remove()
+        svg.querySelector(`#${defsIds.grain}`)?.remove()
+        // X6 inlines every portrait so the file opens offline (Illustrator,
+        // Inkscape, a journal's system), but writes each one twice; keep one.
+        for (const image of svg.querySelectorAll("image[href]")) {
+          if (image.getAttribute("xlink:href")) image.removeAttribute("href")
+        }
+        for (const element of svg.querySelectorAll(
+          ".x6-port, .x6-cell-tools, .x6-widget-transform, .x6-widget-selection",
+        ))
+          element.remove()
+        const background = svgElement("rect", {
+          width: snapshot.width,
+          height: snapshot.height,
+          fill: pageBackgroundColour(snapshot),
+        })
         svg.insertBefore(background, svg.firstChild)
-        const metadataNode = window.document.createElementNS(namespace, "metadata")
+        const metadataNode = svgElement("metadata", {})
         metadataNode.textContent = metadata
         svg.insertBefore(metadataNode, background.nextSibling)
-        const title = window.document.createElementNS(namespace, "title")
+        const title = svgElement("title", {})
         title.textContent = snapshot.title
         svg.insertBefore(title, metadataNode.nextSibling)
         return svg
@@ -465,55 +1049,192 @@ export async function createDiagramEditor({ container, document, onChange, onSel
     }
   }
 
+  function downloadUrl(url, fileName) {
+    const link = window.document.createElement("a")
+    link.href = url
+    link.download = fileName
+    link.hidden = true
+    window.document.body.append(link)
+    link.click()
+    link.remove()
+  }
+
+  function align(mode) {
+    const nodes = selectedNodes()
+    if (nodes.length < 2) return
+    const boxes = nodes.map((node) => node.getBBox())
+    const left = Math.min(...boxes.map((box) => box.x))
+    const right = Math.max(...boxes.map((box) => box.x + box.width))
+    const top = Math.min(...boxes.map((box) => box.y))
+    const bottom = Math.max(...boxes.map((box) => box.y + box.height))
+    nodes.forEach((node, index) => {
+      const box = boxes[index]
+      const position = { x: box.x, y: box.y }
+      if (mode === "left") position.x = left
+      if (mode === "center") position.x = (left + right) / 2 - box.width / 2
+      if (mode === "right") position.x = right - box.width
+      if (mode === "top") position.y = top
+      if (mode === "middle") position.y = (top + bottom) / 2 - box.height / 2
+      if (mode === "bottom") position.y = bottom - box.height
+      node.position(Math.round(position.x), Math.round(position.y))
+    })
+    emitChange()
+  }
+
+  function distribute(axis) {
+    const nodes = selectedNodes()
+    if (nodes.length < 3) return
+    const key = axis === "vertical" ? "y" : "x"
+    const size = axis === "vertical" ? "height" : "width"
+    const items = nodes.map((node) => ({ node, box: node.getBBox() }))
+    items.sort((left, right) => left.box[key] - right.box[key])
+    const first = items[0].box
+    const last = items[items.length - 1].box
+    const total = items.reduce((sum, item) => sum + item.box[size], 0)
+    const gap = (last[key] + last[size] - first[key] - total) / (items.length - 1)
+    let cursor = first[key]
+    for (const item of items) {
+      const position = { x: item.box.x, y: item.box.y }
+      position[key] = Math.round(cursor)
+      item.node.position(position.x, position.y)
+      cursor += item.box[size] + gap
+    }
+    emitChange()
+  }
+
+  function order(direction) {
+    const cells = graph.getSelectedCells().filter((cell) => !isPage(cell))
+    if (!cells.length) return
+    for (const cell of cells) {
+      if (direction === "front") cell.toFront()
+      else cell.toBack()
+      // The sheet always stays at the very back.
+      if (direction === "back" && cell.getZIndex() <= -1000) cell.setZIndex(-999)
+    }
+    graph.getCellById(PAGE_ID)?.setZIndex(-1000)
+    emitChange()
+  }
+
   return {
     graph,
     setDocument,
-    select(id) {
-      const cell = id ? graph.getCellById(id) : null
-      if (cell) graph.select(cell)
-      else graph.cleanSelection()
+    select(ids) {
+      const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean)
+      const cells = list.map((id) => graph.getCellById(id)).filter(Boolean)
+      graph.cleanSelection()
+      if (cells.length) graph.select(cells)
     },
+    selectedIds: () => graph.getSelectedCells().map((cell) => cell.id),
     setRelationshipKind(kind) {
       activeRelationshipKind = kind
     },
-    updateEdge(id, patch) {
+    // Style patches go straight to the X6 cell so a slider drag is one cheap
+    // repaint; the document is rebuilt from the graph afterwards.
+    updateItem(id, patch) {
+      const cell = graph.getCellById(id)
+      if (!cell || isPage(cell)) return
+      const data = { ...(cell.getData() || {}), ...patch }
+      if (patch.evidence) data.evidence = { ...(cell.getData()?.evidence || {}), ...patch.evidence }
+      cell.setData(data, { overwrite: true })
+      if (cell.isEdge()) {
+        if (patch.vertices) cell.setVertices(patch.vertices)
+        applyEdge(cell, data)
+      } else if (!applyNode(cell, data, patch)) {
+        return "replace"
+      }
+      emitChange()
+    },
+    reverseEdge(id) {
       const edge = graph.getCellById(id)
       if (!edge?.isEdge()) return
-      const data = { ...(edge.getData() || {}), ...patch }
-      edge.setData(data)
-      edge.attr(edgeAttrs(data.kind || "activation", true), { overwrite: true })
-      edge.setLabels(edgeLabels(data.label || "", baseDocument.background))
+      const source = edge.getSourceCellId()
+      const target = edge.getTargetCellId()
+      edge.setSource({ cell: target })
+      edge.setTarget({ cell: source })
+      edge.setVertices([...edge.getVertices()].reverse())
       emitChange()
     },
-    updateNode(id, patch) {
+    edgeAnchor(id) {
+      const edge = graph.getCellById(id)
+      const view = edge && graph.findViewByCell(edge)
+      if (!view?.getPointAtRatio) return null
+      const point = view.getPointAtRatio(0.5)
+      return point ? graph.localToGraph(point) : null
+    },
+    nodeRect(id) {
       const node = graph.getCellById(id)
-      if (!node?.isNode()) return
-      const data = { ...(node.getData() || {}), ...patch }
-      node.setData(data)
-      if (data.itemType === "text") node.attr("label/text", data.text || "")
-      emitChange()
+      return node?.isNode() ? graph.localToGraph(node.getBBox()) : null
     },
-    canUndo: () => graph.canUndo(),
-    canRedo: () => graph.canRedo(),
-    undo: () => graph.undo(),
-    redo: () => graph.redo(),
-    zoomIn: () => graph.zoom(0.15, { maxScale: 2.5 }),
-    zoomOut: () => graph.zoom(-0.15, { minScale: 0.35 }),
+    view() {
+      const { tx, ty } = graph.translate()
+      return { scale: graph.zoom(), tx, ty }
+    },
+    nudge,
+    refreshSize: syncSize,
+    clientToLocal(x, y) {
+      const point = graph.clientToLocal(x, y)
+      return { x: Math.round(point.x), y: Math.round(point.y) }
+    },
+    visibleCentre() {
+      const rect = container.getBoundingClientRect()
+      const point = graph.clientToLocal(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return { x: Math.round(point.x), y: Math.round(point.y) }
+    },
+    zoomIn: () => graph.zoom(0.1, { maxScale: 4 }),
+    zoomOut: () => graph.zoom(-0.1, { minScale: 0.1 }),
+    zoomTo: (scale) => graph.zoomTo(Math.min(4, Math.max(0.1, scale))),
     zoomToFit: fitDiagram,
+    zoomToSelection: fitSelection,
+    setTool(tool) {
+      if (tool === "pan") selection.disableRubberband()
+      else selection.enableRubberband()
+      container.classList.toggle("is-pan-tool", tool === "pan")
+    },
+    setGridVisible(visible) {
+      showGrid = visible
+      graph.getCellById(PAGE_ID)?.attr("grid/visibility", visible ? "visible" : "hidden")
+    },
+    setSnap(enabled) {
+      snapping = enabled
+      graph.setGridSize(enabled ? 10 : 1)
+      if (enabled) snapline.enable()
+      else snapline.disable()
+    },
+    snapEnabled: () => snapping,
+    align,
+    distribute,
+    order,
+    deleteSelection() {
+      const cells = graph.getSelectedCells().filter((cell) => !isPage(cell))
+      if (cells.length) graph.removeCells(cells)
+    },
+    selectAll() {
+      graph.select(graph.getCells().filter((cell) => !isPage(cell)))
+    },
     async arrange(direction = "horizontal") {
-      const { DagreLayout, GridLayout } = await loadRuntime()
-      const genes = graph.getNodes().filter((node) => node.getData()?.itemType === "gene")
+      const { DagreLayout, GridLayout } = runtime
+      const genes = graph.getNodes().filter((node) => itemType(node) === "gene")
       if (!genes.length) return
-      const useGrid = genes.length > 36
+      const useGrid = direction === "grid" || genes.length > 36
       const columns = Math.ceil(Math.sqrt(genes.length * 1.5))
       const gridIndex = new Map(genes.map((node, index) => [node.id, index]))
+      const geneSize = genes[0].getSize()
+      // B-1045: labels used to collide with portraits because ranks sat 90
+      // units apart whatever the label said. The gap now fits the longest label.
+      const longestLabel = Math.max(
+        0,
+        ...graph.getEdges().map((edge) => {
+          const data = edge.getData() || {}
+          return String(data.label || "").length * (data.label_size || 12) * 0.56
+        }),
+      )
       const layout = useGrid
         ? new GridLayout({
             begin: [60, 60],
             cols: columns,
-            width: columns * 190,
-            height: Math.ceil(genes.length / columns) * 230,
-            nodeSize: [132, 176],
+            width: columns * (geneSize.width + 70),
+            height: Math.ceil(genes.length / columns) * (geneSize.height + 60),
+            nodeSize: [geneSize.width, geneSize.height],
             preventOverlap: true,
             condense: true,
             position: (node) => {
@@ -525,61 +1246,68 @@ export async function createDiagramEditor({ container, document, onChange, onSel
           })
         : new DagreLayout({
             rankdir: direction === "vertical" ? "TB" : "LR",
-            nodesep: 54,
-            ranksep: 90,
-            marginx: 50,
-            marginy: 70,
+            nodesep: 48,
+            ranksep: Math.max(90, Math.ceil(longestLabel) + 56),
+            marginx: 60,
+            marginy: 60,
             nodeSize: (node) => {
               const cell = graph.getCellById(String(node.id))
-              const size = cell?.getSize() || { width: 132, height: 176 }
+              const size = cell?.getSize() || geneSize
               return [size.width, size.height]
             },
           })
-      const data = {
+      await layout.execute({
         nodes: genes.map((node) => ({ id: node.id })),
         edges: graph.getEdges().map((edge) => ({
           id: edge.id,
           source: edge.getSourceCellId(),
           target: edge.getTargetCellId(),
         })),
-      }
-      await layout.execute(data)
-      applyingDocument = true
-      graph.startBatch("antv-dagre-layout")
+      })
       layout.forEachNode((item) => {
         const node = graph.getCellById(String(item.id))
         const size = node?.getSize()
-        if (node && size) node.position(item.x - size.width / 2, item.y - size.height / 2)
+        if (node && size)
+          node.position(Math.round(item.x - size.width / 2), Math.round(item.y - size.height / 2))
       })
-      graph.stopBatch("antv-dagre-layout")
-      const bounds = graph.getCellsBBox(genes)
-      baseDocument = {
-        ...baseDocument,
-        width: Math.max(1200, Math.ceil(bounds.x + bounds.width + 60)),
-        height: Math.max(800, Math.ceil(bounds.y + bounds.height + 60)),
-      }
-      applyingDocument = false
+      for (const edge of graph.getEdges()) edge.setVertices([])
       layout.destroy()
-      fitDiagram()
+      const bounds = graph.getCellsBBox(graph.getNodes().filter((node) => !isPage(node)))
+      const width = Math.max(baseDocument.width, Math.ceil(bounds.x + bounds.width + 60))
+      const height = Math.max(baseDocument.height, Math.ceil(bounds.y + bounds.height + 60))
+      if (width !== baseDocument.width || height !== baseDocument.height) {
+        baseDocument = { ...baseDocument, width, height }
+        graph.getCellById(PAGE_ID)?.resize(width, height)
+      }
       emitChange()
+      fitDiagram()
     },
     async exportSvg() {
-      return graph.toSVGAsync(x6ExportOptions())
+      return graph.toSVGAsync(exportOptions())
     },
     async downloadSvg(fileName) {
-      const svg = await graph.toSVGAsync(x6ExportOptions())
-      const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const link = window.document.createElement("a")
-      link.href = url
-      link.download = fileName
-      link.hidden = true
-      window.document.body.append(link)
-      link.click()
-      link.remove()
+      graph.cleanSelection()
+      const svg = await graph.toSVGAsync(exportOptions())
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }))
+      downloadUrl(url, fileName)
       // Keep the object URL alive long enough for Chromium and Firefox to
       // consume it after the synchronous click dispatch.
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    },
+    async exportPng(scale = 2) {
+      graph.cleanSelection()
+      const fonts = await embeddedFontCss()
+      return graph.toPNGAsync({
+        ...exportOptions(fonts),
+        serializeImages: true,
+        width: baseDocument.width * scale,
+        height: baseDocument.height * scale,
+        backgroundColor: pageBackgroundColour(baseDocument),
+        padding: 0,
+      })
+    },
+    async downloadPng(fileName, scale = 2) {
+      downloadUrl(await this.exportPng(scale), fileName)
     },
     dispose() {
       resizeObserver.disconnect()
@@ -598,7 +1326,7 @@ export async function exportDiagramWithX6(document) {
     height: `${document.height}px`,
   })
   window.document.body.append(container)
-  const editor = await createDiagramEditor({ container, document })
+  const editor = await createDiagramEditor({ container, document, gridVisible: false })
   try {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     return await editor.exportSvg()
