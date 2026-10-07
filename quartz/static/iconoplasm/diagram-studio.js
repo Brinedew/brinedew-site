@@ -1491,6 +1491,11 @@ function renderFormat() {
 
 function fieldValue(item, field) {
   if (field.startsWith("evidence.")) return item.evidence?.[field.slice(9)] ?? ""
+  // The page's paper size follows its width and height (auto layout widens it).
+  if (field === "preset") {
+    const size = `${item.width}x${item.height}`
+    return PAGE_PRESETS.some(([value]) => value === size) ? size : "custom"
+  }
   return item[field]
 }
 
@@ -1960,7 +1965,12 @@ function keepSelectionInView() {
   window.setTimeout(async () => {
     const instance = await editorReady
     instance?.refreshSize()
-    if (isPhone() && selectedIds.length) instance?.zoomToSelection()
+    // On a phone the canvas strip shrinks: keep the selection, or else the
+    // whole sheet, in view.
+    if (isPhone()) {
+      if (selectedIds.length) instance?.zoomToSelection()
+      else instance?.zoomToFit()
+    }
     scheduleViewUpdate()
   }, 60)
 }
