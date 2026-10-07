@@ -4,13 +4,6 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
-  # B-1037: the admin cost page reads this KV snapshot, not the deployed bundle.
-  # GitHub fires the hourly schedule only every 4 to 7 hours (measured 2026-10-05/06),
-  # so a deploy that changes the snapshot's shape left the page on the old shape
-  # for hours. Publish once after every successful production deploy too.
-  workflow_run:
-    workflows: ["Deploy Production (Cloudflare Pages + Worker)"]
-    types: [completed]
 
 permissions:
   contents: read
@@ -21,7 +14,6 @@ concurrency:
 
 jobs:
   refresh-snapshot:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

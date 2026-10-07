@@ -210,11 +210,6 @@ includesOrFail(
 )
 includesOrFail(
   refreshWorkflow,
-  'workflows: ["Deploy Production (Cloudflare Pages + Worker)"]',
-  "Observability snapshot must republish after each production deploy (B-1037).",
-)
-includesOrFail(
-  refreshWorkflow,
   "check-iconoplasm-cloudflare-budget-headroom.mjs",
   "Observability snapshot publication must fail closed on KV budget pressure.",
 )

@@ -584,6 +584,33 @@ test("admin cost snapshot prefers the atomically published KV artifact", async (
   assert.deepEqual(budgetNamespace.calls, [])
 })
 
+test("B-1037: a deploy-baked snapshot newer than the KV artifact wins until the next refresh", async () => {
+  const budgetNamespace = new FakeDailyBudgetNamespace()
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(
+        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
+        { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+      ),
+      {
+        ICONOPLASM_ADMIN_TOKEN: "founder-secret",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
+        KV: {
+          async get() {
+            return JSON.stringify({ generatedAt: "2020-01-01T00:00:00.000Z", source: {} })
+          },
+        },
+      },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(payload?.snapshot?.publication?.state, "deploy_newer")
+  assert.equal(payload?.snapshot?.publication?.source, "worker_bundle")
+  assert.notEqual(payload?.snapshot?.generatedAt, "2020-01-01T00:00:00.000Z")
+})
+
 test("signed-in admin sees current account meters beside an old baked snapshot", async () => {
   const day = new Date().toISOString().slice(0, 10)
   const observed = []
