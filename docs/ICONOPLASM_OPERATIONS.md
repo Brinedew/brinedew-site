@@ -451,7 +451,7 @@ The admin Observability tab is fed by Cloudflare GraphQL data collected out of b
 
 Publication contract:
 
-- `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It also runs after every successful production deploy, because GitHub fires the hourly schedule only every few hours and the admin page would otherwise show the previous snapshot's shape. It can also be dispatched manually. Both checks still run if collection or publication fails; cancellation stops them.
+- `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It can also be dispatched manually. GitHub fires the hourly schedule only every few hours, so the cost endpoint serves whichever is newer: this KV snapshot or the one the last production deploy baked into the Worker. Both checks still run if collection or publication fails; cancellation stops them.
 - The generator writes one JSON snapshot. The account check reports every capacity alert but permits its one atomic KV write only when KV write headroom is available; exhausted D1 must not hide fresh telemetry. The key is `iconoplasm:observability-snapshot:v1`.
 - The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
 - Cloudflare GraphQL owns account-wide usage truth. The shared operation-cost
