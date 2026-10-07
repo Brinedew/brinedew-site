@@ -32,9 +32,16 @@ export async function syncStudioImportVersions(staticRoot) {
     "iconoplasm/diagram-x6-editor.js",
   ])
   await syncStaticImportVersions(staticRoot, "iconoplasm/diagram-document.js", [
+    "iconoplasm/diagram-x6-editor.js",
     "iconoplasm/diagram-studio.js",
   ])
   await syncStaticImportVersions(staticRoot, "iconoplasm/diagram-x6-editor.js", [
+    "iconoplasm/diagram-studio.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/diagram-studio-icons.js", [
+    "iconoplasm/diagram-studio.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/diagram-studio.css", [
     "iconoplasm/diagram-studio.js",
   ])
   await syncStaticImportVersions(staticRoot, "iconoplasm/diagram-studio.js", ["iconoplasm/app.js"])
