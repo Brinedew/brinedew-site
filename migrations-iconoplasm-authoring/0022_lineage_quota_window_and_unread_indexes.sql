@@ -7,6 +7,10 @@
 -- (bounding what one account can write) and keep every version in History.
 -- The window starts from the upload intent's own timestamp, so the trigger stays
 -- deterministic. Live reservations still count whatever their age.
+-- The trigger body has no inner END: the online lane sends this file whole to
+-- D1's query endpoint, whose parser refused 'CASE ... END;' inside a trigger
+-- ("incomplete input", deploy of 839e256b, 2026-10-07). RAISE ... WHERE and iif
+-- say the same thing; iif is SQLite's own CASE, so each limit is still lazy.
 CREATE INDEX IF NOT EXISTS idx_icono_revisions_caretaker_quota_window
 ON icono_manifestation_revisions(caretaker_assignment_id, created_at, manifestation_revision_id, body_bytes)
 WHERE caretaker_assignment_id IS NOT NULL;
@@ -15,38 +19,46 @@ DROP TRIGGER icono_upload_intent_admission;
 CREATE TRIGGER icono_upload_intent_admission
 BEFORE INSERT ON icono_manifestation_upload_intents
 BEGIN
-  SELECT CASE WHEN NEW.lease_expires_at <= NEW.created_at
-    THEN RAISE(ABORT, 'upload_intent_lease_is_not_future') END;
-  SELECT CASE WHEN NEW.entity_kind = 'revision' AND NEW.planned_body_bytes > 16384
-    THEN RAISE(ABORT, 'revision_body_exceeds_16kib') END;
-  SELECT CASE WHEN NEW.actor_kind = 'account' AND NOT EXISTS (
+  SELECT RAISE(ABORT, 'upload_intent_lease_is_not_future')
+   WHERE NEW.lease_expires_at <= NEW.created_at;
+  SELECT RAISE(ABORT, 'revision_body_exceeds_16kib')
+   WHERE NEW.entity_kind = 'revision' AND NEW.planned_body_bytes > 16384;
+  SELECT RAISE(ABORT, 'upload_actor_is_not_active')
+   WHERE NEW.actor_kind = 'account' AND NOT EXISTS (
     SELECT 1 FROM icono_authority_accounts account
      WHERE account.account_id = NEW.actor_account_id AND account.status = 'active'
-  ) THEN RAISE(ABORT, 'upload_actor_is_not_active') END;
-  SELECT CASE WHEN NEW.caretaker_assignment_id IS NOT NULL AND NEW.actor_kind = 'account' AND NOT EXISTS (
+  );
+  SELECT RAISE(ABORT, 'upload_assignment_is_not_active')
+   WHERE NEW.caretaker_assignment_id IS NOT NULL AND NEW.actor_kind = 'account' AND NOT EXISTS (
     SELECT 1 FROM icono_caretaker_assignments assignment
      WHERE assignment.caretaker_assignment_id = NEW.caretaker_assignment_id
        AND assignment.status = 'active'
        AND assignment.account_id = NEW.actor_account_id
-  ) THEN RAISE(ABORT, 'upload_assignment_is_not_active') END;
-  SELECT CASE WHEN (
+  );
+  SELECT RAISE(ABORT, 'authoring_body_quota_exceeded')
+   WHERE (
     SELECT body_admitted_bytes + body_reserved_bytes + NEW.planned_body_bytes
       FROM icono_authority_state WHERE singleton = 1
   ) > (
     SELECT body_admitted_limit_bytes FROM icono_authority_state WHERE singleton = 1
-  ) THEN RAISE(ABORT, 'authoring_body_quota_exceeded') END;
+  );
 
   -- Read at most one more row than each quota can admit. Counts reject an
   -- oversized window before any truncated sum could admit it. CROSS JOIN fixes
   -- the revision-to-derivative indexed traversal direction.
-  SELECT CASE
-    WHEN revisions.n + intents.revisions > 256 - (NEW.entity_kind = 'revision')
-      THEN RAISE(ABORT, 'caretaker_lineage_revision_limit_exceeded')
-    WHEN derivatives.n + intents.derivatives > 512 - (NEW.entity_kind = 'derivative')
-      THEN RAISE(ABORT, 'caretaker_lineage_derivative_limit_exceeded')
-    WHEN revisions.bytes + derivatives.bytes + intents.bytes + NEW.planned_body_bytes > 2097152
-      THEN RAISE(ABORT, 'caretaker_lineage_body_quota_exceeded')
-    ELSE 1 END
+  SELECT iif(
+    revisions.n + intents.revisions > 256 - (NEW.entity_kind = 'revision'),
+    RAISE(ABORT, 'caretaker_lineage_revision_limit_exceeded'),
+    iif(
+      derivatives.n + intents.derivatives > 512 - (NEW.entity_kind = 'derivative'),
+      RAISE(ABORT, 'caretaker_lineage_derivative_limit_exceeded'),
+      iif(
+        revisions.bytes + derivatives.bytes + intents.bytes + NEW.planned_body_bytes > 2097152,
+        RAISE(ABORT, 'caretaker_lineage_body_quota_exceeded'),
+        1
+      )
+    )
+  )
   FROM (
     SELECT COUNT(*) AS n, COALESCE(SUM(body_bytes), 0) AS bytes
     FROM (
