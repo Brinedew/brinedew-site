@@ -1495,6 +1495,31 @@ async function readPublishedIconoplasmObservabilitySnapshot(env) {
     try {
       const raw = await env.KV.get(KV_OBSERVABILITY_SNAPSHOT)
       const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+      // B-1037: the deploy bakes a snapshot with the same generator and live
+      // meters. GitHub fires the KV refresh only every 4 to 7 hours, so after a
+      // deploy the bundle copy is usually newer; serve whichever is newer, or the
+      // admin page shows the previous release's shape for hours.
+      const bundleGeneratedAt = Date.parse(
+        String(ICONOPLASM_OBSERVABILITY_SNAPSHOT?.generatedAt || ""),
+      )
+      const kvGeneratedAt = Date.parse(String(parsed?.generatedAt || ""))
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        parsed.generatedAt &&
+        Number.isFinite(bundleGeneratedAt) &&
+        Number.isFinite(kvGeneratedAt) &&
+        bundleGeneratedAt > kvGeneratedAt
+      ) {
+        return {
+          snapshot: ICONOPLASM_OBSERVABILITY_SNAPSHOT,
+          publication: {
+            state: "deploy_newer",
+            source: "worker_bundle",
+            key: KV_OBSERVABILITY_SNAPSHOT,
+          },
+        }
+      }
       if (parsed && typeof parsed === "object" && parsed.generatedAt) {
         return {
           snapshot: parsed,
