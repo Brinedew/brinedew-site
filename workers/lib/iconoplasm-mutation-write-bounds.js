@@ -229,10 +229,10 @@ export function generationCompletionWriteUnits(requestCount) {
 // batch in the authoring D1 (derivative, event, outbox, upload intent, storage
 // secret, head) and then the in-process projection of the accepted event into the
 // primary D1. Measured on both complete production schemas: a complete
-// submission writes 39 rows in the authoring D1 and 15 in the primary D1. The
+// submission writes 38 rows in the authoring D1 and 15 in the primary D1. The
 // head selection is not here: the gateway hands it to the operation-cost
 // authority (isReplicaCostRoute), which admits it against its own declared bound.
-export const TAGS_DERIVATIVE_SUBMIT_ROWS = 54
+export const TAGS_DERIVATIVE_SUBMIT_ROWS = 53
 
 // A workstation regeneration (B-1011): one system revision with its Tags, the
 // Tags head and, while the system text is canonical, the selection, as one

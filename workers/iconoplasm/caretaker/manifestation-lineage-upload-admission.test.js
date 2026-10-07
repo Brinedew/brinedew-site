@@ -28,11 +28,19 @@ const migration = readFileSync(
   ),
   "utf8",
 )
+// B-1018: the same caps over the last 30 days instead of a lifetime.
+const windowMigration = readFileSync(
+  new URL(
+    "../../../migrations-iconoplasm-authoring/0022_lineage_quota_window_and_unread_indexes.sql",
+    import.meta.url,
+  ),
+  "utf8",
+)
 const admin = "account_quota_admin",
   account = "account_quota_user",
   gene = "gene_quota_test",
   assignment = "assignment_quota_test"
-async function fixture(t, { revisions = 0, bodyBytes = 1 } = {}) {
+async function fixture(t, { revisions = 0, bodyBytes = 1, historyAt } = {}) {
   const db = new TestD1()
   t.after(() => db.close())
   await registerAuthorityAccount(db, { accountId: admin })
@@ -82,12 +90,14 @@ async function fixture(t, { revisions = 0, bodyBytes = 1 } = {}) {
       storage: storage(i + 10, bodyBytes),
       manifestationId: "manifestation_quota_user",
       revisionId: `revision_quota_${i}`,
+      ...(historyAt ? { now: historyAt } : {}),
       ...command(`command_quota_save_${i}`, "d", account, "account"),
     })
   let serial = 10000
   return {
     db,
     migrate: () => db.raw.exec(migration),
+    migrateWindow: () => db.raw.exec(windowMigration),
     async reserve(kind, bytes = 1, overrides = {}) {
       const n = serial++,
         envelope = storage(n, bytes)
@@ -417,4 +427,79 @@ test("the scheduled read walks the due index in order, so its cost is the limit 
     plan.join("; "),
   )
   assert.ok(!plan.some((detail) => /TEMP B-TREE|SCAN/.test(detail)), plan.join("; "))
+})
+
+// B-1018. Ways the window can fail, written before the migration:
+// 1. old history still counts, so a long-time caretaker stays locked out;
+// 2. a full window no longer refuses, so the caps stop bounding an account;
+// 3. live reservations escape the count because they are older than the window;
+// 4. the window query scans the revisions table instead of seeking the index.
+test("B-1018: 256 revisions older than 30 days no longer block the next save", async (t) => {
+  const f = await fixture(t, { revisions: 256, historyAt: "2026-08-01T10:00:00.000Z" })
+  f.migrate()
+  await assert.rejects(f.reserve("revision", 1, { now: "2026-10-05T10:00:00.000Z" }), {
+    code: "LINEAGE_REVISION_LIMIT_EXCEEDED",
+  })
+  f.migrateWindow()
+  const admitted = await f.reserve("revision", 1, { now: "2026-10-05T10:00:00.000Z" })
+  assert.equal(admitted.status, "uploading")
+})
+
+test("B-1018: a full 30-day window still refuses, and live reservations count at any age", async (t) => {
+  const f = await fixture(t, { revisions: 255, historyAt: "2026-10-01T10:00:00.000Z" })
+  f.migrate()
+  f.migrateWindow()
+  // An old reservation that is still uploading counts like a recent one.
+  await f.reserve("revision", 1, {
+    now: "2026-08-01T10:00:00.000Z",
+    leaseMs: 10 * 60 * 1000,
+  })
+  await assert.rejects(f.reserve("revision", 1, { now: "2026-10-05T10:00:00.000Z" }), {
+    code: "LINEAGE_REVISION_LIMIT_EXCEEDED",
+  })
+})
+
+test("B-1018: the window quota seeks its index and every capped input", async (t) => {
+  const f = await fixture(t, { revisions: 1 })
+  f.migrate()
+  f.migrateWindow()
+  const query = windowMigration
+    .slice(
+      windowMigration.indexOf("  SELECT CASE\n    WHEN revisions"),
+      windowMigration.lastIndexOf("END;"),
+    )
+    .replaceAll("NEW.caretaker_assignment_id", "?1")
+    .replaceAll("NEW.entity_kind", "?2")
+    .replaceAll("NEW.planned_body_bytes", "?3")
+    .replaceAll("NEW.created_at", "?4")
+    .replace(/RAISE\(ABORT, '[^']+'\)/g, "0")
+  const plans = f.db.raw
+    .prepare(`EXPLAIN QUERY PLAN ${query}`)
+    .all(assignment, "derivative", 1, "2026-10-05T10:00:00.000Z")
+  assert.ok(
+    plans.every(
+      ({ detail }) =>
+        !/SCAN (icono_manifestation_revisions|icono_manifestation_derivatives|icono_manifestation_upload_intents|derivative)\b/.test(
+          detail,
+        ),
+    ),
+    JSON.stringify(plans),
+  )
+  assert.ok(
+    plans.some(({ detail }) =>
+      /idx_icono_revisions_caretaker_quota_window \(caretaker_assignment_id=\? AND created_at>\?\)/.test(
+        detail,
+      ),
+    ),
+    JSON.stringify(plans),
+  )
+  // B-859 step 2: the three unread indexes are gone.
+  const left = f.db.raw
+    .prepare(
+      `SELECT name FROM sqlite_schema WHERE type = 'index' AND name IN (
+         'idx_icono_revisions_manifestation_history', 'idx_icono_revisions_body_hash',
+         'idx_icono_events_cursor', 'idx_icono_revisions_caretaker_quota')`,
+    )
+    .all()
+  assert.deepEqual(left, [])
 })
