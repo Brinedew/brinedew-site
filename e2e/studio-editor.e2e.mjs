@@ -73,7 +73,16 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       height: 900,
     })
 
-    // 1, 3. Mounted, in Plex Sans, with no typewriter face anywhere.
+    // 1. Mounted over the whole window: no Quartz ancestor traps the fixed
+    // editor inside the article column.
+    const frame = await page.evaluate(() => {
+      const rect = document.querySelector("[data-studio-root]").getBoundingClientRect()
+      return [rect.left, rect.top, rect.width, rect.height].map(Math.round)
+    })
+    report.frame = frame
+    assert.deepEqual(frame, [0, 0, 1440, 900])
+
+    // 3. In Plex Sans, with no typewriter face anywhere.
     const type = await page.evaluate(async () => {
       await document.fonts.ready
       const faces = new Set()
