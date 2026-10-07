@@ -255,7 +255,7 @@ function normalizeEdge(rawEdge, index, nodeIds) {
     head_size: clamp(finiteNumber(edge.head_size, 8), 4, 20),
     opacity: clamp(finiteNumber(edge.opacity, 1), 0.1, 1),
     label_position: oneOf(edge.label_position, LABEL_POSITIONS, "above"),
-    label_size: clamp(finiteNumber(edge.label_size, 12), 8, 28),
+    label_size: clamp(finiteNumber(edge.label_size, 14), 8, 28),
     label_background: edge.label_background !== false,
     vertices: normalizeVertices(edge.vertices),
     evidence: normalizeEvidence(edge.evidence),

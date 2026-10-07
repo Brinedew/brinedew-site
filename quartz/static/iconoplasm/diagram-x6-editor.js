@@ -3,7 +3,7 @@ import {
   diagramReferences,
   pageBackgroundColour,
   relationshipKind,
-} from "./diagram-document.js?v=cf7098d37f1eb0a2"
+} from "./diagram-document.js?v=66e939078affbb77"
 
 const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"
@@ -55,9 +55,11 @@ const COMPARTMENT_MARKUP = {
       body: { refWidth: "100%", refHeight: "100%", fill: "#ece3d3", stroke: "none" },
       top: { refWidth: "100%", height: 3, fill: "#c9b99d", stroke: "none" },
       bottom: { refWidth: "100%", height: 3, refY: "100%", y: -3, fill: "#c9b99d", stroke: "none" },
+      // Receptors sit on the left of a membrane band, so its name goes right.
       label: {
-        textAnchor: "start",
-        refX: 12,
+        textAnchor: "end",
+        refX: "100%",
+        refX2: -14,
         refY: "50%",
         textVerticalAnchor: "middle",
         fill: "#7a5a3e",
@@ -298,9 +300,9 @@ function registerShapes(Graph) {
           ...spec.attrs,
           label: {
             fontFamily: UI_FONT,
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: 600,
-            letterSpacing: 1.2,
+            letterSpacing: 1.3,
             ...spec.attrs.label,
           },
         },
@@ -425,7 +427,7 @@ function edgeLabels(edge, background) {
         kind.tag,
         {
           fill: colour,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 600,
           stroke: background,
           strokeWidth: 4,
@@ -855,7 +857,7 @@ export async function createDiagramEditor({
       head_size: 8,
       opacity: 1,
       label_position: "above",
-      label_size: 12,
+      label_size: 14,
       label_background: true,
       vertices: [],
       evidence: { reference: "", note: "" },
