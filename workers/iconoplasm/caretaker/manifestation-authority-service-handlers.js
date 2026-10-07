@@ -27,6 +27,8 @@ import {
 import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
 import { prepareManifestationProse } from "../../lib/iconoplasm-manifestation-prose.js"
 import { appendSystemRevisionWithTags } from "./manifestation-write-commands.js"
+import { registerGeneIdentity } from "./caretaker-assignment-commands.js"
+import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import {
   prepareManifestationTagsPayload,
   splitManifestationTagsPayload,
@@ -284,6 +286,9 @@ export function createManifestationAuthorityServiceHandler({
         )
         const replay = await resolveCommandReplay(db, command, actor)
         if (replay) return mutationResponse(db, onAuthorityEvent, replay)
+        if (body.canonical_symbol != null) {
+          await registerNewCatalogueGene(db, geneId, body.canonical_symbol)
+        }
         const prose = await prepareManifestationProse(body.prose)
         const output = await prepareManifestationTagsPayload({
           tagsText: body.tags_text,
@@ -456,4 +461,35 @@ export function createManifestationAuthorityServiceHandler({
       return safeErrorResponse(error)
     }
   }
+}
+
+// B-1031: a gene new to the catalogue has no identity here until its first system
+// text arrives. Its ID is derived from its symbol, so the workstation and the site
+// agree on it without a round trip, and no caller can register an arbitrary ID.
+export async function catalogueGeneId(symbol) {
+  const normalized = String(symbol || "")
+    .trim()
+    .toUpperCase()
+  return `gene_${(await sha256Hex(`iconoplasm-gene:${normalized}`)).slice(0, 48)}`
+}
+
+async function registerNewCatalogueGene(db, geneId, canonicalSymbol) {
+  const symbol = String(canonicalSymbol || "")
+    .trim()
+    .toUpperCase()
+  if (!symbol) throw authorityError("INVALID_CANONICAL_SYMBOL", "canonical_symbol is empty", 400)
+  const existing = await first(
+    db,
+    "SELECT gene_id FROM icono_gene_identities WHERE gene_id = ?",
+    geneId,
+  )
+  if (existing) return
+  if (geneId !== (await catalogueGeneId(symbol))) {
+    throw authorityError(
+      "ROUTE_ENTITY_MISMATCH",
+      "A new gene's ID must be derived from its canonical symbol",
+      400,
+    )
+  }
+  await registerGeneIdentity(db, { geneId, canonicalSymbol: symbol })
 }
