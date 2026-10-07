@@ -692,6 +692,7 @@ export async function createDiagramEditor({
   onHover,
   gridVisible = true,
   snap = true,
+  sizeHost = null,
 }) {
   const runtime = await loadRuntime()
   // The studio keeps the one undo history (document snapshots) and the
@@ -977,10 +978,21 @@ export async function createDiagramEditor({
 
   await setDocument(document, { fit: true, select: [] })
 
-  const resizeObserver = new ResizeObserver(() => {
-    graph.resize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight))
-  })
-  resizeObserver.observe(container)
+  // X6 pins the container to inline pixel sizes, so watching the container
+  // itself never sees a panel open or close. The studio passes the canvas
+  // area as `sizeHost`; the graph fills it, less the container's ruler offset.
+  function syncSize() {
+    const host = sizeHost || container
+    const width = Math.max(1, host.clientWidth - (sizeHost ? container.offsetLeft : 0))
+    const height = Math.max(1, host.clientHeight - (sizeHost ? container.offsetTop : 0))
+    if (width !== graph.options.width || height !== graph.options.height) {
+      graph.resize(width, height)
+      onView?.()
+    }
+  }
+  const resizeObserver = new ResizeObserver(syncSize)
+  resizeObserver.observe(sizeHost || container)
+  syncSize()
 
   function exportOptions(stylesheet = "") {
     const snapshot = documentFromGraph(graph, baseDocument)
@@ -1149,6 +1161,7 @@ export async function createDiagramEditor({
       return { scale: graph.zoom(), tx, ty }
     },
     nudge,
+    refreshSize: syncSize,
     clientToLocal(x, y) {
       const point = graph.clientToLocal(x, y)
       return { x: Math.round(point.x), y: Math.round(point.y) }

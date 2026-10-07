@@ -21,7 +21,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=66e939078affbb77"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=3e43dcc0c97f72d2"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=c2b42b43e82401b8"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=ca595fa807fe488d"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -32,7 +32,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=7f8d11a360e52205", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=b9a577a175c5d929", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]
@@ -1954,11 +1954,22 @@ async function insertNode(kind, at) {
   if (kind === "text" || kind === "note") focusFormatField("text", "text")
 }
 
+// After a panel opens or closes the canvas changes size; on a phone, bring
+// the selection back into the strip that is still visible.
+function keepSelectionInView() {
+  window.setTimeout(async () => {
+    const instance = await editorReady
+    instance?.refreshSize()
+    if (isPhone() && selectedIds.length) instance?.zoomToSelection()
+    scheduleViewUpdate()
+  }, 60)
+}
+
 function focusFormatField(tab, field) {
   view.formatTab = tab
   if (!view.format) {
-    view.format = true
-    renderChrome()
+    void setView("format", true)
+    keepSelectionInView()
   }
   renderFormat()
   window.setTimeout(() => {
@@ -2169,13 +2180,19 @@ function findIn(document, id) {
 
 async function setView(key, value) {
   view[key] = value
+  // A phone has room for one sheet at a time.
+  if (isPhone() && value && (key === "library" || key === "format"))
+    view[key === "library" ? "format" : "library"] = false
   storeViewPreferences()
   const instance = await editorReady
   if (key === "grid") instance?.setGridVisible(value)
   if (key === "snap") instance?.setSnap(value)
   if (key === "tool") instance?.setTool(value)
   renderChrome()
-  if (key === "rulers") scheduleViewUpdate()
+  if (key === "rulers") {
+    instance?.refreshSize()
+    scheduleViewUpdate()
+  }
 }
 
 async function runAction(action) {
@@ -2301,13 +2318,14 @@ async function runAction(action) {
     case "toggle-snap": {
       const key = name.slice(7)
       await setView(key, !view[key])
-      if (key === "library" || key === "format") window.dispatchEvent(new Event("resize"))
+      if (key === "library" || key === "format") keepSelectionInView()
       return
     }
     case "show-format":
       view.formatTab = "style"
       if (!view.format) await setView("format", true)
-      return renderFormat()
+      renderFormat()
+      return keepSelectionInView()
     case "tool":
       return setView("tool", argument === "pan" ? "pan" : "select")
     case "fit":
@@ -3081,6 +3099,7 @@ export function renderDiagramStudio(root) {
   const studioRoot = mountedRoot.querySelector("[data-studio-root]")
   editorReady = createDiagramEditor({
     container,
+    sizeHost: mountedRoot.querySelector("[data-studio-canvas-area]"),
     document: currentDocument,
     gridVisible: view.grid,
     snap: view.snap,

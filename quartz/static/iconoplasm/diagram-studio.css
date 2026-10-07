@@ -1782,18 +1782,24 @@ input.ics-hex {
     display: none;
   }
 
+  /* The open sheet takes the bottom of the screen and the canvas shrinks
+     above it, so the item being edited stays in view. */
+  .ics-body {
+    flex-direction: column;
+  }
+
   .ics-library,
   .ics-format {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 15;
+    order: 2;
     width: auto;
-    height: min(62vh, 540px);
+    height: min(55vh, 480px);
     border: 0;
     border-top: 1px solid var(--ics-field-line);
-    box-shadow: 0 -12px 28px rgba(32, 18, 11, 0.24);
+    box-shadow: 0 -10px 24px rgba(32, 18, 11, 0.18);
+  }
+
+  input.ics-hex {
+    width: 96px;
   }
 
   .ics-sheet-head {
