@@ -32,7 +32,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=3c2e8ee65e99f1a8", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=ebdc235f508ac640", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]

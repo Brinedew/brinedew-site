@@ -129,9 +129,12 @@ body.icono-studio-route {
 
 /* Quartz places every <footer> in its page grid's "grid-footer" area. Inside
    the studio's grid that name doesn't exist, so the browser invented a second
-   column for it and laid the whole editor out side by side (B-1045 E2E). */
+   column for it and laid the whole editor out side by side (B-1045 E2E). The
+   same footer rule adds 70% opacity and a 64 px bottom margin. */
 .icono-studio :where(header, footer, nav, aside, section) {
   grid-area: auto;
+  margin: 0;
+  opacity: 1;
 }
 
 .icono-studio :where(img) {
