@@ -187,12 +187,25 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       ),
       "#a24834",
     )
-    const tbar = await page.evaluate(() =>
-      document.querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')?.getAttribute("d"),
-    )
+    // X6 repaints the colour before the new connector's path, so wait for the
+    // path; X6 writes the bend as a cubic curve.
+    const tbarPath = () =>
+      document.querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')?.getAttribute("d") || ""
+    await page
+      .waitForFunction(
+        () =>
+          / C /.test(
+            document
+              .querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')
+              ?.getAttribute("d") || "",
+          ),
+        null,
+        { timeout: 5_000 },
+      )
+      .catch(() => {})
+    const tbar = await page.evaluate(tbarPath)
     report.tbarPath = tbar
-    // X6 writes the bend as a cubic curve.
-    assert.match(tbar || "", / C /, "an inhibition meets the portrait square-on")
+    assert.match(tbar, / C /, "an inhibition meets the portrait square-on")
     // 12: the ends are round handles, not two extra arrowheads.
     const handles = await page.evaluate(() =>
       [
