@@ -185,7 +185,7 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
 ])
 
 // The template library shows a picture of each template, as draw.io's does:
-// the PNG export of the built page, scaled to 480 px wide
+// the PNG export of the built page, scaled to 960 px wide (sharp in the magnifier)
 // (studio/templates/<id>.webp). Regenerate it when a template's layout moves.
 export function templateThumbnail(id) {
   return new URL(`./studio/templates/${id}.webp`, import.meta.url).href

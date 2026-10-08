@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
+import { statSync } from "node:fs"
 import test from "node:test"
 
-import { DIAGRAM_TEMPLATES, buildTemplateDocument, templateSymbols } from "./diagram-templates.js"
+import {
+  DIAGRAM_TEMPLATES,
+  buildTemplateDocument,
+  templateSymbols,
+  templateThumbnail,
+} from "./diagram-templates.js"
 
 // B-1050, the owner's QC for a faction chart, applied to every template:
 // 1. no two shapes collide;
@@ -173,4 +179,14 @@ test("a gene the resolver cannot find drops out with its relationships", () => {
     document.edges.length,
     DIAGRAM_TEMPLATES.find((item) => item.id === "faction").edges.length - 2,
   )
+})
+
+// The template library shows each template's picture (the Studio's own PNG
+// export, scaled down); a template without one would be a blank tile.
+test("every template has its library picture", () => {
+  for (const template of DIAGRAM_TEMPLATES) {
+    const file = new URL(templateThumbnail(template.id))
+    assert.ok(statSync(file).size > 8_000, `${template.id} has no real picture`)
+    assert.ok(template.category, `${template.id} has no library category`)
+  }
 })

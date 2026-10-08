@@ -32,7 +32,7 @@ import {
   diagramTemplate,
   templateSymbols,
   templateThumbnail,
-} from "./diagram-templates.js?v=6f531442d2f4cd5e"
+} from "./diagram-templates.js?v=c5f574febcc126c3"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -43,7 +43,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=9cd4311ee9019cbd", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=5879935fb3a50b66", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]

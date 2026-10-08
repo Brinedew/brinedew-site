@@ -2096,6 +2096,26 @@ input.ics-colour-well {
   width: 100%;
 }
 
+.ics-library-dialog-nav .ics-search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ics-text);
+  font: inherit;
+}
+
+/* The field's own border turns teal on focus; the app's ring on the input
+   inside it (styles.css, scoped by #iconoplasm-root) would draw a box in a
+   box. */
+#iconoplasm-root .ics-search-field input:focus-visible {
+  outline: none;
+}
+
 .ics-library-dialog-categories {
   display: grid;
   align-content: start;
@@ -2131,14 +2151,16 @@ input.ics-colour-well {
   overflow-y: auto;
 }
 
+/* A card: the whole picture on its own paper, the name under it (BioRender's
+   and Lucidchart's template cards). */
 .ics-template-tile {
   position: relative;
   display: grid;
-  aspect-ratio: 4 / 3;
+  align-content: start;
+  gap: 6px;
   padding: 6px;
   border: 2px solid transparent;
   border-radius: 4px;
-  background: var(--ics-panel);
   cursor: pointer;
 }
 
@@ -2147,7 +2169,8 @@ input.ics-colour-well {
 }
 
 .ics-template-tile[aria-selected="true"] {
-  border: 2px dashed var(--ics-accent);
+  border-color: var(--ics-accent);
+  background: var(--ics-accent-soft);
 }
 
 .ics-template-tile:focus-visible {
@@ -2157,22 +2180,18 @@ input.ics-colour-well {
 
 .ics-template-tile img {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--ics-line);
+  background: #f7f1e8;
   object-fit: contain;
-  box-shadow: 0 1px 3px rgba(53, 38, 27, 0.18);
 }
 
 .ics-template-title {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  left: 10px;
   display: grid;
-  padding: 4px 6px;
-  border-radius: 2px;
-  background: rgba(251, 247, 241, 0.9);
-  color: #20120b;
-  text-align: center;
+  gap: 1px;
+  padding: 0 2px 2px;
+  color: var(--ics-text);
+  line-height: 1.3;
 }
 
 .ics-template-title span {
@@ -2180,7 +2199,7 @@ input.ics-colour-well {
 }
 
 .ics-template-title small {
-  color: rgba(32, 18, 11, 0.64);
+  color: var(--ics-muted);
   font-size: 11px;
 }
 
