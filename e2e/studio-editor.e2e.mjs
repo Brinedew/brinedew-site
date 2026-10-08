@@ -26,6 +26,10 @@
 //     keeps dark ink;
 // 16. there is no first-run tour, or it cannot be closed.
 //
+// B-1051:
+// 17. the control variable chart's variable is not a gauge, or a gauge cannot
+//     be added from the Shapes panel, or its words never reach the canvas.
+//
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/.
 import assert from "node:assert/strict"
@@ -418,7 +422,7 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
 
     // 14. The faction chart and the control variable chart open on the real
     // resolver with every portrait and arrow.
-    for (const [id, genes, molecules, relationships] of [
+    for (const [id, genes, gauges, relationships] of [
       ["faction", 7, 0, 8],
       ["control-variable", 8, 1, 8],
     ]) {
@@ -438,13 +442,36 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       )
       await portraitsReady(page, genes)
       assert.equal(
-        await page.locator('[data-shape="iconoplasm-molecule"]').count(),
-        molecules,
-        id + " molecules",
+        await page.locator('[data-shape="iconoplasm-gauge"]').count(),
+        gauges,
+        id + " gauges",
       )
       await page.mouse.click(4, 4)
       await page.screenshot({ path: path.join(OUT, `studio-template-${id}.png`) })
     }
+
+    // 17. The Gauge tile adds a gauge, Format opens on its name, and the
+    // words and the needle are drawn on the canvas.
+    const gaugeTile = page.locator('.ics-tile[data-studio-action="insert-gauge"]')
+    await gaugeTile.scrollIntoViewIfNeeded()
+    await gaugeTile.click()
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-shape="iconoplasm-gauge"]').length === 2,
+    )
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("data-field")),
+      "label",
+    )
+    await page.keyboard.type("cAMP")
+    await page.keyboard.press("Tab")
+    await page.locator('[data-studio-format-body] [data-field="needle"]').selectOption("high")
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('[data-shape="iconoplasm-gauge"]')].some((gauge) =>
+        [...gauge.querySelectorAll("text")].some((text) => text.textContent === "cAMP"),
+      ),
+    )
+    await page.screenshot({ path: path.join(OUT, "studio-gauge-added.png") })
+    await page.mouse.click(4, 4)
 
     // 15. Any page colour; a dark page turns the default ink light.
     await page.locator('[data-studio-format-body] .ics-bg-swatches [data-value="#2b211b"]').click()
