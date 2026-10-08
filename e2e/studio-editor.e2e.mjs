@@ -238,22 +238,52 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
         pageScroll: window.scrollY + document.documentElement.scrollTop,
       }))
     const matrix = (transform) => transform.match(/-?[\d.]+/g).map(Number)
-    await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2)
+    const center = () =>
+      page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2)
+    const wheel = async (dy, modifier) => {
+      await center()
+      if (modifier) await page.keyboard.down(modifier)
+      await page.mouse.wheel(0, dy)
+      if (modifier) await page.keyboard.up(modifier)
+      // A new gesture starts after 240 ms of quiet.
+      await page.waitForTimeout(300)
+      return viewState()
+    }
+    const navigation = async (mode) => {
+      await page.click('[data-studio-menu="view"]')
+      await page.click(`[data-studio-action="navigation:${mode}"]`)
+    }
+    // Auto, the default: a mouse's wheel zooms in about the pointer, as in
+    // Lucidchart's and Miro's Mouse navigation; the page never scrolls.
     const beforeWheel = await viewState()
-    await page.mouse.wheel(0, 300)
-    await page.waitForTimeout(150)
-    const afterWheel = await viewState()
-    report.wheel = { beforeWheel, afterWheel }
-    assert.equal(afterWheel.pageScroll, 0, "the page itself never scrolls")
-    // The pan is the wheel delta in CSS pixels (300 at 100% display scaling).
-    const panned = matrix(beforeWheel.transform)[5] - matrix(afterWheel.transform)[5]
-    assert.ok(panned > 200 && panned <= 301, `a 300 px wheel panned ${panned} px`)
-    await page.keyboard.down("Control")
-    await page.mouse.wheel(0, -200)
-    await page.keyboard.up("Control")
-    await page.waitForTimeout(150)
-    const zoomed = await viewState()
-    assert.ok(matrix(zoomed.transform)[0] > matrix(afterWheel.transform)[0], "Ctrl+wheel zooms in")
+    const zoomedIn = await wheel(-200)
+    report.wheel = { beforeWheel, zoomedIn }
+    assert.equal(zoomedIn.pageScroll, 0, "the page itself never scrolls")
+    assert.ok(
+      matrix(zoomedIn.transform)[0] > matrix(beforeWheel.transform)[0],
+      "a mouse wheel zooms in",
+    )
+    // Shift+wheel pans sideways and leaves the zoom alone.
+    const sideways = await wheel(200, "Shift")
+    assert.equal(matrix(sideways.transform)[0], matrix(zoomedIn.transform)[0])
+    assert.notEqual(
+      matrix(sideways.transform)[4],
+      matrix(zoomedIn.transform)[4],
+      "Shift+wheel pans",
+    )
+    // Trackpad: two fingers pan up and down, a pinch (Ctrl+wheel) zooms.
+    await navigation("trackpad")
+    const beforePan = await viewState()
+    const panned = await wheel(300)
+    const moved = matrix(beforePan.transform)[5] - matrix(panned.transform)[5]
+    assert.ok(moved > 200 && moved <= 301, `a 300 px scroll panned ${moved} px`)
+    const pinched = await wheel(-200, "Control")
+    assert.ok(matrix(pinched.transform)[0] > matrix(panned.transform)[0], "a pinch zooms in")
+    // Mouse, chosen by hand: the wheel zooms out again.
+    await navigation("mouse")
+    const zoomedOut = await wheel(200)
+    assert.ok(matrix(zoomedOut.transform)[0] < matrix(pinched.transform)[0], "the wheel zooms out")
+    await navigation("auto")
     await page.keyboard.press("Control+Shift+H")
 
     // 11. A dragged portrait lands on the grid step the status bar names.
