@@ -277,9 +277,9 @@ export async function seedEmbeddings(db, genes, options = {}) {
   }
 }
 
-// The two account tables as production has them once `retireLeaderboardOptInIndex` has run
-// (B-966): the `users` columns of migrations 001, 0016, 0019 and 0027 with the four secondary
-// indexes the code reads (production's `sqlite_master` on 2026-10-03 also listed
+// The two account tables as production has them (no `leaderboard_opt_in` index since B-966):
+// the `users` columns of migrations 001, 0016, 0019 and 0027 with the four secondary indexes the
+// code reads (production's `sqlite_master` on 2026-10-03 also listed
 // `idx_users_leaderboard_opt_in`, which migration 0016 made and no query needs), and `stats`
 // with the `migrated_at` of 002. The indexes are here because D1 counts every index entry a
 // statement writes as a row written, so a statement's receipt is only the production one when

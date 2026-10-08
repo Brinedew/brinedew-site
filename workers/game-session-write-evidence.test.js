@@ -17,7 +17,6 @@
 //       first and last time, an example message and path, or the count of what D1 was told
 //   F6  a refused D1 write loses the failures an isolate had counted, or the record failing changes
 //       what the visitor sees, or is not logged, or a successful write runs a statement
-//   F7  the tables the per-minute record used are left behind, or dropping them costs D1 rows
 //   F8  rows past the retention stay, or preparing costs a statement every time
 //   F9  through the real Worker: a failed write is not recorded, or the visitor stops seeing the
 //       failure, or the admin status stops carrying the record, or a 300-failure storm costs more
@@ -32,10 +31,6 @@ import { openVisitHarness } from "./geneguessr-visit-test-harness.js"
 const WRITE_CAP = "Exceeded allowed rows written in Durable Objects free tier."
 const RESET = "Durable Object reset because its code was updated."
 const FAILURES = "game_session_write_failures_do_not_delete"
-const LEGACY = [
-  "game_session_write_observations_do_not_delete",
-  "game_session_write_failure_samples_do_not_delete",
-]
 const WINDOW_MS = 5 * 60 * 1000
 // 12:00 UTC on 2026-10-03; every test moves the clock forward from here, inside that day unless it
 // says otherwise (T0 + 144 windows is midnight).
@@ -333,41 +328,6 @@ test("F6: a refused write keeps the isolate's count, a record D1 cannot take cha
     assert.equal(saved, "saved")
   })
   assert.deepEqual(quiet.receipts, [], "a successful write runs no statement")
-})
-
-test("F7: the per-minute tables are dropped by the first isolate that records, for no rows", async () => {
-  await clearStored()
-  await h.db.batch(
-    LEGACY.flatMap((table) => [
-      h.db.prepare(
-        `CREATE TABLE IF NOT EXISTS ${table} (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, b TEXT)`,
-      ),
-      h.db.prepare(`CREATE INDEX IF NOT EXISTS ${table}_a ON ${table}(a)`),
-    ]),
-  )
-  const rows = JSON.stringify(Array.from({ length: 3000 }, (_, index) => `r${index}`))
-  await h.db.batch(
-    LEGACY.map((table) =>
-      h.db.prepare(`INSERT INTO ${table} (a, b) SELECT value, value FROM json_each(?)`).bind(rows),
-    ),
-  )
-  const names = async () =>
-    (await h.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).results.map(
-      (row) => row.name,
-    )
-  for (const table of LEGACY) assert.ok((await names()).includes(table), `${table} is there`)
-
-  const mod = await isolate()
-  setClock(T0 + 100 * WINDOW_MS)
-  const first = await charged(() => fail(mod))
-  for (const table of LEGACY)
-    assert.equal((await names()).includes(table), false, `${table} is gone`)
-  assert.equal(rowsOf(mine(first.receipts, /DROP TABLE/)), 0, "dropping 6,000 rows wrote no D1 row")
-  assert.equal(mine(first.receipts, /DROP TABLE/).length, 2)
-  assert.ok(
-    first.rows <= 1,
-    `${first.rows} rows for the first failure on a database with the table`,
-  )
 })
 
 test("F8: rows past 14 days are pruned when an isolate prepares, and preparing happens once a day", async () => {

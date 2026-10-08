@@ -26,10 +26,6 @@
 //
 // The error text is classified into a closed set so a message carrying a unique reference cannot
 // mint a row per failure; the first message of a key is kept as its example.
-//
-// The tables the per-minute record used are dropped by the first isolate that records or reads
-// (B-963). `DROP TABLE` of 10,000 rows measured 0 rows written on a local D1; delete these two
-// statements once production's `sqlite_master` no longer lists them.
 const FAILURE_TABLE = "game_session_write_failures_do_not_delete"
 
 const FAILURE_TABLE_SQL = `
@@ -46,11 +42,6 @@ const FAILURE_TABLE_SQL = `
     PRIMARY KEY (observed_day, operation, session_kind, error_class)
   ) WITHOUT ROWID
 `
-
-const RETIRED_TABLES_SQL = [
-  "DROP TABLE IF EXISTS game_session_write_observations_do_not_delete",
-  "DROP TABLE IF EXISTS game_session_write_failure_samples_do_not_delete",
-]
 
 const UPSERT_FAILURE_SQL = `
   INSERT INTO ${FAILURE_TABLE} (
@@ -151,13 +142,12 @@ function classifySessionKind(sessionId) {
   return practiceMode ? "practice_unknown" : "unknown"
 }
 
-// Creates the table, drops the two it replaced, and prunes what is past retention, in one batch.
-// Once an isolate per cutoff day, so a day with no failure and no status read costs no statement.
+// Creates the table and prunes what is past retention, in one batch. Once an isolate per cutoff
+// day, so a day with no failure and no status read costs no statement.
 async function prepareEvidenceTable(db, cutoffDay) {
   if (preparedCutoffDay === cutoffDay) return
   await db.batch([
     db.prepare(FAILURE_TABLE_SQL),
-    ...RETIRED_TABLES_SQL.map((sql) => db.prepare(sql)),
     db.prepare(DELETE_OLD_FAILURES_SQL).bind(cutoffDay),
   ])
   preparedCutoffDay = cutoffDay

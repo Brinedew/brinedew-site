@@ -17,16 +17,11 @@ const CREATE_TABLE_SQL = `
 // moved (2 rows a guess, 1 now) and one more on the first guess of a protein each day (3, now 2)
 // (B-964). The readers read the same rows through the primary key, and the top 5 of the day sorts
 // them either way (workers/geneguessr-unused-indexes.test.js proves both on plans and receipts).
-// The drop is `IF EXISTS` and writes 0 rows (30 read on a populated table). Delete the statement
-// once production's `sqlite_master` no longer lists the index.
-const DROP_RETIRED_INDEX_SQL = `DROP INDEX IF EXISTS idx_daily_guess_aggregate_day_count`
-
 let schemaEnsured = false
 
 export async function ensureGuessAggregateSchema(db) {
   if (schemaEnsured) return
   await db.prepare(CREATE_TABLE_SQL).run()
-  await db.prepare(DROP_RETIRED_INDEX_SQL).run()
   schemaEnsured = true
 }
 

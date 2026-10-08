@@ -127,15 +127,7 @@ const LEADERBOARD_SQL = `
 // chose it (1,022 rows read at 10,000 accounts); without it, and with its join order pinned, the
 // build reads `stats` and probes `users`: 3,718 rows at 10,000 accounts, once. Keeping the index
 // cost a row written on every new account (6 rows, 5 without) and on every change of the public
-// choice (3 rows, 2 without). The statement writes 0 rows (38 read
-// on a local D1) and the leaderboard publisher runs it once per isolate; delete it together with
-// the one in guess-aggregates.js once production's `sqlite_master` no longer lists the index.
-let optInIndexRetired = false
-export async function retireLeaderboardOptInIndex(db) {
-  if (optInIndexRetired) return
-  await db.prepare("DROP INDEX IF EXISTS idx_users_leaderboard_opt_in").run()
-  optInIndexRetired = true
-}
+// choice (3 rows, 2 without).
 
 const selectBoard = async (db, limit) => {
   const answer = await db.prepare(LEADERBOARD_SQL).bind(limit, limit, limit).all()

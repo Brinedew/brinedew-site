@@ -462,12 +462,8 @@ fills it from `stats` and `users` in one batch (37,428 rows read and 2,141 writt
 it: the board read, the trigger refreshes, the visibility switch and the account erasure all plan
 on primary keys (`workers/geneguessr-unused-indexes.test.js` explains each). Keeping it cost a
 row written on every new account (6 rows, 5 without) and on every change of the public choice
-(3 rows, 2 without). `retireLeaderboardOptInIndex` drops it once per isolate from the Top Streaks
-publisher (`DROP INDEX IF EXISTS`, 0 rows written, 38 read on a local D1). The GeneGuessr
-database applies no migration on a normal deploy and has no online migration path, so a
-`migrations/` file would need a reviewed plan entry, an adapter and a paused maintenance release
-for a no-op statement. The one-shot statements for this index, for the aggregate's and for the
-two evidence tables are deleted once production's `sqlite_master` no longer lists the objects.
+(3 rows, 2 without). Production's `sqlite_master` no longer lists it (nightly copy of
+2026-10-07, B-975), nor the aggregate's second index or the two per-minute evidence tables.
 
 ### Visitors a day until a meter is spent
 
@@ -690,7 +686,7 @@ and, through the real Worker, that a failed write is recorded once, the visitor 
 admin status carries it, and 300 failures cost a handful of rows.
 
 `workers/leaderboard-streaks.test.js` must prove, through the real Worker on a local D1 with
-production's account tables (the four indexes `users` has once the one-shot drop has run), that a
+production's account tables (the four indexes `users` has), that a
 leaderboard read costs at most 4 x limit + 8 rows at 1,000, 10,000 and 100,000 accounts of
 production's shape and of a shape whose every long streak is private or abandoned, with the same
 entries the join over every account returns; that the board is that join's for every limit, with
@@ -705,12 +701,11 @@ at most 3. The receipts land in `artifacts/b-959/leaderboard-rows-read.json`.
 tables and indexes, with the index recreated as the control: that the aggregate readers without
 `idx_daily_guess_aggregate_day_count` are index searches on `day` through the primary key, never a
 table scan, and read at most two rows more per guessed protein than with it; that a guess writes 1
-row (2 for a protein's first of the day) against 2 (3) with it; that the code drops it on first use
-for no D1 row and not again in the same isolate; that no statement touching `users` or `stats`
+row (2 for a protein's first of the day) against 2 (3) with it; that the aggregate module runs one
+schema statement per isolate, for no D1 row; that no statement touching `users` or `stats`
 plans through `idx_users_leaderboard_opt_in`; that the leaderboard build, with its join order
 pinned, reads under half a row an account without the index where the planner's own choice read a
-row an account; that a new account writes 5 rows against 6 and a visibility switch 2 against 3;
-and that `retireLeaderboardOptInIndex` runs once per isolate for no D1 row.
+row an account; and that a new account writes 5 rows against 6 and a visibility switch 2 against 3.
 
 `workers/leaderboard-publication.test.js` must prove, on a real local D1 with a fake Bunny Storage
 and Discord CDN behind `fetch`, that the object holds the board's public live names in the route's
