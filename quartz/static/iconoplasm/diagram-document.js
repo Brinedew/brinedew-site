@@ -1,6 +1,6 @@
 // ARCHITECTURE FENCE [IPD-003]: Studio documents reference the canonical
 // published gene blot. They never select or mint a parallel image identity.
-export const ICONOPLASM_DIAGRAM_SCHEMA_VERSION = 4
+export const ICONOPLASM_DIAGRAM_SCHEMA_VERSION = 5
 export const ICONOPLASM_DIAGRAM_LIMITS = Object.freeze({
   nodes: 150,
   edges: 300,
@@ -88,6 +88,40 @@ export const MOLECULE_DEFAULT = Object.freeze({ width: 150, height: 72 })
 // arrives perpendicular to the side it hits (a T-bar lies flat against that
 // side); "free" keeps the angle of the line. Empty follows the kind.
 export const LINE_END_MODES = Object.freeze(["square", "free"])
+
+// B-1051: a page's line style, the rule set its relationships follow unless one
+// is set by hand (Cytoscape's style defaults with a per-element bypass). Sides
+// are yEd's "side at source / side at target"; "any" is the shortest line to
+// the portrait's edge. Spreading puts N ends on one side at k/(N+1) along it.
+export const LINE_SIDES = Object.freeze(["any", "top", "bottom", "left", "right"])
+export const LINE_PRESETS = Object.freeze({
+  free: Object.freeze({
+    routing: "straight",
+    source_side: "any",
+    target_side: "any",
+    spread: false,
+    tbar: "square",
+  }),
+  "top-to-bottom": Object.freeze({
+    routing: "straight",
+    source_side: "bottom",
+    target_side: "top",
+    spread: true,
+    tbar: "square",
+  }),
+  "left-to-right": Object.freeze({
+    routing: "straight",
+    source_side: "right",
+    target_side: "left",
+    spread: true,
+    tbar: "square",
+  }),
+})
+export const LINE_PRESET_NAMES = Object.freeze([
+  ["free", "Free"],
+  ["top-to-bottom", "Top to bottom"],
+  ["left-to-right", "Left to right"],
+])
 
 const DEFAULT_WIDTH = 1200
 const DEFAULT_HEIGHT = 800
@@ -289,11 +323,15 @@ function normalizeEvidence(rawEvidence) {
   }
 }
 
-function normalizeEdge(rawEdge, index, nodeIds) {
+// An empty routing or side follows the page's lines. Before version 5 every
+// relationship stored "straight", the only default there was; it reads as
+// "follow the page", whose default is straight, so old pages draw the same.
+function normalizeEdge(rawEdge, index, nodeIds, legacy = false) {
   const edge = rawEdge && typeof rawEdge === "object" ? rawEdge : {}
   const from = safeId(edge.from, "")
   const to = safeId(edge.to, "")
   if (!from || !to || from === to || !nodeIds.has(from) || !nodeIds.has(to)) return null
+  const routing = legacy && edge.routing === "straight" ? "" : edge.routing
   return {
     id: safeId(edge.id, `edge-${index + 1}`),
     type: "relationship",
@@ -305,7 +343,9 @@ function normalizeEdge(rawEdge, index, nodeIds) {
     width: clamp(finiteNumber(edge.width, 1.5), 0.5, 8),
     // An empty pattern follows the kind: KEGG draws an indirect effect dashed.
     pattern: oneOf(edge.pattern, LINE_PATTERNS, ""),
-    routing: oneOf(edge.routing, EDGE_ROUTINGS, "straight"),
+    routing: oneOf(routing, EDGE_ROUTINGS, ""),
+    source_side: oneOf(edge.source_side, LINE_SIDES, ""),
+    target_side: oneOf(edge.target_side, LINE_SIDES, ""),
     jumps: oneOf(edge.jumps, LINE_JUMPS, "none"),
     head_size: clamp(finiteNumber(edge.head_size, 8), 4, 20),
     opacity: clamp(finiteNumber(edge.opacity, 1), 0.1, 1),
@@ -335,6 +375,7 @@ export function createDiagramDocument(rawDocument = {}) {
     nodes.push(node)
   }
   const geneIds = actorIds(nodes)
+  const legacy = finiteNumber(rawDocument.schema_version, 0) < 5
   const rawEdges = Array.isArray(rawDocument.edges) ? rawDocument.edges : []
   const edges = []
   const edgeIds = new Set()
@@ -343,7 +384,7 @@ export function createDiagramDocument(rawDocument = {}) {
     index < rawEdges.length && edges.length < ICONOPLASM_DIAGRAM_LIMITS.edges;
     index++
   ) {
-    const edge = normalizeEdge(rawEdges[index], index, geneIds)
+    const edge = normalizeEdge(rawEdges[index], index, geneIds, legacy)
     if (!edge || edgeIds.has(edge.id)) continue
     edgeIds.add(edge.id)
     edges.push(edge)
@@ -357,10 +398,119 @@ export function createDiagramDocument(rawDocument = {}) {
     width,
     height,
     background,
+    lines: normalizeLines(rawDocument.lines),
     nodes,
     edges,
   }
 }
+
+// A preset name sets every field; a page stores the fields, so a later edit
+// to one of them simply makes it "custom".
+function normalizeLines(rawLines) {
+  const raw =
+    typeof rawLines === "string"
+      ? LINE_PRESETS[rawLines] || {}
+      : rawLines && typeof rawLines === "object"
+        ? rawLines
+        : {}
+  const free = LINE_PRESETS.free
+  return {
+    routing: oneOf(raw.routing, EDGE_ROUTINGS, free.routing),
+    source_side: oneOf(raw.source_side, LINE_SIDES, free.source_side),
+    target_side: oneOf(raw.target_side, LINE_SIDES, free.target_side),
+    spread: typeof raw.spread === "boolean" ? raw.spread : free.spread,
+    tbar: oneOf(raw.tbar, LINE_END_MODES, free.tbar),
+  }
+}
+
+export function linesPreset(lines) {
+  const fields = normalizeLines(lines)
+  for (const [name] of LINE_PRESET_NAMES) {
+    const preset = LINE_PRESETS[name]
+    if (Object.keys(preset).every((key) => preset[key] === fields[key])) return name
+  }
+  return "custom"
+}
+
+// What a relationship actually does: its own setting, or the page's.
+export function effectiveLine(edge, lines) {
+  const page = normalizeLines(lines)
+  return {
+    routing: edge.routing || page.routing,
+    source_side: edge.source_side || page.source_side,
+    target_side: edge.target_side || page.target_side,
+    end: edge.end || (relationshipKind(edge.kind).head === "bar" ? page.tbar : ""),
+  }
+}
+
+// Where each sided end attaches, as an offset from the middle of its side
+// ({ side, dx, dy } in page units; X6 takes these as anchor arguments). Ends on
+// one side of one actor are spread at k/(N+1) along it when the page spreads,
+// ordered by where their other end sits, so lines leaving a side don't cross
+// at it. On a molecule's ellipse the point is moved onto the curve and the
+// usable side is 70% of it, clear of the steep tips. An "any" end is null.
+export function lineEnds(document) {
+  const lines = normalizeLines(document.lines)
+  const nodes = new Map(document.nodes.map((node) => [node.id, node]))
+  const centre = (node) => ({ x: node.x + node.width / 2, y: node.y + node.height / 2 })
+  const groups = new Map()
+  const ends = new Map()
+  for (const edge of document.edges) {
+    const line = effectiveLine(edge, lines)
+    ends.set(edge.id, { source: null, target: null })
+    for (const [end, nodeId, otherId, side] of [
+      ["source", edge.from, edge.to, line.source_side],
+      ["target", edge.to, edge.from, line.target_side],
+    ]) {
+      if (side === "any" || !nodes.has(nodeId) || !nodes.has(otherId)) continue
+      const key = `${nodeId}:${side}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push({ edge, end, node: nodes.get(nodeId), other: nodes.get(otherId), side })
+    }
+  }
+  for (const members of groups.values()) {
+    const { node, side } = members[0]
+    const vertical = side === "top" || side === "bottom"
+    const ellipse = node.type === "molecule"
+    const half = (vertical ? node.width : node.height) / 2
+    const usable = (ellipse ? 0.7 : 1) * 2 * half
+    members.sort((a, b) =>
+      vertical ? centre(a.other).x - centre(b.other).x : centre(a.other).y - centre(b.other).y,
+    )
+    members.forEach((member, index) => {
+      const along = lines.spread ? usable * ((index + 1) / (members.length + 1)) - usable / 2 : 0
+      // On an ellipse, step in from the box's side to the curve at that offset.
+      const across = vertical ? node.height / 2 : node.width / 2
+      const inset = ellipse ? across - across * Math.sqrt(Math.max(0, 1 - (along / half) ** 2)) : 0
+      // END_GAP units out from the side, as an unsided end stops 3 short of
+      // the boundary: a T-bar or an arrowhead then sits clear of the portrait,
+      // which is drawn above the lines.
+      const toward = side === "top" || side === "left" ? 1 : -1
+      const inward = toward * (inset - END_GAP)
+      ends.get(member.edge.id)[member.end] = vertical
+        ? { side, dx: wholeUnits(along), dy: wholeUnits(inward) }
+        : { side, dx: wholeUnits(inward), dy: wholeUnits(along) }
+    })
+  }
+  return ends
+}
+
+// The page point of an end from lineEnds, for checks outside the editor.
+export function lineEndPoint(node, end) {
+  const middle = {
+    top: { x: node.x + node.width / 2, y: node.y },
+    bottom: { x: node.x + node.width / 2, y: node.y + node.height },
+    left: { x: node.x, y: node.y + node.height / 2 },
+    right: { x: node.x + node.width, y: node.y + node.height / 2 },
+  }[end.side]
+  return { x: middle.x + end.dx, y: middle.y + end.dy }
+}
+
+const END_GAP = 3
+
+// Whole page units: X6 reads an anchor offset strictly between 0 and 1 as a
+// fraction of the box (its normalizePercentage), so 0.44 would mean 44%.
+const wholeUnits = (value) => Math.round(value) || 0
 
 // Genes and molecules are the actors a relationship can join.
 function actorIds(nodes) {
@@ -514,6 +664,8 @@ const EDGE_PATCH_FIELDS = [
   "width",
   "pattern",
   "routing",
+  "source_side",
+  "target_side",
   "jumps",
   "head_size",
   "opacity",
