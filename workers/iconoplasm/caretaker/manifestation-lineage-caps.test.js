@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import {
-  appendSystemRevisionWithTags,
   registerAuthorityAccount,
   registerGeneIdentity,
   registerCaretakerTermsVersion,
@@ -13,6 +12,7 @@ import {
   submitTagsDerivative,
   releaseAbandonedManifestationUploads,
 } from "./manifestation-authority.js"
+import { appendSystemRevisionWithTags } from "./manifestation-write-commands.js"
 import { TestD1, command, sha, storage } from "./manifestation-authority-test-support.js"
 import {
   ICONOPLASM_BACKGROUND_MINUTES,
@@ -339,9 +339,11 @@ test("both commit-time caps seek their indexes and read a bounded number of rows
       .replaceAll("NEW.body_bytes", "?3")
       .replaceAll("NEW.manifestation_revision_id", "?4")
       .replace(/RAISE\(ABORT, '[^']+'\)/g, "0")
+    // Bind ?1 to ?N, N being the highest number this trigger uses.
+    const highest = Math.max(...[...query.matchAll(/\?(\d)/g)].map(([, n]) => Number(n)))
     const plans = f.db.raw
       .prepare(`EXPLAIN QUERY PLAN ${query}`)
-      .all(assignment, NOW, 1, latestRevision(f))
+      .all(...[assignment, NOW, 1, latestRevision(f)].slice(0, highest))
       .map(({ detail }) => detail)
     assert.ok(
       plans.every(
@@ -376,7 +378,6 @@ const storageEnv = {
   ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "quota-test-password",
 }
 const PAST = "2026-08-30T00:00:00.000Z"
-const TICK_DAY = "2026-10-03T00:00:00.000Z"
 
 function stubStorage(t, handler) {
   const original = globalThis.fetch
@@ -417,7 +418,8 @@ test("the scheduled manifestations tick releases an abandoned upload nobody retr
     return new Response(null, { status: isDelete ? 200 : 404 })
   })
   const stray = oldReservation(f, { bytes: 5, createdAt: PAST, leaseMs: 30_000 })
-  const live = oldReservation(f, { bytes: 7, createdAt: TICK_DAY, leaseMs: 86_400_000 })
+  // The scheduled sweep runs on the real clock: this lease is still running.
+  const live = oldReservation(f, { bytes: 7, leaseMs: 600_000 })
   assert.equal(reservedBytes(f), 12)
   await manifestationsTick(f)
   assert.equal(statusOf(f, stray.upload_intent_id), "deleted")

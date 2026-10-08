@@ -49,16 +49,18 @@ import {
   seedSystemManifestation,
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
+import { catalogueGeneId } from "./manifestation-authority-service-handlers.js"
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 
 // Rows written (`meta.rows_written`) by one ordinary autosave on a lineage that
 // already exists, summed over the POST and the projection it wakes. Measured
 // 2026-10-05: 117 + 34 as four commands (#508), 66 + 18 as one (B-859 step 3).
-const MAX_SAVE_ROWS_AUTHORING = 66
+// 2026-10-08: 43 + 18 without the upload reservation and its adoption (B-859).
+const MAX_SAVE_ROWS_AUTHORING = 43
 const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 71
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 48
 const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
@@ -451,25 +453,31 @@ test(
         },
       })
       const appendStarts = []
-      async function regenerate(label, prose, tagsText, fieldsJson) {
+      async function regenerate(
+        label,
+        prose,
+        tagsText,
+        fieldsJson,
+        { geneId = SYSTEM_GENE, newSymbol } = {},
+      ) {
         const head = await authoring
           .prepare(
             "SELECT head_version, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
           )
-          .bind(SYSTEM_GENE)
+          .bind(geneId)
           .first()
         const lineage = await authoring
           .prepare(
             "SELECT manifestation_head_revision_id FROM icono_manifestations WHERE gene_id = ? AND origin = 'system_seed'",
           )
-          .bind(SYSTEM_GENE)
+          .bind(geneId)
           .first()
         const hash = (text) => createHash("sha256").update(text).digest("hex")
         appendStarts.push(receipts.length)
         phase = `${label} append`
         const response = await workstation(
           new Request(
-            `https://iconoplasm.test/api/iconoplasm/authority/genes/${SYSTEM_GENE}/system-revisions`,
+            `https://iconoplasm.test/api/iconoplasm/authority/genes/${geneId}/system-revisions`,
             {
               method: "POST",
               headers: { authorization: "Bearer test-service", "content-type": "application/json" },
@@ -485,9 +493,10 @@ test(
                 provider_id: "opencode",
                 model_id: "deepseek-v4.1-flash",
                 tagger_config_sha256: "9".repeat(64),
-                expected_head_version: head.head_version,
-                expected_canonical_revision_id: head.canonical_revision_id,
-                expected_system_revision_id: lineage.manifestation_head_revision_id,
+                expected_head_version: head?.head_version ?? 0,
+                expected_canonical_revision_id: head?.canonical_revision_id ?? null,
+                expected_system_revision_id: lineage?.manifestation_head_revision_id ?? null,
+                ...(newSymbol ? { canonical_symbol: newSymbol } : {}),
               }),
             },
           ),
@@ -508,6 +517,15 @@ test(
         "A regenerated archivist in a Barbiecore coat, careful, bright and lantern-lit.",
         "pink coat, careful gaze, lantern",
         { outfit: ["pink coat"], face: ["careful gaze"], held_item: ["lantern"] },
+      )
+      // A gene new to the catalogue (B-1031): the same route registers it and
+      // seeds its system lineage, the most this route writes.
+      await regenerate(
+        "system-new-gene",
+        "A first text for a gene the catalogue has just added.",
+        "lab coat, steady hands",
+        { outfit: ["lab coat"], hands: ["steady hands"] },
+        { geneId: await catalogueGeneId("B859NEW"), newSymbol: "B859NEW" },
       )
 
       function summarize(slice, label) {
@@ -584,14 +602,12 @@ test(
         `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}`,
       )
       // The regeneration route reserves SYSTEM_REVISION_APPEND_ROWS per call on the
-      // laptop lane; it has to cover what one call writes in both databases.
-      for (const [index, append] of appends.entries()) {
-        const wrote = append.byDatabase.authoring + append.byDatabase.primary
-        assert.ok(
-          wrote <= SYSTEM_REVISION_APPEND_ROWS,
-          `regeneration ${index + 1} wrote ${wrote} rows; it reserves ${SYSTEM_REVISION_APPEND_ROWS}`,
-        )
-      }
+      // laptop lane. The constant is the worst call measured here, in both
+      // databases, with no estimate on top: lower it when a call gets cheaper.
+      const appendRows = appends.map(
+        (append) => append.byDatabase.authoring + append.byDatabase.primary,
+      )
+      assert.equal(SYSTEM_REVISION_APPEND_ROWS, Math.max(...appendRows), JSON.stringify(appendRows))
     } finally {
       await runtime.dispose()
     }

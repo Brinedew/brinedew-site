@@ -189,7 +189,7 @@ test(
       try {
         const root = new URL("../../migrations-iconoplasm-authoring/", import.meta.url)
         for (const file of readdirSync(root)
-          .filter((name) => name.endsWith(".sql") && Number.parseInt(name, 10) <= 13)
+          .filter((name) => name.endsWith(".sql"))
           .sort()) {
           schema.exec(readFileSync(new URL(file, root), "utf8"))
         }
@@ -210,14 +210,6 @@ test(
         .prepare(
           "INSERT INTO icono_authority_state(singleton,schema_version,authority_epoch,authority_mode) VALUES(1,1,1,'authoritative')",
         )
-        .run()
-      await authoring
-        .prepare(
-          "ALTER TABLE icono_authority_state ADD COLUMN event_archive_through INTEGER NOT NULL DEFAULT 0",
-        )
-        .run()
-      await authoring
-        .prepare("ALTER TABLE icono_authority_state ADD COLUMN event_archive_sha256 TEXT")
         .run()
       await authoring
         .prepare(

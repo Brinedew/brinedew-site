@@ -74,9 +74,11 @@ test("when two copies of one save race, the loser deletes its own upload", async
   const request = () => saveRequest(context, "uploaded_body_race", "One text, sent twice.")
   // The first copy passes the replay check, and while its upload is in flight
   // the second copy runs start to finish and commits.
+  let raced = false
   let second = null
   bunny.rules.push(async ({ method }) => {
-    if (method !== "PUT" || second) return null
+    if (method !== "PUT" || raced) return null
+    raced = true
     second = await handler(request())
     return null
   })
@@ -95,9 +97,12 @@ test("when one of a save's two uploads fails, nothing commits and no body is lef
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8103", bunny)
   const handler = humanHandler(context, bodyEnvironment())
-  let puts = 0
-  bunny.rules.push(async ({ method }) => {
-    if (method !== "PUT" || ++puts !== 2) return null
+  // The first body stores; every attempt at the second fails, retries included.
+  let firstKey = null
+  bunny.rules.push(async ({ method, objectKey }) => {
+    if (method !== "PUT") return null
+    firstKey ??= objectKey
+    if (objectKey === firstKey) return null
     return new Response("storage unavailable", { status: 500 })
   })
   const head = headState(context)

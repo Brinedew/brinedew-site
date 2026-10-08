@@ -6,6 +6,7 @@ import {
   readAssignmentManifestation,
   readGeneAliases,
 } from "./manifestation-authority-repository.js"
+import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { discardUnreferencedBodies } from "./manifestation-uploaded-bodies.js"
 import { TestD1 } from "./manifestation-authority-test-support.js"
 
@@ -88,8 +89,8 @@ test("the cleanup after a failed save looks each body up by its unique key", asy
     db,
     { ICONOPLASM_AUTHORING_STORAGE_ZONE: "zone", ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "pw" },
     [
-      { kind: "revision", objectKey: "private/manifestations/v1/aa/one.bin" },
-      { kind: "derivative", objectKey: "private/manifestations/v1/aa/two.bin" },
+      { kind: "revision", objectKey: await createManifestationBodyObjectKey() },
+      { kind: "derivative", objectKey: await createManifestationBodyObjectKey() },
     ],
   )
   assert.deepEqual(outcomes, ["deleted", "deleted"])

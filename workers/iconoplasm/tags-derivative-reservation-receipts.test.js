@@ -359,8 +359,10 @@ test("at the ceiling a submission refuses before any write and leaves no trace, 
   installMemoryBodyStorage(t)
   const { geneId, revisionId } = await bootstrapCaretaker()
   const units = laptopReservation("authority_tags_derivative_submit", { command_id: "x" }).units
-  assert.ok(units > MUTATION_WRITE_FLOOR_UNITS, "the measured size is above the floor")
-  // Room for the old 50 but not for what a submission writes.
+  // A submission reserves its measured rows or the floor, whichever is larger
+  // (44 rows since B-859 retired the upload reservation, so the floor).
+  assert.equal(units, Math.max(TAGS_DERIVATIVE_SUBMIT_ROWS, MUTATION_WRITE_FLOOR_UNITS))
+  // One unit short of what a submission reserves.
   const run = fixture(t, 70_000 - units + 1)
   const body = completeSubmission(
     await geneRevision(geneId),

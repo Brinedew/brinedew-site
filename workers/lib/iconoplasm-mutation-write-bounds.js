@@ -228,18 +228,20 @@ export function generationCompletionWriteUnits(requestCount) {
 // The tags-derivative submission (B-945): one command per caretaker revision, a
 // batch in the authoring D1 (derivative, event, outbox, storage secret, head) and then the in-process projection of the accepted event into the
 // primary D1. Measured on both complete production schemas: a complete
-// submission writes 38 rows in the authoring D1 and 15 in the primary D1. The
+// submission writes 29 rows in the authoring D1 and 15 in the primary D1 (38 + 15
+// until B-859 retired the upload reservation, 2026-10-08). The
 // head selection is not here: the gateway hands it to the operation-cost
 // authority (isReplicaCostRoute), which admits it against its own declared bound.
-export const TAGS_DERIVATIVE_SUBMIT_ROWS = 53
+export const TAGS_DERIVATIVE_SUBMIT_ROWS = 44
 
 // A workstation regeneration (B-1011): one system revision with its Tags, the
 // Tags head and, while the system text is canonical, the selection, as one
-// command. The same statements as the caretaker's combined save, measured at 66
-// authoring + 18 primary rows on workerd (caretaker-save-cost.workerd.test.js,
-// B-859); the system lineage's row_version update and margin bring it to 96.
-// Derived from that sibling measurement, not measured on this route itself.
-export const SYSTEM_REVISION_APPEND_ROWS = 96
+// command. Measured on this route on workerd (caretaker-save-cost.workerd.test.js,
+// 2026-10-08): 42 authoring + 14 primary rows for a gene with a system text, and
+// 56 + 15 for a gene new to the catalogue (B-1031), which the route also
+// registers and seeds; the constant is that worst case. It was 96 until then,
+// derived from the caretaker save and never measured here.
+export const SYSTEM_REVISION_APPEND_ROWS = 71
 
 // Per route: the rows one admitted request may write, from its parsed body.
 //   units 0     no reservation: the route writes no row (material is reads only)
