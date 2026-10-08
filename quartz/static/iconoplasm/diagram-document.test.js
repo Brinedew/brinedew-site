@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   RELATIONSHIP_NOTATIONS,
   addCompartmentNode,
+  addGaugeNode,
   addGeneNode,
   addMoleculeNode,
   addTextNode,
@@ -428,6 +429,45 @@ test("top to bottom spreads ends along a side and onto a molecule's curve", () =
     dy: 0,
   })
   assert.equal(linesPreset({ ...document.lines, spread: false }), "custom")
+})
+
+// B-1051: a gauge is an actor like a molecule, with the user's words for its
+// name and both ends. Its box is a rectangle, so ends on a side spread over
+// the whole side, with no step in onto a curve.
+test("a gauge keeps its words and spreads ends over its whole top", () => {
+  let document = createDiagramDocument({ lines: "top-to-bottom" })
+  document = addGeneNode(document, { symbol: "PTEN", asset: asset("PTEN"), x: 100, y: 40 }).document
+  document = addGeneNode(document, {
+    symbol: "PIK3CA",
+    asset: asset("PIK3CA"),
+    x: 700,
+    y: 40,
+  }).document
+  const added = addGaugeNode(document, { label: "PIP₃ : PIP₂", x: 300, y: 400 })
+  assert.deepEqual(
+    [added.node.type, added.node.width, added.node.height, added.node.needle],
+    ["gauge", 300, 190, "middle"],
+  )
+  assert.deepEqual([added.node.low_label, added.node.high_label], ["LOW", "HIGH"])
+  document = added.document
+  const [pten, pik3ca] = document.nodes.filter((node) => node.type === "gene").map((n) => n.id)
+  const gauge = added.node.id
+  document = connectGeneNodes(document, { from: pik3ca, to: gauge, kind: "activation" }).document
+  document = connectGeneNodes(document, { from: pten, to: gauge, kind: "inhibition" }).document
+  const ends = lineEnds(document)
+  const [fromPik3ca, fromPten] = document.edges.map((edge) => ends.get(edge.id).target)
+  // 300 units, two ends: at -50 and +50, 3 out from the top.
+  assert.deepEqual(fromPten, { side: "top", dx: -50, dy: -3 })
+  assert.deepEqual(fromPik3ca, { side: "top", dx: 50, dy: -3 })
+  // The words are the user's: an end may be emptied, a needle must be one of three.
+  const edited = updateDiagramItem(document, gauge, {
+    low_label: "",
+    high_label: "AKT on",
+    needle: "sideways",
+  })
+  const node = edited.nodes.find((item) => item.id === gauge)
+  assert.deepEqual([node.low_label, node.high_label, node.needle], ["", "AKT on", "middle"])
+  assert.equal(updateDiagramItem(edited, gauge, { needle: "high" }).nodes.at(-1).needle, "high")
 })
 
 test("the simple notation is the main four arrows", () => {

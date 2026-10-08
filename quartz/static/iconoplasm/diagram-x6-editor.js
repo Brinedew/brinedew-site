@@ -6,12 +6,13 @@ import {
   lineEnds,
   pageBackgroundColour,
   relationshipKind,
-} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
+} from "./diagram-document.js?v=ae8ed02849975cc2"
 
 const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"
 const TEXT_SHAPE = "iconoplasm-text"
 const MOLECULE_SHAPE = "iconoplasm-molecule"
+const GAUGE_SHAPE = "iconoplasm-gauge"
 const SQUARE_END_CONNECTOR = "iconoplasm-square-end"
 const PAGE_SHAPE = "iconoplasm-page"
 const PAGE_ID = "iconoplasm-page"
@@ -430,6 +431,59 @@ function registerShapes(Graph) {
     },
     true,
   )
+  Graph.registerNode(
+    GAUGE_SHAPE,
+    {
+      inherit: "rect",
+      width: 300,
+      height: 190,
+      markup: [
+        { tagName: "rect", selector: "body" },
+        { tagName: "path", selector: "ticks" },
+        { tagName: "path", selector: "needle" },
+        { tagName: "circle", selector: "hub" },
+        { tagName: "text", selector: "low" },
+        { tagName: "text", selector: "high" },
+        { tagName: "text", selector: "label" },
+      ],
+      attrs: {
+        // A transparent fill still takes the pointer, so the whole box selects.
+        body: {
+          refWidth: "100%",
+          refHeight: "100%",
+          rx: 10,
+          ry: 10,
+          fill: "transparent",
+          stroke: INK,
+          strokeOpacity: 0.55,
+          strokeWidth: 1,
+        },
+        ticks: { stroke: "none" },
+        needle: { strokeWidth: 1, strokeLinejoin: "round" },
+        hub: { fill: "none", strokeWidth: 2 },
+        low: {
+          textAnchor: "middle",
+          fontFamily: UI_FONT,
+          fontWeight: 600,
+          letterSpacing: "0.12em",
+        },
+        high: {
+          textAnchor: "middle",
+          fontFamily: UI_FONT,
+          fontWeight: 600,
+          letterSpacing: "0.12em",
+        },
+        label: {
+          textAnchor: "middle",
+          textVerticalAnchor: "bottom",
+          fontFamily: UI_FONT,
+          fontWeight: 600,
+        },
+      },
+      ports: { groups: portGroups(), items: PORT_IDS.map((group) => ({ id: group, group })) },
+    },
+    true,
+  )
   Graph.registerConnector(SQUARE_END_CONNECTOR, squareEndConnector, true)
   for (const shape of COMPARTMENT_SHAPES) {
     const spec = COMPARTMENT_MARKUP[shape.id]
@@ -659,6 +713,79 @@ function moleculeAttrs(node, ink = INK) {
   }
 }
 
+// B-1051: the gauge is the tick-ring dial of current dashboard gauges (the
+// owner picked it from Pinterest and Dribbble references, 2026-10-08): a
+// 240-degree ring of 41 ticks, open at the bottom, that grow longer and
+// heavier from LOW to HIGH, a slim needle on a ring hub, the ends' words under
+// the ring and the name at the bottom of a hairline box. The box is
+// transparent, so the page shows through. Everything is computed from the box
+// size, so a resize redraws the ring round instead of stretching it.
+const GAUGE_TICKS = 41
+const GAUGE_NEEDLE_AT = { low: 1 / 6, middle: 0.5, high: 5 / 6 }
+
+function gaugeAttrs(node, ink = INK) {
+  const colour = node.color || ink
+  const width = node.width
+  const height = node.height
+  const fontSize = node.font_size || 18
+  const pad = 12
+  const nameBand = fontSize * 1.2 + 12
+  const radius = Math.max(
+    16,
+    Math.min((width - 2 * pad - 40) / Math.sqrt(3), (height - pad - nameBand - 22) / 1.5),
+  )
+  const scale = radius / 78
+  const cx = width / 2
+  const cy = pad + radius
+  const round = (value) => Math.round(value * 100) / 100
+  const point = (x, y) => `${round(x)} ${round(y)}`
+  const direction = (t) => {
+    const angle = ((210 - 240 * t) * Math.PI) / 180
+    return { x: Math.cos(angle), y: -Math.sin(angle) }
+  }
+  let ticks = ""
+  for (let index = 0; index < GAUGE_TICKS; index += 1) {
+    const t = index / (GAUGE_TICKS - 1)
+    const u = direction(t)
+    const half = ((1.1 + 1.9 * t) * scale) / 2
+    const outer = radius
+    const inner = radius - (5 + 17 * t) * scale
+    // A capsule: the tick's two long sides joined by round ends.
+    const n = { x: -u.y * half, y: u.x * half }
+    const at = (r, sign) => point(cx + u.x * r + sign * n.x, cy + u.y * r + sign * n.y)
+    ticks +=
+      `M ${at(outer, 1)} L ${at(inner, 1)} A ${round(half)} ${round(half)} 0 0 0 ${at(inner, -1)}` +
+      ` L ${at(outer, -1)} A ${round(half)} ${round(half)} 0 0 0 ${at(outer, 1)} Z `
+  }
+  const u = direction(GAUGE_NEEDLE_AT[node.needle] ?? 0.5)
+  const base = 3 * scale
+  const tip = radius - 30 * scale
+  const needle =
+    `M ${point(cx - u.y * base, cy + u.x * base)} L ${point(cx + u.x * tip, cy + u.y * tip)}` +
+    ` L ${point(cx + u.y * base, cy - u.x * base)} Z`
+  const endY = cy + radius / 2 + 16 * scale
+  const endSize = round(Math.max(9, 10.5 * Math.min(scale, 1.4)))
+  // Text takes X6's refX/refY (whole units from the box's corner); X6 moves
+  // text elements itself, so plain x and y attributes are overwritten.
+  const endText = (x, text) => ({
+    text,
+    refX: round(x),
+    refY: round(endY),
+    fontSize: endSize,
+    fillOpacity: 0.6,
+    ...textFill(colour),
+  })
+  return {
+    body: { stroke: colour },
+    ticks: { d: ticks.trim(), fill: colour },
+    needle: { d: needle, fill: colour, stroke: colour },
+    hub: { cx: round(cx), cy: round(cy), r: round(6 * scale), stroke: colour },
+    low: endText(cx - (radius * Math.sqrt(3)) / 2, node.low_label),
+    high: endText(cx + (radius * Math.sqrt(3)) / 2, node.high_label),
+    label: { text: node.label, fontSize, refX: round(cx), refY: height - 12, ...textFill(colour) },
+  }
+}
+
 function textAttrs(node, ink = INK) {
   const fill = node.fill === "note" ? NOTE_FILL : node.fill === "paper" ? PAPER_FILL : "transparent"
   return {
@@ -730,6 +857,7 @@ function graphNodes(document, gridVisible, defsIds) {
     if (node.type === "text") return { ...base, shape: TEXT_SHAPE, attrs: textAttrs(node, ink) }
     if (node.type === "molecule")
       return { ...base, shape: MOLECULE_SHAPE, attrs: moleculeAttrs(node, ink) }
+    if (node.type === "gauge") return { ...base, shape: GAUGE_SHAPE, attrs: gaugeAttrs(node, ink) }
     if (node.type === "compartment")
       return { ...base, shape: compartmentShape(node.shape), attrs: compartmentAttrs(node) }
     // B-846: cdn_url serves the same immutable bytes without a Worker request,
@@ -919,8 +1047,8 @@ export async function createDiagramEditor({
 
   const isPage = (cell) => cell?.getData?.()?.itemType === "page"
   const itemType = (cell) => cell?.getData?.()?.itemType
-  // Genes and molecules are what a relationship joins.
-  const isActor = (cell) => itemType(cell) === "gene" || itemType(cell) === "molecule"
+  // Genes, molecules and gauges are what a relationship joins.
+  const isActor = (cell) => ["gene", "molecule", "gauge"].includes(itemType(cell))
 
   const graph = new Graph({
     container,
@@ -992,8 +1120,8 @@ export async function createDiagramEditor({
       rotating: false,
       resizing: {
         enabled: (node) => !isPage(node),
-        minWidth: (node) => (itemType(node) === "gene" ? 72 : itemType(node) === "text" ? 60 : 40),
-        minHeight: (node) => (itemType(node) === "gene" ? 96 : itemType(node) === "text" ? 28 : 24),
+        minWidth: (node) => ({ gene: 72, text: 60, gauge: 160 })[itemType(node)] ?? 40,
+        minHeight: (node) => ({ gene: 96, text: 28, gauge: 110 })[itemType(node)] ?? 24,
         maxWidth: (node) =>
           itemType(node) === "gene" ? 240 : itemType(node) === "text" ? 900 : 4000,
         maxHeight: (node) =>
@@ -1129,6 +1257,11 @@ export async function createDiagramEditor({
   })
   graph.on("node:moved", emitChange)
   graph.on("node:resized", emitChange)
+  // The dial is drawn for its box, so it is redrawn while the box changes.
+  graph.on("node:change:size", ({ node }) => {
+    if (itemType(node) === "gauge")
+      node.setAttrs(gaugeAttrs({ ...node.getData(), ...node.getSize() }, inkFor(baseDocument)))
+  })
   graph.on("node:removed", emitChange)
   graph.on("edge:connected", ({ edge, isNew }) => {
     // Dragging an existing arrowhead to another gene keeps the relationship.
@@ -1244,6 +1377,8 @@ export async function createDiagramEditor({
     }
     if (data.itemType === "text") node.setAttrs(textAttrs(data, inkFor(baseDocument)))
     if (data.itemType === "molecule") node.setAttrs(moleculeAttrs(data, inkFor(baseDocument)))
+    if (data.itemType === "gauge")
+      node.setAttrs(gaugeAttrs({ ...data, ...node.getSize() }, inkFor(baseDocument)))
     if (data.itemType === "compartment") {
       node.setAttrs(compartmentAttrs(data))
       // The shape is the registered X6 shape; changing it means a new cell.
