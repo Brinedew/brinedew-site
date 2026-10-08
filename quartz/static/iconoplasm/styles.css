@@ -1421,8 +1421,9 @@ img-comparison-slider.rendered [slot="second"] {
 
 /* ───────── B-883: the Free queue style picker ─────────
    A grid of 3:4 style cards beside a "Your batch" tray, inside a dialog of
-   fixed height. Only the dialog title and the method tabs stay put; the view
-   switch, search and cards scroll together in [data-icono-request-browse]. */
+   fixed height. The cards scroll in [data-icono-request-browse]; the view
+   switch and the search stay pinned while they do, as in an emoji picker
+   (B-1044: the owner lost the switch on scrolling down). */
 .icono-request-dialog .icono-dialog__body {
   display: flex;
   flex-direction: column;
@@ -1508,6 +1509,29 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-request-find-dock {
   grid-area: find;
   min-width: 0;
+}
+
+/* The pinned row: an opaque band across the scroller's first row, out to its
+   padding and a little into the row gap, with the switch and the search
+   pinned above it. The band's -0.2rem top cancels the scroller's top padding,
+   so no card peeks above it. */
+.icono-request-head {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  align-self: stretch;
+  position: sticky;
+  top: -0.2rem;
+  z-index: 1;
+  margin: -0.2rem -0.35rem -0.45rem -0.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
+  background: color-mix(in srgb, var(--light) 98%, white 2%);
+}
+
+.icono-request-browse > .icono-request-views,
+.icono-request-browse > .icono-request-find-dock {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .icono-request-browse > .icono-request-grid {
@@ -1874,8 +1898,10 @@ img-comparison-slider.rendered [slot="second"] {
     align-self: start;
   }
 
-  .icono-request-find-dock {
+  .icono-request-find-dock,
+  .icono-request-browse > .icono-request-find-dock {
     position: sticky;
+    top: auto;
     bottom: 0;
     z-index: 1;
     /* Out to the scroller's edges (its padding), so a picked card's outline
