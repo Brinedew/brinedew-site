@@ -83,18 +83,6 @@ test(
           .run()
         await db
           .prepare(
-            `INSERT INTO icono_manifestation_upload_intents(upload_intent_id,entity_kind,entity_id,object_key,ciphertext_sha256,planned_body_bytes,lease_token,lease_expires_at,actor_kind,created_at)
-        VALUES (?,'revision',?,?,?,1,'lease','2999-01-01','service','2026-09-06')`,
-          )
-          .bind(
-            `intent_${id}`,
-            `revision_${id}`,
-            `private/manifestations/v1/aa/opaque_${id}_${"x".repeat(40)}.bin`,
-            "b".repeat(64),
-          )
-          .run()
-        await db
-          .prepare(
             `INSERT INTO icono_manifestation_revision_storage_secrets(manifestation_revision_id,object_key,ciphertext_sha256,ciphertext_bytes,body_iv_base64,wrapped_dek_base64,wrap_iv_base64,key_version,verified_at)
         VALUES (?,?,?,17,?,?,?,1,'2026-09-06')`,
           )

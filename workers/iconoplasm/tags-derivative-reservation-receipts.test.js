@@ -4,7 +4,6 @@ import test, { after, before } from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
-  createManifestationUploadIntent,
   offerCaretakerAssignment,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
@@ -30,7 +29,7 @@ import {
 
 // B-945. The tags-derivative submission reserved the 50-unit floor with a comment
 // saying nobody had measured it. One command is a batch in the authoring D1
-// (derivative, event, outbox, head, upload intent, storage secret) and then the
+// (derivative, event, outbox, head, storage secret) and then the
 // in-process projection of the accepted event into the primary D1. (The issue
 // named a second route, the head selection; the gateway hands that one to the
 // operation-cost authority before the budget wrapper, so it never reserved.)
@@ -38,8 +37,7 @@ import {
 // How a reservation could under-count (written before the tests, B-945):
 // 1. Writes in two D1s counted as one.
 // 2. The projection runs after the response is built and writes more.
-// 3. A complete submission writes an upload intent and a storage secret that a
-//    failed one does not.
+// 3. A complete submission writes a storage secret that a failed one does not.
 // 4. A replay is billed as a fresh write.
 // 5. A refusal consumes the reservation, so the identical retry is refused forever.
 // 6. A later migration adds an index or trigger and the number drifts.
@@ -138,18 +136,7 @@ async function bootstrapCaretaker() {
   // plaintext hash storage(1) uses, so the body hash is one constant.
   const envelope = storage(1000 + 2 * counter + 1)
   await registerGeneIdentity(db, { geneId, canonicalSymbol: `R${suffix}`, now: NOW })
-  // The complete production schema fences every stored body behind a live upload
-  // reservation for its exact object.
-  await createManifestationUploadIntent(db, {
-    entityKind: "revision",
-    entityId: `revision_seed_${suffix}`,
-    objectKey: envelope.object_key,
-    ciphertextSha256: envelope.ciphertext_sha256,
-    bodyBytes: envelope.body_bytes,
-    actorKind: "migration",
-    uploadIntentId: `upload_intent_seed_${suffix}`,
-    leaseToken: `upload_lease_seed_${suffix}`,
-  })
+
   await seedSystemManifestation(db, {
     geneId,
     storage: envelope,
@@ -372,8 +359,10 @@ test("at the ceiling a submission refuses before any write and leaves no trace, 
   installMemoryBodyStorage(t)
   const { geneId, revisionId } = await bootstrapCaretaker()
   const units = laptopReservation("authority_tags_derivative_submit", { command_id: "x" }).units
-  assert.ok(units > MUTATION_WRITE_FLOOR_UNITS, "the measured size is above the floor")
-  // Room for the old 50 but not for what a submission writes.
+  // A submission reserves its measured rows or the floor, whichever is larger
+  // (44 rows since B-859 retired the upload reservation, so the floor).
+  assert.equal(units, Math.max(TAGS_DERIVATIVE_SUBMIT_ROWS, MUTATION_WRITE_FLOOR_UNITS))
+  // One unit short of what a submission reserves.
   const run = fixture(t, 70_000 - units + 1)
   const body = completeSubmission(
     await geneRevision(geneId),

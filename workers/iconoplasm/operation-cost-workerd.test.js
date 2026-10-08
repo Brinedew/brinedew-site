@@ -9,7 +9,6 @@ import { createOperationCostQueryRegistry } from "./operation-cost-query-registr
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import {
   registerGeneIdentity,
-  createManifestationUploadIntent,
   seedSystemManifestation,
   submitTagsDerivative,
 } from "./caretaker/manifestation-authority.js"
@@ -190,7 +189,7 @@ test(
       try {
         const root = new URL("../../migrations-iconoplasm-authoring/", import.meta.url)
         for (const file of readdirSync(root)
-          .filter((name) => name.endsWith(".sql") && Number.parseInt(name, 10) <= 13)
+          .filter((name) => name.endsWith(".sql"))
           .sort()) {
           schema.exec(readFileSync(new URL(file, root), "utf8"))
         }
@@ -211,14 +210,6 @@ test(
         .prepare(
           "INSERT INTO icono_authority_state(singleton,schema_version,authority_epoch,authority_mode) VALUES(1,1,1,'authoritative')",
         )
-        .run()
-      await authoring
-        .prepare(
-          "ALTER TABLE icono_authority_state ADD COLUMN event_archive_through INTEGER NOT NULL DEFAULT 0",
-        )
-        .run()
-      await authoring
-        .prepare("ALTER TABLE icono_authority_state ADD COLUMN event_archive_sha256 TEXT")
         .run()
       await authoring
         .prepare(
@@ -359,21 +350,6 @@ test(
       const prose = "文".repeat(4000)
       const revisionStorage = { ...storage(1), ...(await plainBodyObject(prose)) }
       const derivativeStorage = { ...storage(2), ...(await plainBodyObject("tagged!\n{}")) }
-      for (const [entityKind, entityId, envelope] of [
-        ["revision", "revision_cost_select", revisionStorage],
-        ["derivative", "derivative_cost_select", derivativeStorage],
-      ]) {
-        await createManifestationUploadIntent(authoring, {
-          entityKind,
-          entityId,
-          objectKey: envelope.object_key,
-          ciphertextSha256: envelope.ciphertext_sha256,
-          bodyBytes: envelope.body_bytes,
-          actorKind: "migration",
-          uploadIntentId: `intent_${entityKind}`,
-          leaseToken: `lease_${entityKind}`,
-        })
-      }
       await seedSystemManifestation(authoring, {
         geneId: "gene_cost_select",
         storage: revisionStorage,

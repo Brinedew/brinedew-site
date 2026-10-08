@@ -10,7 +10,6 @@ import {
   registerGeneIdentity,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
-  createManifestationUploadIntent,
   seedSystemManifestation,
   offerCaretakerAssignment,
   transitionCaretakerAssignment,
@@ -105,18 +104,6 @@ test(
           now,
         })
         await registerGeneIdentity(authoring, { geneId, canonicalSymbol: `P${i}`, now })
-        const envelope = storage(i)
-        await createManifestationUploadIntent(authoring, {
-          entityKind: "revision",
-          entityId: `revision_seed_cost_${i}`,
-          objectKey: envelope.object_key,
-          ciphertextSha256: envelope.ciphertext_sha256,
-          bodyBytes: envelope.body_bytes,
-          actorKind: "migration",
-          uploadIntentId: `intent_cost_${i}`,
-          leaseToken: `lease_cost_${i}`,
-          now,
-        })
         await seedSystemManifestation(authoring, {
           geneId,
           storage: storage(i),
