@@ -9,6 +9,7 @@ import {
   RELATIONSHIP_KIND_IDS,
   RELATIONSHIP_NOTATIONS,
   addCompartmentNode,
+  addGaugeNode,
   addGeneNode,
   addMoleculeNode,
   addTextNode,
@@ -27,16 +28,16 @@ import {
   relationshipKind,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
+} from "./diagram-document.js?v=ae8ed02849975cc2"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=7389813e5207a0dd"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=86aca2cd81e8a3c5"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
   diagramTemplate,
   templateSymbols,
   templateThumbnail,
-} from "./diagram-templates.js?v=e8c4a80477862cf7"
+} from "./diagram-templates.js?v=04923f4d2ca1ba10"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -608,6 +609,19 @@ function minibarMarkup() {
 const MOLECULE_PREVIEW =
   '<svg viewBox="0 0 48 26" aria-hidden="true"><ellipse cx="24" cy="13" rx="21" ry="10" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
 
+// The Gauge tile: the tick ring at tile size, 13 ticks growing toward HIGH.
+const GAUGE_PREVIEW = (() => {
+  let ticks = ""
+  for (let index = 0; index < 13; index += 1) {
+    const t = index / 12
+    const angle = ((210 - 240 * t) * Math.PI) / 180
+    const [x, y] = [Math.cos(angle), -Math.sin(angle)]
+    const inner = 11 - (2 + 4.5 * t)
+    ticks += `<line x1="${(24 + 11 * x).toFixed(2)}" y1="${(14 + 11 * y).toFixed(2)}" x2="${(24 + inner * x).toFixed(2)}" y2="${(14 + inner * y).toFixed(2)}" stroke-width="${(0.8 + t).toFixed(2)}"/>`
+  }
+  return `<svg viewBox="0 0 48 26" aria-hidden="true"><g stroke="currentColor" stroke-linecap="round" fill="none">${ticks}<line x1="24" y1="14" x2="24" y2="7" stroke-width="1.5"/></g></svg>`
+})()
+
 function toolButton(action, iconName, label, extra = "") {
   return `<button type="button" class="ics-tb" data-studio-action="${action}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${extra}>${icon(iconName)}</button>`
 }
@@ -690,6 +704,7 @@ function studioMarkup() {
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-text" data-studio-drag="text">${icon("type")}<span>Text</span></button>
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-note" data-studio-drag="note">${icon("sticky-note")}<span>Note</span></button>
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-molecule" data-studio-drag="molecule" title="A small molecule, an ion or a control variable">${MOLECULE_PREVIEW}<span>Molecule</span></button>
+              <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-gauge" data-studio-drag="gauge" title="A control variable with a low and a high end">${GAUGE_PREVIEW}<span>Gauge</span></button>
             </div></details>
           </div>
         </aside>
@@ -762,6 +777,7 @@ function selectionDescription() {
   if (item.type === "text") return item.fill === "note" ? "Note" : "Text"
   if (item.type === "compartment") return `Compartment · ${item.label || item.shape}`
   if (item.type === "molecule") return `Molecule · ${item.label}`
+  if (item.type === "gauge") return `Gauge · ${item.label}`
   return `${relationshipKind(item.kind).label} · ${edgeEndpoints(item)}`
 }
 
@@ -1045,6 +1061,11 @@ const TABS = {
     ["arrange", "Arrange"],
   ],
   molecule: [
+    ["style", "Style"],
+    ["text", "Text"],
+    ["arrange", "Arrange"],
+  ],
+  gauge: [
     ["style", "Style"],
     ["text", "Text"],
     ["arrange", "Arrange"],
@@ -1633,6 +1654,55 @@ function formatBody(kind, tab) {
       }),
     )
   }
+  if (kind === "gauge") {
+    if (tab === "text") {
+      return section(
+        "Name",
+        stepper({
+          field: "font_size",
+          target: item.id,
+          value: item.font_size,
+          min: 8,
+          max: 40,
+          unit: "pt",
+          label: "Font size",
+        }),
+      )
+    }
+    const words = (field, label, placeholder) =>
+      textInput({
+        field,
+        target: item.id,
+        value: item[field],
+        label,
+        placeholder,
+        maxlength: ICONOPLASM_DIAGRAM_LIMITS.labelLength,
+      })
+    return section(
+      "Gauge",
+      words("label", "Name", "PIP₃ : PIP₂") +
+        words("low_label", "Low end", "LOW") +
+        words("high_label", "High end", "HIGH") +
+        selectControl({
+          field: "needle",
+          target: item.id,
+          value: item.needle,
+          label: "Needle",
+          options: [
+            ["low", "Low"],
+            ["middle", "At threshold"],
+            ["high", "High"],
+          ],
+        }) +
+        swatches({
+          field: "color",
+          target: item.id,
+          value: item.color,
+          label: "Colour",
+          defaultLabel: "Ink",
+        }),
+    )
+  }
   if (kind === "compartment") {
     if (tab === "text") {
       return section(
@@ -1858,6 +1928,7 @@ function menuItems(name) {
         { action: "insert-text", label: "Text" },
         { action: "insert-note", label: "Note" },
         { action: "insert-molecule", label: "Molecule" },
+        { action: "insert-gauge", label: "Gauge" },
         "-",
         { heading: "Compartment" },
         ...COMPARTMENT_SHAPES.map((shape) => ({
@@ -2167,7 +2238,13 @@ async function replaceWorkspace(nextWorkspace, message) {
 async function insertNode(kind, at) {
   const centre = at || (await visibleCentre())
   let outcome
-  if (kind === "molecule") {
+  if (kind === "gauge") {
+    outcome = addGaugeNode(currentDocument, {
+      label: "Variable",
+      x: centre.x - 150,
+      y: centre.y - 95,
+    })
+  } else if (kind === "molecule") {
     outcome = addMoleculeNode(currentDocument, {
       label: "Molecule",
       x: centre.x - 75,
@@ -2195,6 +2272,7 @@ async function insertNode(kind, at) {
   await commitDocument(outcome.document, { message: "Added." })
   if (kind === "text" || kind === "note") focusFormatField("text", "text")
   if (kind === "molecule") focusFormatField("text", "label")
+  if (kind === "gauge") focusFormatField("style", "label")
 }
 
 // After a panel opens or closes the canvas changes size; on a phone, bring
@@ -2575,6 +2653,8 @@ async function runAction(action) {
       return insertNode(argument)
     case "insert-molecule":
       return insertNode("molecule")
+    case "insert-gauge":
+      return insertNode("gauge")
     case "template":
       return openTemplate(argument)
     case "templates":

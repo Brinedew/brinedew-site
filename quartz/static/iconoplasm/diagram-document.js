@@ -84,6 +84,12 @@ export const PAGE_BACKGROUND_SWATCHES = Object.freeze([
 // A molecule is any actor that is not a gene's own portrait: a small molecule
 // (PIP3, cAMP), an ion or an abstract control variable such as a ratio.
 export const MOLECULE_DEFAULT = Object.freeze({ width: 150, height: 72 })
+// B-1051: a gauge is a control variable drawn as a dial in a box (PIP₃ : PIP₂):
+// what feeds it lands on the box's top, what reads it leaves from the bottom,
+// and the needle says which end the chart is about. The ends and the name are
+// the user's words.
+export const GAUGE_DEFAULT = Object.freeze({ width: 300, height: 190 })
+export const GAUGE_NEEDLES = Object.freeze(["middle", "low", "high"])
 // Which way a line meets the portrait: "square" bends its last stretch so it
 // arrives perpendicular to the side it hits (a T-bar lies flat against that
 // side); "free" keeps the angle of the line. Empty follows the kind.
@@ -295,10 +301,37 @@ function normalizeMoleculeNode(rawNode, index, width, height) {
   )
 }
 
+function normalizeGaugeNode(rawNode, index, width, height) {
+  const node = rawNode && typeof rawNode === "object" ? rawNode : {}
+  const limit = ICONOPLASM_DIAGRAM_LIMITS.labelLength
+  return placed(
+    {
+      id: safeId(node.id, `gauge-${index + 1}`),
+      type: "gauge",
+      label: boundedText(node.label || "Variable", limit) || "Variable",
+      low_label: boundedText(node.low_label ?? "LOW", limit),
+      high_label: boundedText(node.high_label ?? "HIGH", limit),
+      needle: oneOf(node.needle, GAUGE_NEEDLES, "middle"),
+      x: 0,
+      y: 0,
+      width: clamp(finiteNumber(node.width, GAUGE_DEFAULT.width), 160, 900),
+      height: clamp(finiteNumber(node.height, GAUGE_DEFAULT.height), 110, 600),
+      font_size: clamp(finiteNumber(node.font_size, 18), 8, 40),
+      color: hexColour(node.color),
+    },
+    node,
+    width,
+    height,
+    120 + (index % 4) * 320,
+    120 + Math.floor(index / 4) * 220,
+  )
+}
+
 function normalizeNode(rawNode, index, width, height) {
   if (rawNode && rawNode.type === "text") return normalizeTextNode(rawNode, index, width, height)
   if (rawNode && rawNode.type === "molecule")
     return normalizeMoleculeNode(rawNode, index, width, height)
+  if (rawNode && rawNode.type === "gauge") return normalizeGaugeNode(rawNode, index, width, height)
   if (rawNode && rawNode.type === "compartment")
     return normalizeCompartmentNode(rawNode, index, width, height)
   return normalizeGeneNode(rawNode, index, width, height)
@@ -512,11 +545,10 @@ const END_GAP = 3
 // fraction of the box (its normalizePercentage), so 0.44 would mean 44%.
 const wholeUnits = (value) => Math.round(value) || 0
 
-// Genes and molecules are the actors a relationship can join.
+// Genes, molecules and gauges are the actors a relationship can join.
+const ACTOR_TYPES = new Set(["gene", "molecule", "gauge"])
 function actorIds(nodes) {
-  return new Set(
-    nodes.filter((node) => node.type === "gene" || node.type === "molecule").map((node) => node.id),
-  )
+  return new Set(nodes.filter((node) => ACTOR_TYPES.has(node.type)).map((node) => node.id))
 }
 
 // Version 2 stored the colour itself and version 3 named the sheet ("paper"
@@ -605,6 +637,19 @@ export function addMoleculeNode(document, rawNode = {}) {
   return { document: next, node }
 }
 
+export function addGaugeNode(document, rawNode = {}) {
+  const next = cloneDiagramDocument(document)
+  assertRoom(next)
+  const node = normalizeGaugeNode(
+    { ...rawNode, id: rawNode.id || nextId(next.nodes, "gauge") },
+    next.nodes.length,
+    next.width,
+    next.height,
+  )
+  next.nodes.push(node)
+  return { document: next, node }
+}
+
 // Compartments go to the back of the stack so they never cover a character.
 export function addCompartmentNode(document, rawNode = {}) {
   const next = cloneDiagramDocument(document)
@@ -656,6 +701,18 @@ const NODE_PATCH_FIELDS = {
   ],
   compartment: ["label", "x", "y", "width", "height", "color", "shape"],
   molecule: ["label", "x", "y", "width", "height", "color", "font_size"],
+  gauge: [
+    "label",
+    "low_label",
+    "high_label",
+    "needle",
+    "x",
+    "y",
+    "width",
+    "height",
+    "color",
+    "font_size",
+  ],
 }
 const EDGE_PATCH_FIELDS = [
   "kind",
