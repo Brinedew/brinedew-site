@@ -30,6 +30,7 @@
 // them to make a new feature fit without writing down in B-859 why the extra
 // rows are worth their share of the free plan's 100,000 rows/day.
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { readdirSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { DatabaseSync } from "node:sqlite"
@@ -37,9 +38,10 @@ import test from "node:test"
 
 import { ownManifestation } from "../../../quartz/static/iconoplasm/caretaker-manifestations-model.js"
 import { drainIconoplasmManifestationAuthorityProjection } from "../../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { SYSTEM_REVISION_APPEND_ROWS } from "../../lib/iconoplasm-mutation-write-bounds.js"
 import {
   createCaretakerManifestationHttpHandler,
-  createManifestationUploadIntent,
+  createManifestationAuthorityServiceHandler,
   offerCaretakerAssignment,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
@@ -48,6 +50,7 @@ import {
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
+import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 
 // Rows written (`meta.rows_written`) by one ordinary autosave on a lineage that
 // already exists, summed over the POST and the projection it wakes. Measured
@@ -65,6 +68,9 @@ const GENE = "gene_b859cost_0001"
 const SYMBOL = "B859COST"
 const ASSIGNMENT = "assignment_b859cost_0001"
 const BASE = `/api/iconoplasm/caretaker/genes/${SYMBOL}`
+// A second gene with no caretaker, whose system text stays canonical: the
+// common case for the workstation's regeneration outbox (B-1048).
+const SYSTEM_GENE = "gene_b859cost_0002"
 const STORAGE_ZONE = "b859-cost-zone"
 
 async function installFinalSchema(db, directory) {
@@ -262,17 +268,6 @@ test(
       })
       await registerGeneIdentity(authoring, { geneId: GENE, canonicalSymbol: SYMBOL, now })
       const seedStorage = storage(1)
-      await createManifestationUploadIntent(authoring, {
-        entityKind: "revision",
-        entityId: "revision_seed_b859cost",
-        objectKey: seedStorage.object_key,
-        ciphertextSha256: seedStorage.ciphertext_sha256,
-        bodyBytes: seedStorage.body_bytes,
-        actorKind: "migration",
-        uploadIntentId: "intent_seed_b859cost",
-        leaseToken: "lease_seed_b859cost",
-        now,
-      })
       await seedSystemManifestation(authoring, {
         geneId: GENE,
         storage: seedStorage,
@@ -284,6 +279,23 @@ test(
         eventUuid: "event_seed_b859cost",
         now,
         ...command("command_seed_b859cost", "1", null, "migration"),
+      })
+      await registerGeneIdentity(authoring, {
+        geneId: SYSTEM_GENE,
+        canonicalSymbol: "B859SYS",
+        now,
+      })
+      await seedSystemManifestation(authoring, {
+        geneId: SYSTEM_GENE,
+        storage: storage(3),
+        expectedHeadVersion: 0,
+        expectedCanonicalRevisionId: null,
+        manifestationId: "manifestation_seed_b859sys",
+        revisionId: "revision_seed_b859sys",
+        selectionId: "selection_seed_b859sys",
+        eventUuid: "event_seed_b859sys",
+        now,
+        ...command("command_seed_b859sys", "4", null, "migration"),
       })
       await offerCaretakerAssignment(authoring, {
         geneId: GENE,
@@ -422,6 +434,81 @@ test(
         "archivist, red_coat, lantern",
         { ...fields, held_item: ["lantern"] },
       )
+      const afterSaves = receipts.length
+
+      // The workstation's regeneration (B-1011): one system revision with its
+      // Tags, the Tags head and the canonical selection, then its projection.
+      const workstation = createManifestationAuthorityServiceHandler({
+        db: meteredAuthoring,
+        env,
+        authorizeReplicaBearer: async () => ({ authorized: true, actor_kind: "service" }),
+        onAuthorityEvent: async (event) => {
+          const result = await drainIconoplasmManifestationAuthorityProjection(env, 1, {
+            priorityEventId: event.event_id,
+          })
+          const accepted = result.results.find((item) => item.event_id === event.event_id)
+          assert.equal(accepted?.status, "published", JSON.stringify(result.results))
+        },
+      })
+      const appendStarts = []
+      async function regenerate(label, prose, tagsText, fieldsJson) {
+        const head = await authoring
+          .prepare(
+            "SELECT head_version, canonical_revision_id FROM icono_manifestation_heads WHERE gene_id = ?",
+          )
+          .bind(SYSTEM_GENE)
+          .first()
+        const lineage = await authoring
+          .prepare(
+            "SELECT manifestation_head_revision_id FROM icono_manifestations WHERE gene_id = ? AND origin = 'system_seed'",
+          )
+          .bind(SYSTEM_GENE)
+          .first()
+        const hash = (text) => createHash("sha256").update(text).digest("hex")
+        appendStarts.push(receipts.length)
+        phase = `${label} append`
+        const response = await workstation(
+          new Request(
+            `https://iconoplasm.test/api/iconoplasm/authority/genes/${SYSTEM_GENE}/system-revisions`,
+            {
+              method: "POST",
+              headers: { authorization: "Bearer test-service", "content-type": "application/json" },
+              body: JSON.stringify({
+                command_id: `b859sys_${crypto.randomUUID().replaceAll("-", "")}`,
+                prose,
+                tags_text: tagsText,
+                tags_sha256: hash(tagsText),
+                fields_json: fieldsJson,
+                fields_sha256: hash(canonicalManifestationFieldsJson(fieldsJson)),
+                recipe_id: "manifestation-tagger-json-categories",
+                recipe_version: "1",
+                provider_id: "opencode",
+                model_id: "deepseek-v4.1-flash",
+                tagger_config_sha256: "9".repeat(64),
+                expected_head_version: head.head_version,
+                expected_canonical_revision_id: head.canonical_revision_id,
+                expected_system_revision_id: lineage.manifestation_head_revision_id,
+              }),
+            },
+          ),
+        )
+        const text = await response.text()
+        assert.equal(response.status, 200, `${label} answered ${response.status}: ${text}`)
+        assert.equal(JSON.parse(text).canonical_changed, true)
+        phase = "idle"
+      }
+      await regenerate(
+        "system-1",
+        "A regenerated archivist in a Barbiecore coat, careful and bright.",
+        "pink coat, careful gaze",
+        { outfit: ["pink coat"], face: ["careful gaze"] },
+      )
+      await regenerate(
+        "system-2",
+        "A regenerated archivist in a Barbiecore coat, careful, bright and lantern-lit.",
+        "pink coat, careful gaze, lantern",
+        { outfit: ["pink coat"], face: ["careful gaze"], held_item: ["lantern"] },
+      )
 
       function summarize(slice, label) {
         const byDatabase = { authoring: 0, primary: 0 }
@@ -456,12 +543,22 @@ test(
         return { byDatabase, lines }
       }
       const first = summarize(receipts.slice(0, afterFirst), "B859_SAVE_COST first-save")
-      const second = summarize(receipts.slice(afterFirst), "B859_SAVE_COST ordinary-save")
+      const second = summarize(
+        receipts.slice(afterFirst, afterSaves),
+        "B859_SAVE_COST ordinary-save",
+      )
+      const appends = appendStarts.map((start, index) =>
+        summarize(
+          receipts.slice(start, appendStarts[index + 1] ?? receipts.length),
+          `B859_SAVE_COST system-append-${index + 1}`,
+        ),
+      )
       console.log(
         [
           "B859_SAVE_COST columns: save | phase | database | rows_written | statement",
           ...first.lines,
           ...second.lines,
+          ...appends.flatMap((append) => append.lines),
           `B859_SAVE_COST publication-coordinator-requests first=${coordinatorAfterFirst} second=${coordinatorRequests - coordinatorAfterFirst}`,
         ].join("\n"),
       )
@@ -486,6 +583,15 @@ test(
         second.byDatabase.primary <= MAX_SAVE_ROWS_PRIMARY,
         `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}`,
       )
+      // The regeneration route reserves SYSTEM_REVISION_APPEND_ROWS per call on the
+      // laptop lane; it has to cover what one call writes in both databases.
+      for (const [index, append] of appends.entries()) {
+        const wrote = append.byDatabase.authoring + append.byDatabase.primary
+        assert.ok(
+          wrote <= SYSTEM_REVISION_APPEND_ROWS,
+          `regeneration ${index + 1} wrote ${wrote} rows; it reserves ${SYSTEM_REVISION_APPEND_ROWS}`,
+        )
+      }
     } finally {
       await runtime.dispose()
     }

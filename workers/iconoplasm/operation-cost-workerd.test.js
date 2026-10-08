@@ -9,7 +9,6 @@ import { createOperationCostQueryRegistry } from "./operation-cost-query-registr
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import {
   registerGeneIdentity,
-  createManifestationUploadIntent,
   seedSystemManifestation,
   submitTagsDerivative,
 } from "./caretaker/manifestation-authority.js"
@@ -359,21 +358,6 @@ test(
       const prose = "文".repeat(4000)
       const revisionStorage = { ...storage(1), ...(await plainBodyObject(prose)) }
       const derivativeStorage = { ...storage(2), ...(await plainBodyObject("tagged!\n{}")) }
-      for (const [entityKind, entityId, envelope] of [
-        ["revision", "revision_cost_select", revisionStorage],
-        ["derivative", "derivative_cost_select", derivativeStorage],
-      ]) {
-        await createManifestationUploadIntent(authoring, {
-          entityKind,
-          entityId,
-          objectKey: envelope.object_key,
-          ciphertextSha256: envelope.ciphertext_sha256,
-          bodyBytes: envelope.body_bytes,
-          actorKind: "migration",
-          uploadIntentId: `intent_${entityKind}`,
-          leaseToken: `lease_${entityKind}`,
-        })
-      }
       await seedSystemManifestation(authoring, {
         geneId: "gene_cost_select",
         storage: revisionStorage,

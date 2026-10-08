@@ -226,8 +226,7 @@ export function generationCompletionWriteUnits(requestCount) {
 }
 
 // The tags-derivative submission (B-945): one command per caretaker revision, a
-// batch in the authoring D1 (derivative, event, outbox, upload intent, storage
-// secret, head) and then the in-process projection of the accepted event into the
+// batch in the authoring D1 (derivative, event, outbox, storage secret, head) and then the in-process projection of the accepted event into the
 // primary D1. Measured on both complete production schemas: a complete
 // submission writes 38 rows in the authoring D1 and 15 in the primary D1. The
 // head selection is not here: the gateway hands it to the operation-cost

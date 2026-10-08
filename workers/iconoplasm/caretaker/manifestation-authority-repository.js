@@ -99,6 +99,40 @@ function isCasFailure(error) {
   )
 }
 
+// The body limits are checked when a save commits (global cap: 0001's
+// *_body_quota_validate; a caretaker lineage's 30-day caps: 0023), so their
+// aborts surface here as the same 429s callers already handle.
+const BODY_QUOTA_ERRORS = Object.freeze([
+  [
+    /authoring_body_quota_exceeded/i,
+    "AUTHORITY_BODY_QUOTA_EXCEEDED",
+    "Authoring body capacity is temporarily exhausted",
+  ],
+  [
+    /caretaker_lineage_body_quota_exceeded/i,
+    "LINEAGE_BODY_QUOTA_EXCEEDED",
+    "This caretaker lineage reached its 2 MiB body limit",
+  ],
+  [
+    /caretaker_lineage_revision_limit_exceeded/i,
+    "LINEAGE_REVISION_LIMIT_EXCEEDED",
+    "This caretaker lineage reached its 256 revision limit",
+  ],
+  [
+    /caretaker_lineage_derivative_limit_exceeded/i,
+    "LINEAGE_DERIVATIVE_LIMIT_EXCEEDED",
+    "This caretaker lineage reached its 512 derivative limit",
+  ],
+])
+
+function bodyQuotaError(error) {
+  const message = String(error?.message || error || "")
+  for (const [pattern, code, text] of BODY_QUOTA_ERRORS) {
+    if (pattern.test(message)) return authorityError(code, text, 429, error)
+  }
+  return error
+}
+
 async function runCommand({
   db,
   commandId,
@@ -172,7 +206,7 @@ async function runCommand({
         error,
       )
     }
-    throw error
+    throw bodyQuotaError(error)
   }
 
   const committed = await readReceipt(db, commandId)
