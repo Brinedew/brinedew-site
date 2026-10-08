@@ -330,6 +330,12 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     assert.ok(svg.includes("<metadata>"))
     assert.ok(!svg.includes("iconoplasm-page"))
     assert.ok(!svg.includes("icono-grid"))
+    // B-1050: the export places the page by its viewBox, never by the view's
+    // on-screen zoom (a 2x PNG once drew the page at 0.89x in a corner).
+    assert.ok(
+      !/x6-graph-svg-viewport[^>]*transform=/.test(svg),
+      "the export keeps the on-screen zoom",
+    )
 
     // 14. The faction chart and the control variable chart open on the real
     // resolver with every portrait and arrow.

@@ -1239,6 +1239,11 @@ export async function createDiagramEditor({
       copyStyles: false,
       stylesheet,
       beforeSerialize(svg) {
+        // B-1050: X6 clones the live SVG with the viewport's on-screen zoom
+        // and pan still on it, so every export came out scaled and shifted by
+        // wherever the reader had left the view (a 2x PNG drew the page at
+        // 0.89x in its top-left corner). The viewBox alone places the page.
+        svg.querySelector(".x6-graph-svg-viewport")?.removeAttribute("transform")
         svg.querySelector(`[data-cell-id="${PAGE_ID}"]`)?.remove()
         svg.querySelector(`#${defsIds.grid}`)?.remove()
         svg.querySelector(`#${defsIds.grain}`)?.remove()
