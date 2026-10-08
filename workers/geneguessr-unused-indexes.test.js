@@ -12,15 +12,15 @@
 //       recap and an admin click, against a row written on every guess)
 //   U2  a guess still writes the second index entry: a steady-state guess costs 2 rows, a first
 //       guess of a protein 3; the target is 1 and 2
-//   U3  the code does not drop that index on first use, the drop costs D1 rows, or it runs a
-//       statement more than once per isolate
+//   U3  the aggregate module's first use in an isolate runs any schema statement besides its
+//       `CREATE TABLE IF NOT EXISTS` (production has no index to drop since B-975), that
+//       statement writes a D1 row, or a second use runs it again
 //   U4  a statement that reads or writes `users` or `stats` plans through
 //       `idx_users_leaderboard_opt_in` other than the one-time build of `leaderboard_streaks`, or
 //       that build, without the index, reads more than half a row an account (the planner's own
 //       choice reads a row an account, so the build pins its join order)
 //   U5  a new account or a change of the public choice still writes the index entry (6 and 3 rows;
 //       5 and 2 is the target)
-//   U6  the leaderboard module drops the `users` index more than once per isolate, or for rows
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -69,7 +69,7 @@ async function receiptsOf(db, body) {
   return { metered, seen, result, read: metered.totalRead(), written: metered.totalWritten() }
 }
 
-test("U1-U3: the per-guess aggregate without its second index reads the same rows, writes one fewer per guess, and the code drops the index for no rows", async (t) => {
+test("U1-U3: the per-guess aggregate without its second index reads the same rows, writes one fewer per guess, and the code runs one schema statement per isolate", async (t) => {
   const { db, dispose } = await openCatalogDb()
   try {
     // Production before the change: the table, its two indexes, and a viral day's 3,000 distinct
@@ -94,29 +94,28 @@ test("U1-U3: the per-guess aggregate without its second index reads the same row
       ),
     )
 
-    // U3: the first use in an isolate drops the index; the second runs no schema statement.
+    // Production dropped the index (B-964); the nightly copy of 2026-10-07 no longer lists it
+    // (B-975). The measurement below starts from that state.
+    await db.prepare("DROP INDEX idx_daily_guess_aggregate_day_count").run()
+
+    // U3: the first use in an isolate creates the table if it is missing and nothing else; the
+    // second runs no schema statement.
     const aggregates = await copy("guess-aggregates")
     const first = await receiptsOf(db, (metered) =>
       aggregates.getWinnersCount(metered, { day: DAY }),
     )
-    const drop = first.metered.receipts.filter((receipt) => /DROP INDEX/.test(receipt.sql))
-    assert.equal(drop.length, 1, "the first use drops the index")
-    assert.equal(drop[0].rows_written, 0, "and it writes no D1 row")
-    assert.equal(
-      (await indexNames(db, "daily_guess_aggregate")).includes(
-        "idx_daily_guess_aggregate_day_count",
-      ),
-      false,
-    )
+    const schema = first.metered.receipts.filter((receipt) => /DROP|CREATE/.test(receipt.sql))
+    assert.equal(schema.length, 1, "the first use runs one schema statement")
+    assert.match(schema[0].sql, /CREATE TABLE IF NOT EXISTS daily_guess_aggregate/)
+    assert.equal(schema[0].rows_written, 0, "and it writes no D1 row")
     const second = await receiptsOf(db, (metered) =>
       aggregates.getWinnersCount(metered, { day: DAY }),
     )
     assert.equal(
-      second.metered.receipts.filter((receipt) => /DROP INDEX|CREATE/.test(receipt.sql)).length,
+      second.metered.receipts.filter((receipt) => /DROP|CREATE/.test(receipt.sql)).length,
       0,
       "the same isolate runs no schema statement again",
     )
-    t.diagnostic(`DROP INDEX on ${proteins.length} rows: ${JSON.stringify(drop[0])}`)
 
     // U1: the four readers, without the index, then with it.
     const readers = [
@@ -202,7 +201,7 @@ test("U1-U3: the per-guess aggregate without its second index reads the same row
   }
 })
 
-test("U4-U6: no statement plans through the users index, the build without it reads under half a row an account, and a new account and a switch write one row fewer", async (t) => {
+test("U4-U5: no statement plans through the users index, the build without it reads under half a row an account, and a new account and a switch write one row fewer", async (t) => {
   const { db, dispose } = await openCatalogDb()
   try {
     const OPT_IN_INDEX = "CREATE INDEX idx_users_leaderboard_opt_in ON users (leaderboard_opt_in)"
@@ -250,14 +249,9 @@ test("U4-U6: no statement plans through the users index, the build without it re
       "the old build chose the index",
     )
 
-    // U6: the retire function runs once per isolate and writes nothing.
-    const retiring = await copy("leaderboard-streaks")
-    const retire = await receiptsOf(db, (metered) => retiring.retireLeaderboardOptInIndex(metered))
-    const again = await receiptsOf(db, (metered) => retiring.retireLeaderboardOptInIndex(metered))
-    assert.equal(retire.metered.receipts.length, 1)
-    assert.equal(retire.written, 0, "the drop writes no D1 row")
-    assert.equal(again.metered.receipts.length, 0, "and the same isolate does not run it again")
-    assert.equal((await indexNames(db, "users")).includes("idx_users_leaderboard_opt_in"), false)
+    // Production as it is now: the index is gone (B-966; the nightly copy of 2026-10-07 no longer
+    // lists it, B-975).
+    await db.prepare("DROP INDEX idx_users_leaderboard_opt_in").run()
 
     await db.prepare("DELETE FROM leaderboard_streaks").run()
     const oldWithout = await receiptsOf(db, (metered) => metered.prepare(OLD_FILL).run())
