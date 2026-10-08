@@ -14,6 +14,18 @@
 // 8. the SVG export loses characters or ships the editing sheet and grid;
 // 9. a phone gets a sideways page scroll.
 //
+// B-1050, the owner's list:
+// 10. the mouse wheel over the canvas does nothing (or scrolls the page);
+// 11. a dragged portrait does not land on the grid the reader sees;
+// 12. reverse does nothing you can see, and selecting a relationship spawns
+//     two triangles at its ends;
+// 13. a T-bar tilts with its stem instead of lying flat on the portrait;
+// 14. a template is missing, or the faction and control variable charts
+//     lose their portraits or arrows on the real resolver;
+// 15. the page colour cannot be anything but paper or white, or a dark page
+//     keeps dark ink;
+// 16. there is no first-run tour, or it cannot be closed.
+//
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/.
 import assert from "node:assert/strict"
@@ -37,11 +49,16 @@ function installToolRecorder() {
   }
 }
 
-async function openStudio(browser, origin, { width, height, theme = "light" }) {
+async function openStudio(browser, origin, { width, height, theme = "light", tour = false }) {
   const context = await browser.newContext({ viewport: { width, height } })
   await routeProduction(context, origin, () => undefined, { session: false })
   await context.addInitScript(installToolRecorder)
   await context.addInitScript((value) => window.localStorage.setItem("theme", value), theme)
+  // The first-run tour dims the page; only the tour test lets it run.
+  if (!tour)
+    await context.addInitScript(() =>
+      window.localStorage.setItem("iconoplasm.diagramStudio.tour.v1", "done"),
+    )
   const page = await context.newPage()
   const errors = []
   page.on("pageerror", (error) => errors.push(error.message))
@@ -119,7 +136,9 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     assert.ok(!type.faces.some((face) => /Special Elite|Caveat/i.test(face)), type.faces.join(", "))
 
     // 2. The template's ten characters all paint; none is a blank box.
-    await page.click('.ics-empty [data-studio-action="template-egfr"]')
+    // The template library opens from the toolbar; a double-click inserts.
+    await page.click('.ics-toolbar [data-studio-action="templates"]')
+    await page.click('[data-studio-template="mechanism"]', { clickCount: 2 })
     await portraitsReady(page, 10)
     const nodes = await page.evaluate(() =>
       [...document.querySelectorAll('[data-shape="iconoplasm-gene"]')].map((node) => ({
@@ -168,8 +187,40 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       ),
       "#a24834",
     )
+    // X6 writes the bend as a cubic curve. The width edit above runs first on
+    // purpose: an edit used to leave the line unable to redraw (see 13).
+    const tbarPath = () =>
+      document.querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')?.getAttribute("d") || ""
+    const tbar = await page.evaluate(tbarPath)
+    report.tbarPath = tbar
+    assert.match(tbar, / C /, "an inhibition meets the portrait square-on")
+    // 12: the ends are round handles, not two extra arrowheads.
+    const handles = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          ".x6-edge-tool-source-arrowhead, .x6-edge-tool-target-arrowhead",
+        ),
+      ].map((element) => element.tagName.toLowerCase()),
+    )
+    report.endHandles = handles
+    assert.deepEqual(handles, ["circle", "circle"])
     await page.screenshot({ path: path.join(OUT, "studio-edge-format.png") })
+    // 13. An edited relationship still follows its portraits. Edits used to
+    // replace the edge's attributes wholesale and drop X6's `connection` flag,
+    // so the drawn line froze in place while its handles moved on (B-1050 #9).
     await page.mouse.click(4, 4)
+    const target = await page.locator('[data-cell-id="gene-map2k1"]').boundingBox()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2 + 60, {
+      steps: 8,
+    })
+    await page.mouse.up()
+    const followed = await page.evaluate(tbarPath)
+    report.editedEdgeAfterDrag = followed
+    assert.notEqual(followed, tbar, "an edited relationship follows its portrait")
+    await page.mouse.click(4, 4)
+    await page.keyboard.press("Control+z")
     await page.keyboard.press("Control+z")
     await page.keyboard.press("Control+z")
     await page.waitForFunction(
@@ -178,6 +229,69 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
           .querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')
           ?.getAttribute("stroke-width") === "1.5",
     )
+
+    // 10. The wheel pans the sheet and never the page; Ctrl+wheel zooms.
+    const canvasBox = await page.locator("[data-studio-x6-canvas]").boundingBox()
+    const viewState = () =>
+      page.evaluate(() => ({
+        transform: document.querySelector(".x6-graph-svg-viewport").getAttribute("transform"),
+        pageScroll: window.scrollY + document.documentElement.scrollTop,
+      }))
+    const matrix = (transform) => transform.match(/-?[\d.]+/g).map(Number)
+    await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2)
+    const beforeWheel = await viewState()
+    await page.mouse.wheel(0, 300)
+    await page.waitForTimeout(150)
+    const afterWheel = await viewState()
+    report.wheel = { beforeWheel, afterWheel }
+    assert.equal(afterWheel.pageScroll, 0, "the page itself never scrolls")
+    // The pan is the wheel delta in CSS pixels (300 at 100% display scaling).
+    const panned = matrix(beforeWheel.transform)[5] - matrix(afterWheel.transform)[5]
+    assert.ok(panned > 200 && panned <= 301, `a 300 px wheel panned ${panned} px`)
+    await page.keyboard.down("Control")
+    await page.mouse.wheel(0, -200)
+    await page.keyboard.up("Control")
+    await page.waitForTimeout(150)
+    const zoomed = await viewState()
+    assert.ok(matrix(zoomed.transform)[0] > matrix(afterWheel.transform)[0], "Ctrl+wheel zooms in")
+    await page.keyboard.press("Control+Shift+H")
+
+    // 11. A dragged portrait lands on the grid step the status bar names.
+    const step = Number(
+      (await page.locator("[data-studio-grid-status]").textContent()).match(/Grid (\d+)/)[1],
+    )
+    const kras = page.locator('[data-cell-id="gene-kras"]')
+    const krasBox = await kras.boundingBox()
+    await page.mouse.move(krasBox.x + krasBox.width / 2, krasBox.y + krasBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(krasBox.x + krasBox.width / 2 + 23, krasBox.y + krasBox.height / 2 + 17, {
+      steps: 8,
+    })
+    await page.mouse.up()
+    const dropped = matrix(await kras.getAttribute("transform"))
+    report.snap = { step, dropped }
+    assert.ok(step >= 10, "the step follows the zoom")
+    assert.equal(dropped[0] % step, 0, "x on the grid")
+    assert.equal(dropped[1] % step, 0, "y on the grid")
+
+    // 12. Reverse: binding has no direction, an activation flips visibly.
+    const selectEdge = async (id) => {
+      const edgeBox = await page.locator(`[data-cell-id="${id}"] path`).first().boundingBox()
+      await page.mouse.click(edgeBox.x + edgeBox.width / 2, edgeBox.y + edgeBox.height / 2)
+      await page.locator('[data-studio-format-body] select[data-field="kind"]').waitFor()
+    }
+    await selectEdge("edge-1")
+    assert.equal(
+      await page.locator('[data-studio-format-body] [data-studio-action="reverse"]').isDisabled(),
+      true,
+      "binding cannot be reversed",
+    )
+    await selectEdge("edge-4")
+    await page.locator('[data-studio-format-body] [data-studio-action="reverse"]').click()
+    await page.waitForFunction(() =>
+      /BRAF → KRAS/.test(document.querySelector("[data-studio-selection-status]").textContent),
+    )
+    await page.mouse.click(4, 4)
 
     // 7. A chain with long labels, laid out by the editor, keeps every label
     // off every portrait.
@@ -232,13 +346,84 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     assert.ok(svg.includes("<metadata>"))
     assert.ok(!svg.includes("iconoplasm-page"))
     assert.ok(!svg.includes("icono-grid"))
+    // B-1050: the export places the page by its viewBox, never by the view's
+    // on-screen zoom (a 2x PNG once drew the page at 0.89x in a corner).
+    assert.ok(
+      !/x6-graph-svg-viewport[^>]*transform=/.test(svg),
+      "the export keeps the on-screen zoom",
+    )
+
+    // 14. The faction chart and the control variable chart open on the real
+    // resolver with every portrait and arrow.
+    for (const [id, genes, molecules, relationships] of [
+      ["faction", 7, 0, 8],
+      ["control-variable", 8, 1, 8],
+    ]) {
+      // The template library: draw.io's dialog, opened from the toolbar.
+      await page.click('.ics-toolbar [data-studio-action="templates"]')
+      await page.locator("[data-studio-template-library]").waitFor()
+      await page.click('[data-studio-template="' + id + '"]')
+      await page.click(
+        '[data-studio-template-library] .ics-library-dialog-actions [data-studio-action="insert-template"]',
+      )
+      await page.waitForFunction(
+        ([expected, edges]) =>
+          document.querySelectorAll('[data-shape="iconoplasm-gene"]').length === expected &&
+          document.querySelectorAll('[data-shape="edge"]').length === edges,
+        [genes, relationships],
+        { timeout: 45_000 },
+      )
+      await portraitsReady(page, genes)
+      assert.equal(
+        await page.locator('[data-shape="iconoplasm-molecule"]').count(),
+        molecules,
+        id + " molecules",
+      )
+      await page.mouse.click(4, 4)
+      await page.screenshot({ path: path.join(OUT, `studio-template-${id}.png`) })
+    }
+
+    // 15. Any page colour; a dark page turns the default ink light.
+    await page.locator('[data-studio-format-body] .ics-bg-swatches [data-value="#2b211b"]').click()
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[data-cell-id="iconoplasm-page"] rect')?.getAttribute("fill") ===
+        "#2b211b",
+    )
+    const darkInk = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-shape="edge"] path:nth-of-type(2)')]
+        .map((line) => line.getAttribute("stroke"))
+        .filter((stroke) => stroke !== "#a24834"),
+    )
+    assert.ok(darkInk.length && darkInk.every((stroke) => stroke === "#f1e9de"), darkInk.join())
+    await page.screenshot({ path: path.join(OUT, "studio-dark-page.png") })
 
     assert.deepEqual(errors, [])
     await context.close()
 
+    // 16. A first visit gets the tour; it can be closed and stays closed.
+    const touring = await openStudio(browser, origin, { width: 1440, height: 900, tour: true })
+    const popover = touring.page.locator(".driver-popover.ics-tour")
+    await popover.waitFor({ state: "visible", timeout: 15_000 })
+    report.tourFirstStep = await popover.textContent()
+    assert.match(report.tourFirstStep, /1 of \d/)
+    await touring.page.screenshot({ path: path.join(OUT, "studio-tour.png") })
+    await touring.page.locator(".driver-popover-next-btn").click()
+    await touring.page.keyboard.press("Escape")
+    await popover.waitFor({ state: "detached" })
+    assert.equal(
+      await touring.page.evaluate(() =>
+        window.localStorage.getItem("iconoplasm.diagramStudio.tour.v1"),
+      ),
+      "done",
+    )
+    assert.deepEqual(touring.errors, [])
+    await touring.context.close()
+
     // Dark roast keeps a cream sheet.
     const dark = await openStudio(browser, origin, { width: 1440, height: 900, theme: "dark" })
-    await dark.page.click('.ics-empty [data-studio-action="template-egfr"]')
+    await dark.page.click('.ics-toolbar [data-studio-action="templates"]')
+    await dark.page.click('[data-studio-template="mechanism"]', { clickCount: 2 })
     await portraitsReady(dark.page, 10)
     const sheet = await dark.page.evaluate(() => ({
       chrome: getComputedStyle(document.querySelector(".ics-titlebar")).backgroundColor,

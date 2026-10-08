@@ -137,6 +137,10 @@ const fontTargets = iconoplasmFontContract.fonts
 const binaryTargets = [
   ...fontTargets,
   {
+    source: path.join(repoRoot, "node_modules", "driver.js", "dist", "driver.css"),
+    outputs: [path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "driver.css")],
+  },
+  {
     source: path.join(repoRoot, "node_modules", "roughjs", "bundled", "rough.js"),
     outputs: [
       path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "rough.js"),
@@ -146,6 +150,14 @@ const binaryTargets = [
 ]
 
 const bundledTargets = [
+  {
+    source: path.join(repoRoot, "shared", "iconoplasm-diagram", "tour-runtime.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "tour-runtime.js"),
+    ],
+    format: "esm",
+    minify: true,
+  },
   {
     source: path.join(repoRoot, "shared", "iconoplasm-diagram", "x6-runtime.js"),
     outputs: [path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "x6-runtime.js")],

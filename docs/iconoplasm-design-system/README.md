@@ -62,6 +62,7 @@ The extension's hover card has three styles that mirror the site: **Simple** (co
 
 - **Type:** IBM Plex Sans for every label, menu, button and value, at 12 px with sentence-case labels and tabular numerals. IBM Plex Mono only for codes (a hex colour, a PMID). League Spartan 800 only for gene symbols. No Special Elite or Caveat anywhere in the editor: the owner called the typewriter-and-mono version "atrocious font choices" that "make my eyes bleed" (2026-10-07).
 - **Icons:** Lucide line icons (ISC licence, inlined in `diagram-studio-icons.js`) for toolbar and menu commands, because a toolbar of 40 commands can't be told apart by Unicode glyphs. The rest of Iconoplasm stays icon-light (see Iconography).
+- **First-run tour:** driver.js (MIT licence, bundled in `generated/tour-runtime.js` and loaded only when a tour starts) dims the page and lights one control at a time. Its popover wears the same chrome: Plex Sans, cream panel, teal for the forward button (B-1050).
 
 Colour and material stay Iconoplasm's: cream paper chrome with the ambientCG grain, a greyboard desk, the teal pen as the only accent, the rust stamp for inhibition, and a dark-roast twin in dark mode. The exported figure is always the cream (or white) sheet. Relationship glyphs and names are KEGG's pathway notation.
 

@@ -853,10 +853,6 @@ details[open] > summary.ics-sech::before {
   font-family: "IBM Plex Sans", sans-serif;
 }
 
-.ics-templates {
-  padding-top: 4px;
-}
-
 /* ───────── canvas ───────── */
 
 .ics-canvas-area {
@@ -1894,4 +1890,410 @@ input.ics-hex {
   summary.ics-sech::before {
     transition: none;
   }
+}
+
+/* ───────── B-1050 ───────── */
+
+.ics-notation {
+  margin: 2px 0 6px;
+}
+
+.ics-tile svg:not(.ics-i) {
+  width: 48px;
+  height: 26px;
+  margin: 4px 0;
+  color: var(--ics-icon);
+}
+
+.ics-bg-swatches .ics-sw {
+  border-color: rgba(32, 18, 11, 0.32);
+}
+
+input.ics-colour-well {
+  width: 26px;
+  height: 22px;
+  padding: 0 2px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  cursor: pointer;
+}
+
+/* The first-run tour (driver.js). Its popover lives on <body>, outside the
+   studio root, so it carries the studio's colours itself. */
+.driver-popover.ics-tour {
+  max-width: 320px;
+  padding: 14px 16px 12px;
+  border: 1px solid rgba(32, 18, 11, 0.16);
+  border-radius: 4px;
+  background: #f4ede5;
+  color: #20120b;
+  box-shadow: 0 10px 24px rgba(53, 38, 27, 0.28);
+  font:
+    400 13px/1.45 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+}
+
+.driver-popover.ics-tour .driver-popover-title {
+  font:
+    600 14px/1.3 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+}
+
+.driver-popover.ics-tour .driver-popover-description {
+  margin-top: 4px;
+  color: rgba(32, 18, 11, 0.8);
+}
+
+.driver-popover.ics-tour .driver-popover-progress-text {
+  color: rgba(32, 18, 11, 0.6);
+  font-size: 12px;
+}
+
+.driver-popover.ics-tour .driver-popover-navigation-btns button {
+  padding: 4px 10px;
+  border: 1px solid rgba(32, 18, 11, 0.24);
+  border-radius: 3px;
+  background: #fbf7f1;
+  color: #20120b;
+  font:
+    500 12px/1.3 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+  text-shadow: none;
+}
+
+.driver-popover.ics-tour .driver-popover-next-btn {
+  border-color: #1b7269;
+  background: #1b7269;
+  color: #f6efe4;
+}
+
+.driver-popover.ics-tour .driver-popover-close-btn {
+  color: rgba(32, 18, 11, 0.6);
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #f4ede5;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour {
+  border-color: rgba(239, 230, 217, 0.12);
+  background: #1c140f;
+  color: #efe6d9;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-description,
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-progress-text,
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-close-btn {
+  color: rgba(239, 230, 217, 0.72);
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-navigation-btns button {
+  border-color: rgba(239, 230, 217, 0.22);
+  background: #150e0a;
+  color: #efe6d9;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-next-btn {
+  border-color: #6fb3a9;
+  background: #6fb3a9;
+  color: #0f0a07;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #1c140f;
+}
+
+/* The template library (B-1050), draw.io's pattern in the studio's skin:
+   search and categories on the left, a grid of pictures, Cancel and Insert. */
+.ics-modal-layer:empty {
+  display: none;
+}
+
+.ics-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(32, 18, 11, 0.38);
+}
+
+.ics-library-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 41;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(760px, calc(100vw - 32px));
+  height: min(540px, calc(100vh - 32px));
+  padding: 34px 20px 16px;
+  border: 1px solid var(--ics-line);
+  border-radius: 6px;
+  background: var(--ics-panel);
+  box-shadow: var(--ics-shadow);
+  transform: translate(-50%, -50%);
+}
+
+.ics-library-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.ics-library-dialog-body {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  min-height: 0;
+  border: 1px solid var(--ics-line);
+  background: var(--ics-field);
+}
+
+.ics-library-dialog-nav {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+  padding: 6px;
+  border-right: 1px solid var(--ics-line);
+}
+
+.ics-library-dialog-nav .ics-search-field {
+  width: 100%;
+}
+
+.ics-library-dialog-nav .ics-search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ics-text);
+  font: inherit;
+}
+
+/* The field's own border turns teal on focus; the app's ring on the input
+   inside it (styles.css, scoped by #iconoplasm-root) would draw a box in a
+   box. */
+#iconoplasm-root .ics-search-field input:focus-visible {
+  outline: none;
+}
+
+.ics-library-dialog-categories {
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.ics-library-category {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ics-text);
+  text-align: left;
+}
+
+.ics-library-category:hover {
+  background: var(--ics-hover);
+}
+
+.ics-library-category[aria-pressed="true"] {
+  background: var(--ics-accent-soft);
+  color: var(--ics-accent);
+  font-weight: 600;
+}
+
+.ics-library-dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+  gap: 14px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+/* A card: the whole picture on its own paper, the name under it (BioRender's
+   and Lucidchart's template cards). */
+.ics-template-tile {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ics-template-tile:hover {
+  border-color: var(--ics-line);
+}
+
+.ics-template-tile[aria-selected="true"] {
+  border-color: var(--ics-accent);
+  background: var(--ics-accent-soft);
+}
+
+.ics-template-tile:focus-visible {
+  outline: 2px solid var(--ics-accent);
+  outline-offset: 2px;
+}
+
+.ics-template-tile img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--ics-line);
+  background: #f7f1e8;
+  object-fit: contain;
+}
+
+.ics-template-title {
+  display: grid;
+  gap: 1px;
+  padding: 0 2px 2px;
+  color: var(--ics-text);
+  line-height: 1.3;
+}
+
+.ics-template-title span {
+  font-weight: 600;
+}
+
+.ics-template-title small {
+  color: var(--ics-muted);
+  font-size: 11px;
+}
+
+.ics-template-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--ics-line);
+  border-radius: 50%;
+  background: #fbf7f1;
+  color: #34241b;
+}
+
+.ics-template-zoom .ics-i {
+  width: 14px;
+  height: 14px;
+}
+
+.ics-template-none {
+  grid-column: 1 / -1;
+  padding: 24px;
+  text-align: center;
+}
+
+.ics-library-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.ics-template-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 6px;
+  background: var(--ics-panel);
+}
+
+.ics-template-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ics-template-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ics-template-preview-bar > span {
+  flex: 1;
+  color: var(--ics-muted);
+}
+
+.ics-template-preview-bar strong {
+  color: var(--ics-text);
+}
+
+@media (max-width: 760px) {
+  .ics-library-dialog-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .ics-library-dialog-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--ics-line);
+  }
+
+  .ics-library-dialog-categories {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .ics-library-dialog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Quartz styles a bare <footer> (grid area, 70% opacity, 4rem margin); the
+   tour's popover footer is one. */
+.driver-popover.ics-tour footer.driver-popover-footer {
+  grid-area: auto;
+  margin: 10px 0 0;
+  opacity: 1;
 }
