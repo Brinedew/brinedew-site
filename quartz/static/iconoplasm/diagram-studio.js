@@ -2,10 +2,13 @@ import { applyThemePreference, readEffectiveTheme } from "../site-preferences.js
 import {
   COMPARTMENT_SHAPES,
   ICONOPLASM_DIAGRAM_LIMITS,
+  PAGE_BACKGROUND_SWATCHES,
   RELATIONSHIP_KINDS,
   RELATIONSHIP_KIND_IDS,
+  RELATIONSHIP_NOTATIONS,
   addCompartmentNode,
   addGeneNode,
+  addMoleculeNode,
   addTextNode,
   addWorkspacePage,
   cloneDiagramDocument,
@@ -15,13 +18,20 @@ import {
   diagramAssetManifest,
   diagramReferences,
   normalizeGeneSymbol,
+  pageBackgroundColour,
   referenceUrl,
   relationshipKind,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=66e939078affbb77"
+} from "./diagram-document.js?v=189a4fd320f16b65"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=3e43dcc0c97f72d2"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=65fab870afe0afd0"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=6d7705171f640da1"
+import {
+  DIAGRAM_TEMPLATES,
+  buildTemplateDocument,
+  diagramTemplate,
+  templateSymbols,
+} from "./diagram-templates.js?v=5a6afc741070d535"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -32,15 +42,20 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=ebdc235f508ac640", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=904c9ce33a94f440", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]
 const VIEW_KEY = "iconoplasm.diagramStudio.view.v1"
+// B-1050: the first-run tour runs once per browser; Help replays it.
+const TOUR_KEY = "iconoplasm.diagramStudio.tour.v1"
+const TOUR_RUNTIME_URL = "./generated/tour-runtime.js?v=58faf9183c19c4ff"
+const TOUR_STYLESHEET_URL = new URL("./generated/driver.css?v=d095d440021fcf13", import.meta.url)
+  .href
 const SEARCH_DEBOUNCE_MS = 180
 const PHONE_QUERY = "(max-width: 760px)"
 const UNDO_LIMIT = 100
-const QUICK_KINDS = ["activation", "inhibition", "association", "phosphorylation"]
+const KEGG_QUICK_KINDS = ["activation", "inhibition", "association", "phosphorylation"]
 const LINE_COLOURS = [
   ["#20120b", "Ink"],
   ["#1b7269", "Teal"],
@@ -56,31 +71,6 @@ const PAGE_PRESETS = [
   ["794x1123", "A4 portrait (794 × 1123)"],
   ["1000x1000", "Square (1000 × 1000)"],
 ]
-const EXAMPLE_GENES = [
-  ["EGFR", 100, 130],
-  ["KRAS", 520, 130],
-  ["GRB2", 180, 360],
-  ["SOS1", 350, 360],
-  ["BRAF", 680, 360],
-  ["MAP2K1", 860, 360],
-  ["MAPK1", 1040, 360],
-  ["DUSP6", 1220, 360],
-  ["ELK1", 820, 690],
-  ["FOS", 1040, 690],
-]
-const EXAMPLE_EDGES = [
-  ["EGFR", "GRB2", "association", ""],
-  ["GRB2", "SOS1", "association", ""],
-  ["SOS1", "KRAS", "activation", "GEF"],
-  ["KRAS", "BRAF", "activation", ""],
-  ["BRAF", "MAP2K1", "phosphorylation", ""],
-  ["MAP2K1", "MAPK1", "phosphorylation", ""],
-  ["MAPK1", "ELK1", "phosphorylation", ""],
-  ["ELK1", "FOS", "expression", ""],
-  ["DUSP6", "MAPK1", "dephosphorylation", ""],
-  ["MAPK1", "SOS1", "inhibition", "negative feedback"],
-]
-
 // State is read from storage when the studio mounts (or a WebMCP tool first
 // asks), never at import: the module also loads in Node for its tests.
 let workspace = null
@@ -259,6 +249,7 @@ function readViewPreferences() {
     snap: true,
     tool: "select",
     formatTab: "style",
+    notation: "simple",
   }
   try {
     const stored = JSON.parse(window.localStorage.getItem(VIEW_KEY) || "null")
@@ -266,6 +257,7 @@ function readViewPreferences() {
       for (const key of ["rulers", "grid", "snap"]) {
         if (typeof stored[key] === "boolean") defaults[key] = stored[key]
       }
+      if (stored.notation === "kegg") defaults.notation = "kegg"
       if (!phone) {
         for (const key of ["library", "format"]) {
           if (typeof stored[key] === "boolean") defaults[key] = stored[key]
@@ -280,8 +272,11 @@ function readViewPreferences() {
 
 function storeViewPreferences() {
   try {
-    const { library, format, rulers, grid, snap } = view
-    window.localStorage.setItem(VIEW_KEY, JSON.stringify({ library, format, rulers, grid, snap }))
+    const { library, format, rulers, grid, snap, notation } = view
+    window.localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ library, format, rulers, grid, snap, notation }),
+    )
   } catch (_error) {
     // Private browsing keeps the in-memory view.
   }
@@ -564,6 +559,49 @@ function compartmentPreview(id) {
   return `<svg class="ics-comp-svg" viewBox="0 0 56 34" aria-hidden="true">${COMPARTMENT_PREVIEWS[id]}</svg>`
 }
 
+// B-1050: which relationship kinds the pickers offer. The kind of whatever is
+// selected is always listed, so a KEGG kind never vanishes from its own panel.
+function notationKinds(include = "") {
+  const ids = RELATIONSHIP_NOTATIONS[view?.notation === "kegg" ? "kegg" : "simple"]
+  return RELATIONSHIP_KINDS.filter((kind) => ids.includes(kind.id) || kind.id === include)
+}
+
+function quickKinds() {
+  return view?.notation === "kegg" ? KEGG_QUICK_KINDS : [...RELATIONSHIP_NOTATIONS.simple]
+}
+
+function relationshipButtons() {
+  return notationKinds()
+    .map(
+      (kind) =>
+        `<button type="button" class="ics-rel" data-studio-action="kind:${kind.id}" aria-pressed="false">${relationshipGlyph(kind.id)}<span>${escapeHtml(kind.label)}</span>${kind.key ? `<kbd class="ics-kbd">${kind.key.toUpperCase()}</kbd>` : ""}</button>`,
+    )
+    .join("")
+}
+
+function minibarMarkup() {
+  const edge = selectedItem()
+  const undirected = edge?.type === "relationship" && relationshipKind(edge.kind).head === "none"
+  return `${quickKinds()
+    .map(
+      (kind) =>
+        `<button type="button" class="ics-tb" data-studio-action="kind:${kind}" aria-label="${escapeHtml(relationshipKind(kind).label)}" title="${escapeHtml(relationshipKind(kind).label)}" aria-pressed="false">${relationshipGlyph(kind)}</button>`,
+    )
+    .join(
+      "",
+    )}<span class="ics-tsep" aria-hidden="true"></span><button type="button" class="ics-tb" data-studio-action="reverse" aria-label="Reverse direction" title="${undirected ? "Binding has no direction" : "Reverse direction"}"${undirected ? " disabled" : ""}>${icon("arrow-left-right")}</button><button type="button" class="ics-tb" data-studio-action="show-format" aria-label="Format" title="Format">${icon("ellipsis")}</button>`
+}
+
+const MOLECULE_PREVIEW =
+  '<svg viewBox="0 0 48 26" aria-hidden="true"><ellipse cx="24" cy="13" rx="21" ry="10" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
+
+function templateButtons(className = "ics-template") {
+  return DIAGRAM_TEMPLATES.map(
+    (template) =>
+      `<button type="button" class="${className}" data-studio-action="template:${template.id}"><span class="ics-template-name">${escapeHtml(template.name)}</span><span class="ics-template-subject">${escapeHtml(template.subject)}</span></button>`,
+  ).join("")
+}
+
 function toolButton(action, iconName, label, extra = "") {
   return `<button type="button" class="ics-tb" data-studio-action="${action}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${extra}>${icon(iconName)}</button>`
 }
@@ -638,16 +676,16 @@ function studioMarkup() {
             <details class="ics-sec" open><summary class="ics-sech">Compartments</summary><div class="ics-tiles">
               ${COMPARTMENT_SHAPES.map((shape) => `<button type="button" class="ics-tile" draggable="true" data-studio-action="insert-compartment:${shape.id}" data-studio-drag="compartment:${shape.id}" title="${escapeHtml(shape.label)}">${compartmentPreview(shape.id)}<span>${escapeHtml(shape.id === "er" ? "ER" : shape.label.replace("Plasma membrane", "Membrane"))}</span></button>`).join("")}
             </div></details>
-            <details class="ics-sec" open><summary class="ics-sech">Relationships<span class="ics-sech-count">KEGG</span></summary><div class="ics-rels" role="group" aria-label="Relationship type for new connections">
-              ${RELATIONSHIP_KINDS.map((kind) => `<button type="button" class="ics-rel" data-studio-action="kind:${kind.id}" aria-pressed="false">${relationshipGlyph(kind.id)}<span>${escapeHtml(kind.label)}</span>${kind.key ? `<kbd class="ics-kbd">${kind.key.toUpperCase()}</kbd>` : ""}</button>`).join("")}
-            </div></details>
+            <details class="ics-sec" open data-studio-rels-section><summary class="ics-sech">Relationships</summary>
+              <div class="ics-row ics-notation"><label class="ics-lbl" for="icono-studio-notation">Notation</label><span class="ics-select"><select id="icono-studio-notation" data-studio-notation><option value="simple"${view.notation === "kegg" ? "" : " selected"}>Simple</option><option value="kegg"${view.notation === "kegg" ? " selected" : ""}>KEGG</option></select>${icon("chevron-down")}</span></div>
+              <div class="ics-rels" role="group" aria-label="Relationship type for new connections" data-studio-rels>${relationshipButtons()}</div>
+            </details>
             <details class="ics-sec" open><summary class="ics-sech">Annotations</summary><div class="ics-tiles">
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-text" data-studio-drag="text">${icon("type")}<span>Text</span></button>
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-note" data-studio-drag="note">${icon("sticky-note")}<span>Note</span></button>
+              <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-molecule" data-studio-drag="molecule" title="A small molecule, an ion or a control variable">${MOLECULE_PREVIEW}<span>Molecule</span></button>
             </div></details>
-            <details class="ics-sec"><summary class="ics-sech">Templates</summary><div class="ics-templates">
-              <button type="button" class="ics-btn ics-btn-wide" data-studio-action="template-egfr">${icon("workflow")}<span>EGFR–MAPK signaling</span></button>
-            </div></details>
+            <details class="ics-sec" open data-studio-templates><summary class="ics-sech">Templates</summary><div class="ics-templates">${templateButtons()}</div></details>
           </div>
         </aside>
         <section class="ics-canvas-area" aria-label="Diagram canvas" data-studio-canvas-area>
@@ -657,14 +695,9 @@ function studioMarkup() {
           <div class="ics-canvas icono-studio-x6-canvas" data-studio-x6-canvas aria-label="Editable pathway diagram"></div>
           <div class="ics-empty" data-studio-empty hidden>
             <button type="button" class="ics-btn" data-studio-action="insert-gene">${icon("user-round-plus")}<span>Add genes</span></button>
-            <button type="button" class="ics-btn" data-studio-action="template-egfr">${icon("workflow")}<span>Open template</span></button>
+            ${templateButtons("ics-btn ics-empty-template")}
           </div>
-          <div class="ics-minibar" role="toolbar" aria-label="Relationship" data-studio-minibar hidden>
-            ${QUICK_KINDS.map((kind) => `<button type="button" class="ics-tb" data-studio-action="kind:${kind}" aria-label="${escapeHtml(relationshipKind(kind).label)}" title="${escapeHtml(relationshipKind(kind).label)}" aria-pressed="false">${relationshipGlyph(kind)}</button>`).join("")}
-            <span class="ics-tsep" aria-hidden="true"></span>
-            <button type="button" class="ics-tb" data-studio-action="reverse" aria-label="Reverse direction" title="Reverse direction">${icon("arrow-left-right")}</button>
-            <button type="button" class="ics-tb" data-studio-action="show-format" aria-label="Format" title="Format">${icon("ellipsis")}</button>
-          </div>
+          <div class="ics-minibar" role="toolbar" aria-label="Relationship" data-studio-minibar hidden>${minibarMarkup()}</div>
           <div class="ics-tooltip" role="tooltip" data-studio-tooltip hidden></div>
         </section>
         <aside class="ics-panel ics-format" aria-label="Format" data-studio-format>
@@ -722,13 +755,14 @@ function selectionDescription() {
   if (item.type === "gene") return `Gene · ${item.symbol}`
   if (item.type === "text") return item.fill === "note" ? "Note" : "Text"
   if (item.type === "compartment") return `Compartment · ${item.label || item.shape}`
+  if (item.type === "molecule") return `Molecule · ${item.label}`
   return `${relationshipKind(item.kind).label} · ${edgeEndpoints(item)}`
 }
 
 function edgeEndpoints(edge) {
   const from = currentDocument.nodes.find((node) => node.id === edge.from)
   const to = currentDocument.nodes.find((node) => node.id === edge.to)
-  return `${from?.symbol || "?"} → ${to?.symbol || "?"}`
+  return `${from?.symbol || from?.label || "?"} → ${to?.symbol || to?.label || "?"}`
 }
 
 function selectionTypes() {
@@ -787,7 +821,8 @@ function renderChrome() {
   const selectionStatus = root.querySelector("[data-studio-selection-status]")
   if (selectionStatus) selectionStatus.textContent = selectionDescription()
   const gridStatus = root.querySelector("[data-studio-grid-status]")
-  if (gridStatus) gridStatus.textContent = `Grid 10 · Snap ${view.snap ? "on" : "off"}`
+  if (gridStatus)
+    gridStatus.textContent = `Grid ${editor?.gridStep?.() || 10} · Snap ${view.snap ? "on" : "off"}`
   const types = selectionTypes()
   const items = selectedItems()
   const nodeCount = items.filter((item) => item.type !== "relationship").length
@@ -988,6 +1023,11 @@ const TABS = {
     ["text", "Text"],
     ["arrange", "Arrange"],
   ],
+  molecule: [
+    ["style", "Style"],
+    ["text", "Text"],
+    ["arrange", "Arrange"],
+  ],
   mixed: [["arrange", "Arrange"]],
 }
 
@@ -1005,10 +1045,12 @@ function relationshipStyleTab(edge, target) {
           target,
           value: edge.kind,
           label: "Type",
-          options: RELATIONSHIP_KINDS.map((item) => [item.id, item.label]),
+          options: notationKinds(edge.kind).map((item) => [item.id, item.label]),
           before: `<span class="ics-select-glyph" data-studio-kind-glyph>${relationshipGlyph(edge.kind)}</span>`,
         }),
-        single ? buttonRow([["reverse", "Reverse direction", "arrow-left-right"]]) : "",
+        single
+          ? buttonRow([["reverse", "Reverse direction", "arrow-left-right", kind.head === "none"]])
+          : "",
       ].join(""),
     ),
     section(
@@ -1086,7 +1128,24 @@ function relationshipStyleTab(edge, target) {
         step: 1,
         unit: "pt",
         label: "Size",
-      }),
+      }) +
+        // B-1050: "square" bends the last stretch so the line meets the
+        // portrait perpendicular to its side; a T-bar then lies flat on it.
+        segmented({
+          field: "end",
+          target,
+          value: edge.end || "",
+          label: "Meets portrait",
+          options: [
+            [
+              "",
+              "Auto",
+              kind.head === "bar" ? "Auto: square, as for a T-bar" : "Auto: at the line's angle",
+            ],
+            ["square", "Square", "Square to the portrait's side"],
+            ["free", "Angled", "At the line's own angle"],
+          ],
+        }),
     ),
     section(
       "",
@@ -1266,16 +1325,7 @@ function diagramTabs(tab) {
           options: [...PAGE_PRESETS, ["custom", "Custom"]],
         }),
         `<div class="ics-pair">${stepper({ field: "width", target: "page", value: currentDocument.width, min: 640, max: 12000, step: 10, unit: "px", label: "Width" })}${stepper({ field: "height", target: "page", value: currentDocument.height, min: 360, max: 12000, step: 10, unit: "px", label: "Height" })}</div>`,
-        segmented({
-          field: "background",
-          target: "page",
-          value: currentDocument.background,
-          label: "Background",
-          options: [
-            ["paper", "Paper"],
-            ["white", "White"],
-          ],
-        }),
+        backgroundPicker(),
       ].join(""),
     ),
     section(
@@ -1291,9 +1341,32 @@ function diagramTabs(tab) {
     ),
     section(
       "Notation",
-      `<p class="ics-muted ics-small">Relationship glyphs follow KEGG pathway notation.</p>`,
+      selectControl({
+        field: "view.notation",
+        target: "view",
+        value: view.notation,
+        label: "Relationships",
+        options: [
+          ["simple", "Simple"],
+          ["kegg", "KEGG"],
+        ],
+      }) +
+        `<p class="ics-muted ics-small">Glyphs follow KEGG pathway notation; Simple shows the main four.</p>`,
     ),
   ].join("")
+}
+
+// B-1050: named sheets first, then any colour from the system picker or a
+// typed hex. A dark sheet turns the default ink light.
+function backgroundPicker() {
+  const value = currentDocument.background
+  const hex = pageBackgroundColour(currentDocument)
+  const id = fieldId("background")
+  return row(
+    "Background",
+    `<span class="ics-swatches ics-bg-swatches" role="group" aria-label="Background">${PAGE_BACKGROUND_SWATCHES.map(([key, colour, name]) => `<button type="button" class="ics-sw" style="--sw:${colour}" aria-pressed="${value === key}" data-value="${key}" ${fieldAttrs("background", "page")} aria-label="${escapeHtml(name)}" title="${escapeHtml(name)}"></button>`).join("")}<input type="color" class="ics-colour-well" value="${hex}" title="Any colour" aria-label="Any background colour" ${fieldAttrs("background", "page")}><input id="${id}" class="ics-field ics-hex" type="text" maxlength="7" spellcheck="false" placeholder="#RRGGBB" value="${escapeHtml(hex)}" aria-label="Background hex" ${fieldAttrs("background", "page")}></span>`,
+    id,
+  )
 }
 
 function formatBody(kind, tab) {
@@ -1434,6 +1507,40 @@ function formatBody(kind, tab) {
           label: "Font colour",
           defaultLabel: "Ink",
         }),
+    )
+  }
+  if (kind === "molecule") {
+    if (tab === "text") {
+      return section(
+        "Label",
+        textInput({
+          field: "label",
+          target: item.id,
+          value: item.label,
+          label: "Text",
+          placeholder: "PIP₃",
+          maxlength: ICONOPLASM_DIAGRAM_LIMITS.labelLength,
+        }) +
+          stepper({
+            field: "font_size",
+            target: item.id,
+            value: item.font_size,
+            min: 8,
+            max: 40,
+            unit: "pt",
+            label: "Font size",
+          }),
+      )
+    }
+    return section(
+      "Molecule",
+      swatches({
+        field: "color",
+        target: item.id,
+        value: item.color,
+        label: "Colour",
+        defaultLabel: "Ink",
+      }),
     )
   }
   if (kind === "compartment") {
@@ -1637,6 +1744,7 @@ function menuItems(name) {
         { action: "insert-gene", label: "Gene…", shortcut: "/" },
         { action: "insert-text", label: "Text" },
         { action: "insert-note", label: "Note" },
+        { action: "insert-molecule", label: "Molecule" },
         "-",
         { heading: "Compartment" },
         ...COMPARTMENT_SHAPES.map((shape) => ({
@@ -1645,7 +1753,10 @@ function menuItems(name) {
         })),
         "-",
         { heading: "Template" },
-        { action: "template-egfr", label: "EGFR–MAPK signaling" },
+        ...DIAGRAM_TEMPLATES.map((template) => ({
+          action: `template:${template.id}`,
+          label: `${template.name}: ${template.subject}`,
+        })),
       ]
     case "compartment":
       return COMPARTMENT_SHAPES.map((shape) => ({
@@ -1657,6 +1768,14 @@ function menuItems(name) {
       return [
         { action: "to-front", label: "To front", shortcut: "Ctrl+Shift+F", disabled: none },
         { action: "to-back", label: "To back", shortcut: "Ctrl+Shift+B", disabled: none },
+        {
+          action: "reverse",
+          label: "Reverse direction",
+          disabled:
+            items.length !== 1 ||
+            items[0].type !== "relationship" ||
+            relationshipKind(items[0].kind).head === "none",
+        },
         "-",
         ...alignItems(nodes.length < 2),
         "-",
@@ -1731,7 +1850,7 @@ function menuItems(name) {
         { action: "routing:curved", label: "Curved", icon: "spline" },
       ]
     case "kind":
-      return RELATIONSHIP_KINDS.map((kind) => ({
+      return notationKinds(selectedItem()?.kind).map((kind) => ({
         action: `kind:${kind.id}`,
         label: kind.label,
         html: relationshipGlyph(kind.id),
@@ -1745,6 +1864,7 @@ function menuItems(name) {
       ]
     case "help":
       return [
+        { action: "tour", label: "Take the tour" },
         { action: "shortcuts", label: "Keyboard shortcuts" },
         {
           href: "https://www.kegg.jp/kegg/document/help_pathway.html",
@@ -1936,7 +2056,13 @@ async function replaceWorkspace(nextWorkspace, message) {
 async function insertNode(kind, at) {
   const centre = at || (await visibleCentre())
   let outcome
-  if (kind === "text" || kind === "note") {
+  if (kind === "molecule") {
+    outcome = addMoleculeNode(currentDocument, {
+      label: "Molecule",
+      x: centre.x - 75,
+      y: centre.y - 36,
+    })
+  } else if (kind === "text" || kind === "note") {
     outcome = addTextNode(currentDocument, {
       text: kind === "note" ? "Note" : "Text",
       fill: kind === "note" ? "note" : "none",
@@ -1957,6 +2083,7 @@ async function insertNode(kind, at) {
   selectedIds = [outcome.node.id]
   await commitDocument(outcome.document, { message: "Added." })
   if (kind === "text" || kind === "note") focusFormatField("text", "text")
+  if (kind === "molecule") focusFormatField("text", "label")
 }
 
 // After a panel opens or closes the canvas changes size; on a phone, bring
@@ -1989,75 +2116,23 @@ function focusFormatField(tab, field) {
   }, 0)
 }
 
-async function loadExample() {
-  const payload = await resolveGeneAssets(EXAMPLE_GENES.map(([symbol]) => symbol))
-  const assets = resolvedAssetMap(payload)
-  let example = createDiagramDocument({
-    id: currentDocument.id,
-    title: "EGFR–MAPK signaling",
-    width: 1400,
-    height: 900,
+async function openTemplate(id = "mechanism") {
+  const template = diagramTemplate(id)
+  if (!template) return
+  setStatus(`Loading the ${template.name.toLowerCase()}…`)
+  const payload = await resolveGeneAssets(templateSymbols(id))
+  const page = buildTemplateDocument(id, resolvedAssetMap(payload), {
+    documentId: currentDocument.id,
   })
-  example = addCompartmentNode(example, {
-    id: "compartment-membrane",
-    shape: "membrane",
-    x: 40,
-    y: 170,
-    width: 1320,
-    height: 60,
-  }).document
-  example = addCompartmentNode(example, {
-    id: "compartment-nucleus",
-    shape: "nucleus",
-    x: 640,
-    y: 600,
-    width: 700,
-    height: 270,
-  }).document
-  for (const [symbol, x, y] of EXAMPLE_GENES) {
-    if (!assets.get(symbol)) continue
-    example = addGeneNode(example, {
-      id: `gene-${symbol.toLowerCase()}`,
-      symbol,
-      asset: assets.get(symbol),
-      x,
-      y,
-      width: 104,
-    }).document
-  }
-  for (const [from, to, kind, label] of EXAMPLE_EDGES) {
-    const source = example.nodes.find((node) => node.symbol === from)
-    const target = example.nodes.find((node) => node.symbol === to)
-    if (!source || !target) continue
-    const feedback = kind === "inhibition"
-    example = connectGeneNodes(example, {
-      from: source.id,
-      to: target.id,
-      kind,
-      label,
-      label_position: feedback ? "below" : "above",
-      vertices: feedback
-        ? [
-            { x: target.x + 52 + 690, y: 560 },
-            { x: target.x + 52, y: 560 },
-          ]
-        : [],
-    }).document
-  }
-  return example
-}
-
-async function openTemplate() {
-  setStatus("Loading the EGFR–MAPK template…")
-  const example = await loadExample()
+  const message = `Opened the ${template.name.toLowerCase()}: ${template.subject}.`
   if (currentDocument.nodes.length) {
     syncWorkspacePage()
-    const { workspace: next } = addWorkspacePage(workspace, example)
-    await replaceWorkspace(next, "Opened the EGFR–MAPK template on a new page.")
+    const { workspace: next } = addWorkspacePage(workspace, page)
+    await replaceWorkspace(next, `${message} It is on a new page.`)
     return
   }
   selectedIds = []
-  await commitDocument(example, { fit: true, message: "Opened the EGFR–MAPK template." })
+  await commitDocument(page, { fit: true, message })
 }
 
 function copySelection() {
@@ -2198,6 +2273,16 @@ async function setView(key, value) {
   if (key === "grid") instance?.setGridVisible(value)
   if (key === "snap") instance?.setSnap(value)
   if (key === "tool") instance?.setTool(value)
+  if (key === "notation") {
+    view.notation = value === "kegg" ? "kegg" : "simple"
+    storeViewPreferences()
+    const list = mountedRoot?.querySelector("[data-studio-rels]")
+    if (list) list.innerHTML = relationshipButtons()
+    const select = mountedRoot?.querySelector("[data-studio-notation]")
+    if (select) select.value = view.notation
+    renderFormat()
+    scheduleViewUpdate()
+  }
   renderChrome()
   if (key === "rulers") {
     instance?.refreshSize()
@@ -2367,8 +2452,14 @@ async function runAction(action) {
       return insertNode("note")
     case "insert-compartment":
       return insertNode(argument)
+    case "insert-molecule":
+      return insertNode("molecule")
+    case "template":
+      return openTemplate(argument)
     case "template-egfr":
-      return openTemplate()
+      return openTemplate("mechanism")
+    case "tour":
+      return startTour({ force: true })
     case "to-front":
       return instance?.order("front")
     case "to-back":
@@ -2392,9 +2483,14 @@ async function runAction(action) {
       return applyToSelection({ fill: argument }, ["text"])
     case "reverse": {
       const edge = selectedItem()
-      if (edge?.type === "relationship") instance?.reverseEdge(edge.id)
+      if (edge?.type !== "relationship") return
+      // B-1050: binding has no head, so reversing it changed nothing you could
+      // see and read as a broken button.
+      if (relationshipKind(edge.kind).head === "none")
+        return setStatus(`${relationshipKind(edge.kind).label} has no direction to reverse.`)
+      instance?.reverseEdge(edge.id)
       renderFormat()
-      return
+      return setStatus(`Reversed: ${edgeEndpoints(findItem(edge.id) || edge)}.`, "success")
     }
     case "clear-waypoints": {
       const edge = selectedItem()
@@ -2460,6 +2556,10 @@ function scheduleViewUpdate() {
   if (viewFrame) return
   viewFrame = requestAnimationFrame(() => {
     viewFrame = 0
+    // The snap step follows the zoom (B-1050), so the status bar does too.
+    const gridStatus = mountedRoot?.querySelector("[data-studio-grid-status]")
+    if (gridStatus)
+      gridStatus.textContent = `Grid ${editor?.gridStep?.() || 10} · Snap ${view.snap ? "on" : "off"}`
     renderZoom()
     drawRulers()
     placeMinibar()
@@ -2538,9 +2638,28 @@ function placeMinibar() {
   bar.hidden = false
   const offsetX = canvas.offsetLeft
   const offsetY = canvas.offsetTop
+  const nextMarkup = minibarMarkup()
+  if (bar.getAttribute("data-markup") !== nextMarkup) {
+    bar.innerHTML = nextMarkup
+    bar.setAttribute("data-markup", nextMarkup)
+  }
   const width = bar.offsetWidth
+  const height = bar.offsetHeight || 36
   const left = Math.min(area.clientWidth - width - 6, Math.max(6, offsetX + anchor.x - width / 2))
-  const top = Math.max(offsetY + 6, offsetY + anchor.y - 52)
+  // B-1050: the bar used to sit over the two genes a short relationship joins.
+  // Try above the line, then below, and keep the first spot clear of both.
+  const ends = [item.from, item.to].map((id) => editor.nodeRect(id)).filter(Boolean)
+  const clear = (candidate) =>
+    !ends.some(
+      (rect) =>
+        offsetX + rect.x < left + width &&
+        left < offsetX + rect.x + rect.width &&
+        offsetY + rect.y < candidate + height &&
+        candidate < offsetY + rect.y + rect.height,
+    )
+  const above = offsetY + anchor.y - height - 16
+  const below = offsetY + anchor.y + 16
+  const top = Math.max(offsetY + 6, [above, below].find(clear) ?? above)
   bar.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`
 }
 
@@ -2956,7 +3075,9 @@ async function applyPageField(field, value) {
   } else if (field === "width" || field === "height") {
     next[field] = value
   } else if (field === "background") {
-    next.background = value
+    const named = PAGE_BACKGROUND_SWATCHES.some(([key]) => key === value)
+    if (!named && !/^#[0-9a-f]{6}$/i.test(String(value))) return
+    next.background = String(value).toLowerCase()
   }
   await commitDocument(next, { fit: field !== "background" })
 }
@@ -2993,6 +3114,7 @@ async function handleStudioChange(event) {
     return
   }
   if (target.matches("[data-studio-page-rename]")) return
+  if (target.matches("[data-studio-notation]")) return setView("notation", target.value)
   if (target.matches('[data-field]:not([type="range"]):not([type="text"]):not(textarea)')) {
     await handleField(target)
   }
@@ -3073,6 +3195,104 @@ function handleThemeChange() {
   scheduleViewUpdate()
 }
 
+/* ───────── first-run tour ───────── */
+
+// B-1050: a short spotlight tour, one lit element at a time on a dimmed
+// screen, each step something to do. It runs once per browser, can be closed
+// at any step, and Help replays it. Steps whose element is hidden (a closed
+// panel, a phone sheet) are left out rather than lighting an empty corner.
+const TOUR_STEPS = [
+  [
+    "[data-studio-templates]",
+    "Start from a chart",
+    "Open a faction chart, a control variable chart or a mechanism chart, then swap in your own genes.",
+    "right",
+  ],
+  [
+    ".ics-library-search",
+    "Add genes",
+    "Type a symbol or alias. Click a result to place it, or drag it onto the sheet.",
+    "right",
+  ],
+  [
+    "[data-studio-x6-canvas]",
+    "Draw relationships",
+    "Hover a portrait, then drag from one of its dots to another portrait. Scroll to pan; Ctrl+scroll zooms.",
+    "left",
+  ],
+  [
+    "[data-studio-rels-section]",
+    "Pick the arrow",
+    "New relationships use the arrow picked here. Simple keeps the main four; KEGG lists all fourteen.",
+    "right",
+  ],
+  [
+    "[data-studio-format]",
+    "Style the selection",
+    "Colour, line ends, labels and evidence for whatever you select. With nothing selected, the page itself.",
+    "left",
+  ],
+  [
+    '[data-studio-menu="export"]',
+    "Export",
+    "Save the page as a PNG or SVG figure, or as JSON to keep editing it later.",
+    "bottom",
+  ],
+]
+
+function tourSeen() {
+  try {
+    return window.localStorage.getItem(TOUR_KEY) === "done"
+  } catch (_error) {
+    return true
+  }
+}
+
+function markTourSeen() {
+  try {
+    window.localStorage.setItem(TOUR_KEY, "done")
+  } catch (_error) {
+    // Without storage the tour may show again next visit; it can be closed.
+  }
+}
+
+function ensureTourStylesheet() {
+  if (window.document.querySelector("link[data-studio-tour-stylesheet]")) return
+  const link = window.document.createElement("link")
+  link.rel = "stylesheet"
+  link.href = TOUR_STYLESHEET_URL
+  link.setAttribute("data-studio-tour-stylesheet", "")
+  window.document.head.append(link)
+}
+
+async function startTour({ force = false } = {}) {
+  if (!mountedRoot || (!force && (tourSeen() || isPhone()))) return
+  const steps = TOUR_STEPS.map(([selector, title, description, side]) => ({
+    element: mountedRoot.querySelector(selector),
+    popover: { title, description, side, align: "start" },
+  })).filter(({ element }) => element && element.getClientRects().length > 0)
+  if (!steps.length) return
+  closePopover({ restoreFocus: false })
+  ensureTourStylesheet()
+  const { driver } = await import(TOUR_RUNTIME_URL)
+  driver({
+    steps,
+    showProgress: true,
+    progressText: "{{current}} of {{total}}",
+    nextBtnText: "Next",
+    prevBtnText: "Back",
+    doneBtnText: "Done",
+    overlayColor: "#20120b",
+    overlayOpacity: 0.72,
+    stagePadding: 6,
+    stageRadius: 6,
+    allowClose: true,
+    smoothScroll: true,
+    popoverClass: "ics-tour",
+    onDestroyed: markTourSeen,
+  }).drive()
+}
+
 /* ───────── mount ───────── */
 
 function ensureStylesheet() {
@@ -3138,6 +3358,7 @@ export function renderDiagramStudio(root) {
       renderChrome()
       scheduleViewUpdate()
       studioRoot?.setAttribute("data-ready", "true")
+      if (!tourSeen()) window.setTimeout(() => void startTour(), 700)
       return instance
     })
     .catch((error) => {

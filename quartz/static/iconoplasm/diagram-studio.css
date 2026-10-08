@@ -1895,3 +1895,195 @@ input.ics-hex {
     transition: none;
   }
 }
+
+/* ───────── B-1050 ───────── */
+
+.ics-notation {
+  margin: 2px 0 6px;
+}
+
+.ics-template {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 7px 9px;
+  border: 1px solid var(--ics-line);
+  border-radius: 3px;
+  background: var(--ics-field);
+  color: var(--ics-text);
+  text-align: left;
+}
+
+.ics-template:hover {
+  border-color: var(--ics-accent);
+  background: var(--ics-accent-soft);
+}
+
+.ics-template-name {
+  font-weight: 600;
+}
+
+.ics-template-subject {
+  color: var(--ics-muted);
+  font-size: 11.5px;
+}
+
+.ics-empty {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(640px, 90%);
+}
+
+.ics-empty-template {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  height: auto;
+  padding: 6px 10px;
+}
+
+.ics-empty-template .ics-template-subject {
+  font-size: 11px;
+}
+
+.ics-tile svg:not(.ics-i) {
+  width: 48px;
+  height: 26px;
+  margin: 4px 0;
+  color: var(--ics-icon);
+}
+
+.ics-bg-swatches .ics-sw {
+  border-color: rgba(32, 18, 11, 0.32);
+}
+
+input.ics-colour-well {
+  width: 26px;
+  height: 22px;
+  padding: 0 2px;
+  border: 1px solid var(--ics-field-line);
+  border-radius: 2px;
+  background: var(--ics-field);
+  cursor: pointer;
+}
+
+/* The first-run tour (driver.js). Its popover lives on <body>, outside the
+   studio root, so it carries the studio's colours itself. */
+.driver-popover.ics-tour {
+  max-width: 320px;
+  padding: 14px 16px 12px;
+  border: 1px solid rgba(32, 18, 11, 0.16);
+  border-radius: 4px;
+  background: #f4ede5;
+  color: #20120b;
+  box-shadow: 0 10px 24px rgba(53, 38, 27, 0.28);
+  font:
+    400 13px/1.45 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+}
+
+.driver-popover.ics-tour .driver-popover-title {
+  font:
+    600 14px/1.3 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+}
+
+.driver-popover.ics-tour .driver-popover-description {
+  margin-top: 4px;
+  color: rgba(32, 18, 11, 0.8);
+}
+
+.driver-popover.ics-tour .driver-popover-progress-text {
+  color: rgba(32, 18, 11, 0.6);
+  font-size: 12px;
+}
+
+.driver-popover.ics-tour .driver-popover-navigation-btns button {
+  padding: 4px 10px;
+  border: 1px solid rgba(32, 18, 11, 0.24);
+  border-radius: 3px;
+  background: #fbf7f1;
+  color: #20120b;
+  font:
+    500 12px/1.3 "IBM Plex Sans",
+    "Segoe UI",
+    sans-serif;
+  text-shadow: none;
+}
+
+.driver-popover.ics-tour .driver-popover-next-btn {
+  border-color: #1b7269;
+  background: #1b7269;
+  color: #f6efe4;
+}
+
+.driver-popover.ics-tour .driver-popover-close-btn {
+  color: rgba(32, 18, 11, 0.6);
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #f4ede5;
+}
+
+.driver-popover.ics-tour .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #f4ede5;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour {
+  border-color: rgba(239, 230, 217, 0.12);
+  background: #1c140f;
+  color: #efe6d9;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-description,
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-progress-text,
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-close-btn {
+  color: rgba(239, 230, 217, 0.72);
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-navigation-btns button {
+  border-color: rgba(239, 230, 217, 0.22);
+  background: #150e0a;
+  color: #efe6d9;
+}
+
+:root[saved-theme="dark"] .driver-popover.ics-tour .driver-popover-next-btn {
+  border-color: #6fb3a9;
+  background: #6fb3a9;
+  color: #0f0a07;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-left.driver-popover-arrow {
+  border-left-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-top.driver-popover-arrow {
+  border-top-color: #1c140f;
+}
+
+:root[saved-theme="dark"]
+  .driver-popover.ics-tour
+  .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-bottom-color: #1c140f;
+}
