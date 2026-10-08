@@ -25,7 +25,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=189a4fd320f16b65"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=5f39ed128fd784a5"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=1d7ceb651f9ff265"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
@@ -240,6 +240,10 @@ function activePage() {
   return workspace.pages.find((page) => page.id === workspace.active) || workspace.pages[0]
 }
 
+// What the mouse wheel does over the canvas, named as in Lucidchart's
+// View > Navigation mode: Mouse zooms, Trackpad pans, Auto tells them apart.
+const NAVIGATION_MODES = ["auto", "mouse", "trackpad"]
+
 function readViewPreferences() {
   const phone = isPhone()
   const defaults = {
@@ -251,6 +255,7 @@ function readViewPreferences() {
     tool: "select",
     formatTab: "style",
     notation: "simple",
+    navigation: "auto",
   }
   try {
     const stored = JSON.parse(window.localStorage.getItem(VIEW_KEY) || "null")
@@ -259,6 +264,7 @@ function readViewPreferences() {
         if (typeof stored[key] === "boolean") defaults[key] = stored[key]
       }
       if (stored.notation === "kegg") defaults.notation = "kegg"
+      if (NAVIGATION_MODES.includes(stored.navigation)) defaults.navigation = stored.navigation
       if (!phone) {
         for (const key of ["library", "format"]) {
           if (typeof stored[key] === "boolean") defaults[key] = stored[key]
@@ -273,10 +279,10 @@ function readViewPreferences() {
 
 function storeViewPreferences() {
   try {
-    const { library, format, rulers, grid, snap, notation } = view
+    const { library, format, rulers, grid, snap, notation, navigation } = view
     window.localStorage.setItem(
       VIEW_KEY,
-      JSON.stringify({ library, format, rulers, grid, snap, notation }),
+      JSON.stringify({ library, format, rulers, grid, snap, notation, navigation }),
     )
   } catch (_error) {
     // Private browsing keeps the in-memory view.
@@ -1723,6 +1729,26 @@ function menuItems(name) {
         { action: "toggle-grid", label: "Grid", checked: view.grid, shortcut: "Ctrl+Shift+G" },
         { action: "toggle-snap", label: "Snap to grid", checked: view.snap },
         "-",
+        { heading: "Navigation mode" },
+        {
+          action: "navigation:auto",
+          label: "Auto",
+          radio: true,
+          checked: view.navigation === "auto",
+        },
+        {
+          action: "navigation:mouse",
+          label: "Mouse",
+          radio: true,
+          checked: view.navigation === "mouse",
+        },
+        {
+          action: "navigation:trackpad",
+          label: "Trackpad",
+          radio: true,
+          checked: view.navigation === "trackpad",
+        },
+        "-",
         { action: "fit", label: "Reset view", shortcut: "Ctrl+Shift+H" },
         { action: "fit-selection", label: "Fit selection", disabled: none },
         { action: "zoom-in", label: "Zoom in", shortcut: "Ctrl+=" },
@@ -1890,7 +1916,8 @@ function menuMarkup(name, items) {
         return `<div class="ics-menu-heading" role="presentation">${escapeHtml(item.heading)}</div>`
       const lead = item.html || (item.icon ? icon(item.icon) : "")
       const checked = item.checked === undefined ? "" : ` aria-checked="${check(item.checked)}"`
-      const role = item.checked === undefined ? "menuitem" : "menuitemcheckbox"
+      const role =
+        item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"
       const content = `<span class="ics-menu-lead">${item.checked ? "✓" : lead}</span><span class="ics-menu-label">${escapeHtml(item.label)}</span>${item.shortcut ? `<span class="ics-menu-key">${escapeHtml(item.shortcut)}</span>` : ""}`
       if (item.href) {
         const external = /^https?:/.test(item.href)
@@ -2265,6 +2292,7 @@ async function setView(key, value) {
   const instance = await editorReady
   if (key === "grid") instance?.setGridVisible(value)
   if (key === "snap") instance?.setSnap(value)
+  if (key === "navigation") instance?.setNavigation(value)
   if (key === "tool") instance?.setTool(value)
   if (key === "notation") {
     view.notation = value === "kegg" ? "kegg" : "simple"
@@ -2398,6 +2426,9 @@ async function runAction(action) {
     }
     case "paste-style":
       if (styleClipboard) await applyToSelection(styleClipboard)
+      return
+    case "navigation":
+      if (NAVIGATION_MODES.includes(argument)) await setView("navigation", argument)
       return
     case "toggle-library":
     case "toggle-format":
@@ -3488,6 +3519,7 @@ export function renderDiagramStudio(root) {
     document: currentDocument,
     gridVisible: view.grid,
     snap: view.snap,
+    navigationMode: view.navigation,
     onChange: acceptEditorDocument,
     onSelect(ids, options) {
       selectItems(ids, { canvas: false, edit: options?.edit })
