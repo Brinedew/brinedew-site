@@ -873,6 +873,7 @@ export async function createDiagramEditor({
   onHover,
   gridVisible = true,
   snap = true,
+  navigationMode = "auto",
   sizeHost = null,
 }) {
   const runtime = await loadRuntime()
@@ -904,7 +905,8 @@ export async function createDiagramEditor({
     grid: { size: snap ? 10 : 1, visible: false },
     // B-1050: the wheel is handled below (X6's own wheel panning never moved
     // the view, so the page scrolled instead).
-    panning: { enabled: true, eventTypes: ["leftMouseDown", "rightMouseDown"] },
+    // A middle-button drag pans too, as in Figma and Miro.
+    panning: { enabled: true, eventTypes: ["leftMouseDown", "rightMouseDown", "mouseWheelDown"] },
     mousewheel: { enabled: false },
     interacting: {
       nodeMovable: (view) => !isPage(view.cell),
@@ -987,33 +989,65 @@ export async function createDiagramEditor({
     installPatterns(graph, defsIds, step, inkFor(baseDocument))
   }
 
-  // B-1050: wheel pans (Shift+wheel sideways), Ctrl or Cmd+wheel and a
-  // trackpad pinch zoom about the pointer, as in draw.io and Figma. The event
-  // never reaches the page, so the window no longer scrolls under the canvas.
+  // B-1050: the wheel follows the navigation mode, as Lucidchart's and Miro's
+  // Navigation mode (Mouse, Trackpad, Auto) does.
+  // - Mouse: the wheel zooms about the pointer; Shift+wheel pans sideways and
+  //   Ctrl/Cmd+Shift+wheel pans up and down (Lucidchart's escape hatch).
+  // - Trackpad: two fingers pan, a pinch (Ctrl+wheel to the browser) zooms.
+  // - Auto: each gesture is classified from its first event and keeps that
+  //   device until it stops, so a trackpad's momentum tail can't flip it.
+  // The event never reaches the page, so the window never scrolls under the
+  // canvas.
+  let navigation = navigationMode
+  const gesture = { device: "mouse", at: -Infinity }
+  function wheelDevice(event) {
+    if (navigation !== "auto") return navigation
+    const continuing = event.timeStamp - gesture.at < 240
+    gesture.at = event.timeStamp
+    if (continuing) return gesture.device
+    if (event.deltaMode !== 0) gesture.device = "mouse"
+    else if (event.deltaX) gesture.device = "trackpad"
+    else if (typeof event.wheelDeltaY === "number" && event.wheelDeltaY) {
+      // A wheel notch is 120, divided by the display scale on Windows: 109 at
+      // 110%, so a bare "multiple of 120" test calls that mouse a trackpad.
+      const notches = (Math.abs(event.wheelDeltaY) * (window.devicePixelRatio || 1)) / 120
+      gesture.device =
+        notches >= 0.95 && Math.abs(notches - Math.round(notches)) < 0.05 ? "mouse" : "trackpad"
+    } else gesture.device = Math.abs(event.deltaY) >= 40 ? "mouse" : "trackpad"
+    return gesture.device
+  }
+  function zoomAbout(event, dy) {
+    const { tx, ty } = graph.translate()
+    const scale = graph.zoom()
+    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * Math.exp(-dy * 0.0015)))
+    if (next === scale) return
+    const rect = container.getBoundingClientRect()
+    const px = event.clientX - rect.left
+    const py = event.clientY - rect.top
+    graph.scale(next, next)
+    graph.translate(px - ((px - tx) / scale) * next, py - ((py - ty) / scale) * next)
+  }
   container.addEventListener(
     "wheel",
     (event) => {
       event.preventDefault()
+      // Read deltaMode first: Firefox then reports a mouse's notches as lines.
       const unit =
-        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight || 600 : 1
+        event.deltaMode === 1 ? 100 / 3 : event.deltaMode === 2 ? container.clientHeight || 600 : 1
       const dx = event.deltaX * unit
       const dy = event.deltaY * unit
+      const device = wheelDevice(event)
+      const command = event.ctrlKey || event.metaKey
       const { tx, ty } = graph.translate()
-      if (event.ctrlKey || event.metaKey) {
-        const scale = graph.zoom()
-        const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * Math.exp(-dy * 0.0015)))
-        if (next === scale) return
-        const rect = container.getBoundingClientRect()
-        const px = event.clientX - rect.left
-        const py = event.clientY - rect.top
-        const lx = (px - tx) / scale
-        const ly = (py - ty) / scale
-        graph.scale(next, next)
-        graph.translate(px - lx * next, py - ly * next)
+      if (event.shiftKey) {
+        // Some browsers turn Shift+wheel into a sideways delta themselves.
+        const along = dx || dy
+        if (device === "mouse" && command) graph.translate(tx, ty - along)
+        else graph.translate(tx - along, ty)
         return
       }
-      const sideways = event.shiftKey && !dx
-      graph.translate(tx - (sideways ? dy : dx), ty - (sideways ? 0 : dy))
+      if (command || device === "mouse") return zoomAbout(event, dy || dx)
+      graph.translate(tx - dx, ty - dy)
     },
     { passive: false },
   )
@@ -1436,6 +1470,9 @@ export async function createDiagramEditor({
       else snapline.disable()
     },
     snapEnabled: () => snapping,
+    setNavigation(mode) {
+      navigation = mode
+    },
     align,
     distribute,
     order,
