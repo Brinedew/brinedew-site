@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { statSync } from "node:fs"
 import test from "node:test"
 
+import { lineEndPoint, lineEnds } from "./diagram-document.js"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
@@ -41,12 +42,16 @@ function boxesOverlap(a, b, gap = 8) {
   )
 }
 
-// The drawn line runs from centre to centre through the waypoints; X6 clips
-// it at each box's boundary.
+// The drawn line runs through the waypoints from each end: the point its side
+// attaches at when the page's lines give it one (B-1051), or the centre, where
+// X6 clips it at the box's boundary.
 function segments(document, edge) {
   const from = document.nodes.find((node) => node.id === edge.from)
   const to = document.nodes.find((node) => node.id === edge.to)
-  const points = [centre(from), ...edge.vertices, centre(to)]
+  const ends = lineEnds(document).get(edge.id)
+  const start = ends.source ? lineEndPoint(from, ends.source) : centre(from)
+  const finish = ends.target ? lineEndPoint(to, ends.target) : centre(to)
+  const points = [start, ...edge.vertices, finish]
   return points.slice(1).map((point, index) => [points[index], point])
 }
 

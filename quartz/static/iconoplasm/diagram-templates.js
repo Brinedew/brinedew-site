@@ -5,7 +5,7 @@ import {
   addTextNode,
   connectGeneNodes,
   createDiagramDocument,
-} from "./diagram-document.js?v=189a4fd320f16b65"
+} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
 
 // B-1050: the canvas templates. Each one is a kind of chart from the owner's
 // own writing, so the names are the owner's:
@@ -106,6 +106,9 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
     category: "Control variable charts",
     subject: "PIP₃ : PIP₂",
     page: { width: 1400, height: 1000 },
+    // B-1051: upstream arrows come in at the variable's top and downstream
+    // ones leave from its bottom, each at its own point (the owner's example).
+    lines: "top-to-bottom",
     bins: [
       ["Upstream: lowers PIP₃", 40, 40, 640, 390, OFF],
       ["Upstream: raises PIP₃", 720, 40, 640, 390, ON],
@@ -210,6 +213,7 @@ export function buildTemplateDocument(id, assets, { documentId } = {}) {
     title: template.subject,
     width: template.page.width,
     height: template.page.height,
+    lines: template.lines || "free",
   })
   // Background to foreground: compartment bands, then the faction bins over
   // them, then region names, molecules and portraits; arrows draw last.
