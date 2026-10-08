@@ -2,6 +2,8 @@ import { applyThemePreference, readEffectiveTheme } from "../site-preferences.js
 import {
   COMPARTMENT_SHAPES,
   ICONOPLASM_DIAGRAM_LIMITS,
+  LINE_PRESETS,
+  LINE_PRESET_NAMES,
   PAGE_BACKGROUND_SWATCHES,
   RELATIONSHIP_KINDS,
   RELATIONSHIP_KIND_IDS,
@@ -17,22 +19,24 @@ import {
   createDiagramWorkspace,
   diagramAssetManifest,
   diagramReferences,
+  effectiveLine,
+  linesPreset,
   normalizeGeneSymbol,
   pageBackgroundColour,
   referenceUrl,
   relationshipKind,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=189a4fd320f16b65"
+} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=1d7ceb651f9ff265"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=7389813e5207a0dd"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
   diagramTemplate,
   templateSymbols,
   templateThumbnail,
-} from "./diagram-templates.js?v=c5f574febcc126c3"
+} from "./diagram-templates.js?v=e8c4a80477862cf7"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -909,6 +913,21 @@ function fieldId(field) {
   return `ics-f-${field.replace(/[^a-z0-9]/gi, "-")}-${fieldCounter}`
 }
 
+// B-1051: the routing choices the arrow tab and the page's lines share, and
+// the sides (yEd's "side at source / side at target").
+const ROUTING_OPTIONS = [
+  ["straight", icon("move-right"), "Straight"],
+  ["orthogonal", icon("corner-down-right"), "Orthogonal"],
+  ["curved", icon("spline"), "Curved"],
+]
+const SIDE_OPTIONS = [
+  ["any", "Any"],
+  ["top", "Top"],
+  ["bottom", "Bottom"],
+  ["left", "Left"],
+  ["right", "Right"],
+]
+
 function fieldAttrs(field, target) {
   return `data-field="${escapeHtml(field)}" data-target="${escapeHtml(target)}"`
 }
@@ -1091,17 +1110,27 @@ function relationshipStyleTab(edge, target) {
     section(
       "Waypoints",
       [
+        // "Auto" follows the page's lines (Format → Diagram → Lines).
         segmented({
           field: "routing",
           target,
-          value: edge.routing,
+          value: edge.routing || "",
           label: "Routing",
-          options: [
-            ["straight", icon("move-right"), "Straight"],
-            ["orthogonal", icon("corner-down-right"), "Orthogonal"],
-            ["curved", icon("spline"), "Curved"],
-          ],
+          options: [["", "Auto", "Auto: the page's lines"], ...ROUTING_OPTIONS],
         }),
+        `<div class="ics-pair">${selectControl({
+          field: "source_side",
+          target,
+          value: edge.source_side || "",
+          label: "Source side",
+          options: [["", "Auto"], ...SIDE_OPTIONS],
+        })}${selectControl({
+          field: "target_side",
+          target,
+          value: edge.target_side || "",
+          label: "Target side",
+          options: [["", "Auto"], ...SIDE_OPTIONS],
+        })}</div>`,
         selectControl({
           field: "jumps",
           target,
@@ -1117,6 +1146,9 @@ function relationshipStyleTab(edge, target) {
         single && edge.vertices.length
           ? buttonRow([["clear-waypoints", `Clear waypoints (${edge.vertices.length})`, ""]])
           : "",
+        // draw.io's "Set as Default Style": this line's routing, sides and
+        // T-bar become the page's lines, which every Auto line follows.
+        single ? buttonRow([["set-default-lines", "Set as Default Style", ""]]) : "",
       ].join(""),
     ),
     section(
@@ -1355,7 +1387,63 @@ function diagramTabs(tab) {
       }) +
         `<p class="ics-muted ics-small">Glyphs follow KEGG pathway notation; Simple shows the main four.</p>`,
     ),
+    linesSection(),
   ].join("")
+}
+
+// B-1051: the page's line style. A preset sets every field below it; changing
+// one turns the preset to Custom, as Paper size does when a width is typed.
+// Relationships follow these unless one is set by hand on the arrow tab.
+function linesSection() {
+  const lines = currentDocument.lines
+  return section(
+    "Lines",
+    [
+      selectControl({
+        field: "lines.preset",
+        target: "page",
+        value: linesPreset(lines),
+        label: "Preset",
+        options: [...LINE_PRESET_NAMES, ["custom", "Custom"]],
+      }),
+      segmented({
+        field: "lines.routing",
+        target: "page",
+        value: lines.routing,
+        label: "Routing",
+        options: ROUTING_OPTIONS,
+      }),
+      `<div class="ics-pair">${selectControl({
+        field: "lines.source_side",
+        target: "page",
+        value: lines.source_side,
+        label: "Source side",
+        options: SIDE_OPTIONS,
+      })}${selectControl({
+        field: "lines.target_side",
+        target: "page",
+        value: lines.target_side,
+        label: "Target side",
+        options: SIDE_OPTIONS,
+      })}</div>`,
+      checkbox({
+        field: "lines.spread",
+        target: "page",
+        checked: lines.spread,
+        label: "Space ends evenly",
+      }),
+      segmented({
+        field: "lines.tbar",
+        target: "page",
+        value: lines.tbar,
+        label: "T-bars",
+        options: [
+          ["square", "Square", "Square to the portrait's side"],
+          ["free", "Angled", "At the line's own angle"],
+        ],
+      }),
+    ].join(""),
+  )
 }
 
 // B-1050: named sheets first, then any colour from the system picker or a
@@ -1600,6 +1688,8 @@ function renderFormat() {
 
 function fieldValue(item, field) {
   if (field.startsWith("evidence.")) return item.evidence?.[field.slice(9)] ?? ""
+  if (field === "lines.preset") return linesPreset(item.lines)
+  if (field.startsWith("lines.")) return item.lines?.[field.slice(6)]
   // The page's paper size follows its width and height (auto layout widens it).
   if (field === "preset") {
     const size = `${item.width}x${item.height}`
@@ -1864,6 +1954,7 @@ function menuItems(name) {
       }))
     case "routing":
       return [
+        { action: "routing:", label: "Auto (page's lines)", icon: "spline" },
         { action: "routing:straight", label: "Straight", icon: "move-right" },
         { action: "routing:orthogonal", label: "Orthogonal", icon: "corner-down-right" },
         { action: "routing:curved", label: "Curved", icon: "spline" },
@@ -2402,6 +2493,9 @@ async function runAction(action) {
         width,
         pattern,
         routing,
+        source_side,
+        target_side,
+        end,
         jumps,
         head_size,
         opacity,
@@ -2414,6 +2508,9 @@ async function runAction(action) {
         width,
         pattern,
         routing,
+        source_side,
+        target_side,
+        end,
         jumps,
         head_size,
         opacity,
@@ -2536,6 +2633,29 @@ async function runAction(action) {
       instance?.reverseEdge(edge.id)
       renderFormat()
       return setStatus(`Reversed: ${edgeEndpoints(findItem(edge.id) || edge)}.`, "success")
+    }
+    case "set-default-lines": {
+      const edge = selectedItem()
+      if (edge?.type !== "relationship") return
+      const line = effectiveLine(edge, currentDocument.lines)
+      const next = cloneDiagramDocument(currentDocument)
+      next.lines = {
+        ...next.lines,
+        routing: line.routing,
+        source_side: line.source_side,
+        target_side: line.target_side,
+        ...(relationshipKind(edge.kind).head === "bar" && line.end ? { tbar: line.end } : {}),
+      }
+      const index = next.edges.findIndex((item) => item.id === edge.id)
+      next.edges[index] = {
+        ...next.edges[index],
+        routing: "",
+        source_side: "",
+        target_side: "",
+        end: "",
+      }
+      await commitDocument(next)
+      return setStatus("The page's lines now follow this relationship.", "success")
     }
     case "clear-waypoints": {
       const edge = selectedItem()
@@ -3145,8 +3265,13 @@ async function applyPageField(field, value) {
     const named = PAGE_BACKGROUND_SWATCHES.some(([key]) => key === value)
     if (!named && !/^#[0-9a-f]{6}$/i.test(String(value))) return
     next.background = String(value).toLowerCase()
+  } else if (field === "lines.preset") {
+    if (!LINE_PRESETS[value]) return
+    next.lines = { ...LINE_PRESETS[value] }
+  } else if (field.startsWith("lines.")) {
+    next.lines = { ...next.lines, [field.slice(6)]: value }
   }
-  await commitDocument(next, { fit: field !== "background" })
+  await commitDocument(next, { fit: field !== "background" && !field.startsWith("lines.") })
 }
 
 async function handleStudioChange(event) {
