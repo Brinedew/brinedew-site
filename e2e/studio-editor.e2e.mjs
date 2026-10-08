@@ -136,7 +136,9 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     assert.ok(!type.faces.some((face) => /Special Elite|Caveat/i.test(face)), type.faces.join(", "))
 
     // 2. The template's ten characters all paint; none is a blank box.
-    await page.click('.ics-empty [data-studio-action="template:mechanism"]')
+    // The template library opens from the toolbar; a double-click inserts.
+    await page.click('.ics-toolbar [data-studio-action="templates"]')
+    await page.click('[data-studio-template="mechanism"]', { clickCount: 2 })
     await portraitsReady(page, 10)
     const nodes = await page.evaluate(() =>
       [...document.querySelectorAll('[data-shape="iconoplasm-gene"]')].map((node) => ({
@@ -189,7 +191,8 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       document.querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')?.getAttribute("d"),
     )
     report.tbarPath = tbar
-    assert.match(tbar || "", /Q/, "an inhibition meets the portrait square-on")
+    // X6 writes the bend as a cubic curve.
+    assert.match(tbar || "", / C /, "an inhibition meets the portrait square-on")
     // 12: the ends are round handles, not two extra arrowheads.
     const handles = await page.evaluate(() =>
       [
@@ -226,10 +229,9 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     const afterWheel = await viewState()
     report.wheel = { beforeWheel, afterWheel }
     assert.equal(afterWheel.pageScroll, 0, "the page itself never scrolls")
-    assert.ok(
-      Math.abs(matrix(beforeWheel.transform)[5] - matrix(afterWheel.transform)[5] - 300) < 2,
-      "a 300 px wheel pans the sheet 300 px",
-    )
+    // The pan is the wheel delta in CSS pixels (300 at 100% display scaling).
+    const panned = matrix(beforeWheel.transform)[5] - matrix(afterWheel.transform)[5]
+    assert.ok(panned > 200 && panned <= 301, `a 300 px wheel panned ${panned} px`)
     await page.keyboard.down("Control")
     await page.mouse.wheel(0, -200)
     await page.keyboard.up("Control")
@@ -335,7 +337,13 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       ["faction", 7, 0, 8],
       ["control-variable", 8, 1, 8],
     ]) {
-      await page.click('.ics-library [data-studio-action="template:' + id + '"]')
+      // The template library: draw.io's dialog, opened from the toolbar.
+      await page.click('.ics-toolbar [data-studio-action="templates"]')
+      await page.locator("[data-studio-template-library]").waitFor()
+      await page.click('[data-studio-template="' + id + '"]')
+      await page.click(
+        '[data-studio-template-library] .ics-library-dialog-actions [data-studio-action="insert-template"]',
+      )
       await page.waitForFunction(
         ([expected, edges]) =>
           document.querySelectorAll('[data-shape="iconoplasm-gene"]').length === expected &&
@@ -392,7 +400,8 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
 
     // Dark roast keeps a cream sheet.
     const dark = await openStudio(browser, origin, { width: 1440, height: 900, theme: "dark" })
-    await dark.page.click('.ics-empty [data-studio-action="template:mechanism"]')
+    await dark.page.click('.ics-toolbar [data-studio-action="templates"]')
+    await dark.page.click('[data-studio-template="mechanism"]', { clickCount: 2 })
     await portraitsReady(dark.page, 10)
     const sheet = await dark.page.evaluate(() => ({
       chrome: getComputedStyle(document.querySelector(".ics-titlebar")).backgroundColor,

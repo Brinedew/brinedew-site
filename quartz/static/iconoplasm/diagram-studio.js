@@ -24,14 +24,15 @@ import {
   removeDiagramItem,
   updateDiagramItem,
 } from "./diagram-document.js?v=189a4fd320f16b65"
-import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=3e43dcc0c97f72d2"
+import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
 import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=6d7705171f640da1"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
   diagramTemplate,
   templateSymbols,
-} from "./diagram-templates.js?v=5a6afc741070d535"
+  templateThumbnail,
+} from "./diagram-templates.js?v=6f531442d2f4cd5e"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
@@ -42,7 +43,7 @@ import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec
 // bar), skinned as Iconoplasm's printed lab. Menu and panel words are
 // draw.io's and BioRender's; relationship names are KEGG's.
 
-const STYLESHEET_URL = new URL("./diagram-studio.css?v=904c9ce33a94f440", import.meta.url).href
+const STYLESHEET_URL = new URL("./diagram-studio.css?v=9cd4311ee9019cbd", import.meta.url).href
 const LOGO_URL = new URL("./studio/iconoplasm-48.png", import.meta.url).href
 const WORKSPACE_KEY = "iconoplasm.diagramStudio.workspace.v3"
 const LEGACY_KEYS = ["iconoplasm.diagramStudio.document.v2", "iconoplasm.diagramStudio.document.v1"]
@@ -553,6 +554,8 @@ const COMPARTMENT_PREVIEWS = {
   er: '<path d="M4 9c12-5 36 5 48 0M4 15c12-5 36 5 48 0M4 21c12-5 36 5 48 0M4 27c12-5 36 5 48 0" fill="none" stroke="#9fb096" stroke-width="2"/>',
   complex:
     '<rect x="2" y="2" width="52" height="30" rx="2" fill="none" stroke="currentColor" stroke-opacity=".6" stroke-dasharray="3 2"/>',
+  faction:
+    '<rect x="2" y="2" width="52" height="30" rx="5" fill="rgba(27,114,105,.08)" stroke="rgba(27,114,105,.85)" stroke-width="1.5"/>',
 }
 
 function compartmentPreview(id) {
@@ -594,13 +597,6 @@ function minibarMarkup() {
 
 const MOLECULE_PREVIEW =
   '<svg viewBox="0 0 48 26" aria-hidden="true"><ellipse cx="24" cy="13" rx="21" ry="10" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
-
-function templateButtons(className = "ics-template") {
-  return DIAGRAM_TEMPLATES.map(
-    (template) =>
-      `<button type="button" class="${className}" data-studio-action="template:${template.id}"><span class="ics-template-name">${escapeHtml(template.name)}</span><span class="ics-template-subject">${escapeHtml(template.subject)}</span></button>`,
-  ).join("")
-}
 
 function toolButton(action, iconName, label, extra = "") {
   return `<button type="button" class="ics-tb" data-studio-action="${action}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${extra}>${icon(iconName)}</button>`
@@ -650,7 +646,7 @@ function studioMarkup() {
         ${toolMenu("align", icon("align-center-vertical"), "Align", ' data-studio-needs="two"')}
         ${toolMenu("distribute", icon("align-horizontal-space-around"), "Distribute", ' data-studio-needs="three"')}
         ${toolMenu("layout", `${icon("network")}<span class="ics-tdd-text">Layout</span>`, "Layout")}${sep}
-        ${toolButton("insert-gene", "user-round-plus", "Gene (/)")}${toolButton("insert-text", "type", "Text")}${toolButton("insert-note", "sticky-note", "Note")}
+        ${toolButton("insert-gene", "user-round-plus", "Gene (/)")}${toolButton("insert-text", "type", "Text")}${toolButton("insert-note", "sticky-note", "Note")}${toolButton("templates", "layout-template", "Template…")}
         ${toolMenu("compartment", icon("square-dashed"), "Compartment")}${sep}
         ${toolButton("toggle-grid", "grid-3x3", "Grid (Ctrl+Shift+G)", ' data-studio-pressed="grid"')}${toolButton("toggle-snap", "magnet", "Snap to grid", ' data-studio-pressed="snap"')}${toolButton("toggle-rulers", "ruler", "Ruler", ' data-studio-pressed="rulers"')}
         <span class="ics-toolbar-end">${toolButton("fullscreen", "maximize", "Fullscreen")}${toolButton("toggle-format", "panel-right", "Format (Ctrl+Shift+P)", ' data-studio-pressed="format"')}</span>
@@ -685,7 +681,6 @@ function studioMarkup() {
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-note" data-studio-drag="note">${icon("sticky-note")}<span>Note</span></button>
               <button type="button" class="ics-tile" draggable="true" data-studio-action="insert-molecule" data-studio-drag="molecule" title="A small molecule, an ion or a control variable">${MOLECULE_PREVIEW}<span>Molecule</span></button>
             </div></details>
-            <details class="ics-sec" open data-studio-templates><summary class="ics-sech">Templates</summary><div class="ics-templates">${templateButtons()}</div></details>
           </div>
         </aside>
         <section class="ics-canvas-area" aria-label="Diagram canvas" data-studio-canvas-area>
@@ -695,7 +690,7 @@ function studioMarkup() {
           <div class="ics-canvas icono-studio-x6-canvas" data-studio-x6-canvas aria-label="Editable pathway diagram"></div>
           <div class="ics-empty" data-studio-empty hidden>
             <button type="button" class="ics-btn" data-studio-action="insert-gene">${icon("user-round-plus")}<span>Add genes</span></button>
-            ${templateButtons("ics-btn ics-empty-template")}
+            <button type="button" class="ics-btn" data-studio-action="templates">${icon("layout-template")}<span>Open template</span></button>
           </div>
           <div class="ics-minibar" role="toolbar" aria-label="Relationship" data-studio-minibar hidden>${minibarMarkup()}</div>
           <div class="ics-tooltip" role="tooltip" data-studio-tooltip hidden></div>
@@ -718,6 +713,7 @@ function studioMarkup() {
         <span class="ics-status-zoom"><button type="button" class="ics-tb ics-tb-small" data-studio-action="zoom-out" aria-label="Zoom out">${icon("minus")}</button><input type="range" min="10" max="400" step="5" value="100" aria-label="Zoom" data-studio-zoom-slider><button type="button" class="ics-tb ics-tb-small" data-studio-action="zoom-in" aria-label="Zoom in">${icon("plus")}</button><span data-studio-zoom-label>100%</span></span>
       </footer>
       <div class="ics-popover-layer" data-studio-popover></div>
+      <div class="ics-modal-layer" data-studio-modal></div>
       <input type="file" accept="application/json,.json" hidden data-studio-open-file>
     </main>`
 }
@@ -1666,6 +1662,7 @@ function menuItems(name) {
         { action: "rename-page", label: "Rename page…" },
         { action: "delete-page", label: "Delete page", disabled: workspace.pages.length < 2 },
         "-",
+        { action: "templates", label: "New from template…" },
         { action: "open-json", label: "Import from device…" },
         { action: "save-json", label: "Save as JSON", shortcut: "Ctrl+S" },
         "-",
@@ -1752,11 +1749,7 @@ function menuItems(name) {
           label: shape.label,
         })),
         "-",
-        { heading: "Template" },
-        ...DIAGRAM_TEMPLATES.map((template) => ({
-          action: `template:${template.id}`,
-          label: `${template.name}: ${template.subject}`,
-        })),
+        { action: "templates", label: "Template…" },
       ]
     case "compartment":
       return COMPARTMENT_SHAPES.map((shape) => ({
@@ -2456,6 +2449,27 @@ async function runAction(action) {
       return insertNode("molecule")
     case "template":
       return openTemplate(argument)
+    case "templates":
+      return openTemplateLibrary()
+    case "close-templates":
+      return closeTemplateLibrary()
+    case "template-category":
+      templateLibrary.category = argument
+      templateLibrary.selected = visibleTemplates()[0]?.id || ""
+      return renderTemplateLibrary()
+    case "preview-template":
+      templateLibrary.preview = argument
+      templateLibrary.selected = argument
+      return renderTemplateLibrary()
+    case "close-template-preview":
+      templateLibrary.preview = ""
+      return renderTemplateLibrary()
+    case "insert-template": {
+      const id = templateLibrary.selected
+      if (!id) return
+      closeTemplateLibrary()
+      return openTemplate(id)
+    }
     case "template-egfr":
       return openTemplate("mechanism")
     case "tour":
@@ -2767,6 +2781,19 @@ function handleStudioInput(event) {
     )
     return
   }
+  if (event.target.matches("[data-studio-template-search]") && templateLibrary) {
+    templateLibrary.query = event.target.value
+    const visible = visibleTemplates()
+    if (!visible.some((template) => template.id === templateLibrary.selected))
+      templateLibrary.selected = visible[0]?.id || ""
+    const grid = mountedRoot.querySelector("[data-studio-template-grid]")
+    if (grid) grid.innerHTML = templateTilesMarkup()
+    const insert = mountedRoot.querySelector(
+      '[data-studio-template-library] .ics-library-dialog-actions [data-studio-action="insert-template"]',
+    )
+    if (insert) insert.disabled = !templateLibrary.selected
+    return
+  }
   if (event.target.matches("[data-studio-zoom-slider]")) {
     editor?.zoomTo(Number(event.target.value) / 100)
     return
@@ -2843,6 +2870,8 @@ function handleStudioKeydown(event) {
 // on the document. Typing in a field never triggers one.
 function handleShortcut(event) {
   if (!mountedRoot) return
+  if (handleTemplateLibraryKeydown(event)) return
+  if (templateLibrary) return
   if (handleMenuKeydown(event)) return
   const dialog = mountedRoot.querySelector(".ics-dialog")
   if (dialog && event.key === "Escape") {
@@ -2964,6 +2993,13 @@ async function handleStudioClick(event) {
     } catch (error) {
       setStatus(error.message, "error")
     }
+    return
+  }
+  const tile = event.target.closest("[data-studio-template]")
+  if (tile && !event.target.closest("[data-studio-action]")) {
+    templateLibrary.selected = tile.getAttribute("data-studio-template")
+    if (event.detail >= 2) return runAction("insert-template")
+    renderTemplateLibrary({ focus: "tile" })
     return
   }
   const selection = event.target.closest("[data-studio-select]")
@@ -3195,6 +3231,119 @@ function handleThemeChange() {
   scheduleViewUpdate()
 }
 
+/* ───────── template library ───────── */
+
+// B-1050: templates open in a library dialog, as in draw.io (Arrange > Insert >
+// Template), BioRender and Lucidchart: categories with counts on the left
+// under a search box, a grid of pictures of each template with a magnifier for
+// a larger look, Cancel and Insert at the bottom. A click selects, a
+// double-click or Enter inserts. Words are draw.io's.
+let templateLibrary = null
+
+function templateCategories() {
+  const categories = []
+  for (const template of DIAGRAM_TEMPLATES) {
+    const known = categories.find((entry) => entry.name === template.category)
+    if (known) known.count += 1
+    else categories.push({ name: template.category, count: 1 })
+  }
+  return [{ name: "All", count: DIAGRAM_TEMPLATES.length }, ...categories]
+}
+
+function visibleTemplates() {
+  if (!templateLibrary) return []
+  const query = templateLibrary.query.trim().toLowerCase()
+  return DIAGRAM_TEMPLATES.filter(
+    (template) =>
+      (templateLibrary.category === "All" || template.category === templateLibrary.category) &&
+      (!query || `${template.name} ${template.subject}`.toLowerCase().includes(query)),
+  )
+}
+
+function templateTilesMarkup() {
+  const templates = visibleTemplates()
+  if (!templates.length)
+    return '<p class="ics-muted ics-small ics-template-none">No templates found.</p>'
+  return templates
+    .map((template) => {
+      const selected = template.id === templateLibrary.selected
+      return `<div class="ics-template-tile" role="option" tabindex="${selected ? 0 : -1}" aria-selected="${selected}" data-studio-template="${template.id}" title="${escapeHtml(`${template.name}: ${template.subject}`)}"><img src="${escapeHtml(templateThumbnail(template.id))}" alt="" loading="lazy" decoding="async" draggable="false"><span class="ics-template-title"><span>${escapeHtml(template.name)}</span><small>${escapeHtml(template.subject)}</small></span><button type="button" class="ics-template-zoom" data-studio-action="preview-template:${template.id}" aria-label="Preview ${escapeHtml(template.name)}" title="Preview">${icon("search")}</button></div>`
+    })
+    .join("")
+}
+
+function renderTemplateLibrary({ focus = "" } = {}) {
+  const layer = mountedRoot?.querySelector("[data-studio-modal]")
+  if (!layer) return
+  if (!templateLibrary) {
+    layer.innerHTML = ""
+    return
+  }
+  const preview = templateLibrary.preview ? diagramTemplate(templateLibrary.preview) : null
+  layer.innerHTML = `<div class="ics-modal-backdrop" data-studio-action="close-templates"></div><div class="ics-library-dialog" role="dialog" aria-modal="true" aria-label="Templates" data-studio-template-library><button type="button" class="ics-tb ics-library-close" data-studio-action="close-templates" aria-label="Close" title="Close">${icon("x")}</button><div class="ics-library-dialog-body"><nav class="ics-library-dialog-nav" aria-label="Template categories"><span class="ics-field ics-search-field">${icon("search")}<input type="search" placeholder="Search" aria-label="Search templates" value="${escapeHtml(templateLibrary.query)}" data-studio-template-search></span><div class="ics-library-dialog-categories">${templateCategories()
+    .map(
+      (category) =>
+        `<button type="button" class="ics-library-category" aria-pressed="${category.name === templateLibrary.category}" data-studio-action="template-category:${escapeHtml(category.name)}">${escapeHtml(category.name)} (${category.count})</button>`,
+    )
+    .join(
+      "",
+    )}</div></nav><div class="ics-library-dialog-grid" role="listbox" aria-label="Templates" data-studio-template-grid>${templateTilesMarkup()}</div></div><div class="ics-library-dialog-actions"><button type="button" class="ics-btn" data-studio-action="close-templates">Cancel</button><button type="button" class="ics-btn ics-btn-pri" data-studio-action="insert-template"${templateLibrary.selected ? "" : " disabled"}>Insert</button></div>${
+    preview
+      ? `<div class="ics-template-preview" role="dialog" aria-label="${escapeHtml(preview.name)} preview"><img src="${escapeHtml(templateThumbnail(preview.id))}" alt="${escapeHtml(`${preview.name}: ${preview.subject}`)}"><div class="ics-template-preview-bar"><span><strong>${escapeHtml(preview.name)}</strong> ${escapeHtml(preview.subject)}</span><button type="button" class="ics-btn" data-studio-action="close-template-preview">Close</button><button type="button" class="ics-btn ics-btn-pri" data-studio-action="insert-template">Insert</button></div></div>`
+      : ""
+  }</div>`
+  if (focus === "search") {
+    const search = layer.querySelector("[data-studio-template-search]")
+    search?.focus()
+    search?.setSelectionRange(search.value.length, search.value.length)
+  } else if (focus === "tile") {
+    layer.querySelector('.ics-template-tile[aria-selected="true"]')?.focus()
+  }
+}
+
+function openTemplateLibrary() {
+  closePopover({ restoreFocus: false })
+  templateLibrary = { category: "All", query: "", selected: DIAGRAM_TEMPLATES[0].id, preview: "" }
+  renderTemplateLibrary({ focus: "search" })
+}
+
+function closeTemplateLibrary() {
+  templateLibrary = null
+  renderTemplateLibrary()
+  mountedRoot?.querySelector('.ics-toolbar [data-studio-action="templates"]')?.focus()
+}
+
+function handleTemplateLibraryKeydown(event) {
+  if (!templateLibrary) return false
+  if (event.key === "Escape") {
+    event.preventDefault()
+    if (templateLibrary.preview) {
+      templateLibrary.preview = ""
+      renderTemplateLibrary({ focus: "tile" })
+    } else closeTemplateLibrary()
+    return true
+  }
+  if (event.key === "Enter" && !event.target.closest?.("button")) {
+    event.preventDefault()
+    void runAction("insert-template")
+    return true
+  }
+  const moves = { ArrowRight: 1, ArrowDown: 3, ArrowLeft: -1, ArrowUp: -3 }
+  if (moves[event.key] && !event.target.matches?.("[data-studio-template-search]")) {
+    const templates = visibleTemplates()
+    const at = templates.findIndex((template) => template.id === templateLibrary.selected)
+    const next = templates[Math.min(templates.length - 1, Math.max(0, at + moves[event.key]))]
+    if (next) {
+      event.preventDefault()
+      templateLibrary.selected = next.id
+      renderTemplateLibrary({ focus: "tile" })
+    }
+    return true
+  }
+  // Everything else stays inside the dialog: no canvas shortcuts behind it.
+  return !isTypingTarget(event.target) && event.key.length === 1
+}
+
 /* ───────── first-run tour ───────── */
 
 // B-1050: a short spotlight tour, one lit element at a time on a dimmed
@@ -3203,10 +3352,10 @@ function handleThemeChange() {
 // panel, a phone sheet) are left out rather than lighting an empty corner.
 const TOUR_STEPS = [
   [
-    "[data-studio-templates]",
-    "Start from a chart",
-    "Open a faction chart, a control variable chart or a mechanism chart, then swap in your own genes.",
-    "right",
+    '.ics-toolbar [data-studio-action="templates"]',
+    "Start from a template",
+    "Open the template library: a faction chart, a control variable chart or a mechanism chart, ready for your own genes.",
+    "bottom",
   ],
   [
     ".ics-library-search",
@@ -3390,6 +3539,7 @@ export function unmountDiagramStudio() {
   editor = null
   editorReady = null
   openMenu = null
+  templateLibrary = null
   mountedRoot = null
 }
 

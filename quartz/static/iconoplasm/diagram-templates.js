@@ -26,7 +26,7 @@ import {
 // two shapes overlap, no arrow runs along another, and no arrow crosses a
 // portrait it does not join.
 
-const GENE_WIDTH = 96
+const GENE_WIDTH = 128
 const ON = "#1b7269"
 const OFF = "#a24834"
 const ENVELOPE = "#1b7269"
@@ -35,8 +35,8 @@ const MIRRORED_BANDS = [
   // [shape, label, y, height, colour]
   ["membrane", "Plasma membrane", 80, 60, ""],
   ["membrane", "Nuclear envelope", 380, 40, ENVELOPE],
-  ["membrane", "Nuclear envelope", 820, 40, ENVELOPE],
-  ["membrane", "Plasma membrane", 1100, 60, ""],
+  ["membrane", "Nuclear envelope", 840, 40, ENVELOPE],
+  ["membrane", "Plasma membrane", 1140, 60, ""],
 ]
 
 const REGION_LABELS = [
@@ -44,26 +44,27 @@ const REGION_LABELS = [
   ["EXTRACELLULAR", 14],
   ["CYTOPLASM", 152],
   ["NUCLEUS", 432],
-  ["CYTOPLASM", 872],
-  ["EXTRACELLULAR", 1172],
+  ["CYTOPLASM", 892],
+  ["EXTRACELLULAR", 1212],
 ]
 
 export const DIAGRAM_TEMPLATES = Object.freeze([
   Object.freeze({
     id: "faction",
     name: "Faction chart",
+    category: "Faction charts",
     subject: "Oncogene-induced apoptosis",
-    page: { width: 1600, height: 1240 },
+    page: { width: 1600, height: 1280 },
     bins: [
-      ["Restart the cycle", 50, 30, 740, 1180, OFF],
-      ["Collapse the world", 810, 30, 740, 1180, ON],
+      ["Restart the cycle", 50, 30, 740, 1220, OFF],
+      ["Collapse the world", 810, 30, 740, 1220, ON],
     ],
     bands: MIRRORED_BANDS,
     regions: REGION_LABELS,
     genes: [
-      ["HRAS", 560, 46],
+      ["HRAS", 560, 30],
       ["MYC", 200, 480],
-      ["MDM2", 520, 640],
+      ["MDM2", 520, 650],
       ["BCL2", 520, 920],
       ["TP53", 1000, 540],
       ["BBC3", 940, 920],
@@ -80,8 +81,8 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
         "activation",
         "",
         [
-          { x: 1048, y: 790 },
-          { x: 600, y: 790 },
+          { x: 1064, y: 830 },
+          { x: 616, y: 830 },
         ],
       ],
       ["TP53", "BBC3", "activation", ""],
@@ -93,8 +94,8 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
         "inhibition",
         "",
         [
-          { x: 568, y: 1076 },
-          { x: 1288, y: 1076 },
+          { x: 584, y: 1112 },
+          { x: 1304, y: 1112 },
         ],
       ],
     ],
@@ -102,6 +103,7 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
   Object.freeze({
     id: "control-variable",
     name: "Control variable chart",
+    category: "Control variable charts",
     subject: "PIP₃ : PIP₂",
     page: { width: 1400, height: 1000 },
     bins: [
@@ -113,14 +115,14 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
     bands: [],
     regions: [],
     genes: [
-      ["PTEN", 200, 200],
-      ["INPP5D", 420, 200],
-      ["PIK3CA", 880, 200],
-      ["PIK3R1", 1100, 200],
-      ["FOXO3", 200, 720],
-      ["GSK3B", 420, 720],
-      ["PDPK1", 880, 720],
-      ["AKT1", 1100, 720],
+      ["PTEN", 170, 180],
+      ["INPP5D", 420, 180],
+      ["PIK3CA", 850, 180],
+      ["PIK3R1", 1100, 180],
+      ["FOXO3", 170, 690],
+      ["GSK3B", 420, 690],
+      ["PDPK1", 850, 690],
+      ["AKT1", 1100, 690],
     ],
     molecules: [["variable", "PIP₃ : PIP₂", 560, 455, 280, 90]],
     edges: [
@@ -137,6 +139,7 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
   Object.freeze({
     id: "mechanism",
     name: "Mechanism chart",
+    category: "Mechanism charts",
     subject: "EGFR–MAPK signaling",
     page: { width: 1400, height: 900 },
     bins: [],
@@ -180,6 +183,13 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
     ],
   }),
 ])
+
+// The template library shows a picture of each template, as draw.io's does:
+// the PNG export of the built page, scaled to 480 px wide
+// (studio/templates/<id>.webp). Regenerate it when a template's layout moves.
+export function templateThumbnail(id) {
+  return new URL(`./studio/templates/${id}.webp`, import.meta.url).href
+}
 
 export function diagramTemplate(id) {
   return DIAGRAM_TEMPLATES.find((template) => template.id === id) || null
