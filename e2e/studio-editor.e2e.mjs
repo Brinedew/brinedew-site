@@ -187,22 +187,10 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       ),
       "#a24834",
     )
-    // X6 repaints the colour before the new connector's path, so wait for the
-    // path; X6 writes the bend as a cubic curve.
+    // X6 writes the bend as a cubic curve. The width edit above runs first on
+    // purpose: an edit used to leave the line unable to redraw (see 13).
     const tbarPath = () =>
       document.querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')?.getAttribute("d") || ""
-    await page
-      .waitForFunction(
-        () =>
-          / C /.test(
-            document
-              .querySelector('[data-cell-id="edge-5"] path:nth-of-type(2)')
-              ?.getAttribute("d") || "",
-          ),
-        null,
-        { timeout: 5_000 },
-      )
-      .catch(() => {})
     const tbar = await page.evaluate(tbarPath)
     report.tbarPath = tbar
     assert.match(tbar, / C /, "an inhibition meets the portrait square-on")
@@ -217,7 +205,22 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     report.endHandles = handles
     assert.deepEqual(handles, ["circle", "circle"])
     await page.screenshot({ path: path.join(OUT, "studio-edge-format.png") })
+    // 13. An edited relationship still follows its portraits. Edits used to
+    // replace the edge's attributes wholesale and drop X6's `connection` flag,
+    // so the drawn line froze in place while its handles moved on (B-1050 #9).
     await page.mouse.click(4, 4)
+    const target = await page.locator('[data-cell-id="gene-map2k1"]').boundingBox()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2 + 60, {
+      steps: 8,
+    })
+    await page.mouse.up()
+    const followed = await page.evaluate(tbarPath)
+    report.editedEdgeAfterDrag = followed
+    assert.notEqual(followed, tbar, "an edited relationship follows its portrait")
+    await page.mouse.click(4, 4)
+    await page.keyboard.press("Control+z")
     await page.keyboard.press("Control+z")
     await page.keyboard.press("Control+z")
     await page.waitForFunction(

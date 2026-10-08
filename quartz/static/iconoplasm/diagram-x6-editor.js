@@ -505,9 +505,14 @@ function markerFor(edge, ink) {
   return null
 }
 
+// Edits write these with `overwrite: true` so stale keys (a dash, a marker)
+// go away, which also replaces X6's own `lines` group. Without its
+// `connection` flag X6 stops writing the path, and the line freezes where it
+// is while its portraits move on.
 function edgeAttrs(edge, selected = false, ink = INK) {
   const width = edge.width || 1.5
   return {
+    lines: { connection: true, strokeLinejoin: "round" },
     wrap: {
       stroke: selected ? "rgba(27,114,105,0.24)" : "transparent",
       strokeWidth: Math.max(10, width + 9),

@@ -25,7 +25,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=189a4fd320f16b65"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=728a389710af9fbb"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=5f39ed128fd784a5"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
