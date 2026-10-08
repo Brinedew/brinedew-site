@@ -1,11 +1,12 @@
 import {
   addCompartmentNode,
+  addGaugeNode,
   addGeneNode,
   addMoleculeNode,
   addTextNode,
   connectGeneNodes,
   createDiagramDocument,
-} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
+} from "./diagram-document.js?v=ae8ed02849975cc2"
 
 // B-1050: the canvas templates. Each one is a kind of chart from the owner's
 // own writing, so the names are the owner's:
@@ -15,7 +16,7 @@ import {
 //   the top and outputs near the bottom, two arrow kinds only. The cast is the
 //   owner's "oncogene-induced apoptosis" from "Mnemonic portraits for 19,023
 //   human genes" (What next?).
-// - Control variable chart: one abstract variable in the middle and four
+// - Control variable chart: one abstract variable (a gauge) in the middle and four
 //   quadrants around it: upstream that lowers it, upstream that raises it,
 //   downstream that runs when it is low, and when it is high. PIP3 : PIP2 is the
 //   owner's own example (2026-10-08).
@@ -110,24 +111,28 @@ export const DIAGRAM_TEMPLATES = Object.freeze([
     // ones leave from its bottom, each at its own point (the owner's example).
     lines: "top-to-bottom",
     bins: [
-      ["Upstream: lowers PIP₃", 40, 40, 640, 390, OFF],
-      ["Upstream: raises PIP₃", 720, 40, 640, 390, ON],
-      ["Downstream: runs when PIP₃ is low", 40, 570, 640, 390, OFF],
-      ["Downstream: runs when PIP₃ is high", 720, 570, 640, 390, ON],
+      ["Upstream: lowers PIP₃", 40, 40, 640, 350, OFF],
+      ["Upstream: raises PIP₃", 720, 40, 640, 350, ON],
+      ["Downstream: runs when PIP₃ is low", 40, 610, 640, 350, OFF],
+      ["Downstream: runs when PIP₃ is high", 720, 610, 640, 350, ON],
     ],
     bands: [],
     regions: [],
     genes: [
-      ["PTEN", 170, 180],
-      ["INPP5D", 420, 180],
-      ["PIK3CA", 850, 180],
-      ["PIK3R1", 1100, 180],
-      ["FOXO3", 170, 690],
-      ["GSK3B", 420, 690],
-      ["PDPK1", 850, 690],
-      ["AKT1", 1100, 690],
+      ["PTEN", 170, 170],
+      ["INPP5D", 420, 170],
+      ["PIK3CA", 850, 170],
+      ["PIK3R1", 1100, 170],
+      ["FOXO3", 170, 730],
+      ["GSK3B", 420, 730],
+      ["PDPK1", 850, 730],
+      ["AKT1", 1100, 730],
     ],
-    molecules: [["variable", "PIP₃ : PIP₂", 560, 455, 280, 90]],
+    molecules: [],
+    // The variable is a gauge (B-1051): lowering inputs land on the left of
+    // its top, raising ones on the right, and what runs when it is low or
+    // high leaves from the matching half of its bottom.
+    gauges: [["variable", "PIP₃ : PIP₂", 550, 405, 300, 190]],
     edges: [
       ["PTEN", "variable", "inhibition", ""],
       ["INPP5D", "variable", "inhibition", ""],
@@ -272,6 +277,18 @@ export function buildTemplateDocument(id, assets, { documentId } = {}) {
       width: moleculeWidth,
       height: moleculeHeight,
       font_size: 22,
+    })
+    document = added.document
+    ids.set(key, added.node.id)
+  }
+  for (const [key, label, x, y, gaugeWidth, gaugeHeight] of template.gauges || []) {
+    const added = addGaugeNode(document, {
+      id: `gauge-${key}`,
+      label,
+      x,
+      y,
+      width: gaugeWidth,
+      height: gaugeHeight,
     })
     document = added.document
     ids.set(key, added.node.id)

@@ -115,7 +115,9 @@ for (const template of DIAGRAM_TEMPLATES) {
   test(`${template.name}: arrows only cross at points and never run through a portrait`, () => {
     const document = buildTemplateDocument(template.id, assetsFor(template.id))
     assert.equal(document.edges.length, template.edges.length, "every relationship was drawn")
-    const actors = document.nodes.filter((node) => node.type === "gene" || node.type === "molecule")
+    const actors = document.nodes.filter((node) =>
+      ["gene", "molecule", "gauge"].includes(node.type),
+    )
     const drawn = document.edges.map((edge) => ({ edge, parts: segments(document, edge) }))
     for (const { edge, parts } of drawn) {
       for (const actor of actors) {
@@ -151,7 +153,7 @@ test("faction and control variable charts use only activation and inhibition", (
 
 test("the control variable sits in the middle with four quadrants around it", () => {
   const document = buildTemplateDocument("control-variable", assetsFor("control-variable"))
-  const variable = document.nodes.find((node) => node.type === "molecule")
+  const variable = document.nodes.find((node) => node.type === "gauge")
   const bins = document.nodes.filter((node) => node.shape === "faction")
   const middle = centre(variable)
   assert.equal(bins.length, 4)
@@ -172,6 +174,15 @@ test("the control variable sits in the middle with four quadrants around it", ()
       (node) => node.id === (edge.from === variable.id ? edge.to : edge.from),
     )
     assert.equal(edge.to === variable.id, centre(other).y < middle.y)
+  }
+  // B-1051: inputs land on the gauge's top and outputs leave from its bottom;
+  // what lowers it, or runs when it is low, is on the left half, the rest on
+  // the right, like the bins.
+  const ends = lineEnds(document)
+  for (const edge of document.edges) {
+    const end = edge.to === variable.id ? ends.get(edge.id).target : ends.get(edge.id).source
+    assert.equal(end.side, edge.to === variable.id ? "top" : "bottom", edge.id)
+    assert.equal(end.dx < 0, edge.kind === "inhibition", edge.id)
   }
 })
 
