@@ -471,7 +471,11 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
       ),
     )
     await page.screenshot({ path: path.join(OUT, "studio-gauge-added.png") })
-    await page.mouse.click(4, 4)
+    // A click on the empty canvas outside the sheet clears the selection, so
+    // Format shows the page again for step 15.
+    const canvasArea = await page.locator("[data-studio-canvas-area]").boundingBox()
+    await page.mouse.click(canvasArea.x + 40, canvasArea.y + canvasArea.height - 20)
+    await page.locator("[data-studio-format-body] .ics-bg-swatches").waitFor()
 
     // 15. Any page colour; a dark page turns the default ink light.
     await page.locator('[data-studio-format-body] .ics-bg-swatches [data-value="#2b211b"]').click()
