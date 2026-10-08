@@ -58,12 +58,12 @@ that historical table by assuming the first migration is the current schema.
   rebuilds it. The page reads the board from the object `leaderboard/v1/top.json` on the CDN, which
   `workers/lib/leaderboard-publication.js` rebuilds from this table every ten minutes or so;
   `GET /api/stats/leaderboard` is its fallback. Migration 0016's index on
-  `users.leaderboard_opt_in` is not part of the schema: nothing reads it, and the publisher drops
-  it once per isolate (`retireLeaderboardOptInIndex`, B-966).
+  `users.leaderboard_opt_in` is not part of the schema: nothing reads it, and production no longer
+  has it (B-966, B-975).
 - **Guess aggregates:** D1 `daily_guess_aggregate` is created on first use by
   `workers/lib/guess-aggregates.js`, which keeps its primary key `(day, guess_uniprot)` as the
-  only index and drops the second one migration-free (`DROP INDEX IF EXISTS`, B-964); a guess
-  writes 1 row, 2 for a protein's first of the day.
+  only index (production no longer has the second one, B-964, B-975); a guess writes 1 row, 2 for
+  a protein's first of the day.
 - **Failed session writes:** D1 `game_session_write_failures_do_not_delete` holds only failed
   Durable Object session writes: one row for each day, operation, session kind and error class,
   with a count that is a lower bound and the first message as the example. D1 takes at most one

@@ -28,7 +28,7 @@ import {
   createPublishedCardObjectStore,
 } from "./iconoplasm-published-card-objects.js"
 import { sanitizeDiscordAvatarUrl } from "./avatar-proxy.js"
-import { boardEntry, readLeaderboard, retireLeaderboardOptInIndex } from "./leaderboard-streaks.js"
+import { boardEntry, readLeaderboard } from "./leaderboard-streaks.js"
 
 // What the page shows: five rows.
 export const LEADERBOARD_OBJECT_ENTRIES = 5
@@ -116,7 +116,6 @@ export async function publishLeaderboardObject(
   { fetchImpl = (...args) => fetch(...args) } = {},
 ) {
   if (!env?.DB) return { ok: false, reason: "missing_db" }
-  await retireLeaderboardOptInIndex(env.DB)
   const rows = await readLeaderboard(env.DB, LEADERBOARD_OBJECT_ENTRIES)
   const avatars = await Promise.all(rows.map((row) => avatarDataUri(row?.avatar_url, fetchImpl)))
   const object = { entries: rows.map((row, index) => boardEntry(row, index, avatars[index])) }
