@@ -7,7 +7,6 @@ import assert from "node:assert/strict"
 import {
   createCaretakerManifestationHttpHandler,
   createManifestationAuthorityServiceHandler,
-  createManifestationUploadIntent,
   offerCaretakerAssignment,
   registerAuthorityAccount,
   registerCaretakerTermsVersion,
@@ -53,7 +52,7 @@ export function ids() {
 }
 
 // One counter for every handler in a test run: two handlers in one test must
-// not mint the same revision or upload-intent id.
+// not mint the same revision id.
 const sharedIds = ids()
 
 // An in-memory Bunny Storage zone. `rules` run first and may answer a request
@@ -215,19 +214,7 @@ export async function seedLegacyRevision(context, env, bunny, { name, prose, fir
   const revisionId = `revision_legacy_${name}`
   const encrypted = await encryptLegacyProse(env, { revisionId, geneId: context.geneId, prose })
   const objectKey = await createManifestationBodyObjectKey()
-  await createManifestationUploadIntent(context.db, {
-    entityKind: "revision",
-    entityId: revisionId,
-    assignmentId: context.assignmentId,
-    objectKey,
-    ciphertextSha256: encrypted.ciphertext_sha256,
-    bodyBytes: encrypted.body_bytes,
-    actorKind: "account",
-    actorAccountId: USER,
-    uploadIntentId: `upload_intent_legacy_${name}`,
-    leaseToken: `upload_lease_legacy_${name}`,
-    now: "2099-10-03T00:00:00.000Z",
-  })
+
   bunny.objects.set(objectKey, encrypted.ciphertext)
   const manifestation = row(
     context.db,
@@ -295,19 +282,7 @@ export async function seedLegacyTags(
     tags: prepared.output_plain,
   })
   const objectKey = await createManifestationBodyObjectKey()
-  await createManifestationUploadIntent(context.db, {
-    entityKind: "derivative",
-    entityId: derivativeId,
-    assignmentId: context.assignmentId,
-    objectKey,
-    ciphertextSha256: encrypted.ciphertext_sha256,
-    bodyBytes: encrypted.body_bytes,
-    actorKind: "account",
-    actorAccountId: USER,
-    uploadIntentId: `upload_intent_legacy_tags_${name}`,
-    leaseToken: `upload_lease_legacy_tags_${name}`,
-    now: "2099-10-03T00:00:00.000Z",
-  })
+
   bunny.objects.set(objectKey, encrypted.ciphertext)
   await submitTagsDerivative(context.db, {
     revisionId,

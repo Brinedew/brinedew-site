@@ -6,7 +6,9 @@ import {
   readAssignmentManifestation,
   readGeneAliases,
 } from "./manifestation-authority-repository.js"
-import { requireAdoptedManifestationUpload } from "./manifestation-upload-intents.js"
+import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
+import { discardUnreferencedBodies } from "./manifestation-uploaded-bodies.js"
+import { TestD1 } from "./manifestation-authority-test-support.js"
 
 test("alias envelopes preserve full ordered history and stop after 257 indexed rows on overflow", async () => {
   const raw = new DatabaseSync(":memory:")
@@ -61,45 +63,44 @@ test("alias envelopes preserve full ordered history and stop after 257 indexed r
   }
 })
 
-test("upload verification probes only the current object and rejects historical adoption", async () => {
-  const raw = new DatabaseSync(":memory:")
-  try {
-    raw.exec(`CREATE TABLE icono_manifestation_revision_storage_secrets (
-      manifestation_revision_id TEXT PRIMARY KEY, object_key TEXT);
-      CREATE TABLE icono_manifestation_upload_intents (
-      upload_intent_id TEXT PRIMARY KEY, object_key TEXT UNIQUE,
-      entity_kind TEXT, entity_id TEXT, status TEXT, resolved_at TEXT);
-      WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<20000)
-      INSERT INTO icono_manifestation_upload_intents
-      SELECT 'intent_'||n, 'object_'||n, 'revision', 'revision_cost_test', 'adopted', '2026-09-05'
-      FROM ids;
-      INSERT INTO icono_manifestation_revision_storage_secrets
-      VALUES ('revision_cost_test','object_1')`)
-    let queryPlan
-    const db = {
-      prepare(sql) {
-        return {
-          bind(...args) {
-            queryPlan = raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args)
-            return { first: async () => raw.prepare(sql).get(...args) }
-          },
-        }
-      },
-    }
-    assert.equal(
-      (await requireAdoptedManifestationUpload(db, "revision", "revision_cost_test"))
-        .upload_intent_id,
-      "intent_1",
+test("the cleanup after a failed save looks each body up by its unique key", async (t) => {
+  // B-859: one indexed probe per uploaded body, never a scan of the ~19,000
+  // stored bodies, on the real schema.
+  const db = new TestD1()
+  t.after(() => db.close())
+  const plans = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    plans.push(
+      ...db.raw
+        .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .all("key")
+        .map(({ detail }) => detail),
     )
-    assert.equal(queryPlan.length, 2)
-    assert.ok(queryPlan.every((step) => /SEARCH .* USING INDEX .*\(.*=\?\)/.test(step.detail)))
-    raw.exec("UPDATE icono_manifestation_revision_storage_secrets SET object_key='missing_current'")
-    await assert.rejects(requireAdoptedManifestationUpload(db, "revision", "revision_cost_test"), {
-      code: "UPLOAD_NOT_ADOPTED",
-    })
-  } finally {
-    raw.close()
+    return prepare(sql)
   }
+  const original = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = original
+  })
+  globalThis.fetch = async (_url, init = {}) =>
+    new Response(null, { status: String(init.method).toUpperCase() === "DELETE" ? 200 : 404 })
+  const outcomes = await discardUnreferencedBodies(
+    db,
+    { ICONOPLASM_AUTHORING_STORAGE_ZONE: "zone", ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "pw" },
+    [
+      { kind: "revision", objectKey: await createManifestationBodyObjectKey() },
+      { kind: "derivative", objectKey: await createManifestationBodyObjectKey() },
+    ],
+  )
+  assert.deepEqual(outcomes, ["deleted", "deleted"])
+  assert.equal(plans.length, 2)
+  assert.ok(
+    plans.every((detail) =>
+      /^SEARCH \w+ USING COVERING INDEX sqlite_autoindex_\w+ \(object_key=\?\)$/.test(detail),
+    ),
+    plans.join("; "),
+  )
 })
 
 test("assignment manifestation lookup keeps latest history while avoiding the system-wide scan", async () => {

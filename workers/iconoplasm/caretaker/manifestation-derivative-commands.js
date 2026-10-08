@@ -133,8 +133,7 @@ function derivativeHeadSnapshot(row) {
 }
 
 // The rows that record one Tags derivative: the derivative and, when it has a
-// body, its storage row (whose trigger adopts the upload intent). Shared by the
-// Tags submit command and the combined caretaker save (B-859 step 3), so the
+// body, its storage row. Shared by the Tags submit command and the combined caretaker save (B-859 step 3), so the
 // SQL exists once.
 function derivativeInsertStatements(db, derivative, storage) {
   const statements = [
