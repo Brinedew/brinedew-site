@@ -40,7 +40,9 @@
 //     does not load the next page, or the label claims a count (B-1014);
 // 19. opening the picker asks the Worker for the style list although the CDN
 //     object has it and every favourite (B-896), or the picker shows nothing
-//     when the CDN cannot be reached.
+//     when the CDN cannot be reached;
+// 20. the view switch (and, on desktop, the search) scrolls out of view while
+//     the cards scroll (B-1044: the owner lost it on scrolling down).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -597,17 +599,20 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           `${where}: the star click toggled the card`,
         )
 
-        // 6 again: on a phone the docked search stays in view while the grid scrolls.
-        if (!desktop) {
-          await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 400))
-          await page.waitForTimeout(150)
-          m = await page.evaluate(measurePicker)
-          assert.ok(
-            m.find.bottom <= m.browse.bottom + 1 && m.find.top >= m.browse.top,
-            `${where}: the docked search scrolled out of view`,
-          )
-          await page.screenshot({ path: shot("scrolled") })
-        }
+        // 6 and 20: while the cards scroll, the view switch stays pinned at the
+        // top of the scroller, and the search with it on desktop; on a phone
+        // the search stays docked at the bottom.
+        await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 400))
+        await page.waitForTimeout(150)
+        m = await page.evaluate(measurePicker)
+        const inView = (part) => part.top >= m.browse.top - 1 && part.bottom <= m.browse.bottom + 1
+        assert.ok(inView(m.viewSwitch), `${where}: the view switch scrolled out of view`)
+        assert.ok(inView(m.find), `${where}: the search scrolled out of view`)
+        assert.ok(
+          desktop ? m.find.top < m.browse.top + 60 : m.find.bottom > m.browse.bottom - 80,
+          `${where}: the search left its place (desktop: top row; phone: docked at the bottom)`,
+        )
+        await page.screenshot({ path: shot("scrolled") })
 
         // 11 again: an empty batch queues a random candidate.
         // All styles: the star click above un-favorited a picked style, so

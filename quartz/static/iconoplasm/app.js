@@ -5607,6 +5607,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // Grid areas place the search: beside the views on desktop, docked
       // under the cards on a phone (B-884), so only the views sit above them.
       '<div class="icono-request-browse" data-icono-request-browse>' +
+      // B-1044: the band behind the pinned view switch (and, on desktop, the
+      // search), so the cards scroll under an opaque strip.
+      '<div class="icono-request-head" aria-hidden="true"></div>' +
       '<div class="icono-request-views" role="group" aria-label="Show">' +
       '<button type="button" class="icono-request-view" data-icono-request-view="favorites" aria-pressed="false">Favorites <span data-icono-request-view-count></span></button>' +
       '<button type="button" class="icono-request-view" data-icono-request-view="all" aria-pressed="true">All styles</button>' +
