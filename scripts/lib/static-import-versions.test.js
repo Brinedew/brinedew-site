@@ -13,7 +13,10 @@ const files = [
   "diagram-x6-editor.js",
   "diagram-studio-icons.js",
   "diagram-studio.css",
+  "diagram-templates.js",
   "generated/x6-runtime.js",
+  "generated/tour-runtime.js",
+  "generated/driver.css",
 ]
 
 async function fixture(t) {
@@ -40,7 +43,13 @@ async function snapshot(root) {
   )
 }
 
-for (const leaf of ["diagram-document.js", "diagram-studio.css", "generated/x6-runtime.js"]) {
+for (const leaf of [
+  "diagram-document.js",
+  "diagram-studio.css",
+  "diagram-templates.js",
+  "generated/x6-runtime.js",
+  "generated/tour-runtime.js",
+]) {
   test(`editing ${leaf} invalidates the Studio entry import without manual keys`, async (t) => {
     const root = await fixture(t)
     await syncStudioImportVersions(root)
@@ -55,7 +64,7 @@ for (const leaf of ["diagram-document.js", "diagram-studio.css", "generated/x6-r
       .digest("hex")
       .slice(0, 16)
     assert.ok(after["app.js"].includes(`./diagram-studio.js?v=${studioHash}`))
-    if (leaf.startsWith("generated/"))
+    if (leaf === "generated/x6-runtime.js")
       assert.notEqual(after["diagram-x6-editor.js"], before["diagram-x6-editor.js"])
     const appFile = path.join(root, "iconoplasm/app.js")
     const modified = (await stat(appFile)).mtimeMs
