@@ -46,8 +46,8 @@ function requireOpaqueObjectLocator(storage, revisionId) {
   }
 }
 
-// An upload whose commit fails stays an unadopted upload intent; the sweep in
-// manifestation-upload-intents.js deletes its stored body once the lease ends.
+// An upload whose commit fails is deleted by the route that uploaded it, once a
+// read shows no storage row points at it (manifestation-uploaded-bodies.js).
 function commitFailure(error) {
   return error instanceof Error
     ? error
@@ -338,9 +338,8 @@ export async function seedSystemManifestation(
 }
 
 // Everything a caretaker save checks, and the rows its revision writes: the
-// lineage (new, or advanced to the new head), the revision, its storage (which
-// adopts the upload intent) and its lifecycle. The revision save and the
-// combined save (B-859 step 3) share it, so the rules exist once.
+// lineage (new, or advanced to the new head), the revision, its storage and its
+// lifecycle. The revision save and the combined save (B-859 step 3) share it, so the rules exist once.
 async function prepareRevisionSave(
   db,
   {

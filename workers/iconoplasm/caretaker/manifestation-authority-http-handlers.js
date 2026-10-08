@@ -34,10 +34,7 @@ import {
   requireActiveAccount,
   resolveCommandReplay,
 } from "./manifestation-authority-repository.js"
-import {
-  admitManifestationUploadIntent,
-  requireAdoptedManifestationUpload,
-} from "./manifestation-upload-intents.js"
+import { commitUploadedBodies } from "./manifestation-uploaded-bodies.js"
 import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
 import { selectManifestationRevision } from "./manifestation-selection-commands.js"
 import {
@@ -584,32 +581,32 @@ function createCaretakerManifestationHttpHandler({
         const revisionId = idFactory("revision")
         const prose = await prepareManifestationProse(body.prose)
         const objectKey = await createManifestationBodyObjectKey()
-        await admitManifestationUploadIntent(db, env, {
-          entityKind: "revision",
-          entityId: revisionId,
-          assignmentId,
-          objectKey,
-          ciphertextSha256: prose.body_sha256,
-          bodyBytes: prose.body_bytes,
-          actorKind: "account",
-          actorAccountId: session.accountId,
-          idFactory,
-        })
-        const upload = await putManifestationBodyObject(env, objectKey, prose.bytes, {
-          expectedSha256: prose.body_sha256,
-        })
-        result = await saveManifestationRevision(db, {
-          assignmentId,
-          expectedAssignmentVersion: body.expected_assignment_version,
-          expectedManifestationVersion: body.expected_manifestation_version,
-          sourceRevisionId: body.based_on_revision_id,
-          revisionId,
-          eventUuid: body.event_id,
-          storage: plainStorageDescriptor(prose, objectKey, upload),
-          idFactory,
-          ...command,
-        })
-        await requireAdoptedManifestationUpload(db, "revision", revisionId)
+        result = await commitUploadedBodies(
+          db,
+          env,
+          [
+            {
+              kind: "revision",
+              objectKey,
+              upload: () =>
+                putManifestationBodyObject(env, objectKey, prose.bytes, {
+                  expectedSha256: prose.body_sha256,
+                }),
+            },
+          ],
+          ([upload]) =>
+            saveManifestationRevision(db, {
+              assignmentId,
+              expectedAssignmentVersion: body.expected_assignment_version,
+              expectedManifestationVersion: body.expected_manifestation_version,
+              sourceRevisionId: body.based_on_revision_id,
+              revisionId,
+              eventUuid: body.event_id,
+              storage: plainStorageDescriptor(prose, objectKey, upload),
+              idFactory,
+              ...command,
+            }),
+        )
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
       }
 
@@ -658,68 +655,63 @@ function createCaretakerManifestationHttpHandler({
         const derivativeId = idFactory("derivative")
         const proseKey = await createManifestationBodyObjectKey()
         const tagsKey = await createManifestationBodyObjectKey()
-        for (const [entityKind, entityId, objectKey, sha256, bytes] of [
-          ["revision", revisionId, proseKey, prose.body_sha256, prose.body_bytes],
+        const taggerConfigSha256 = await sha256Hex("iconoplasm.caretaker.manual-tags.v1")
+        result = await commitUploadedBodies(
+          db,
+          env,
           [
-            "derivative",
-            derivativeId,
-            tagsKey,
-            output.output_plain_sha256,
-            output.output_plain_bytes,
+            {
+              kind: "revision",
+              objectKey: proseKey,
+              upload: () =>
+                putManifestationBodyObject(env, proseKey, prose.bytes, {
+                  expectedSha256: prose.body_sha256,
+                }),
+            },
+            {
+              kind: "derivative",
+              objectKey: tagsKey,
+              upload: () =>
+                putManifestationBodyObject(env, tagsKey, output.output_bytes, {
+                  expectedSha256: output.output_plain_sha256,
+                }),
+            },
           ],
-        ]) {
-          await admitManifestationUploadIntent(db, env, {
-            entityKind,
-            entityId,
-            assignmentId,
-            objectKey,
-            ciphertextSha256: sha256,
-            bodyBytes: bytes,
-            actorKind: "account",
-            actorAccountId: session.accountId,
-            idFactory,
-          })
-        }
-        const [proseUpload, tagsUpload] = await Promise.all([
-          putManifestationBodyObject(env, proseKey, prose.bytes, {
-            expectedSha256: prose.body_sha256,
-          }),
-          putManifestationBodyObject(env, tagsKey, output.output_bytes, {
-            expectedSha256: output.output_plain_sha256,
-          }),
-        ])
-        result = await saveManifestationWithTags(db, {
-          assignmentId,
-          expectedAssignmentVersion: body.expected_assignment_version,
-          expectedManifestationVersion: body.expected_manifestation_version,
-          expectedHeadVersion: body.expected_head_version,
-          expectedCanonicalRevisionId: body.expected_canonical_revision_id,
-          sourceRevisionId: body.based_on_revision_id,
-          revisionId,
-          eventUuid: body.event_id,
-          storage: plainStorageDescriptor(prose, proseKey, proseUpload),
-          tags: {
-            derivativeId,
-            tagsSha256: output.tags_sha256,
-            tagsBytes: output.tags_bytes,
-            fieldsSha256: output.fields_sha256,
-            fieldsBytes: output.fields_bytes,
-            storage: plainStorageDescriptor(
-              { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
-              tagsKey,
-              tagsUpload,
-            ),
-            recipeId: "caretaker-manual-tags",
-            recipeVersion: "1",
-            providerId: "caretaker",
-            modelId: "manual",
-            taggerConfigSha256: await sha256Hex("iconoplasm.caretaker.manual-tags.v1"),
-          },
-          idFactory,
-          ...command,
-        })
-        await requireAdoptedManifestationUpload(db, "revision", revisionId)
-        await requireAdoptedManifestationUpload(db, "derivative", derivativeId)
+          ([proseUpload, tagsUpload]) =>
+            saveManifestationWithTags(db, {
+              assignmentId,
+              expectedAssignmentVersion: body.expected_assignment_version,
+              expectedManifestationVersion: body.expected_manifestation_version,
+              expectedHeadVersion: body.expected_head_version,
+              expectedCanonicalRevisionId: body.expected_canonical_revision_id,
+              sourceRevisionId: body.based_on_revision_id,
+              revisionId,
+              eventUuid: body.event_id,
+              storage: plainStorageDescriptor(prose, proseKey, proseUpload),
+              tags: {
+                derivativeId,
+                tagsSha256: output.tags_sha256,
+                tagsBytes: output.tags_bytes,
+                fieldsSha256: output.fields_sha256,
+                fieldsBytes: output.fields_bytes,
+                storage: plainStorageDescriptor(
+                  {
+                    body_sha256: output.output_plain_sha256,
+                    body_bytes: output.output_plain_bytes,
+                  },
+                  tagsKey,
+                  tagsUpload,
+                ),
+                recipeId: "caretaker-manual-tags",
+                recipeVersion: "1",
+                providerId: "caretaker",
+                modelId: "manual",
+                taggerConfigSha256,
+              },
+              idFactory,
+              ...command,
+            }),
+        )
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
       }
 
@@ -776,45 +768,49 @@ function createCaretakerManifestationHttpHandler({
         if (replay) return jsonResponse(replay)
         const derivativeId = idFactory("derivative")
         const objectKey = await createManifestationBodyObjectKey()
-        await admitManifestationUploadIntent(db, env, {
-          entityKind: "derivative",
-          entityId: derivativeId,
-          assignmentId: assignment.caretaker_assignment_id,
-          objectKey,
-          ciphertextSha256: output.output_plain_sha256,
-          bodyBytes: output.output_plain_bytes,
-          actorKind: "account",
-          actorAccountId: session.accountId,
-          idFactory,
-        })
-        const upload = await putManifestationBodyObject(env, objectKey, output.output_bytes, {
-          expectedSha256: output.output_plain_sha256,
-        })
-        result = await submitTagsDerivative(db, {
-          revisionId,
-          derivativeId,
-          status: "complete",
-          sourceBodySha256: revision.body_sha256,
-          tagsSha256: output.tags_sha256,
-          tagsBytes: output.tags_bytes,
-          fieldsSha256: output.fields_sha256,
-          fieldsBytes: output.fields_bytes,
-          storage: plainStorageDescriptor(
-            { body_sha256: output.output_plain_sha256, body_bytes: output.output_plain_bytes },
-            objectKey,
-            upload,
-          ),
-          recipeId: "caretaker-manual-tags",
-          recipeVersion: "1",
-          providerId: "caretaker",
-          modelId: "manual",
-          taggerConfigSha256: await sha256Hex("iconoplasm.caretaker.manual-tags.v1"),
-          expectedGeneRevision: body.expected_gene_revision,
-          idFactory,
-          ...auditIds(body),
-          ...command,
-        })
-        await requireAdoptedManifestationUpload(db, "derivative", derivativeId)
+        const taggerConfigSha256 = await sha256Hex("iconoplasm.caretaker.manual-tags.v1")
+        result = await commitUploadedBodies(
+          db,
+          env,
+          [
+            {
+              kind: "derivative",
+              objectKey,
+              upload: () =>
+                putManifestationBodyObject(env, objectKey, output.output_bytes, {
+                  expectedSha256: output.output_plain_sha256,
+                }),
+            },
+          ],
+          ([upload]) =>
+            submitTagsDerivative(db, {
+              revisionId,
+              derivativeId,
+              status: "complete",
+              sourceBodySha256: revision.body_sha256,
+              tagsSha256: output.tags_sha256,
+              tagsBytes: output.tags_bytes,
+              fieldsSha256: output.fields_sha256,
+              fieldsBytes: output.fields_bytes,
+              storage: plainStorageDescriptor(
+                {
+                  body_sha256: output.output_plain_sha256,
+                  body_bytes: output.output_plain_bytes,
+                },
+                objectKey,
+                upload,
+              ),
+              recipeId: "caretaker-manual-tags",
+              recipeVersion: "1",
+              providerId: "caretaker",
+              modelId: "manual",
+              taggerConfigSha256,
+              expectedGeneRevision: body.expected_gene_revision,
+              idFactory,
+              ...auditIds(body),
+              ...command,
+            }),
+        )
         return mutationResponse(db, { onAuthorityEvent, onAssignmentEvent }, result)
       }
 

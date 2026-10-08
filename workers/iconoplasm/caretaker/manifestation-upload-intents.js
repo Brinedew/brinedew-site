@@ -1,238 +1,24 @@
 import { deleteManifestationBodyObject } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import {
-  authorityError,
   createId,
   defaultIdFactory,
-  normalizeActorKind,
-  normalizeId,
   normalizeOptionalId,
-  normalizeSha256,
   normalizeTimestamp,
 } from "./manifestation-authority-contract.js"
-import {
-  all,
-  first,
-  prepared,
-  requireActiveAccount,
-  requireDatabase,
-} from "./manifestation-authority-repository.js"
-import { storageFields } from "./manifestation-storage-contract.js"
+import { all, prepared, requireDatabase } from "./manifestation-authority-repository.js"
+
+// Upload reservations are retired (B-859, migration 0023): a save uploads its
+// bodies, commits, and deletes them itself if nothing adopted them
+// (manifestation-uploaded-bodies.js). What is left here releases the
+// reservations written before that change: a stray that a crashed or abandoned
+// save left 'uploading' still holds its share of the byte reserve and its
+// stored body. Once none is left, a later migration drops the table, its
+// triggers and this file.
 
 const MAX_LEASE_MS = 10 * 60 * 1000
-const DEFAULT_LEASE_MS = 2 * 60 * 1000
 
-function entityKind(raw) {
-  const value = String(raw || "")
-    .trim()
-    .toLowerCase()
-  if (!new Set(["revision", "derivative"]).has(value)) {
-    throw authorityError("INVALID_UPLOAD_ENTITY_KIND", "Upload entity kind is invalid")
-  }
-  return value
-}
-
-function objectKey(raw) {
-  const value = String(raw || "").trim()
-  if (!/^private\/manifestations\/v1\/[a-f0-9]{2}\/[A-Za-z0-9_-]{8,128}\.bin$/.test(value)) {
-    throw authorityError("INVALID_OBJECT_KEY", "Body object locator is invalid")
-  }
-  return value
-}
-
-function futureLease(timestamp, leaseMs = DEFAULT_LEASE_MS) {
-  const duration = Math.max(
-    30_000,
-    Math.min(MAX_LEASE_MS, Math.trunc(Number(leaseMs)) || DEFAULT_LEASE_MS),
-  )
-  return new Date(Date.parse(timestamp) + duration).toISOString()
-}
-
-function mapAdmissionError(error) {
-  const message = String(error?.message || error || "")
-  if (/authoring_body_quota_exceeded/i.test(message)) {
-    return authorityError(
-      "AUTHORITY_BODY_QUOTA_EXCEEDED",
-      "Authoring body capacity is temporarily exhausted",
-      429,
-      error,
-    )
-  }
-  if (/caretaker_lineage_body_quota_exceeded/i.test(message)) {
-    return authorityError(
-      "LINEAGE_BODY_QUOTA_EXCEEDED",
-      "This caretaker lineage reached its 2 MiB body limit",
-      429,
-      error,
-    )
-  }
-  if (/caretaker_lineage_revision_limit_exceeded/i.test(message)) {
-    return authorityError(
-      "LINEAGE_REVISION_LIMIT_EXCEEDED",
-      "This caretaker lineage reached its 256 revision limit",
-      429,
-      error,
-    )
-  }
-  if (/caretaker_lineage_derivative_limit_exceeded/i.test(message)) {
-    return authorityError(
-      "LINEAGE_DERIVATIVE_LIMIT_EXCEEDED",
-      "This caretaker lineage reached its 512 derivative limit",
-      429,
-      error,
-    )
-  }
-  return error
-}
-
-export async function createManifestationUploadIntent(db, input = {}) {
-  requireDatabase(db)
-  const kind = entityKind(input.entityKind)
-  const operation = String(input.operation || "create")
-    .trim()
-    .toLowerCase()
-  if (!["create", "restore"].includes(operation)) {
-    throw authorityError("INVALID_UPLOAD_OPERATION", "Upload operation is invalid")
-  }
-  const entityId = normalizeId(input.entityId, `${kind}_id`)
-  const assignmentId = normalizeOptionalId(input.assignmentId, "caretaker_assignment_id")
-  const actorKind = normalizeActorKind(input.actorKind)
-  const actorAccountId = normalizeOptionalId(input.actorAccountId, "actor_account_id")
-  if (actorKind === "account") {
-    await requireActiveAccount(db, actorAccountId)
-    if (!assignmentId) {
-      throw authorityError(
-        "UPLOAD_ASSIGNMENT_REQUIRED",
-        "Caretaker uploads require an active assignment",
-      )
-    }
-  }
-  const bodyBytes = Number(input.bodyBytes)
-  const maximum = kind === "revision" ? 16 * 1024 : 32 * 1024
-  if (!Number.isSafeInteger(bodyBytes) || bodyBytes < 1 || bodyBytes > maximum) {
-    throw authorityError("INVALID_BODY_BYTES", `Upload ${kind} body size is invalid`)
-  }
-  const timestamp = normalizeTimestamp(input.now)
-  const idFactory = input.idFactory || defaultIdFactory
-  const uploadIntentId = createId(
-    input.uploadIntentId,
-    "upload_intent_id",
-    "upload_intent",
-    idFactory,
-  )
-  const leaseToken = createId(input.leaseToken, "lease_token", "upload_lease", idFactory)
-  const locator = objectKey(input.objectKey)
-  // The object's SHA-256: for a plain body, the text's own hash. The column and
-  // this field keep the name they had when every body was an envelope.
-  const ciphertextSha256 = normalizeSha256(input.ciphertextSha256)
-  const resumableStorage = input.storageDescriptor ? storageFields(input.storageDescriptor) : null
-  if (
-    resumableStorage &&
-    (resumableStorage.object_key !== locator ||
-      resumableStorage.ciphertext_sha256 !== ciphertextSha256 ||
-      resumableStorage.body_bytes !== bodyBytes)
-  ) {
-    throw authorityError(
-      "UPLOAD_ENVELOPE_MISMATCH",
-      "Resumable upload metadata does not match the reservation",
-    )
-  }
-  try {
-    await prepared(
-      db,
-      `INSERT INTO icono_manifestation_upload_intents (
-         upload_intent_id, entity_kind, entity_id, operation, caretaker_assignment_id,
-         object_key, ciphertext_sha256, planned_body_bytes, status,
-         lease_token, lease_expires_at, actor_kind, actor_account_id, created_at,
-         body_sha256, ciphertext_bytes, body_iv_base64, wrapped_dek_base64,
-         wrap_iv_base64, key_version, aad_version
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      uploadIntentId,
-      kind,
-      entityId,
-      operation,
-      assignmentId,
-      locator,
-      ciphertextSha256,
-      bodyBytes,
-      leaseToken,
-      futureLease(timestamp, input.leaseMs),
-      actorKind,
-      actorAccountId,
-      timestamp,
-      resumableStorage?.body_sha256 || null,
-      resumableStorage?.ciphertext_bytes || null,
-      resumableStorage?.body_iv_base64 || null,
-      resumableStorage?.wrapped_dek_base64 || null,
-      resumableStorage?.wrap_iv_base64 || null,
-      resumableStorage?.key_version || null,
-      resumableStorage?.aad_version || null,
-    ).run()
-  } catch (error) {
-    const existing = await first(
-      db,
-      `SELECT upload_intent_id, entity_kind, entity_id, operation, caretaker_assignment_id,
-              object_key, ciphertext_sha256, planned_body_bytes, status,
-              lease_token, lease_expires_at, actor_kind, actor_account_id,
-              body_sha256, ciphertext_bytes, body_iv_base64, wrapped_dek_base64,
-              wrap_iv_base64, key_version, aad_version
-         FROM icono_manifestation_upload_intents
-        WHERE upload_intent_id = ? OR (
-          entity_kind = ? AND entity_id = ? AND status IN ('uploading', 'deleting')
-        )
-        ORDER BY CASE WHEN upload_intent_id = ? THEN 0 ELSE 1 END LIMIT 1`,
-      uploadIntentId,
-      kind,
-      entityId,
-      uploadIntentId,
-    )
-    if (
-      existing &&
-      existing.operation === operation &&
-      existing.object_key === locator &&
-      existing.ciphertext_sha256 === ciphertextSha256 &&
-      Number(existing.planned_body_bytes) === bodyBytes &&
-      (existing.actor_account_id || actorAccountId) === actorAccountId
-    )
-      return Object.freeze({ ...existing, replayed: true })
-    throw mapAdmissionError(error)
-  }
-  return Object.freeze({
-    upload_intent_id: uploadIntentId,
-    entity_kind: kind,
-    entity_id: entityId,
-    operation,
-    object_key: locator,
-    ciphertext_sha256: ciphertextSha256,
-    planned_body_bytes: bodyBytes,
-    status: "uploading",
-    lease_token: leaseToken,
-    lease_expires_at: futureLease(timestamp, input.leaseMs),
-    ...(resumableStorage || {}),
-    replayed: false,
-  })
-}
-
-export async function requireAdoptedManifestationUpload(db, entityKindInput, entityIdInput) {
-  const kind = entityKind(entityKindInput)
-  const entityId = normalizeId(entityIdInput, `${kind}_id`)
-  // Verify the currently installed object by two unique keys. A historical
-  // adopted intent neither proves this upload nor justifies sorting all past
-  // uploads for the entity. `kind` is the validated revision/derivative enum.
-  const row = await first(
-    db,
-    `SELECT intent.upload_intent_id, intent.status, intent.resolved_at
-       FROM icono_manifestation_${kind}_storage_secrets storage
-       JOIN icono_manifestation_upload_intents intent ON intent.object_key = storage.object_key
-      WHERE storage.manifestation_${kind}_id = ?
-        AND intent.entity_kind = ? AND intent.entity_id = ? AND intent.status = 'adopted'`,
-    entityId,
-    kind,
-    entityId,
-  )
-  if (!row) {
-    throw authorityError("UPLOAD_NOT_ADOPTED", "Verified upload was not atomically adopted", 500)
-  }
-  return row
+function futureLease(timestamp, leaseMs) {
+  return new Date(Date.parse(timestamp) + Math.min(MAX_LEASE_MS, leaseMs)).toISOString()
 }
 
 async function claimExpiredIntent(db, row, now, leaseToken) {
@@ -324,23 +110,11 @@ export async function sweepExpiredManifestationUploadIntents(
   return Object.freeze({ processed: results.length, results })
 }
 
-// B-875: upload admission counts every intent still 'uploading' or 'deleting',
-// expired or not, against the global reserve and the caretaker's lineage caps
-// (256 revisions, 512 derivatives, 2 MiB). An abandoned upload (a phone losing
-// signal mid-autosave) used to hold its share forever. Before reserving, release
-// up to three of this caretaker's own expired strays. The cost falls only on
-// uploads, and it heals exactly the caretaker who would otherwise be blocked. A
-// storage failure here never blocks the upload: the stray is retried next time.
-const ADMISSION_SWEEP_LIMIT = 3
-
-// B-985: the per-caretaker release above only helps a caretaker who uploads
-// again. One who abandons an upload and never returns would hold the reservation
-// and the stored body for good. The `manifestations` background tick (5 runs an
-// hour, same database) calls the unscoped sweep with a small limit. Cost: one
-// indexed read per run that finds nothing (about 120 a day) and, per stray
-// released, one storage delete and about fifteen rows written (index entries
-// count). A failed delete puts the intent back for the next run; `ok: false`
-// makes the cron log it as pending.
+// B-985: the `manifestations` background tick (5 runs an hour, same database)
+// calls the unscoped sweep with a small limit. Cost: one indexed read per run
+// that finds nothing (about 120 a day) and, per stray released, one storage
+// delete and about fifteen rows written. A failed delete puts the intent back
+// for the next run; `ok: false` makes the cron log it as pending.
 const SCHEDULED_SWEEP_LIMIT = 3
 
 export async function releaseAbandonedManifestationUploads(env, { now } = {}) {
@@ -361,23 +135,4 @@ export async function releaseAbandonedManifestationUploads(env, { now } = {}) {
       code: String(error?.code || error?.name || "sweep_failed").slice(0, 80),
     })
   }
-}
-
-export async function admitManifestationUploadIntent(db, env, input = {}) {
-  if (input.assignmentId) {
-    try {
-      await sweepExpiredManifestationUploadIntents(db, env, {
-        assignmentId: input.assignmentId,
-        limit: ADMISSION_SWEEP_LIMIT,
-        now: input.now,
-        idFactory: input.idFactory,
-      })
-    } catch (error) {
-      console.warn("[manifestation-upload] stray release deferred", {
-        code: String(error?.code || error?.name || "sweep_failed").slice(0, 80),
-        message: String(error?.message || "").slice(0, 160),
-      })
-    }
-  }
-  return createManifestationUploadIntent(db, input)
 }
