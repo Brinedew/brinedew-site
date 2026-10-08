@@ -12,7 +12,10 @@ import {
   createDiagramWorkspace,
   diagramAssetManifest,
   diagramReferences,
+  effectiveLine,
   isDarkColour,
+  lineEnds,
+  linesPreset,
   pageBackgroundColour,
   referenceUrl,
   updateDiagramItem,
@@ -29,7 +32,7 @@ const asset = (symbol) => ({
 // ARCHITECTURE FENCE [IPD-003]
 test("diagram documents retain 3:2 geometry and canonical blot identity", () => {
   let document = createDiagramDocument({ title: "p53 response" })
-  assert.equal(document.schema_version, 4)
+  assert.equal(document.schema_version, 5)
   assert.equal(document.width / document.height, 1.5)
 
   document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
@@ -185,7 +188,9 @@ test("a version 2 diagram from a reader's browser opens intact as page one", () 
   )
   assert.equal(page.edges[0].kind, "inhibition")
   assert.equal(page.edges[0].label, "activates")
-  assert.equal(page.edges[0].routing, "straight")
+  // An old relationship's "straight" follows the page now, which draws straight.
+  assert.equal(page.edges[0].routing, "")
+  assert.equal(effectiveLine(page.edges[0], page.lines).routing, "straight")
   assert.deepEqual(page.edges[0].evidence, { reference: "", note: "" })
 })
 
@@ -227,7 +232,7 @@ test("panel edits are clamped by the same rules as a fresh document", () => {
   assert.equal(edge.width, 8)
   assert.equal(edge.opacity, 0.1)
   assert.equal(edge.color, "")
-  assert.equal(edge.routing, "straight")
+  assert.equal(edge.routing, "", "an unknown routing follows the page")
   assert.equal(gene.height, 240)
   assert.deepEqual(diagramReferences(edited), [
     {
@@ -304,7 +309,7 @@ test("a page takes any colour; anything else falls back to paper", () => {
   assert.equal(isDarkColour("#f7f1e8"), false)
 })
 
-// Golden: a page the version 3 studio saved opens unchanged in version 4.
+// Golden: a page the version 3 studio saved opens unchanged in version 5.
 test("a version 3 page opens unchanged", () => {
   const saved = {
     schema_version: 3,
@@ -344,7 +349,7 @@ test("a version 3 page opens unchanged", () => {
     ],
   }
   const page = createDiagramDocument(saved)
-  assert.equal(page.schema_version, 4)
+  assert.equal(page.schema_version, 5)
   assert.equal(page.background, "paper")
   assert.deepEqual(
     page.nodes.map(({ id, x, y }) => [id, x, y]),
@@ -355,6 +360,74 @@ test("a version 3 page opens unchanged", () => {
   )
   assert.equal(page.edges[0].kind, "association")
   assert.equal(page.edges[0].end, "")
+})
+
+// Golden (B-1051): a version 4 page stored "straight" on every relationship,
+// the only default there was. It opens with Free lines, its straight lines
+// follow the page and still draw straight, and a hand-set curve stays a curve.
+test("a version 4 page opens with Free lines and draws the same", () => {
+  const page = createDiagramDocument({
+    schema_version: 4,
+    nodes: [
+      { id: "a", type: "gene", symbol: "TP53", asset: asset("TP53"), x: 0, y: 0, width: 120 },
+      { id: "b", type: "gene", symbol: "MDM2", asset: asset("MDM2"), x: 300, y: 400, width: 120 },
+    ],
+    edges: [
+      { id: "e1", from: "a", to: "b", routing: "straight" },
+      { id: "e2", from: "b", to: "a", routing: "curved", kind: "inhibition" },
+    ],
+  })
+  assert.equal(linesPreset(page.lines), "free")
+  assert.deepEqual(
+    page.edges.map((edge) => [edge.routing, effectiveLine(edge, page.lines).routing]),
+    [
+      ["", "straight"],
+      ["curved", "curved"],
+    ],
+  )
+  assert.equal(effectiveLine(page.edges[1], page.lines).end, "square", "a T-bar meets square")
+  assert.deepEqual(lineEnds(page).get("e1"), { source: null, target: null }, "Free: any side")
+})
+
+// B-1051: "Top to bottom" puts each source end on its bottom and each target
+// end on its top, spread at k/(N+1) along the side in the order of the other
+// end, and on a molecule moved onto the ellipse (70% of its width is used).
+test("top to bottom spreads ends along a side and onto a molecule's curve", () => {
+  let document = createDiagramDocument({ lines: "top-to-bottom" })
+  document = addGeneNode(document, { symbol: "PTEN", asset: asset("PTEN"), x: 100, y: 40 }).document
+  document = addGeneNode(document, {
+    symbol: "PIK3CA",
+    asset: asset("PIK3CA"),
+    x: 700,
+    y: 40,
+  }).document
+  document = addMoleculeNode(document, {
+    id: "m",
+    label: "PIP3",
+    x: 300,
+    y: 400,
+    width: 280,
+    height: 90,
+  }).document
+  const [pten, pik3ca] = document.nodes.filter((node) => node.type === "gene").map((n) => n.id)
+  document = connectGeneNodes(document, { from: pik3ca, to: "m", kind: "activation" }).document
+  document = connectGeneNodes(document, { from: pten, to: "m", kind: "inhibition" }).document
+  const ends = lineEnds(document)
+  const [toFromPik3ca, toFromPten] = document.edges.map((edge) => ends.get(edge.id))
+  // Every end stops 3 units out from its side, as an unsided end does.
+  assert.deepEqual(toFromPten.source, { side: "bottom", dx: 0, dy: 3 })
+  // 196 usable units, two ends: at -33 and +33 (whole units), PTEN (left)
+  // first, 1 unit down onto the curve and 3 out: -2.
+  assert.deepEqual(toFromPten.target, { side: "top", dx: -33, dy: -2 })
+  assert.deepEqual(toFromPik3ca.target, { side: "top", dx: 33, dy: -2 })
+  // A side set by hand on one relationship wins over the page's.
+  const edited = updateDiagramItem(document, document.edges[1].id, { source_side: "right" })
+  assert.deepEqual(lineEnds(edited).get(document.edges[1].id).source, {
+    side: "right",
+    dx: 3,
+    dy: 0,
+  })
+  assert.equal(linesPreset({ ...document.lines, spread: false }), "custom")
 })
 
 test("the simple notation is the main four arrows", () => {

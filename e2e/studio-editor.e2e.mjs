@@ -230,6 +230,39 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
           ?.getAttribute("stroke-width") === "1.5",
     )
 
+    // 14. The page's lines (B-1051): "Top to bottom" starts each line 3 units
+    // below its source and ends it 3 units above its target, at the middle of
+    // a side it has to itself; an arrow on Auto follows; one Undo is Free again.
+    const linesOf = (id) =>
+      page.evaluate(async (edgeId) => {
+        const url = performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((name) => /diagram-studio\.js/.test(name))
+        const { graph } = await (await import(url)).__testing.editor()
+        const edge = graph.getCellById(edgeId)
+        const view = graph.findViewByCell(edge)
+        const source = edge.getSourceCell().getBBox()
+        const target = edge.getTargetCell().getBBox()
+        return {
+          belowSource: Math.round(view.sourcePoint.y - (source.y + source.height)),
+          aboveTarget: Math.round(target.y - view.targetPoint.y),
+          offCentre: Math.round(view.sourcePoint.x - (source.x + source.width / 2)),
+        }
+      }, id)
+    await page.keyboard.press("Escape")
+    const preset = page.locator('[data-studio-format-body] [data-field="lines.preset"]')
+    await preset.waitFor()
+    assert.equal(await preset.inputValue(), "free", "a template without lines is Free")
+    await preset.selectOption("top-to-bottom")
+    await page.waitForTimeout(300)
+    const flowing = await linesOf("edge-1")
+    report.linesTopToBottom = flowing
+    assert.deepEqual(flowing, { belowSource: 3, aboveTarget: 3, offCentre: 0 })
+    await page.keyboard.press("Control+z")
+    await page.waitForTimeout(300)
+    assert.equal(await preset.inputValue(), "free", "one Undo brings Free back")
+
     // 10. The wheel pans the sheet and never the page; Ctrl+wheel zooms.
     const canvasBox = await page.locator("[data-studio-x6-canvas]").boundingBox()
     const viewState = () =>

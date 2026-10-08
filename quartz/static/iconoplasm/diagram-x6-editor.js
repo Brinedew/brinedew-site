@@ -1,10 +1,12 @@
 import {
   COMPARTMENT_SHAPES,
   diagramReferences,
+  effectiveLine,
   isDarkColour,
+  lineEnds,
   pageBackgroundColour,
   relationshipKind,
-} from "./diagram-document.js?v=189a4fd320f16b65"
+} from "./diagram-document.js?v=7bf71c5dd15e3e7f"
 
 const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"
@@ -615,14 +617,27 @@ function edgeLabels(edge, background, ink = INK) {
   return labels
 }
 
+// B-1051: a relationship draws with its own routing, sides and end, or the
+// page's lines where it has none.
+function drawnLine(edge, lines) {
+  return { ...edge, ...effectiveLine(edge, lines) }
+}
+
 function routerFor(edge) {
   return edge.routing === "orthogonal"
     ? { name: "orth", args: { padding: 14 } }
     : { name: "normal" }
 }
 
-function connectorFor(edge) {
-  if (edge.routing === "curved") return { name: "smooth" }
+// A curve leaving a top or bottom side starts vertically, one leaving a left
+// or right side horizontally; X6's smooth connector otherwise picks by the
+// larger of the two distances.
+function connectorFor(edge, ends = null) {
+  if (edge.routing === "curved") {
+    const side = ends?.source?.side || ends?.target?.side
+    if (side) return { name: "smooth", args: { direction: /top|bottom/.test(side) ? "V" : "H" } }
+    return { name: "smooth" }
+  }
   if (edge.jumps && edge.jumps !== "none")
     return { name: "jumpover", args: { type: edge.jumps, size: 5 } }
   if (edge.routing === "orthogonal") return { name: "rounded", args: { radius: 8 } }
@@ -732,15 +747,27 @@ function graphNodes(document, gridVisible, defsIds) {
   return [page, ...nodes]
 }
 
-function graphEdge(edge, background, ink = INK) {
+// An end with a side attaches at that point of the side (lineEnds); an "any"
+// end keeps the graph's default, the shortest line to the portrait's edge.
+function terminal(cellId, end) {
+  if (!end) return { cell: cellId }
+  return {
+    cell: cellId,
+    anchor: { name: end.side, args: { dx: end.dx, dy: end.dy } },
+    connectionPoint: { name: "anchor" },
+  }
+}
+
+function graphEdge(edge, background, ink = INK, lines = null, ends = null) {
+  const drawn = drawnLine(edge, lines)
   return {
     id: edge.id,
     shape: "edge",
-    source: { cell: edge.from },
-    target: { cell: edge.to },
+    source: terminal(edge.from, ends?.source),
+    target: terminal(edge.to, ends?.target),
     vertices: edge.vertices || [],
-    router: routerFor(edge),
-    connector: connectorFor(edge),
+    router: routerFor(drawn),
+    connector: connectorFor(drawn, ends),
     attrs: edgeAttrs(edge, false, ink),
     labels: edgeLabels(edge, background, ink),
     zIndex: 1000,
@@ -1052,8 +1079,11 @@ export async function createDiagramEditor({
     { passive: false },
   )
 
+  // Every change passes here, so sided ends (B-1051) follow a drag, a nudge,
+  // a layout or an edited relationship before the document is read back.
   const emitChange = () => {
     if (applyingDocument) return
+    refreshLineEnds()
     const next = documentFromGraph(graph, baseDocument)
     baseDocument = next
     onChange?.(next)
@@ -1113,7 +1143,9 @@ export async function createDiagramEditor({
       color: "",
       width: 1.5,
       pattern: "",
-      routing: "straight",
+      routing: "",
+      source_side: "",
+      target_side: "",
       jumps: "none",
       head_size: 8,
       opacity: 1,
@@ -1168,10 +1200,35 @@ export async function createDiagramEditor({
 
   function applyEdge(edge, data) {
     const ink = inkFor(baseDocument)
-    edge.setRouter(routerFor(data))
-    edge.setConnector(connectorFor(data))
+    const drawn = drawnLine(data, baseDocument.lines)
+    edge.setRouter(routerFor(drawn))
     edge.attr(edgeAttrs(data, selectedEdgeIds.has(edge.id), ink), { overwrite: true })
     edge.setLabels(edgeLabels(data, pageBackgroundColour(baseDocument), ink))
+    refreshLineEnds()
+  }
+
+  // Sided ends depend on every other end on the same side (they spread) and on
+  // where the other ends sit (their order), so a move, a resize or a changed
+  // relationship recomputes them all and resets only what changed.
+  function refreshLineEnds() {
+    const current = documentFromGraph(graph, baseDocument)
+    const ends = lineEnds(current)
+    for (const data of current.edges) {
+      const cell = graph.getCellById(data.id)
+      if (!cell) continue
+      const end = ends.get(data.id)
+      for (const [which, cellId] of [
+        ["source", data.from],
+        ["target", data.to],
+      ]) {
+        const next = terminal(cellId, end?.[which])
+        const now = which === "source" ? cell.getSource() : cell.getTarget()
+        if (JSON.stringify(now) === JSON.stringify(next)) continue
+        if (which === "source") cell.setSource(next)
+        else cell.setTarget(next)
+      }
+      cell.setConnector(connectorFor(drawnLine(data, baseDocument.lines), end))
+    }
   }
 
   // Only fields in the patch move or resize the cell: the data copy of x and
@@ -1231,9 +1288,12 @@ export async function createDiagramEditor({
     const background = pageBackgroundColour(nextDocument)
     const ink = inkFor(nextDocument)
     installPatterns(graph, defsIds, gridStep, ink)
+    const ends = lineEnds(nextDocument)
     graph.fromJSON({
       nodes: graphNodes(nextDocument, showGrid, defsIds),
-      edges: nextDocument.edges.map((edge) => graphEdge(edge, background, ink)),
+      edges: nextDocument.edges.map((edge) =>
+        graphEdge(edge, background, ink, nextDocument.lines, ends.get(edge.id)),
+      ),
     })
     const keep = selectedIds.map((id) => graph.getCellById(id)).filter(Boolean)
     if (keep.length) graph.select(keep)
