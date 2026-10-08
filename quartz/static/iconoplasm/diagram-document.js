@@ -1,6 +1,6 @@
 // ARCHITECTURE FENCE [IPD-003]: Studio documents reference the canonical
 // published gene blot. They never select or mint a parallel image identity.
-export const ICONOPLASM_DIAGRAM_SCHEMA_VERSION = 3
+export const ICONOPLASM_DIAGRAM_SCHEMA_VERSION = 4
 export const ICONOPLASM_DIAGRAM_LIMITS = Object.freeze({
   nodes: 150,
   edges: 300,
@@ -35,6 +35,13 @@ export const RELATIONSHIP_KINDS = Object.freeze([
   { id: "methylation", label: "Methylation", head: "arrow", tag: "+m", key: "m" },
 ])
 export const RELATIONSHIP_KIND_IDS = Object.freeze(RELATIONSHIP_KINDS.map((kind) => kind.id))
+// B-1050: the owner's "simple" notation is the main two to four arrows; KEGG
+// is the full legend above. The choice only filters the pickers: a document
+// keeps whatever kinds it already uses.
+export const RELATIONSHIP_NOTATIONS = Object.freeze({
+  simple: Object.freeze(["activation", "inhibition", "association", "indirect_effect"]),
+  kegg: RELATIONSHIP_KIND_IDS,
+})
 
 export function relationshipKind(id) {
   return RELATIONSHIP_KINDS.find((kind) => kind.id === id) || RELATIONSHIP_KINDS[0]
@@ -50,6 +57,9 @@ export const COMPARTMENT_SHAPES = Object.freeze([
   { id: "mitochondrion", label: "Mitochondrion", width: 260, height: 130 },
   { id: "er", label: "Endoplasmic reticulum", width: 260, height: 150 },
   { id: "complex", label: "Complex", width: 320, height: 220 },
+  // B-1050: a faction bin of a faction chart, an opaque outline over a pale
+  // tint of the same colour.
+  { id: "faction", label: "Faction", width: 520, height: 640 },
 ])
 const COMPARTMENT_IDS = new Set(COMPARTMENT_SHAPES.map((shape) => shape.id))
 
@@ -59,6 +69,25 @@ export const LINE_JUMPS = Object.freeze(["none", "arc", "gap", "cubic"])
 export const LABEL_POSITIONS = Object.freeze(["above", "on", "below"])
 export const TEXT_FILLS = Object.freeze(["none", "paper", "note"])
 export const PAGE_BACKGROUNDS = Object.freeze({ paper: "#f7f1e8", white: "#ffffff" })
+// B-1050: a page can take any colour. These are the named sheets the picker
+// offers first; "paper" and "white" keep their version 3 names.
+export const PAGE_BACKGROUND_SWATCHES = Object.freeze([
+  ["paper", "#f7f1e8", "Paper"],
+  ["white", "#ffffff", "White"],
+  ["#efe6d6", "#efe6d6", "Manila"],
+  ["#e8eee9", "#e8eee9", "Sage"],
+  ["#e6edf2", "#e6edf2", "Blueprint"],
+  ["#f3e6e1", "#f3e6e1", "Blush"],
+  ["#e9e7e4", "#e9e7e4", "Fog"],
+  ["#2b211b", "#2b211b", "Dark roast"],
+])
+// A molecule is any actor that is not a gene's own portrait: a small molecule
+// (PIP3, cAMP), an ion or an abstract control variable such as a ratio.
+export const MOLECULE_DEFAULT = Object.freeze({ width: 150, height: 72 })
+// Which way a line meets the portrait: "square" bends its last stretch so it
+// arrives perpendicular to the side it hits (a T-bar lies flat against that
+// side); "free" keeps the angle of the line. Empty follows the kind.
+export const LINE_END_MODES = Object.freeze(["square", "free"])
 
 const DEFAULT_WIDTH = 1200
 const DEFAULT_HEIGHT = 800
@@ -208,8 +237,34 @@ function normalizeCompartmentNode(rawNode, index, width, height) {
   )
 }
 
+function normalizeMoleculeNode(rawNode, index, width, height) {
+  const node = rawNode && typeof rawNode === "object" ? rawNode : {}
+  return placed(
+    {
+      id: safeId(node.id, `molecule-${index + 1}`),
+      type: "molecule",
+      label:
+        boundedText(node.label || node.text || "Molecule", ICONOPLASM_DIAGRAM_LIMITS.labelLength) ||
+        "Molecule",
+      x: 0,
+      y: 0,
+      width: clamp(finiteNumber(node.width, MOLECULE_DEFAULT.width), 48, 600),
+      height: clamp(finiteNumber(node.height, MOLECULE_DEFAULT.height), 28, 400),
+      font_size: clamp(finiteNumber(node.font_size, 16), 8, 40),
+      color: hexColour(node.color),
+    },
+    node,
+    width,
+    height,
+    120 + (index % 5) * 200,
+    120 + Math.floor(index / 5) * 140,
+  )
+}
+
 function normalizeNode(rawNode, index, width, height) {
   if (rawNode && rawNode.type === "text") return normalizeTextNode(rawNode, index, width, height)
+  if (rawNode && rawNode.type === "molecule")
+    return normalizeMoleculeNode(rawNode, index, width, height)
   if (rawNode && rawNode.type === "compartment")
     return normalizeCompartmentNode(rawNode, index, width, height)
   return normalizeGeneNode(rawNode, index, width, height)
@@ -257,6 +312,7 @@ function normalizeEdge(rawEdge, index, nodeIds) {
     label_position: oneOf(edge.label_position, LABEL_POSITIONS, "above"),
     label_size: clamp(finiteNumber(edge.label_size, 14), 8, 28),
     label_background: edge.label_background !== false,
+    end: oneOf(edge.end, LINE_END_MODES, ""),
     vertices: normalizeVertices(edge.vertices),
     evidence: normalizeEvidence(edge.evidence),
   }
@@ -278,7 +334,7 @@ export function createDiagramDocument(rawDocument = {}) {
     nodeIds.add(node.id)
     nodes.push(node)
   }
-  const geneIds = new Set(nodes.filter((node) => node.type === "gene").map((node) => node.id))
+  const geneIds = actorIds(nodes)
   const rawEdges = Array.isArray(rawDocument.edges) ? rawDocument.edges : []
   const edges = []
   const edgeIds = new Set()
@@ -292,9 +348,7 @@ export function createDiagramDocument(rawDocument = {}) {
     edgeIds.add(edge.id)
     edges.push(edge)
   }
-  // Version 2 stored the colour itself; version 3 names the sheet.
-  const background =
-    rawDocument.background === "white" || rawDocument.background === "#ffffff" ? "white" : "paper"
+  const background = normalizeBackground(rawDocument.background)
   return {
     schema_version: ICONOPLASM_DIAGRAM_SCHEMA_VERSION,
     id: safeId(rawDocument.id, "iconoplasm-diagram"),
@@ -308,12 +362,41 @@ export function createDiagramDocument(rawDocument = {}) {
   }
 }
 
+// Genes and molecules are the actors a relationship can join.
+function actorIds(nodes) {
+  return new Set(
+    nodes.filter((node) => node.type === "gene" || node.type === "molecule").map((node) => node.id),
+  )
+}
+
+// Version 2 stored the colour itself and version 3 named the sheet ("paper"
+// or "white"); version 4 also takes any six-digit colour.
+function normalizeBackground(value) {
+  if (value === "white" || value === "#ffffff") return "white"
+  if (value === "paper" || value === undefined || value === null || value === "") return "paper"
+  const colour = hexColour(value)
+  if (!colour || colour === PAGE_BACKGROUNDS.paper) return "paper"
+  return colour
+}
+
+// Relative luminance (WCAG): below this the default ink turns light.
+export function isDarkColour(hex) {
+  const value = hexColour(hex)
+  if (!value) return false
+  const channel = (offset) => {
+    const c = parseInt(value.slice(offset, offset + 2), 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5) < 0.18
+}
+
 export function cloneDiagramDocument(document) {
   return createDiagramDocument(JSON.parse(JSON.stringify(document || {})))
 }
 
 export function pageBackgroundColour(document) {
-  return PAGE_BACKGROUNDS[document && document.background] || PAGE_BACKGROUNDS.paper
+  const background = document && document.background
+  return PAGE_BACKGROUNDS[background] || hexColour(background) || PAGE_BACKGROUNDS.paper
 }
 
 function nextId(items, prefix) {
@@ -359,6 +442,19 @@ export function addTextNode(document, rawNode = {}) {
   return { document: next, node }
 }
 
+export function addMoleculeNode(document, rawNode = {}) {
+  const next = cloneDiagramDocument(document)
+  assertRoom(next)
+  const node = normalizeMoleculeNode(
+    { ...rawNode, id: rawNode.id || nextId(next.nodes, "molecule") },
+    next.nodes.length,
+    next.width,
+    next.height,
+  )
+  next.nodes.push(node)
+  return { document: next, node }
+}
+
 // Compartments go to the back of the stack so they never cover a character.
 export function addCompartmentNode(document, rawNode = {}) {
   const next = cloneDiagramDocument(document)
@@ -381,13 +477,13 @@ export function connectGeneNodes(document, rawEdge) {
       `A diagram can contain at most ${ICONOPLASM_DIAGRAM_LIMITS.edges} relationships.`,
     )
   }
-  const nodeIds = new Set(next.nodes.filter((node) => node.type === "gene").map((node) => node.id))
   const edge = normalizeEdge(
     { ...rawEdge, id: rawEdge && rawEdge.id ? rawEdge.id : nextId(next.edges, "edge") },
     next.edges.length,
-    nodeIds,
+    actorIds(next.nodes),
   )
-  if (!edge) throw new TypeError("A relationship requires two different genes in the diagram.")
+  if (!edge)
+    throw new TypeError("A relationship requires two different genes or molecules in the diagram.")
   next.edges.push(edge)
   return { document: next, edge }
 }
@@ -409,6 +505,7 @@ const NODE_PATCH_FIELDS = {
     "fill",
   ],
   compartment: ["label", "x", "y", "width", "height", "color", "shape"],
+  molecule: ["label", "x", "y", "width", "height", "color", "font_size"],
 }
 const EDGE_PATCH_FIELDS = [
   "kind",
@@ -423,6 +520,7 @@ const EDGE_PATCH_FIELDS = [
   "label_position",
   "label_size",
   "label_background",
+  "end",
   "vertices",
   "evidence",
   "from",
@@ -455,11 +553,11 @@ export function updateDiagramItem(document, itemId, patch = {}) {
       merged[field] =
         field === "evidence" ? { ...merged.evidence, ...(patch.evidence || {}) } : patch[field]
     }
-    const geneIds = new Set(
-      next.nodes.filter((node) => node.type === "gene").map((node) => node.id),
-    )
-    const edge = normalizeEdge(merged, edgeIndex, geneIds)
-    if (!edge) throw new TypeError("A relationship requires two different genes in the diagram.")
+    const edge = normalizeEdge(merged, edgeIndex, actorIds(next.nodes))
+    if (!edge)
+      throw new TypeError(
+        "A relationship requires two different genes or molecules in the diagram.",
+      )
     next.edges[edgeIndex] = edge
     return next
   }

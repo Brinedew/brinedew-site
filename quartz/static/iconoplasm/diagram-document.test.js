@@ -2,14 +2,18 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  RELATIONSHIP_NOTATIONS,
   addCompartmentNode,
   addGeneNode,
+  addMoleculeNode,
   addTextNode,
   connectGeneNodes,
   createDiagramDocument,
   createDiagramWorkspace,
   diagramAssetManifest,
   diagramReferences,
+  isDarkColour,
+  pageBackgroundColour,
   referenceUrl,
   updateDiagramItem,
 } from "./diagram-document.js"
@@ -25,7 +29,7 @@ const asset = (symbol) => ({
 // ARCHITECTURE FENCE [IPD-003]
 test("diagram documents retain 3:2 geometry and canonical blot identity", () => {
   let document = createDiagramDocument({ title: "p53 response" })
-  assert.equal(document.schema_version, 3)
+  assert.equal(document.schema_version, 4)
   assert.equal(document.width / document.height, 1.5)
 
   document = addGeneNode(document, { symbol: "TP53", asset: asset("TP53") }).document
@@ -256,5 +260,106 @@ test("compartments sit behind every character in the stack", () => {
   assert.deepEqual(
     document.nodes.map((node) => node.type),
     ["compartment", "gene", "text"],
+  )
+})
+
+// B-1050: a molecule (PIP3, an ion, a control variable) is an actor that
+// relationships join, like a gene, but it carries no blot.
+test("relationships join genes and molecules alike", () => {
+  let document = addGeneNode(createDiagramDocument(), {
+    symbol: "PIK3CA",
+    asset: asset("PIK3CA"),
+  }).document
+  const added = addMoleculeNode(document, { label: "PIP₃ : PIP₂", x: 400, y: 200 })
+  document = connectGeneNodes(added.document, {
+    from: document.nodes[0].id,
+    to: added.node.id,
+    kind: "activation",
+  }).document
+  assert.equal(added.node.type, "molecule")
+  assert.equal(document.edges.length, 1)
+  assert.deepEqual(
+    diagramAssetManifest(document).map((entry) => entry.symbol),
+    ["PIK3CA"],
+  )
+  assert.equal(
+    updateDiagramItem(document, document.edges[0].id, { end: "square" }).edges[0].end,
+    "square",
+  )
+  assert.equal(
+    updateDiagramItem(document, document.edges[0].id, { end: "sideways" }).edges[0].end,
+    "",
+  )
+})
+
+test("a page takes any colour; anything else falls back to paper", () => {
+  assert.equal(createDiagramDocument({ background: "#2B211B" }).background, "#2b211b")
+  assert.equal(pageBackgroundColour(createDiagramDocument({ background: "#2b211b" })), "#2b211b")
+  assert.equal(createDiagramDocument({ background: "white" }).background, "white")
+  assert.equal(
+    createDiagramDocument({ background: "url(javascript:alert(1))" }).background,
+    "paper",
+  )
+  assert.equal(isDarkColour("#2b211b"), true)
+  assert.equal(isDarkColour("#f7f1e8"), false)
+})
+
+// Golden: a page the version 3 studio saved opens unchanged in version 4.
+test("a version 3 page opens unchanged", () => {
+  const saved = {
+    schema_version: 3,
+    id: "page-1",
+    title: "EGFR–MAPK signaling",
+    width: 1400,
+    height: 900,
+    background: "paper",
+    nodes: [
+      {
+        id: "gene-egfr",
+        type: "gene",
+        symbol: "EGFR",
+        x: 100,
+        y: 130,
+        width: 104,
+        asset: asset("EGFR"),
+      },
+      {
+        id: "gene-grb2",
+        type: "gene",
+        symbol: "GRB2",
+        x: 180,
+        y: 360,
+        width: 104,
+        asset: asset("GRB2"),
+      },
+    ],
+    edges: [
+      {
+        id: "edge-1",
+        type: "relationship",
+        from: "gene-egfr",
+        to: "gene-grb2",
+        kind: "association",
+      },
+    ],
+  }
+  const page = createDiagramDocument(saved)
+  assert.equal(page.schema_version, 4)
+  assert.equal(page.background, "paper")
+  assert.deepEqual(
+    page.nodes.map(({ id, x, y }) => [id, x, y]),
+    [
+      ["gene-egfr", 100, 130],
+      ["gene-grb2", 180, 360],
+    ],
+  )
+  assert.equal(page.edges[0].kind, "association")
+  assert.equal(page.edges[0].end, "")
+})
+
+test("the simple notation is the main four arrows", () => {
+  assert.deepEqual(
+    [...RELATIONSHIP_NOTATIONS.simple],
+    ["activation", "inhibition", "association", "indirect_effect"],
   )
 })
