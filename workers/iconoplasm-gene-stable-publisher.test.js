@@ -71,6 +71,11 @@ const winnerOf = (db) =>
 test("a gene's first portrait is its winner at once, and the election reaches D1", async () => {
   const db = geneDatabase()
   addPortrait(db, "TP53", A, "2026-10-09 15:09:40")
+  db.database
+    .prepare(
+      "INSERT INTO icono_gene_essence (gene_symbol, full_name, weight_kg, leakage_percent) VALUES ('TP53', 'Cellular tumor antigen p53', 43.7, 12.5)",
+    )
+    .run()
   const objects = recordingStore()
   const result = await publishIconoplasmGeneStableObject({ ICONOPLASM_DB: db }, "tp53", {
     objects,
@@ -83,6 +88,8 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
   assert.equal(card.portrait_candidates[0].status, "approved", "the projection approved it")
   assert.equal(card.full_name, "tumor protein p53")
   assert.equal(card.essence.sex, "Female", "tmh 0 reads as soluble")
+  assert.equal(card.uniqueness_rank, 12.5, "the catalogue's sort key travels on the card")
+  assert.equal(card.weight_kg, 43.7)
   assert.equal(result.winner_asset_sha256, A)
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 0 })
 })

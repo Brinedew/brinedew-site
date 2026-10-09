@@ -167,9 +167,7 @@ The file is immutable: a given URL never changes, and a new release gets a new U
 
 ### Staying current
 
-`GET https://iconoplasm.brinedew.bio/api/public/v1/changes?since={cursor}` lists genes whose card, portrait or details changed after `since`, oldest first, 200 per page. Each page has a `next_cursor`; pass it back as `since`.
-
-Start from the `released_at` of the file you downloaded rather than from the beginning of time, and poll at most once an hour.
+Read the metadata at most once an hour. When its release hash differs from the file you have, download the new bulk file it names. That's the whole update: the file always holds the complete catalogue.
 
 ## Limits
 
@@ -178,8 +176,7 @@ Limits are per client IP address and reset on a rolling 60-second window.
 | Endpoint | Requests per 60 s |
 | --- | --- |
 | `/api/public/v1/images/resolve` | 60 (so up to 3,000 identifiers a minute) |
-| `/api/public/v1/changes` | 60 |
-| `/api/public/v1/metadata`, `/stats`, `/schema` | 60 |
+| `/api/public/v1/metadata`, `/schema` | 60 |
 | `/api/public/v1/dumps/…` (bulk file) | 60 |
 | `/api/public/v1/media/{SYMBOL}` | 120 |
 | `/blot/{SYMBOL}.webp` | No per-client limit (see "Using images at scale") |

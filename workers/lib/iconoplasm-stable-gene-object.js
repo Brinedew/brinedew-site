@@ -37,12 +37,7 @@ const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9-]{0,63}$/
 
 export const STABLE_GENE_OBJECT_VERSION = 3
-export const GENE_CONTENT_VERSION = 1
 export const ICONOPLASM_CANONICAL_ORIGIN = "https://iconoplasm.brinedew.bio"
-
-export function geneContentKey(symbol) {
-  return `content/v${GENE_CONTENT_VERSION}/${symbol}.json`
-}
 
 function normalizeSymbol(value) {
   const symbol = String(value ?? "")
@@ -397,6 +392,9 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
     ["tissue_tau", number(essence.tissue_tau)],
     ["loeuf", number(essence.loeuf)],
     ["constraint_percentile", number(essence.constraint_percentile)],
+    // How unusual the gene is in the catalogue (the essence row's leakage percent):
+    // the catalogue list sorts by it, and the CI builder reads it from the card.
+    ["uniqueness_rank", number(essence.leakage_percent)],
   ]) {
     if (value !== null) card[key] = value
   }

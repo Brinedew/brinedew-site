@@ -30,42 +30,6 @@ function ctx() {
   return { waitUntil() {} }
 }
 
-test("public stats expose named candidate and canonical counts without D1", async () => {
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/public/v1/stats"),
-      {
-        ICONOPLASM_DB: new ThrowingDb(),
-        KV: new FakeKv({
-          "iconoplasm:catalog-manifest": JSON.stringify({
-            gene_count: 19023,
-          }),
-          "iconoplasm:public-stats:v1": JSON.stringify({
-            schema_version: "iconoplasm.publicStats.v1",
-            gene_count: 19023,
-            canonical_blot_count: 19090,
-            generated_candidate_blot_count: 39548,
-            auditable_candidate_blot_count: 39179,
-            storage_verified_candidate_blot_count: 21889,
-            storage_audit_coverage_percent: 55.9,
-            updated_at: "2026-05-03 13:02:48",
-          }),
-        }),
-      },
-      ctx(),
-    )
-
-  assert.equal(response.status, 200)
-  assert.match(response.headers.get("Cache-Control") || "", /max-age=86400/)
-  const payload = await response.json()
-  assert.equal(payload.gene_count, 19023)
-  assert.equal(payload.canonical_blot_count, 19090)
-  assert.equal(payload.generated_candidate_blot_count, 39548)
-  assert.equal(payload.public_copy, "19,023 genes · 39,548 AI blots")
-  assert.equal(payload.published_live_portraits, undefined)
-  assert.equal(payload.portrait_hash, undefined)
-})
-
 test("admin asset summary refresh writes public stats projection to KV", async () => {
   const kv = new FakeKv({
     "iconoplasm:catalog-manifest": JSON.stringify({

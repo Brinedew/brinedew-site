@@ -54,30 +54,44 @@ test("a gene that fails every try fails the run instead of vanishing", async () 
   )
 })
 
-// 2026-10-09: 599 genes were listed while their cards failed to build, so their
-// pages said "Page not found". The list holds only genes with a card.
-test("the catalog lists only genes whose card exists", async () => {
-  const { DatabaseSync } = await import("node:sqlite")
-  const { ROW_SQL } = await import("./publish-iconoplasm-catalog.mjs")
-  const db = new DatabaseSync(":memory:")
-  try {
-    db.exec(`
-      CREATE TABLE icono_gene_catalog (gene_symbol TEXT PRIMARY KEY, full_name TEXT, color_hex TEXT);
-      CREATE TABLE icono_published_gene_routes (gene_symbol TEXT PRIMARY KEY);
-      CREATE TABLE icono_gene_essence (gene_symbol TEXT PRIMARY KEY, leakage_percent REAL,
-        weight_kg REAL, age_years REAL, first_publication_year INTEGER);
-      CREATE TABLE icono_publish_state (gene_symbol TEXT PRIMARY KEY, current_asset_sha256 TEXT);
-      CREATE TABLE icono_portrait_assets (gene_symbol TEXT, asset_sha256 TEXT, created_at TEXT);
-      CREATE TABLE icono_vote_asset_summary (gene_symbol TEXT, asset_sha256 TEXT, score REAL);
-      INSERT INTO icono_gene_catalog VALUES ('TP53', 'tumor protein p53', ''), ('FAM25A', 'family 25A', '');
-      INSERT INTO icono_published_gene_routes VALUES ('TP53');
-    `)
-    const rows = db.prepare(`${ROW_SQL}\n ORDER BY gc.gene_symbol`).all()
-    assert.deepEqual(
-      rows.map((row) => row.symbol),
-      ["TP53"],
+// B-1064: each catalogue row is read from the gene's published card. Golden: two
+// live cards (genes/v3/WEE1.json and MFNG.json as published on 2026-10-09).
+test("a catalogue row is the card's name, winner, colour, score, measures and date", async () => {
+  const { readFileSync } = await import("node:fs")
+  const { rowFromCard } = await import("./publish-iconoplasm-catalog.mjs")
+  const card = (symbol) =>
+    JSON.parse(
+      readFileSync(
+        new URL(`../workers/lib/fixtures/gene-cards/${symbol}.json`, import.meta.url),
+        "utf8",
+      ),
     )
-  } finally {
-    db.close()
+  const wee1 = card("WEE1")
+  assert.deepEqual(rowFromCard(wee1), [
+    "WEE1",
+    "WEE1 G2 checkpoint kinase",
+    wee1.portrait.asset_sha256,
+    "#352f35",
+    1,
+    null,
+    71.6,
+    29,
+    1991,
+    "2026-03-12 18:23:25",
+  ])
+  const mfng = card("MFNG")
+  const winner = mfng.portrait_candidates.find((candidate) => candidate.is_current)
+  const row = rowFromCard(mfng)
+  assert.equal(row[2], mfng.portrait.asset_sha256)
+  assert.equal(row[4], winner.image_score)
+  assert.equal(row[9], winner.created_at)
+
+  // A gene with no portrait yet is listed without one.
+  const bare = {
+    ...wee1,
+    portrait: { status: "missing", asset_sha256: null },
+    portrait_candidates: [],
   }
+  assert.deepEqual(rowFromCard(bare).slice(2, 5), ["", "#352f35", 0])
+  assert.equal(rowFromCard(bare)[9], "")
 })
