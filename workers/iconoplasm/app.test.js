@@ -6,7 +6,7 @@ import {
   refreshIconoplasmRegisteredGeneSummaries,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
-import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "./app.js"
+import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } from "./app.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
 // Drizzle, the D1 schema of every production migration and the real card
@@ -258,4 +258,35 @@ test("one gene's failed card build is reported, and its rows and the other genes
   assert.match(result.body.genes[0].error, /PUT failed/)
   assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n, 2)
   assert.ok(h.cards.has("genes/v3/WEE1.json"))
+})
+
+// 2026-10-09, 20:04 UTC: building one D1 statement per row cost a 96-portrait
+// registration 60 ms of CPU, and Cloudflare killed the call. Whatever its size,
+// a registration writes its rows with one statement per table.
+test("a full registration writes all its rows with two statements", async () => {
+  const h = harness()
+  const batches = []
+  const batch = h.db.batch.bind(h.db)
+  h.db.batch = async (statements) => {
+    batches.push(statements.length)
+    return batch(statements)
+  }
+  const portraits = Array.from({ length: REGISTER_MAX_PORTRAITS }, (_, index) =>
+    portrait(index % 2 ? "TP53" : "WEE1", "", {
+      asset_sha256: index.toString(16).padStart(64, "0"),
+      sample_number: index,
+    }),
+  )
+  const result = await h.register({ created_by: "drain:local", portraits })
+  assert.equal(result.status, 200, JSON.stringify(result.body))
+  assert.equal(result.body.added, REGISTER_MAX_PORTRAITS)
+  assert.equal(batches[0], 2, "the portrait rows and their events, one statement each")
+  assert.equal(
+    h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n,
+    REGISTER_MAX_PORTRAITS,
+  )
+  assert.equal(
+    h.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE action = 'candidate_added'")[0].n,
+    REGISTER_MAX_PORTRAITS,
+  )
 })

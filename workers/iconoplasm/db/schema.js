@@ -43,16 +43,3 @@ export const portraitAssets = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.geneSymbol, table.assetSha256] })],
 )
-
-export const publishEvents = sqliteTable("icono_publish_events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  geneSymbol: text("gene_symbol").notNull(),
-  fromAssetSha256: text("from_asset_sha256"),
-  toAssetSha256: text("to_asset_sha256"),
-  action: text("action").notNull(),
-  actor: text("actor"),
-  reason: text("reason"),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
-})

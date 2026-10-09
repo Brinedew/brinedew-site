@@ -47,6 +47,12 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
   Zod (`@hono/zod-validator`) and use Drizzle for D1. A table's Drizzle
   definition (`workers/iconoplasm/db/schema.js`) is added with its first
   Hono route; the SQL migrations stay the schema of record.
+- **Write many rows with one statement**, the rows bound as one JSON
+  parameter and read with SQLite's `json_each` (D1's own
+  `prepare().bind()`). Building one Drizzle statement per row costs about
+  0.05–0.15 ms of CPU each, and a free-plan request is stopped near 10 ms:
+  on 2026-10-09 a 96-portrait registration (192 statements) was killed at
+  60 ms. Drizzle stays right for reads and single-row writes.
 - **Attach auth to each route**, never to a path prefix. The legacy admin
   routes behind the fall-through keep their own checks (admin sessions, the
   `X-Iconoplasm-Admin-Token` header). The factory's routes take the admin
