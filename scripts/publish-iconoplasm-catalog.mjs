@@ -34,6 +34,13 @@ const KEY = "catalog/v3/index.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
 const PAGE = 2000
 const MAX_INCREMENTAL_SYMBOLS = 2000
+// A gene is listed only once it has a card: publishIconoplasmGeneStableObject adds its
+// icono_published_gene_routes row after writing genes/v3/<SYMBOL>.json, and a withdrawal
+// deletes it. On 2026-10-09 the catalogue delivery listed 604 new genes while 599 of
+// their cards failed ("Canonical manifestation projection was not found"), so readers
+// found ~600 genes whose page said "Page not found". Such a gene joins the list when its
+// text arrives: the manifestation wake writes manifestation_canonical_changed, which
+// republishes the card and dirties the gene for the next run.
 export const ROW_SQL = `
   SELECT gc.gene_symbol AS symbol,
          gc.full_name AS catalog_full_name,
@@ -46,6 +53,7 @@ export const ROW_SQL = `
          ge.first_publication_year,
          COALESCE(pa.created_at, '') AS published_at
     FROM icono_gene_catalog gc
+    JOIN icono_published_gene_routes pr ON pr.gene_symbol = gc.gene_symbol
     LEFT JOIN icono_gene_essence ge ON ge.gene_symbol = gc.gene_symbol
     LEFT JOIN icono_publish_state ps ON ps.gene_symbol = gc.gene_symbol
     LEFT JOIN icono_portrait_assets pa
