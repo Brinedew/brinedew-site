@@ -1,6 +1,28 @@
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const D1_UPSERT_TRANSACTION_SIZE = 10
 const MAX_ROWS_WRITTEN_PER_UPSERT = 4
+// A catalogue row and its counter triggers (4), plus its publication event (1).
+const CATALOG_ROWS_WRITTEN_PER_CHANGE = 5
+// B-1055: a catalogue change is a publication change. Until 2026-10-09 neither
+// catalogue route wrote an event, so the Actions publisher never rebuilt the
+// gene: 600 genes added on 10-07 had no page, and 613 removed on 10-08 kept
+// theirs. The upsert records one when the row is new or differs, or when the
+// gene has no page yet (no route membership: the 600 rows of 10-07 sat in D1
+// unpublished), so sending a row always means "this gene is visible". A resent
+// unchanged row of a gene that has its page schedules nothing.
+const CATALOG_UPSERTED_EVENT_SQL = `INSERT INTO icono_publish_events (
+     gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason
+   )
+   SELECT ?, NULL, NULL, 'catalog_upserted', ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM icono_gene_catalog
+       WHERE gene_symbol = ? AND full_name IS ? AND uniprot IS ? AND color_hex IS ?
+         AND tmh IS ? AND aliases_json IS ?
+    )
+       OR NOT EXISTS (SELECT 1 FROM icono_published_gene_routes WHERE gene_symbol = ?)`
+const CATALOG_REMOVED_EVENT_SQL = `INSERT INTO icono_publish_events (
+     gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason
+   ) VALUES (?, NULL, NULL, 'catalog_removed', ?, 'delete_symbols')`
 
 const REQUIRED_SERVICE_NAMES = Object.freeze([
   "actor",
@@ -106,7 +128,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     let processed = 0
     let invalid = 0
     const results = []
-    const statements = []
+    const itemStatements = []
     for (const rawItem of items) {
       const item = normalizeCatalogPayloadItem(rawItem)
       if (!item || item.validation_error) {
@@ -119,7 +141,23 @@ export function createIconoplasmAdminPublicationHandlers(services) {
         })
         continue
       }
-      statements.push(
+      const row = [
+        item.full_name,
+        item.uniprot || null,
+        item.color_hex || null,
+        item.tmh ? 1 : 0,
+        item.aliases_json || "[]",
+      ]
+      itemStatements.push([
+        // Before the upsert, in the same transaction: it compares against the old row.
+        env.ICONOPLASM_DB.prepare(CATALOG_UPSERTED_EVENT_SQL).bind(
+          item.gene_symbol,
+          actorId,
+          source,
+          item.gene_symbol,
+          ...row,
+          item.gene_symbol,
+        ),
         env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_gene_catalog (
            gene_symbol, full_name, uniprot, color_hex, tmh, aliases_json, source, updated_by, updated_at
@@ -133,17 +171,8 @@ export function createIconoplasmAdminPublicationHandlers(services) {
            source=excluded.source,
            updated_by=excluded.updated_by,
            updated_at=CURRENT_TIMESTAMP`,
-        ).bind(
-          item.gene_symbol,
-          item.full_name,
-          item.uniprot || null,
-          item.color_hex || null,
-          item.tmh ? 1 : 0,
-          item.aliases_json || "[]",
-          source,
-          actorId,
-        ),
-      )
+        ).bind(item.gene_symbol, ...row, source, actorId),
+      ])
       processed += 1
       results.push({ ok: true, symbol: item.gene_symbol })
     }
@@ -153,10 +182,10 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     // the admin mutation limiter's share, then records actual D1 metadata.
     // This preserves exact guard authority without paying one network round
     // trip for every catalog row.
-    for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
-      const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
-      await env.ICONOPLASM_DB.batch(transaction, {
-        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
+    for (let offset = 0; offset < itemStatements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
+      const transaction = itemStatements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
+      await env.ICONOPLASM_DB.batch(transaction.flat(), {
+        maxRowsWritten: transaction.length * CATALOG_ROWS_WRITTEN_PER_CHANGE,
       })
     }
     if (processed > 0 && !deferReadModels) {
@@ -223,10 +252,21 @@ export function createIconoplasmAdminPublicationHandlers(services) {
         json({ error: "No valid delete_symbols provided" }, 400),
       )
 
+    const actorId = await actor(request, env)
+    // One D1 call per symbol (a batch is one call): the delete, its counter
+    // triggers, and the event that has the publisher take the gene's page down.
+    // The event is written even when the row is already gone, so a resend
+    // finishes a removal whose page outlived it.
     for (const symbol of explicitDeleteSymbols) {
-      await env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol=?")
-        .bind(symbol)
-        .run()
+      await env.ICONOPLASM_DB.batch(
+        [
+          env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol=?").bind(
+            symbol,
+          ),
+          env.ICONOPLASM_DB.prepare(CATALOG_REMOVED_EVENT_SQL).bind(symbol, actorId),
+        ],
+        { maxRowsWritten: CATALOG_ROWS_WRITTEN_PER_CHANGE },
+      )
     }
     if (!deferReadModels) {
       await syncAdminReadModels(env, { symbols: explicitDeleteSymbols })

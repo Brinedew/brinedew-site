@@ -174,3 +174,43 @@ test("a stable object rewrite sends only the PUT and its verifying GET, never a 
     false,
   )
 })
+
+// B-1055: a gene the catalogue no longer carries loses its page. The delete's
+// outcome is "no object", so a missing object is success; a storage fault is not.
+test("a stable delete removes the object, treats a missing one as done, and throws on a fault", async () => {
+  const objects = new Map([["genes/v3/ADGRE4P.json", new Uint8Array([1])]])
+  const calls = []
+  let fault = false
+  const store = createPublishedCardObjectStore(env, {
+    request: async (url, init, key) => {
+      calls.push({ method: init.method, key, url: String(url) })
+      if (fault) return new Response(null, { status: 500 })
+      return new Response(null, { status: objects.delete(key) ? 200 : 404 })
+    },
+  })
+  assert.deepEqual(await store.deleteStable("genes/v3/ADGRE4P.json"), {
+    key: "genes/v3/ADGRE4P.json",
+    symbol: "ADGRE4P",
+    deleted: true,
+  })
+  assert.equal(objects.size, 0)
+  assert.equal((await store.deleteStable("genes/v3/ADGRE4P.json")).deleted, false)
+  fault = true
+  await assert.rejects(store.deleteStable("genes/v3/ADGRE4P.json"), /DELETE failed \(500\)/)
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ["DELETE", "DELETE", "DELETE"],
+  )
+  assert.match(calls[0].url, /\/test-zone\/genes\/v3\/ADGRE4P\.json$/)
+})
+
+test("a stable delete refuses the catalog object and every non-gene key", async () => {
+  const store = createPublishedCardObjectStore(env, {
+    request: async () => assert.fail("a refused delete must not reach storage"),
+  })
+  await assert.rejects(store.deleteStable("catalog/v3/index.json"), /Only a stable gene object/)
+  await assert.rejects(
+    store.deleteStable("genes/v3/../index.json"),
+    /Invalid stable gene object key/,
+  )
+})
