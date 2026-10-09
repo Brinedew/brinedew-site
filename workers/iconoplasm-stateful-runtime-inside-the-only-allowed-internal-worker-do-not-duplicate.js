@@ -252,7 +252,6 @@ import {
   appendIconoplasmServiceDiscoveryLinks,
   iconoplasmPublicOpenApiJson,
 } from "./iconoplasm-service-discovery.js"
-import { ICONOPLASM_CLAN_CATALOG } from "./generated/iconoplasm-clan-catalog.js"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/iconoplasm-anima-emulsion-slot-contract.js"
 import { ICONOPLASM_FACTORY_CATALOG } from "./generated/iconoplasm-factory-catalog.js"
 import { renderIconoplasmArtistStylesHtml } from "./iconoplasm-artist-styles-html.js"
@@ -371,14 +370,21 @@ function iconoplasmImageLicenseResponseHeaders(alternateUrl = "") {
 const ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT = 10
 // Server-side clan reference data. Keep this out of the browser bundle; the
 // public route below reveals clan metadata only when the signed-in user has
-// discovered at least one member of that clan.
-const ICONOPLASM_CLAN_CATALOG_BY_NAME = new Map(
-  (Array.isArray(ICONOPLASM_CLAN_CATALOG) ? ICONOPLASM_CLAN_CATALOG : []).map((entry) => [
-    String(entry?.clan || ""),
-    entry,
-  ]),
-)
-const ICONOPLASM_CLAN_CATALOG_TOTAL = ICONOPLASM_CLAN_CATALOG_BY_NAME.size
+// discovered at least one member of that clan. B-1070: loaded on the first
+// clans request, not in every cold isolate's start-up (113 KiB of the bundle).
+let iconoplasmClanCatalog = null
+async function iconoplasmClanCatalogByName() {
+  if (!iconoplasmClanCatalog) {
+    const { ICONOPLASM_CLAN_CATALOG } = await import("./generated/iconoplasm-clan-catalog.js")
+    iconoplasmClanCatalog = new Map(
+      (Array.isArray(ICONOPLASM_CLAN_CATALOG) ? ICONOPLASM_CLAN_CATALOG : []).map((entry) => [
+        String(entry?.clan || ""),
+        entry,
+      ]),
+    )
+  }
+  return iconoplasmClanCatalog
+}
 // Public API cutover note:
 // This worker now exposes one documented public contract under /api/public/v1.
 // The extension and site are expected to use that same contract so we do not
@@ -26954,7 +26960,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!env.ICONOPLASM_DB) {
         return done("clans_overview_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
       }
-      const totalClans = ICONOPLASM_CLAN_CATALOG_TOTAL
+      const clanCatalog = await iconoplasmClanCatalogByName()
+      const totalClans = clanCatalog.size
       const sessionUser = await iconoplasmSessionUser(request, env)
       if (!sessionUser?.user_id) {
         return done(
@@ -27016,7 +27023,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const assetSha = normalizeSha256(row?.asset_sha256 || "") || null
         const isSingleClan = origins.length === 1
         for (const clan of origins) {
-          if (!ICONOPLASM_CLAN_CATALOG_BY_NAME.has(clan)) continue
+          if (!clanCatalog.has(clan)) continue
           let seen = seenByClan.get(clan)
           if (!seen) {
             seen = new Set()
@@ -27039,7 +27046,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const clans = []
       for (const [clan, seen] of seenByClan.entries()) {
-        const entry = ICONOPLASM_CLAN_CATALOG_BY_NAME.get(clan)
+        const entry = clanCatalog.get(clan)
         if (!entry) continue
         const members = (singlesByClan.get(clan) || [])
           .concat(multisByClan.get(clan) || [])
@@ -27093,7 +27100,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         } catch {
           clanName = clanMembersMatch[1] || ""
         }
-        const catalogEntry = ICONOPLASM_CLAN_CATALOG_BY_NAME.get(clanName)
+        const catalogEntry = (await iconoplasmClanCatalogByName()).get(clanName)
         if (!catalogEntry) {
           return done("clans_overview", json({ error: "Unknown clan" }, 404))
         }
