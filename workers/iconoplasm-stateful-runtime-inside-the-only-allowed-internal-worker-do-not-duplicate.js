@@ -11828,38 +11828,24 @@ async function recordCompactDiscoveryEncounters(
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const db = env.ICONOPLASM_DB
   // The cutover fence is deliberately first: a pending migration performs no
-  // dictionary mutation and consumes no mutation-lane reservation.
+  // dictionary mutation.
   await assertCompactDiscoveryActivated(db)
+  // A reader's collecting writes straight to D1, like a vote (B-1067). It used to
+  // reserve its writes in the budget referee first, and every reservation
+  // rescanned the day's reservations: on a viral day the collecting alone would
+  // have spent Cloudflare's Durable Object reads, as publication did on
+  // 2026-10-09 at 16:00 UTC, and taken GeneGuessr down with it.
   const names = encounters.map((encounter) => encounter.symbol)
   const beforeDictionary = await loadDiscoveryDictionaryForNames(db, names)
   const unresolvedNames = beforeDictionary.names.filter(
     (name) => !beforeDictionary.byName.has(name),
   )
-  const dictionaryWriteUnits = unresolvedNames.length ? 1 + unresolvedNames.length : 0
-  const operationId = `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`
-  const admission = await reserveIconoplasmMutationWrites(env, {
-    lane: "user_action",
-    operationId,
-    // Real D1 receipts: three writes for the compact personal batch, one
-    // receipt and one indexed outbox delete for its shared delivery, plus one
-    // conservative unit for the page-level shared-state update.
-    units: 6 + dictionaryWriteUnits,
-  })
-  if (admission?.ok !== true) {
-    const error = new Error(
-      "Discovery capacity is reserved for other mutation lanes; retain the exact batch for retry",
-    )
-    error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
-    error.mutation_lane = admission
-    throw error
-  }
   const lookup = await ensureDiscoveryDictionaryForNames(db, names, {
-    maxMutationWrites: dictionaryWriteUnits,
+    maxMutationWrites: unresolvedNames.length ? 1 + unresolvedNames.length : 0,
   })
   const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
   const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
   if (!known.length) {
-    await completeIconoplasmMutationReservation(env, operationId)
     return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
   }
   const dictionary = discoveryCompactDictionaryFromLookup(lookup)
@@ -11870,7 +11856,6 @@ async function recordCompactDiscoveryEncounters(
     dictionary,
     encounters: known,
   })
-  await completeIconoplasmMutationReservation(env, operationId)
   return { ...result, recorded: known.length, dropped: unknown }
 }
 
@@ -26703,26 +26688,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
-        if (code === "MUTATION_PROVIDER_HEADROOM_RESERVED") {
-          const retryAfter = mutationRefusalRetryAfterSeconds(error.mutation_lane)
-          return done(
-            "discoveries_batch_capacity",
-            json(
-              {
-                ok: false,
-                persisted: false,
-                pending: true,
-                code,
-                error:
-                  "Discovery capacity is reserved for other mutation lanes; keep this exact batch pending and retry later.",
-                batch_id: batchId,
-                retry_after_seconds: retryAfter,
-              },
-              429,
-              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
-            ),
-          )
-        }
         if (code === "DISCOVERY_COMPACT_CONFLICT") {
           return done(
             "discoveries_batch_retry",
@@ -27211,30 +27176,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
       } catch (error) {
         const code = String(error?.code || "")
-        const capacityRefusal = code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
-        if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
-          // Only a capacity refusal clears at a time the ledger can state; a missing
-          // binding is a configuration fault someone has to fix, so it keeps its 60.
-          const retryAfter = capacityRefusal
-            ? mutationRefusalRetryAfterSeconds(error.mutation_lane)
-            : 60
-          return done(
-            "discoveries_merge_capacity",
-            json(
-              {
-                ok: false,
-                persisted: false,
-                pending: true,
-                code,
-                error: "Discovery capacity is unavailable; keep these exact symbols pending.",
-                symbols: requestedSymbols,
-                ...(capacityRefusal ? { retry_after_seconds: retryAfter } : {}),
-              },
-              capacityRefusal ? 429 : 503,
-              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
-            ),
-          )
-        }
         if (code === "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE") {
           return done(
             "discoveries_merge_migration_incomplete",
