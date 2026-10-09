@@ -3,19 +3,21 @@
 // A caller-supplied bound is NOT proof that an arbitrary SQL query is bounded.
 import {
   D1_CRITICALITY_SHARES,
-  D1_OPERATOR_DAILY_LIMITS,
+  FREE_PLAN_DAILY_LIMITS,
   OPERATOR_ACCOUNT_CEILINGS,
-  OPERATOR_DAILY_REQUEST_LIMIT,
   d1CriticalityOfRouteFamily,
 } from "../../shared/iconoplasm-d1-budget-policy.js"
-import { KV_COST_METERS, KV_OPERATOR_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
+import { KV_COST_METERS, KV_DAILY_LIMITS, KV_ACCOUNT_CEILINGS } from "./operation-cost-meters.js"
 import { MUTATION_ANALYTICS_LAG_MS } from "./iconoplasm-mutation-lane-reservations.js"
 
 const METERS = ["rows_read", "rows_written", "requests"]
+// B-1026: no private operator slice. Our own tally is bounded only by the
+// provider's wall; ACCOUNT_CEILINGS shed this batch work against the whole
+// account, readers included.
 const LIMITS = {
-  rows_read: D1_OPERATOR_DAILY_LIMITS.reads,
-  rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
-  requests: OPERATOR_DAILY_REQUEST_LIMIT,
+  rows_read: FREE_PLAN_DAILY_LIMITS.rows_read,
+  rows_written: FREE_PLAN_DAILY_LIMITS.rows_written,
+  requests: FREE_PLAN_DAILY_LIMITS.requests,
 }
 // Replica work (the workstation's material reads, pulls and revision appends) can
 // all be redone after the reset, so it is shed at its tier's share of the operator
@@ -66,7 +68,7 @@ function vector(value, prediction = false) {
       Number.isSafeInteger(value[meter]) &&
         value[meter] >= 0 &&
         value[meter] <=
-          (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : KV_OPERATOR_LIMITS[meter]),
+          (prediction ? Math.floor(Number.MAX_SAFE_INTEGER / 2) : KV_DAILY_LIMITS[meter]),
       "COST_VECTOR_INVALID",
     )
     result[meter] = value[meter]
@@ -621,7 +623,7 @@ export class OperationCostLedger {
           )
           if (maximum === 0) continue
           requireValue(
-            kvUsage[meter] + other + maximum <= KV_OPERATOR_LIMITS[meter],
+            kvUsage[meter] + other + maximum <= KV_DAILY_LIMITS[meter],
             "COST_SHARED_DAILY_LIMIT",
           )
           requireValue(
