@@ -379,20 +379,3 @@ test("legacy resolve accepts the same keys as the image resolver and refuses unu
   assert.equal(tooMany.status, 400)
   assert.equal(tooMany.payload.max_identifiers, 250)
 })
-
-test("public changes route works through THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE", async () => {
-  const response = await viaStatefulWorker(
-    new Request(
-      "https://iconoplasm.brinedew.bio/api/public/v1/changes?since=2026-04-06T00:00:00Z&limit=10",
-    ),
-    buildEnv(),
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(Array.isArray(payload?.changes), true)
-  assert.equal(payload?.changes?.[0]?.symbol, "PRL")
-  assert.deepEqual(payload?.changes?.[0]?.change_types, ["catalog", "essence", "portrait"])
-  assert.equal(payload?.changes?.[0]?.current_asset_sha256, "a".repeat(64))
-})

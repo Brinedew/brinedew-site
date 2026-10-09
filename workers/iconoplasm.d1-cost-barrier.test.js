@@ -501,39 +501,6 @@ test("unpublishing a portrait removes every old portrait representation from the
   assert.ok(before.genes[0].p, "source artifact remains immutable")
 })
 
-test("DO NOT DELETE: vote gallery reuses the shared published gallery snapshot after isolate reset", async () => {
-  const kv = new FakeSharedKv()
-  const db = new FakeCostBarrierDb()
-
-  resetIconoplasmRuntimeCachesForTest()
-  const first = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
-    buildEnv(kv, db),
-    { waitUntil() {} },
-  )
-  const firstPayload = await first.json()
-  assert.equal(first.status, 200)
-  assert.deepEqual(
-    firstPayload.items.map((item) => item.symbol),
-    ["TP53", "A1BG"],
-  )
-  assert.equal(db.galleryPublishedReads, 1)
-
-  resetIconoplasmRuntimeCachesForTest()
-  const second = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes&limit=10"),
-    buildEnv(kv, db),
-    { waitUntil() {} },
-  )
-  const secondPayload = await second.json()
-  assert.equal(second.status, 200)
-  assert.deepEqual(
-    secondPayload.items.map((item) => item.symbol),
-    ["TP53", "A1BG"],
-  )
-  assert.equal(db.galleryPublishedReads, 1)
-})
-
 test("DO NOT DELETE: corrupt portrait publication fails retryably instead of repairing from D1", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()

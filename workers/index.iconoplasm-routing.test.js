@@ -380,7 +380,7 @@ test("public edge is a pure proxy when a shared-host request targets Iconoplasm"
   }
 
   const response = await worker.fetch(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes"),
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/schema"),
     env,
     {},
   )
@@ -389,7 +389,7 @@ test("public edge is a pure proxy when a shared-host request targets Iconoplasm"
   assert.equal(response.status, 200)
   assert.equal(payload?.ok, true)
   assert.equal(calls.length, 1)
-  assert.equal(calls[0]?.url, "https://iconoplasm.brinedew.bio/api/public/v1/gallery?order=votes")
+  assert.equal(calls[0]?.url, "https://iconoplasm.brinedew.bio/api/public/v1/schema")
   assert.equal(calls[0]?.method, "GET")
 })
 

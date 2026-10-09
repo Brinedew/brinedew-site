@@ -45,7 +45,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
-import { ROW_SQL, geneRow } from "../scripts/publish-iconoplasm-catalog.mjs"
+import { rowFromCard } from "../scripts/publish-iconoplasm-catalog.mjs"
 import { writeIconoplasmGenePages } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { publishIconoplasmGeneStableObject } from "../workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
@@ -180,9 +180,11 @@ function seedDatabase() {
   return db
 }
 
-// The catalog builder's own SQL and row mapper, over every seeded gene.
-function buildCatalogObject(db) {
-  const rows = db.rows(`${ROW_SQL}\n   ORDER BY gc.gene_symbol ASC`).map(geneRow)
+// The catalog builder's own row mapper, over every published card (B-1064).
+function buildCatalogObject(stable) {
+  const rows = [...stable.values()]
+    .map(rowFromCard)
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   return { schema: 3, generated_at: "2026-10-03T00:00:00.000Z", watermark_event_id: 1, genes: rows }
 }
 
@@ -223,7 +225,7 @@ test("catalog row, stable object and static document name every gene the same wa
   const db = seedDatabase()
   // Card first, then the list: a gene is listed only once its card exists (B-1055).
   const stable = await publishStableObjects(db)
-  const catalog = buildCatalogObject(db)
+  const catalog = buildCatalogObject(stable)
   const docs = await staticDocuments(catalog.genes)
   const report = []
   for (const gene of GENES) {
@@ -405,7 +407,7 @@ test("the tab title never changes while the gene card loads (real browser)", asy
     const db = seedDatabase()
     // Card first, then the list: a gene is listed only once its card exists (B-1055).
     const stable = await publishStableObjects(db)
-    const catalog = buildCatalogObject(db)
+    const catalog = buildCatalogObject(stable)
     const object = stable.get(`genes/v3/${gene.symbol}.json`)
     const expected = iconoplasmGenePageTitle(gene.symbol, object.full_name)
     report.expected = expected

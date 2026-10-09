@@ -7,13 +7,13 @@
 //   node scripts/publish-iconoplasm-catalog.mjs --dry-run  # build, no upload
 //
 // Runs in GitHub Actions (.github/workflows/publish-iconoplasm-catalog.yml).
-// Reads D1 through the Cloudflare REST API with the deploy token, builds the
-// object in Node (a free-plan Worker request has 10 ms of CPU, this needs all
-// 19k genes), and hands the bytes to the Worker's admin route, which holds the
-// Bunny storage password and purges the CDN URL. Incremental runs read the
-// previous object from the CDN and only the genes with a publication-affecting
-// event since that object's watermark (a winner or candidate change; a vote
-// republishes its own gene's stable object in the Worker).
+// Each row is read from the gene's published card, genes/v3/<SYMBOL>.json, on
+// Bunny Storage's origin (B-1064): a card rewritten seconds ago is read as
+// written, where the CDN's edge keeps its copy for 60 s and ignores query
+// strings. A gene is listed exactly when its card exists. D1 only says which
+// genes changed: incremental runs read the previous object from the CDN and the
+// genes with a publication-affecting event since its watermark, republish
+// those, then read their cards.
 //
 // Object shape (schema 3): { schema, generated_at, watermark_event_id, genes }
 // where each gene row is
@@ -32,34 +32,9 @@ const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const KEY = "catalog/v3/index.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
-const PAGE = 2000
 const MAX_INCREMENTAL_SYMBOLS = 2000
-// A gene is listed only once it has a card: publishIconoplasmGeneStableObject adds its
-// icono_published_gene_routes row after writing genes/v3/<SYMBOL>.json, and a withdrawal
-// deletes it. On 2026-10-09 the catalogue delivery listed 604 new genes while 599 of
-// their cards failed ("Canonical manifestation projection was not found"), so readers
-// found ~600 genes whose page said "Page not found". Such a gene joins the list when its
-// text arrives: the manifestation wake writes manifestation_canonical_changed, which
-// republishes the card and dirties the gene for the next run.
-export const ROW_SQL = `
-  SELECT gc.gene_symbol AS symbol,
-         gc.full_name AS catalog_full_name,
-         CASE WHEN pa.asset_sha256 IS NOT NULL THEN ps.current_asset_sha256 ELSE '' END AS portrait_sha256,
-         COALESCE(gc.color_hex, '') AS color_hex,
-         COALESCE(vs.score, 0) AS image_score,
-         ge.leakage_percent AS uniqueness_rank,
-         ge.weight_kg,
-         ge.age_years,
-         ge.first_publication_year,
-         COALESCE(pa.created_at, '') AS published_at
-    FROM icono_gene_catalog gc
-    JOIN icono_published_gene_routes pr ON pr.gene_symbol = gc.gene_symbol
-    LEFT JOIN icono_gene_essence ge ON ge.gene_symbol = gc.gene_symbol
-    LEFT JOIN icono_publish_state ps ON ps.gene_symbol = gc.gene_symbol
-    LEFT JOIN icono_portrait_assets pa
-      ON pa.gene_symbol = gc.gene_symbol AND pa.asset_sha256 = ps.current_asset_sha256
-    LEFT JOIN icono_vote_asset_summary vs
-      ON vs.gene_symbol = gc.gene_symbol AND vs.asset_sha256 = ps.current_asset_sha256`
+const STORAGE = "https://storage.bunnycdn.com/iconoplasm-portraits"
+const CARD_READ_CONCURRENCY = 16
 
 const args = new Set(process.argv.slice(2))
 const FULL = args.has("--full")
@@ -99,54 +74,72 @@ function nullableNumber(value) {
     : number
 }
 
-export function geneRow(row) {
-  const symbol = String(row.symbol || "").toUpperCase()
+// The catalogue row of one card (schema 3). The winner's score and date come from
+// the candidate the card marks current.
+export function rowFromCard(card) {
+  const symbol = String(card?.symbol || "").toUpperCase()
+  const portrait =
+    card?.portrait?.status === "published" ? String(card.portrait.asset_sha256 || "") : ""
+  const winner = (Array.isArray(card?.portrait_candidates) ? card.portrait_candidates : []).find(
+    (candidate) => candidate?.is_current,
+  )
   return [
     symbol,
-    iconoplasmGeneName(row.catalog_full_name, symbol),
-    /^[a-f0-9]{64}$/i.test(String(row.portrait_sha256 || ""))
-      ? String(row.portrait_sha256).toLowerCase()
-      : "",
-    String(row.color_hex || ""),
-    Number(row.image_score || 0),
-    nullableNumber(row.uniqueness_rank),
-    nullableNumber(row.weight_kg),
-    nullableNumber(row.age_years),
-    nullableNumber(row.first_publication_year),
-    String(row.published_at || ""),
+    iconoplasmGeneName(card?.full_name, symbol),
+    /^[a-f0-9]{64}$/i.test(portrait) ? portrait.toLowerCase() : "",
+    String(card?.color || ""),
+    Number(winner?.image_score || 0),
+    nullableNumber(card?.uniqueness_rank),
+    nullableNumber(card?.weight_kg),
+    nullableNumber(card?.essence?.age_years),
+    nullableNumber(card?.first_publication_year),
+    String(winner?.created_at || ""),
   ]
 }
 
-async function readAllRows() {
+async function storage(pathname) {
+  const response = await fetch(`${STORAGE}/${pathname}`, {
+    headers: {
+      AccessKey: need("ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD"),
+      Accept: "application/json",
+    },
+  })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`Bunny Storage GET ${pathname} failed (${response.status})`)
+  return response.json()
+}
+
+// The rows of the named genes whose card exists.
+async function cardRows(symbols) {
   const rows = []
-  let after = ""
-  let reads = 0
-  for (;;) {
-    const page = await d1(
-      `${ROW_SQL}\n   WHERE gc.gene_symbol > ?\n   ORDER BY gc.gene_symbol ASC LIMIT ${PAGE}`,
-      [after],
-    )
-    reads += Number(page.meta.rows_read || 0)
-    rows.push(...page.rows.map(geneRow))
-    if (page.rows.length < PAGE) break
-    after = page.rows.at(-1).symbol
-  }
-  return { rows, reads }
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(CARD_READ_CONCURRENCY, symbols.length) }, async () => {
+      while (next < symbols.length) {
+        const symbol = symbols[next]
+        next += 1
+        const card = await storage(`genes/v3/${encodeURIComponent(symbol)}.json`)
+        if (card) rows.push(rowFromCard(card))
+      }
+    }),
+  )
+  return rows
+}
+
+// Every gene with a card: Bunny Storage's own listing of genes/v3/.
+async function allCardSymbols() {
+  const listing = await storage("genes/v3/")
+  return (Array.isArray(listing) ? listing : [])
+    .filter((entry) => !entry.IsDirectory && String(entry.ObjectName || "").endsWith(".json"))
+    .map((entry) => String(entry.ObjectName).slice(0, -".json".length).toUpperCase())
+}
+
+async function readAllRows() {
+  return { rows: await cardRows(await allCardSymbols()), reads: 0 }
 }
 
 async function readRowsFor(symbols) {
-  const rows = []
-  let reads = 0
-  for (let index = 0; index < symbols.length; index += 90) {
-    const batch = symbols.slice(index, index + 90)
-    const page = await d1(
-      `${ROW_SQL}\n   WHERE gc.gene_symbol IN (${batch.map(() => "?").join(",")})`,
-      batch,
-    )
-    reads += Number(page.meta.rows_read || 0)
-    rows.push(...page.rows.map(geneRow))
-  }
-  return { rows, reads }
+  return { rows: await cardRows(symbols), reads: 0 }
 }
 
 async function highWater() {
