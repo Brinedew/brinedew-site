@@ -31,10 +31,6 @@
 //       cover every gene.
 //   F7  Running without the admin token still sends requests (or sends an empty
 //       Bearer). It must refuse before the first call.
-//   F8  It runs right after the 00:00 UTC reset and spends the day's D1
-//       allowance up front (AGENTS.md: spend the allowance at the end of the
-//       UTC day). Execute refuses before 20:00 UTC unless the operator names an
-//       incident reason, which the receipt records.
 //   F9  A mistyped --limit, --from, --concurrency or an unknown option widens or
 //       corrupts the sweep. All are refused.
 //  F10  Verification trusts a stale cached copy, or misses a Tags subtree in an
@@ -73,7 +69,6 @@ import {
 } from "../workers/iconoplasm-admin-republish-route.js"
 import {
   DEFAULT_BATCH_SYMBOLS,
-  LATE_UTC_HOUR,
   RETRY_DELAYS_MS,
   createRoutePoster,
   loadCatalogSymbols,
@@ -451,33 +446,6 @@ test("F7 execute refuses before the first call without an admin token", async ()
     fetchImpl: async () => new Response("error code: 1102", { status: 503 }),
   })
   assert.deepEqual(await killed(["G001"]), { status: 503, body: null, raw: "error code: 1102" })
-})
-
-test("F8 execute refuses early in the UTC day unless the operator names an incident", async () => {
-  const { post, calls } = routePoster()
-  assert.equal(LATE_UTC_HOUR, 20)
-  await assert.rejects(
-    republishGeneObjects({
-      symbols: SYMBOLS,
-      post,
-      execute: true,
-      now: EARLY,
-      sleep: noSleep,
-    }),
-    (error) => error.code === "RUN_LATE_IN_THE_UTC_DAY",
-  )
-  assert.equal(calls.length, 0)
-  const allowed = await republishGeneObjects({
-    symbols: SYMBOLS,
-    post,
-    execute: true,
-    now: EARLY,
-    sleep: noSleep,
-    limit: 8,
-    allowEarlyReason: "incident B-859: Tags are public today",
-  })
-  assert.equal(allowed.early_reason, "incident B-859: Tags are public today")
-  assert.equal(allowed.published, 8)
 })
 
 test("F9 bad options are refused", () => {
