@@ -17,7 +17,9 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 // 3. a gene with no canonical text gets no card (599 genes on 2026-10-09);
 // 4. (B-1055) a gene the catalogue no longer carries keeps its page, or a
 //    listed gene loses it;
-// 5. reading a gene's inputs costs more than one D1 call.
+// 5. reading a gene's inputs costs more than one D1 call;
+// 6. an election changes the winner, but readers' shelves, which read it from
+//    the gene rollup, keep the old one (or none).
 // The vote-version recheck after the write is proven in iconoplasm.d1-votes.test.js
 // (failure mode 11).
 const A = "a".repeat(64)
@@ -92,6 +94,12 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
   assert.equal(card.weight_kg, 43.7)
   assert.equal(result.winner_asset_sha256, A)
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 0 })
+  const rollup = db.database
+    .prepare(
+      "SELECT current_asset_sha256 AS asset FROM icono_admin_gene_rollup WHERE gene_symbol = 'TP53'",
+    )
+    .get()
+  assert.equal(rollup?.asset, A, "readers' shelves read the winner from the gene rollup")
 })
 
 test("a pin beats the election and the election leaves the pinned state alone", async () => {

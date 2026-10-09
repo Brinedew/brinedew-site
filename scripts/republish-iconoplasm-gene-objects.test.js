@@ -219,7 +219,7 @@ test("F3 a capped run names where to resume and two runs add up to one sweep", a
   )
 })
 
-test("F4 --only rewrites exactly the named genes and refuses an unknown one", async () => {
+test("F4 --only rewrites exactly the named genes, listed in the CDN catalogue or not", async () => {
   const { post, published } = routePoster()
   const receipt = await republishGeneObjects({
     symbols: SYMBOLS,
@@ -231,17 +231,18 @@ test("F4 --only rewrites exactly the named genes and refuses an unknown one", as
   })
   assert.deepEqual([...published].sort(), ["G003", "G007", "HLA-A"])
   assert.equal(receipt.planned, 3)
-  await assert.rejects(
-    republishGeneObjects({
-      symbols: SYMBOLS,
-      post,
-      execute: true,
-      now: EVENING,
-      sleep: noSleep,
-      only: ["G007", "NOT-A-GENE"],
-    }),
-    (error) => error.code === "ONLY_UNKNOWN_SYMBOL" && /NOT-A-GENE/.test(error.message),
-  )
+  // 2026-10-09: 600 genes in D1's catalogue had no card, so the CDN catalogue
+  // didn't list them; the route, not the derived object, decides.
+  const unlisted = await republishGeneObjects({
+    symbols: SYMBOLS,
+    post,
+    execute: true,
+    now: EVENING,
+    sleep: noSleep,
+    only: ["NEWGENE1"],
+  })
+  assert.equal(unlisted.planned, 1)
+  assert.ok(published.includes("NEWGENE1"))
 })
 
 test("F5 a failed call is retried twice with growing pauses, then split; a failed gene is listed and the sweep goes on", async () => {

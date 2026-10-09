@@ -386,6 +386,7 @@ import {
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   migrateIconoplasmCompactDiscoveryForScheduled,
   publishIconoplasmGeneStableObject,
+  refreshIconoplasmRegisteredGeneSummaries,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
@@ -1939,6 +1940,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 const app = createIconoplasmApp({
   legacy: handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishGene: publishIconoplasmGeneStableObject,
+  refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
 })
 
 export default {
