@@ -9502,14 +9502,6 @@ async function publishCandidateGenerationAsset(env, job, userId) {
     )
     .run()
   await persistPortraitGenerationReceipt(env, receipt)
-  const publishedEmulsionId = sanitizeText(job.requested_emulsion_id || "", 64) || ""
-  if (publishedEmulsionId) {
-    // Keep user-emulsion picker examples correct for site-originated generation.
-    // This is intentionally a source-derived rebuild for the one affected emulsion,
-    // not a blind counter increment: publish retries, admin status changes, imports,
-    // and rollbacks all need the same invariant.
-    await rebuildUserEmulsionOptionRollupsBatch(env, [publishedEmulsionId])
-  }
   const publishReason = `Published direct image generation job ${sanitizeText(job.id || "", 80) || ""}`
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
@@ -10104,178 +10096,6 @@ export async function rebuildGenerationRequestFactoryOptionRollupsBatch(
     .bind(affectedCodesJson)
     .run()
   return affectedCodes.length
-}
-
-export async function rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds = []) {
-  // Examples follow the picker rule shared with the factory rollup: each gene's
-  // best portrait (its winner, then upvotes, score, approval, newest) ranks
-  // ahead of any gene's second best, so one gene's fresh batch of drafts can
-  // fill at most one slot while the style has other genes (B-896).
-  // Invariant: icono_user_emulsion_option_rollup is only a cheap request-picker
-  // read model. The source of truth stays in icono_portrait_assets. Rebuild the
-  // affected emulsion IDs from source rows whenever source assets/currentness
-  // change; never let the authenticated picker compute examples by scanning the
-  // portrait table at request time.
-  if (!env.ICONOPLASM_DB) return 0
-  const cleanedEmulsionIds = Array.from(
-    new Set(
-      (Array.isArray(emulsionIds) ? emulsionIds : [])
-        .map((value) => sanitizeText(value || "", 64) || "")
-        .filter(Boolean),
-    ),
-  )
-  if (!cleanedEmulsionIds.length) return 0
-
-  const payload = JSON.stringify(cleanedEmulsionIds)
-  await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS emulsion_id
-       FROM json_each(?)
-     )
-     DELETE FROM icono_user_emulsion_option_rollup
-     WHERE emulsion_id IN (SELECT emulsion_id FROM incoming)`,
-  )
-    .bind(payload)
-    .run()
-
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_user_emulsion_option_rollup (
-       emulsion_id,
-       image_count,
-       live_count,
-       preview_assets_json,
-       updated_at
-     )
-     WITH incoming AS (
-       SELECT value AS emulsion_id
-       FROM json_each(?)
-     ),
-     source_assets AS (
-       SELECT
-         pa.emulsion_id,
-         pa.gene_symbol,
-         pa.asset_sha256,
-         pa.created_at,
-         lower(COALESCE(pa.status, '')) AS status,
-         CASE
-           WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
-           ELSE 0
-         END AS is_current,
-         COALESCE(vs.upvotes, 0) AS upvotes,
-         COALESCE(vs.score, 0) AS score,
-         ROW_NUMBER() OVER (
-           PARTITION BY pa.emulsion_id, pa.gene_symbol
-           ORDER BY
-             CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END DESC,
-             COALESCE(vs.upvotes, 0) DESC,
-             COALESCE(vs.score, 0) DESC,
-             CASE WHEN lower(COALESCE(pa.status, '')) = 'approved' THEN 1 ELSE 0 END DESC,
-             COALESCE(pa.created_at, '') DESC,
-             pa.asset_sha256 ASC
-         ) AS gene_rank
-       FROM icono_portrait_assets pa
-       JOIN incoming i
-         ON i.emulsion_id = pa.emulsion_id
-       LEFT JOIN icono_publish_state ps
-         ON ps.gene_symbol = pa.gene_symbol
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-       WHERE COALESCE(pa.emulsion_id, '') <> ''
-         AND COALESCE(pa.asset_sha256, '') <> ''
-         AND lower(COALESCE(pa.status, '')) <> 'rejected'
-     ),
-     summary AS (
-       SELECT
-         emulsion_id,
-         COUNT(*) AS image_count,
-         COALESCE(SUM(is_current), 0) AS live_count
-       FROM source_assets
-       GROUP BY emulsion_id
-     ),
-     ranked_previews AS (
-       SELECT
-         emulsion_id,
-         gene_symbol,
-         asset_sha256,
-         is_current,
-         ROW_NUMBER() OVER (
-           PARTITION BY emulsion_id
-           ORDER BY
-             gene_rank ASC,
-             is_current DESC,
-             upvotes DESC,
-             score DESC,
-             CASE WHEN status = 'approved' THEN 1 ELSE 0 END DESC,
-             COALESCE(created_at, '') DESC,
-             asset_sha256 ASC
-         ) AS preview_rank
-       FROM source_assets
-     ),
-     preview_assets AS (
-       SELECT
-         emulsion_id,
-         json_group_array(
-           json_object(
-             'gene_symbol', gene_symbol,
-             'asset_sha256', asset_sha256,
-             'is_current', is_current,
-             'preview_rank', preview_rank
-           )
-         ) AS preview_assets_json
-       FROM (
-         SELECT *
-         FROM ranked_previews
-         WHERE preview_rank <= 5
-         ORDER BY emulsion_id ASC, preview_rank ASC
-       )
-       GROUP BY emulsion_id
-     )
-     SELECT
-       summary.emulsion_id,
-       summary.image_count,
-       summary.live_count,
-       COALESCE(preview_assets.preview_assets_json, '[]'),
-       CURRENT_TIMESTAMP
-     FROM summary
-     LEFT JOIN preview_assets
-       ON preview_assets.emulsion_id = summary.emulsion_id`,
-  )
-    .bind(payload)
-    .run()
-  return cleanedEmulsionIds.length
-}
-
-async function rebuildUserEmulsionOptionRollupsForSymbols(env, symbols = []) {
-  // Admin mutations usually touch a gene, not a known emulsion ID. Resolve the
-  // distinct emulsions on that gene first, then rebuild only those rows. On the
-  // live dataset the heaviest symbols are dozens of rows, not the full 50k table.
-  if (!env.ICONOPLASM_DB) return 0
-  const cleanedSymbols = Array.from(
-    new Set(
-      (Array.isArray(symbols) ? symbols : [])
-        .map((value) => normalizeSymbol(value))
-        .filter(Boolean),
-    ),
-  )
-  if (!cleanedSymbols.length) return 0
-  const response = await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS gene_symbol
-       FROM json_each(?)
-     )
-     SELECT DISTINCT pa.emulsion_id
-     FROM icono_portrait_assets pa
-     JOIN incoming i
-       ON i.gene_symbol = pa.gene_symbol
-     WHERE COALESCE(pa.emulsion_id, '') <> ''`,
-  )
-    .bind(JSON.stringify(cleanedSymbols))
-    .all()
-  const emulsionIds = (Array.isArray(response?.results) ? response.results : [])
-    .map((row) => sanitizeText(row?.emulsion_id || "", 64) || "")
-    .filter(Boolean)
-  return rebuildUserEmulsionOptionRollupsBatch(env, emulsionIds)
 }
 
 function normalizeGenerationRequestOptionSearchQuery(raw) {
@@ -21852,9 +21672,9 @@ export async function publishIconoplasmGeneStableObject(
             : portrait,
         )
         card = buildGeneCard(content, { ...facts, previous_winner: winner })
-        // Readers' shelves and the admin pages still read the winner from the
-        // gene rollup (B-1064 moves the shelf to the cards); nothing else
-        // refreshes it when a vote or a first portrait changes the winner.
+        // The clans page and the admin pages read the winner from the gene
+        // rollup (B-1064 moves clans to the cards); nothing else refreshes it
+        // when a vote or a first portrait changes the winner.
         await rebuildGeneRollupForSymbols(env, [symbol])
       }
     }
@@ -21887,15 +21707,14 @@ export async function publishIconoplasmGeneStableObject(
 }
 
 // B-1063: after the factory registers portraits, the summaries the old ingest
-// and reconcile refreshed for those genes: the gene rollup (its counts), the
-// request picker's emulsion examples, and the visions the picker job rebuilds
-// once each (B-1057). They go when B-1064 retires these tables' readers.
+// and reconcile refreshed for those genes: the gene rollup (its counts; the
+// clans page and the admin pages read it) and the visions the request-picker
+// job rebuilds once each (B-1057). They go when B-1064 retires their readers.
 export async function refreshIconoplasmRegisteredGeneSummaries(
   env,
   { symbols = [], visionIds = [] } = {},
 ) {
   await rebuildGeneRollupForSymbols(env, symbols)
-  await rebuildUserEmulsionOptionRollupsForSymbols(env, symbols)
   await markVisionRollupsDirty(env, visionIds)
 }
 
@@ -31342,9 +31161,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         await syncAdminReadModels(env, {
           symbols: Array.from(touchedSymbols),
         })
-      // Reconcile can restore, reject, or unpublish many source assets. Refresh
-      // affected emulsion examples from source rows before the next picker read.
-      if (!dryRun) await rebuildUserEmulsionOptionRollupsForSymbols(env, Array.from(touchedSymbols))
       return done(
         "admin_reconcile",
         json(
@@ -31470,8 +31286,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           })
           if (result?.changed) autoResolved += 1
         }
-        // Unstaling can make previously hidden source assets eligible examples.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, touchedSymbols)
         await syncAdminReadModels(env, {
           symbols: touchedSymbols,
         })
@@ -31526,9 +31340,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             String(p?.reason || "").slice(0, 2000) || null,
           )
           .run()
-        // Publishing changes currentness and approval state, so rebuild all
-        // emulsion examples on this gene from source rows.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31574,8 +31385,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           actorId,
           reason: "admin_clear_override",
         })
-        // Clearing an override can auto-promote a different current asset.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31637,9 +31446,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           actorId,
           reason: "admin_reject_auto_promote",
         })
-        // Rejecting removes an asset from example eligibility and may auto-promote
-        // a replacement current asset.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31675,8 +31481,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, from, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
-        // Unpublishing changes currentness even when the asset row remains.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31710,8 +31514,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           actorId,
           reason: "admin_unstale_auto_promote",
         })
-        // Unstaling can restore source assets to the picker example pool.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31795,8 +31597,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           await deletePortraitStorageObject(env, key)
         }
 
-        // Purging deletes the source asset; rebuild the affected examples.
-        await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
         await syncAdminReadModels(env, {
           symbols: [symbol],
         })
@@ -31820,9 +31620,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           wasRemoved: (geneSymbol, assetSha256) =>
             iconoplasmCandidateWasRemoved(env, geneSymbol, assetSha256),
           republish: (geneSymbol) => publishIconoplasmGeneStableObject(env, geneSymbol),
-          // Candidate removal deletes the source asset; rebuild the affected examples.
-          afterRemoval: (geneSymbol) =>
-            rebuildUserEmulsionOptionRollupsForSymbols(env, [geneSymbol]),
         })
         const result = await removeCandidate({
           symbol,
@@ -31872,8 +31669,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
         .bind(symbol, from, target, actorId, String(p?.reason || "").slice(0, 2000) || null)
         .run()
-      // Rollback changes currentness and may expose a different preview first.
-      await rebuildUserEmulsionOptionRollupsForSymbols(env, [symbol])
       await syncAdminReadModels(env, { symbols: [symbol] })
       return done(
         "rollback",
