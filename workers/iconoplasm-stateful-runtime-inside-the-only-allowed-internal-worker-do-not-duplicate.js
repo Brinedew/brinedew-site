@@ -1,5 +1,4 @@
 import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js"
-import puppeteer from "@cloudflare/puppeteer"
 import { OperationCostError } from "./lib/operation-cost-ledger.js"
 import {
   DailyMutationLaneReservations,
@@ -23557,12 +23556,20 @@ function iconoplasmPrintCopyArrayBuffer(bytes) {
   throw new Error("Browser screenshot did not return bytes")
 }
 
+// B-1070: the print-copy browser library (659 KiB of the bundle) loads on the two
+// rendering paths only. As a static import it was evaluated in every cold
+// isolate's start-up, which runs 5-8 times over the free plan's CPU allowance.
+async function launchPrintCopyBrowser(binding) {
+  const { default: puppeteer } = await import("@cloudflare/puppeteer")
+  return puppeteer.launch(binding)
+}
+
 async function renderIconoplasmPrintCopyPngWithBrowser(env, renderUrl, dims) {
   const binding = env?.ICONOPLASM_PRINT_COPY_BROWSER
   if (!binding) throw new Error("ICONOPLASM_PRINT_COPY_BROWSER binding is missing")
   let browser = null
   try {
-    browser = await puppeteer.launch(binding)
+    browser = await launchPrintCopyBrowser(binding)
     const page = await browser.newPage()
     await page.setViewport({
       width: ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH,
@@ -24117,7 +24124,7 @@ async function renderIconoplasmGeneCardImageBytes(env, symbol) {
   const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(symbol)}`
   let browser = null
   try {
-    browser = await puppeteer.launch(binding)
+    browser = await launchPrintCopyBrowser(binding)
     const page = await browser.newPage()
     // Desktop viewport so the card lays out horizontally; 2x for a crisp image.
     await page.setViewport({ width: 1280, height: 1000, deviceScaleFactor: 2 })
