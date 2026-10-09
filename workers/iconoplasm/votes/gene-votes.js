@@ -1,9 +1,7 @@
 // B-898 Stage 2: D1 is the only store for votes. A vote is one D1 batch inside
 // the request (the daily vote budget, the user's row in icono_image_votes, an
-// exact delta on the asset's icono_vote_asset_summary row, one
-// icono_vote_events row for the workstation's vote mirror, the gene's vote
-// version), then one
-// election over the gene's D1 rows with the same pure function every caller
+// exact delta on the asset's icono_vote_asset_summary row, the gene's vote
+// version), then one election over the gene's D1 rows with the same pure function every caller
 // uses (electGeneAuthorityWinner), then a version-conditioned projection of
 // the winner into icono_publish_state with one `publish` event. The caller
 // republishes the gene's stable object afterwards; this module never touches
@@ -409,26 +407,6 @@ function geneVoteWriteStatements(db, request, plan) {
             userId,
             plan.final_vote_value,
           ),
-  )
-  // One feed row per accepted vote change, in the same transaction: the
-  // workstation's incremental vote mirror follows this table by id.
-  statements.push(
-    db
-      .prepare(
-        `INSERT INTO icono_vote_events (
-           gene_symbol, asset_sha256, vision_id, candidate_ref, candidate_image_id,
-           user_id, vote_value, created_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)`,
-      )
-      .bind(
-        symbol,
-        asset,
-        plan.resolved_vision_id,
-        geneVoteCandidateRef(symbol, asset),
-        plan.candidate_image_id,
-        userId,
-        plan.final_vote_value,
-      ),
   )
   return statements
 }
