@@ -64,14 +64,16 @@ export const VISION_ROLLUP_ROWS = 194
 // primary-key index entry.
 export const VISION_ROLLUP_DIRTY_MARK_ROWS = 2
 
-// A reconcile writes the emulsion option rollups of every asset its gene holds,
-// republishes the gene, and restores or marks assets one statement group at a
-// time. Our 50-statement invocation budget (workers/lib/d1-invocation-budget.js)
-// stops the restoring after RECONCILE_RESTORES_PER_INVOCATION assets, and no
-// invocation writes more for a restore than the extra rows below.
+// A reconcile republishes the gene and restores or marks assets one statement
+// group at a time. Our 50-statement invocation budget
+// (workers/lib/d1-invocation-budget.js) stops the restoring after
+// RECONCILE_RESTORES_PER_INVOCATION assets. Measured on 2026-10-09 (CI receipts,
+// finalization-reservation-receipts.test.js) once reconcile stopped writing the
+// unread emulsion option rollup: 32 rows with nothing to restore, 16 more per
+// restore, and up to about 70 for marking the stale assets past the cap, 375
+// at most. 20 rows per restore covers the marking at the cap (377 reserved).
 export const RECONCILE_FIXED_ROWS = 19
-export const EMULSION_ROLLUP_ROWS_PER_ASSET = 4
-export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 17
+export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 20
 export const RECONCILE_RESTORES_PER_INVOCATION = 17
 // The after-response republish of a touched gene (route row and card
 // materialization wake-up).
@@ -109,7 +111,6 @@ function reconcileBodyRows(assetCount) {
   return (
     RECONCILE_FIXED_ROWS +
     GENE_REPUBLISH_ROWS +
-    EMULSION_ROLLUP_ROWS_PER_ASSET * assets +
     RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET * Math.min(assets, RECONCILE_RESTORES_PER_INVOCATION)
   )
 }
