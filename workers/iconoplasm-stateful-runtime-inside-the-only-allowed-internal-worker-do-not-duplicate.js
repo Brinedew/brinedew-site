@@ -1229,14 +1229,6 @@ const ICONOPLASM_SYNC_FINALIZATION_QUEUE_DISABLED_ENV =
 const ICONOPLASM_SYNC_FINALIZATION_QUEUE_FREE_DAILY_OPERATION_LIMIT =
   FREE_PLAN_DAILY_LIMITS.queue_operations
 const ICONOPLASM_QUEUE_MAX_DELAY_SECONDS = 24 * 60 * 60
-const ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY"
-const ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY =
-  "ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY"
 const ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_ID_DO_NOT_DUPLICATE = "global"
 // Alerts did not solve the real failure mode here because the expensive query day
 // was already over by the time a human could notice and react. Keep the hard stop
@@ -1426,23 +1418,14 @@ function iconoplasmBudgetCycleInfo(now = new Date(), cycleDayOfMonth = 7) {
 // enforcement/configuration boundary while the attribution plumbing changes
 // underneath it.
 function iconoplasmBudgetPolicyFromEnv(env, now = new Date()) {
-  const rowsReadMonthlyLimit = positiveIntFromEnv(
-    env?.[ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
-    0,
-  )
-  const rowsWrittenMonthlyLimit = positiveIntFromEnv(
-    env?.[ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_ENV_DO_NOT_SET_CASUALLY],
-    0,
-  )
-  if (rowsReadMonthlyLimit <= 0 && rowsWrittenMonthlyLimit <= 0) return null
-  const cycleDayOfMonth = positiveIntFromEnv(
-    env?.[ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_ENV_DO_NOT_SET_CASUALLY],
-    7,
-  )
-  const dailyBurstMultiplier = positiveNumberFromEnv(
-    env?.[ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_ENV_DO_NOT_SET_CASUALLY],
-    3,
-  )
+  // B-1026 (10-09): the budget always applies Cloudflare's daily walls; whether a
+  // Worker enforces it depends only on the budget object being bound. The paid-plan
+  // monthly budgets, burst factor and billing-cycle day that used to switch it on
+  // are gone: the account is on the free plan, whose limits reset every UTC day.
+  const rowsReadMonthlyLimit = 0
+  const rowsWrittenMonthlyLimit = 0
+  const cycleDayOfMonth = 1
+  const dailyBurstMultiplier = 1
   const targetDailyPercent = Math.max(
     1,
     Math.min(
@@ -2823,7 +2806,7 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   const stub = iconoplasmD1DailyBudgetKillSwitchStub(env)
   if (!stub) {
     throw new IconoplasmD1DailyBudgetConfigurationError(
-      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing while smart monthly budgets are enabled",
+      "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE binding missing: every budgeted request is admitted by the shared budget object",
     )
   }
   let snapshot
