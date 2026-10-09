@@ -63,10 +63,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import {
-  REPUBLISH_MAX_SYMBOLS,
-  createIconoplasmAdminRepublishHandlers,
-} from "../workers/iconoplasm-admin-republish-route.js"
+import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "../workers/iconoplasm/app.js"
 import {
   DEFAULT_BATCH_SYMBOLS,
   RETRY_DELAYS_MS,
@@ -91,7 +88,7 @@ const SYMBOLS = [
 
 const noSleep = async () => {}
 
-// The real route handler, with a recording publisher standing in for the
+// The real Hono route, with a recording publisher standing in for the
 // per-gene publisher. `fail(symbol)` makes the publisher throw for a gene, as
 // it does when a body fails its integrity check.
 function routePoster({
@@ -102,10 +99,9 @@ function routePoster({
 } = {}) {
   const published = []
   const calls = []
-  const handlers = createIconoplasmAdminRepublishHandlers({
-    isAdmin: async () => true,
-    json: (body, status = 200) => Response.json(body, { status }),
-    publish: async (_env, symbol) => {
+  const app = createIconoplasmApp({
+    legacy: async () => new Response("legacy", { status: 404 }),
+    publishGene: async (_env, symbol) => {
       if (fail(symbol)) throw new Error(`Canonical manifestation body failed for ${symbol}`)
       if (withdrawn(symbol)) return { symbol, withdrawn: true, stable: null }
       published.push(symbol)
@@ -121,14 +117,15 @@ function routePoster({
       const reply = refuse(symbols, calls.length)
       if (reply) return reply
     }
-    const response = await handlers["admin_publication.republish"]({
-      request: new Request("https://iconoplasm.test/api/iconoplasm/admin/publication/republish", {
+    const response = await app.request(
+      "https://iconoplasm.test/api/iconoplasm/admin/publication/republish",
+      {
         method: "POST",
+        headers: { Authorization: "Bearer test-token", "Content-Type": "application/json" },
         body: JSON.stringify({ symbols }),
-      }),
-      env: {},
-      done: (_id, reply) => reply,
-    })
+      },
+      { ICONOPLASM_ADMIN_TOKEN: "test-token" },
+    )
     return { status: response.status, body: await response.json() }
   }
   return { post, published, calls }
@@ -182,10 +179,10 @@ test("F2 every batch is accepted by the real admin republish route", async () =>
     execute: true,
     now: EVENING,
     sleep: noSleep,
-    batchSize: REPUBLISH_MAX_SYMBOLS,
+    batchSize: MAX_GENES_PER_REQUEST,
   })
   assert.equal(widest.published, 100)
-  assert.equal(Math.max(...wide.calls.map((batch) => batch.length)), REPUBLISH_MAX_SYMBOLS)
+  assert.equal(Math.max(...wide.calls.map((batch) => batch.length)), MAX_GENES_PER_REQUEST)
 })
 
 test("F3 a capped run names where to resume and two runs add up to one sweep", async () => {
@@ -754,7 +751,7 @@ test("F15b a batch that stopped before it finished is the hint, and the genes be
 
 test("F16 --batch takes 1 to the route's limit and nothing else", async () => {
   assert.equal(parseRepublishArgs(["--batch", "1"]).batch, 1)
-  assert.equal(parseRepublishArgs(["--batch", String(REPUBLISH_MAX_SYMBOLS)]).batch, 8)
+  assert.equal(parseRepublishArgs(["--batch", String(MAX_GENES_PER_REQUEST)]).batch, 8)
   for (const bad of [
     ["--batch", "0"],
     ["--batch", "9"],
@@ -784,7 +781,7 @@ test("F16 --batch takes 1 to the route's limit and nothing else", async () => {
       execute: true,
       now: EVENING,
       sleep: noSleep,
-      batchSize: REPUBLISH_MAX_SYMBOLS + 1,
+      batchSize: MAX_GENES_PER_REQUEST + 1,
     }),
     (error) => error.code === "BATCH_INVALID",
   )

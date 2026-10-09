@@ -193,10 +193,7 @@ import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-rou
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
-import {
-  REPUBLISH_MAX_SYMBOLS,
-  createIconoplasmAdminRepublishHandlers,
-} from "./iconoplasm-admin-republish-route.js"
+import { MAX_GENES_PER_REQUEST } from "./iconoplasm/app.js"
 import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-removal.js"
 import { buildGeneCard } from "./lib/iconoplasm-stable-gene-object.js"
 import { iconoplasmGeneName } from "./lib/iconoplasm-gene-name.js"
@@ -1626,8 +1623,6 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
     family === "admin_blots_upload" ||
-    // B-898: about four subrequests and a few D1 rows per gene, bounded per call.
-    family === "admin_publication_republish" ||
     // B-859: a call that writes converts one body (one D1 query, at most 41 storage
     // requests); a call that only reads scans at most ten.
     family === "admin_plaintext_bodies" ||
@@ -22040,7 +22035,7 @@ function republishGeneAfterResponse(env, ctx, symbol) {
 }
 
 // Uploads and reconcile republish their touched genes in process when they
-// touch at most REPUBLISH_MAX_SYMBOLS of them (about four external
+// touch at most MAX_GENES_PER_REQUEST of them (about four external
 // subrequests each), so a new candidate reaches readers within seconds.
 // Larger batches rely on their publication-affecting events and the Actions
 // publisher, which works through them eight genes per call.
@@ -22048,7 +22043,7 @@ function republishTouchedGenesAfterResponse(env, ctx, symbols) {
   const unique = [
     ...new Set((symbols || []).map((value) => normalizeSymbol(value)).filter(Boolean)),
   ]
-  if (!unique.length || unique.length > REPUBLISH_MAX_SYMBOLS) return false
+  if (!unique.length || unique.length > MAX_GENES_PER_REQUEST) return false
   const work = (async () => {
     for (const symbol of unique) await republishGene(env, symbol)
   })()
@@ -26358,11 +26353,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     isAdmin: isIconoplasmAdmin,
     json,
     putObject: putPortraitStorageObject,
-  }),
-  ...createIconoplasmAdminRepublishHandlers({
-    isAdmin: isIconoplasmAdmin,
-    json,
-    publish: (env, symbol) => publishIconoplasmGeneStableObject(env, symbol),
   }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,

@@ -15,8 +15,8 @@ import { geneCatalog, portraitAssets, publishEvents } from "./db/schema.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
 // allows one request (the canonical text's body, the card's PUT and its
-// read-back), so one registration rebuilds at most eight genes.
-export const REGISTER_MAX_GENES = 8
+// read-back), so one request rebuilds at most eight genes.
+export const MAX_GENES_PER_REQUEST = 8
 export const REGISTER_MAX_PORTRAITS = 100
 
 const sha256 = z
@@ -32,12 +32,14 @@ const optionalText = (max) =>
     .transform((value) => value || null)
     .nullish()
 
+const symbolSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9][A-Z0-9-]{0,63}$/)
+
 const portraitSchema = z.object({
-  symbol: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9][A-Z0-9-]{0,63}$/),
+  symbol: symbolSchema,
   asset_sha256: sha256,
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -61,8 +63,8 @@ const registerSchema = z
     created_by: z.string().trim().min(1).max(255),
     portraits: z.array(portraitSchema).min(1).max(REGISTER_MAX_PORTRAITS),
   })
-  .refine((body) => new Set(body.portraits.map((p) => p.symbol)).size <= REGISTER_MAX_GENES, {
-    message: `At most ${REGISTER_MAX_GENES} genes per registration`,
+  .refine((body) => new Set(body.portraits.map((p) => p.symbol)).size <= MAX_GENES_PER_REQUEST, {
+    message: `At most ${MAX_GENES_PER_REQUEST} genes per registration`,
   })
 
 function portraitKey(assetSha256, rendition) {
@@ -252,6 +254,37 @@ export function createIconoplasmApp({ legacy, publishGene }) {
         added: added.length,
         genes,
       })
+    },
+  )
+
+  /**
+   * Rebuilds named genes' cards from what D1 holds now: the bulk sweep
+   * (scripts/republish-iconoplasm-gene-objects.mjs) and the catalogue publisher in
+   * GitHub Actions call it for genes whose cards must change. Same path and answer
+   * as the legacy handler it replaces; a gene that fails is reported and the rest
+   * still rebuild.
+   */
+  app.post(
+    "/api/iconoplasm/admin/publication/republish",
+    factoryAuth,
+    outsideMaintenance,
+    zValidator(
+      "json",
+      z.object({ symbols: z.array(symbolSchema).min(1).max(MAX_GENES_PER_REQUEST) }),
+    ),
+    async (c) => {
+      const symbols = [...new Set(c.req.valid("json").symbols)]
+      const results = []
+      for (const symbol of symbols) {
+        try {
+          results.push({ ok: true, ...(await publishGene(c.env, symbol)) })
+        } catch (error) {
+          results.push({ ok: false, symbol, error: String(error?.message || error).slice(0, 300) })
+        }
+      }
+      const failed = results.filter((result) => !result.ok).length
+      c.header("Cache-Control", "no-store")
+      return c.json({ ok: true, published: results.length - failed, failed, results })
     },
   )
 

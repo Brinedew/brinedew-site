@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { publishIconoplasmGeneStableObject } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
-import { REGISTER_MAX_GENES, createIconoplasmApp } from "./app.js"
+import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "./app.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
 // Drizzle, the D1 schema of every production migration and the real card
@@ -216,7 +216,7 @@ test("a malformed body, or more genes than one request can rebuild, writes nothi
   assert.equal(badSha.status, 400)
   const tooMany = await h.register({
     created_by: "drain:local",
-    portraits: Array.from({ length: REGISTER_MAX_GENES + 1 }, (_, index) =>
+    portraits: Array.from({ length: MAX_GENES_PER_REQUEST + 1 }, (_, index) =>
       portrait(`GENE${index}`, "a"),
     ),
   })

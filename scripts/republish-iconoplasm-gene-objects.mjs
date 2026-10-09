@@ -8,7 +8,7 @@
 // bytes until something rewrites them, and nothing does that for an unchanged
 // gene: the Actions catalog publisher only republishes the genes whose winner or
 // candidates changed. This script drives the existing admin republish route
-// (`admin_publication.republish`, up to eight genes a call, four by default) over
+// (the Hono rebuild route in workers/iconoplasm/app.js, up to eight genes a call, four by default) over
 // the catalog. It is a one-shot, not a cron: delete it once `--verify` reports
 // every object clean.
 //
@@ -58,14 +58,14 @@ import path from "node:path"
 import process from "node:process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-import { REPUBLISH_MAX_SYMBOLS } from "../workers/iconoplasm-admin-republish-route.js"
+import { MAX_GENES_PER_REQUEST } from "../workers/iconoplasm/app.js"
 
 export const ORIGIN = "https://iconoplasm.brinedew.bio"
 export const CDN = "https://iconoplasmportraits.b-cdn.net"
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const TAG_KEYS = new Set(["accepted_tags_derivative", "tags_text", "fields_json"])
 const MAX_CONCURRENCY = 6
-// Genes a call carries. The route takes up to REPUBLISH_MAX_SYMBOLS (a limit, not
+// Genes a call carries. The route takes up to MAX_GENES_PER_REQUEST (a limit, not
 // a target); the CPU cap killed about one call in five at eight.
 export const DEFAULT_BATCH_SYMBOLS = 4
 // Pauses before the first and second retry of a call that got a 5xx or a network
@@ -203,8 +203,8 @@ export async function republishGeneObjects({
     throw fail("LIMIT_INVALID", "limit must be a whole number of at least 1")
   if (!(Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= MAX_CONCURRENCY))
     throw fail("CONCURRENCY_INVALID", `concurrency must be 1 to ${MAX_CONCURRENCY}`)
-  if (!(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= REPUBLISH_MAX_SYMBOLS))
-    throw fail("BATCH_INVALID", `batch must be 1 to ${REPUBLISH_MAX_SYMBOLS} genes a call`)
+  if (!(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= MAX_GENES_PER_REQUEST))
+    throw fail("BATCH_INVALID", `batch must be 1 to ${MAX_GENES_PER_REQUEST} genes a call`)
 
   let plan
   if (only) {
@@ -547,7 +547,7 @@ export function parseRepublishArgs(argv) {
       if (flag === "--from") parsed.from = symbolValue(flag, value)
       else if (flag === "--limit") parsed.limit = wholeNumber(flag, value, { min: 1 })
       else if (flag === "--batch")
-        parsed.batch = wholeNumber(flag, value, { min: 1, max: REPUBLISH_MAX_SYMBOLS })
+        parsed.batch = wholeNumber(flag, value, { min: 1, max: MAX_GENES_PER_REQUEST })
       else if (flag === "--concurrency")
         parsed.concurrency = wholeNumber(flag, value, { min: 1, max: MAX_CONCURRENCY })
       else if (flag === "--verify-sample")
