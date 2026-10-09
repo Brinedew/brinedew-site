@@ -3,17 +3,24 @@ import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
 
+import { OPERATOR_ACCOUNT_CEILINGS } from "../shared/iconoplasm-d1-budget-policy.js"
+
 test("operator D1 admission sums every database and fails closed on exhausted or invalid telemetry", () => {
   const helper = fileURLToPath(
     new URL("./lib/CloudflareWorkerRequestBudget.ps1", import.meta.url),
   ).replaceAll("'", "''")
   const executable =
     process.platform === "win32" ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe" : "pwsh"
+  // Two databases, each under the operator read ceiling, whose sum is over it; then
+  // a day whose writes sit exactly at the write ceiling.
+  const readsA = Math.floor(OPERATOR_ACCOUNT_CEILINGS.rows_read * 0.6)
+  const readsB = Math.floor(OPERATOR_ACCOUNT_CEILINGS.rows_read * 0.5)
+  const writesAtCeiling = OPERATOR_ACCOUNT_CEILINGS.rows_written
   const command = `
     . '${helper}'
     $cases = @(
-      '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":2000000,"rowsWritten":10000}},{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":1600000,"rowsWritten":10000}}]}',
-      '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":1,"rowsWritten":70000}}]}',
+      '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":${readsA},"rowsWritten":10000}},{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":${readsB},"rowsWritten":10000}}]}',
+      '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":1,"rowsWritten":${writesAtCeiling}}}]}',
       '{}',
       '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-04"},"sum":{"rowsRead":1,"rowsWritten":1}}]}',
       '{"d1AnalyticsAdaptiveGroups":[{"dimensions":{"date":"2026-09-05"},"sum":{"rowsRead":null,"rowsWritten":1}}]}',

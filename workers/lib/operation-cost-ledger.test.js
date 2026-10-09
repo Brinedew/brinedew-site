@@ -3,12 +3,15 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { OperationCostLedger, REPLICA_DAILY_ADMISSION } from "./operation-cost-ledger.js"
 import { OperationCostExecutor } from "./operation-cost-executor.js"
+import { KV_ACCOUNT_CEILINGS, KV_DAILY_LIMITS } from "./operation-cost-meters.js"
 import {
-  D1_OPERATOR_DAILY_LIMITS,
-  OPERATOR_DAILY_REQUEST_LIMIT,
+  FREE_PLAN_DAILY_LIMITS,
+  OPERATOR_ACCOUNT_CEILINGS,
 } from "../../shared/iconoplasm-d1-budget-policy.js"
 
-const DAILY_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
+// B-1026: the ledger's own tally is bounded only by Cloudflare's daily wall.
+const DAILY_WRITES = FREE_PLAN_DAILY_LIMITS.rows_written
+const DAILY_REQUESTS = FREE_PLAN_DAILY_LIMITS.requests
 const ADMITTED_WRITES = REPLICA_DAILY_ADMISSION.rows_written
 
 function fixture() {
@@ -121,10 +124,10 @@ test("the account check counts shared writes once the provider's sample provably
 // 2026-10-06: this ledger admitted replica work up to the whole operator day on a
 // private 2,500-request cap, beside the B-1026 tier table, and stopped an 870-gene
 // Image Lab batch. Replica work now sheds at its tier's share like the rest.
-test("replica work is shed at its tier's share of the operator day", () => {
+test("replica work is shed at its tier's share of the day", () => {
   const f = fixture()
   try {
-    assert.ok(REPLICA_DAILY_ADMISSION.rows_read < D1_OPERATOR_DAILY_LIMITS.reads)
+    assert.ok(REPLICA_DAILY_ADMISSION.rows_read < FREE_PLAN_DAILY_LIMITS.rows_read)
     f.ledger.register(f.input)
     f.ledger.readOtherUsage = () => ({
       rows_read: REPLICA_DAILY_ADMISSION.rows_read,
@@ -230,23 +233,30 @@ test("KV operations share one atomic allowance and failures cannot spend the D1 
   const f = fixture()
   try {
     enableKv(f)
+    // Two plans fill the account's batch share of Cloudflare's KV writes between
+    // them. The third asks for more than is left of the daily allowance itself
+    // (its own size fits that allowance alone, and the usage is not its own).
+    const half = Math.floor(KV_ACCOUNT_CEILINGS.kv_writes / 2)
+    const filled = 2 * half
+    const over = KV_DAILY_LIMITS.kv_writes - filled + 1
+    assert.ok(over <= KV_DAILY_LIMITS.kv_writes)
     for (let i = 0; i < 2; i++) {
       f.ledger.register({
         ...f.input,
         id: `kv-${i}`,
-        prediction: { ...f.input.prediction, kv_writes: 50 },
+        prediction: { ...f.input.prediction, kv_writes: Math.ceil(half / 2) },
       })
       f.ledger.reserve(
         f.step({
           id: `kv-${i}`,
-          bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 100 },
+          bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: half },
         }),
       )
     }
     f.ledger.register({
       ...f.input,
       id: "kv-full",
-      prediction: { ...f.input.prediction, kv_writes: 1 },
+      prediction: { ...f.input.prediction, kv_writes: Math.ceil(over / 2) },
     })
     const before = f.db.prepare("SELECT requests FROM operation_cost_days").get().requests
     assert.throws(
@@ -254,12 +264,12 @@ test("KV operations share one atomic allowance and failures cannot spend the D1 
         f.ledger.reserve(
           f.step({
             id: "kv-full",
-            bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: 1 },
+            bound: { rows_read: 0, rows_written: 0, requests: 1, kv_writes: over },
           }),
         ),
       /SHARED_DAILY_LIMIT/,
     )
-    assert.equal(f.ledger.kvDayUsage("2026-09-06").kv_writes, 200)
+    assert.equal(f.ledger.kvDayUsage("2026-09-06").kv_writes, filled)
     assert.equal(f.db.prepare("SELECT requests FROM operation_cost_days").get().requests, before)
     assert.equal(f.ledger.readPlan("kv-full").used.requests, 0)
   } finally {
@@ -275,7 +285,7 @@ test("KV admission rejects stale, missing, exhausted and underestimated dimensio
     assert.throws(() => f.ledger.reserve(step), /ACCOUNT_USAGE_UNAVAILABLE/)
     enableKv(f, { kv_measured_at: f.readAccountUsage().measured_at - 60001 })
     assert.throws(() => f.ledger.reserve(step), /ACCOUNT_USAGE_UNAVAILABLE/)
-    enableKv(f, { kv_writes: 700 })
+    enableKv(f, { kv_writes: KV_ACCOUNT_CEILINGS.kv_writes })
     assert.throws(() => f.ledger.reserve(step), /ACCOUNT_HEADROOM_LIMIT/)
     enableKv(f)
     assert.throws(
@@ -507,10 +517,10 @@ test("control traffic shares the request allocation and remains available after 
     assert.throws(() => f.ledger.reserve(f.step()), /SHARED_DAILY_LIMIT/)
     f.ledger.recordControlRequest()
     assert.equal(requests(), admitted + 1)
-    setRequests(OPERATOR_DAILY_REQUEST_LIMIT - 1)
+    setRequests(DAILY_REQUESTS - 1)
     f.ledger.recordControlRequest()
     assert.throws(() => f.ledger.recordControlRequest(), /SHARED_DAILY_LIMIT/)
-    assert.equal(requests(), OPERATOR_DAILY_REQUEST_LIMIT)
+    assert.equal(requests(), DAILY_REQUESTS)
   } finally {
     f.db.close()
   }
@@ -673,9 +683,9 @@ test("absent, stale, future or exhausted account telemetry causes zero reservati
     assert.throws(() => f.ledger.reserve(f.step()), /ACCOUNT_USAGE_UNAVAILABLE/)
   }
   for (const snapshot of [
-    { ...fresh, rows_read: 3_500_000 },
-    { ...fresh, rows_written: 70_000 },
-    { ...fresh, requests: 75_000 },
+    { ...fresh, rows_read: OPERATOR_ACCOUNT_CEILINGS.rows_read },
+    { ...fresh, rows_written: OPERATOR_ACCOUNT_CEILINGS.rows_written },
+    { ...fresh, requests: OPERATOR_ACCOUNT_CEILINGS.requests },
   ]) {
     f.ledger.readAccountUsage = () => snapshot
     assert.throws(() => f.ledger.reserve(f.step()), /ACCOUNT_HEADROOM_LIMIT/)

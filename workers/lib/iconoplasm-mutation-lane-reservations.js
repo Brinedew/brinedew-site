@@ -28,19 +28,20 @@
 // B-897 (30 Sep 2026): the previous four fixed lanes summed every reservation
 // *started* today at worst case and never subtracted. 200 retried 50-unit
 // finalization phases parked laptop delivery for a whole UTC day while the
-// provider meter sat near 12%. Background work now stops at 70% of the meter
-// and user actions at 90%, so users always keep a band background cannot take.
+// provider meter sat near 12%. The lanes now shed on the B-1026 tiers:
+// background work stops at the batch share (85%) of the provider meter and a
+// person's own action is critical, so people keep the band above batch.
 
 import { secondsUntilCloudflareDailyReset } from "./cloudflare-availability.js"
 import {
-  D1_OPERATOR_DAILY_LIMITS,
+  D1_BACKGROUND_WRITE_CEILING,
   D1_USER_ACTION_DAILY_WRITE_CEILING,
   FREE_D1_DAILY_LIMITS,
 } from "../../shared/iconoplasm-d1-budget-policy.js"
 
 // The numbers live once, in the budget policy (B-1036).
 export const D1_PROVIDER_DAILY_WRITE_LIMIT = FREE_D1_DAILY_LIMITS.writes
-export const MUTATION_BACKGROUND_CEILING = D1_OPERATOR_DAILY_LIMITS.writes
+export const MUTATION_BACKGROUND_CEILING = D1_BACKGROUND_WRITE_CEILING
 export const MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING
 export const MUTATION_ANALYTICS_LAG_MS = 15 * 60_000
 export const MUTATION_PRESSURE_BUCKET_MS = 15 * 60_000

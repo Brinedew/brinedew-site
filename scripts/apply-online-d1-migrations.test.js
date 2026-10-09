@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  MIGRATION_READ_CEILING,
+  MIGRATION_WRITE_CEILING,
   admitOnlineMigrations,
   checkMigrationGuards,
   planOnlineMigrations,
@@ -117,18 +119,26 @@ test("a pending file older than an applied one, or an unknown applied name, refu
   )
 })
 
-// The ceilings are the one operator allowance (1M reads, 70k writes; B-1035).
+// The ceilings are the operator batch share of Cloudflare's meters (B-1026).
 test("the reviewed prediction must fit twice over inside today's live headroom", () => {
   const total = { rows_read: 100000, rows_written: 300 }
-  assert.doesNotThrow(() =>
-    admitOnlineMigrations({ total, usage: { rows_read: 700_000, rows_written: 13_000 } }),
-  )
+  // Room for three predictions fits twice over; room for one fits once, not twice.
+  const roomFor = (predictions) => ({
+    rows_read: MIGRATION_READ_CEILING - predictions * total.rows_read,
+    rows_written: MIGRATION_WRITE_CEILING - predictions * total.rows_written,
+  })
+  assert.doesNotThrow(() => admitOnlineMigrations({ total, usage: roomFor(3) }))
   assert.throws(
-    () => admitOnlineMigrations({ total, usage: { rows_read: 900_000, rows_written: 13_000 } }),
+    () =>
+      admitOnlineMigrations({ total, usage: { ...roomFor(3), rows_read: roomFor(1).rows_read } }),
     /MIGRATION_HEADROOM: rows_read/,
   )
   assert.throws(
-    () => admitOnlineMigrations({ total, usage: { rows_read: 0, rows_written: 69_500 } }),
+    () =>
+      admitOnlineMigrations({
+        total,
+        usage: { rows_read: 0, rows_written: roomFor(1).rows_written },
+      }),
     /MIGRATION_HEADROOM: rows_written/,
   )
   assert.throws(() => admitOnlineMigrations({ total, usage: null }), /MIGRATION_USAGE_UNAVAILABLE/)

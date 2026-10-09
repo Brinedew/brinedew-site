@@ -9,11 +9,11 @@ import {
 } from "./operation-cost-release-plan.mjs"
 import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
-import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { runAdmittedMigrations, createReleaseSender } from "./run-admitted-d1-migrations.mjs"
 import {
   KV_COST_METERS,
-  KV_OPERATOR_LIMITS,
+  KV_DAILY_LIMITS,
   KV_ACCOUNT_CEILINGS,
 } from "../workers/lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "../workers/iconoplasm/operation-cost-catalog-initialization-adapter.js"
@@ -136,8 +136,8 @@ export async function preflightOperationCostRelease({
     }
   }
   if (
-    maximum.rows_read > D1_OPERATOR_DAILY_LIMITS.reads ||
-    maximum.rows_written > D1_OPERATOR_DAILY_LIMITS.writes
+    maximum.rows_read > FREE_D1_DAILY_LIMITS.reads ||
+    maximum.rows_written > FREE_D1_DAILY_LIMITS.writes
   )
     throw new Error("COST_RELEASE_EXCEEDS_DAILY_ALLOCATION")
   const initialization = manifest.catalog_initialization_prediction
@@ -164,7 +164,7 @@ export async function preflightOperationCostRelease({
     required.requests += 4
     maximum.requests += 4
     for (const meter of KV_COST_METERS)
-      if (maximum[meter] > KV_OPERATOR_LIMITS[meter])
+      if (maximum[meter] > KV_DAILY_LIMITS[meter])
         throw new Error("COST_RELEASE_EXCEEDS_DAILY_ALLOCATION")
   }
   const sample = await reader.refresh({ includeKv: Boolean(initialization) })

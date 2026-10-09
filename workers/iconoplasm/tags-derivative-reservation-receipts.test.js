@@ -20,6 +20,7 @@ import {
   TAGS_DERIVATIVE_SUBMIT_ROWS,
   laptopReservation,
 } from "../lib/iconoplasm-mutation-write-bounds.js"
+import { MUTATION_BACKGROUND_CEILING } from "../lib/iconoplasm-mutation-lane-reservations.js"
 import {
   liveD1Meter,
   openMigratedD1,
@@ -363,7 +364,7 @@ test("at the ceiling a submission refuses before any write and leaves no trace, 
   // (44 rows since B-859 retired the upload reservation, so the floor).
   assert.equal(units, Math.max(TAGS_DERIVATIVE_SUBMIT_ROWS, MUTATION_WRITE_FLOOR_UNITS))
   // One unit short of what a submission reserves.
-  const run = fixture(t, 70_000 - units + 1)
+  const run = fixture(t, MUTATION_BACKGROUND_CEILING - units + 1)
   const body = completeSubmission(
     await geneRevision(geneId),
     SEED_BODY_SHA,
