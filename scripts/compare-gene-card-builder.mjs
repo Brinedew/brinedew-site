@@ -52,6 +52,7 @@ export function inputsFromCard(card) {
   for (const field of TOP_LEVEL_ESSENCE_FIELDS) {
     if (card[field] !== undefined) essence[field] = card[field]
   }
+  if (card.uniqueness_rank !== undefined) essence.leakage_percent = card.uniqueness_rank
   if (card.weight_kg !== undefined && essence.weight_kg === undefined)
     essence.weight_kg = card.weight_kg
   const portraits = (card.portrait_candidates || []).map((candidate) =>

@@ -1185,8 +1185,6 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // surface reads the same object per gene.
 const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
-const KV_GALLERY_PUBLISHED_ROWS_PREFIX = "iconoplasm:gallery-published-rows:"
-const KV_GALLERY_UNIQUENESS_ROWS_PREFIX = "iconoplasm:gallery-uniqueness-rows:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
@@ -1252,22 +1250,6 @@ const catalogCache = {
   loadedAt: 0,
 }
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000
-const gallerySnapshotCache = {
-  catalogHash: null,
-  base: null,
-  loadedAt: 0,
-  items: [],
-  publishedTotal: 0,
-  hasUniquenessRanks: false,
-  sorted: new Map(),
-}
-const GALLERY_SNAPSHOT_TTL_MS = 60 * 1000
-const GALLERY_VOTES_SNAPSHOT_TTL_MS = 5 * 1000
-const galleryVersionCache = {
-  value: "0",
-  loadedAt: 0,
-}
-const GALLERY_VERSION_CACHE_TTL_MS = 5 * 1000
 // Cost barrier: local worker memory is not a billing barrier. Cloudflare can run
 // many isolates at once, so any O(N) snapshot that lives only in module memory can
 // multiply globally and burn D1 even when each isolate "looks cached" locally.
@@ -13319,9 +13301,7 @@ function publicRichRouteDeniedPayload(url, routeKey) {
     faq_url: "https://brinedew.bio/wiki/iconoplasm-faq",
     recommended_public_api: {
       metadata: publicUrl(url, "/metadata"),
-      stats: publicUrl(url, "/stats"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
-      changes: publicUrl(url, "/changes"),
       resolve: publicUrl(url, "/resolve"),
       images_resolve: publicUrl(url, "/images/resolve"),
     },
@@ -13626,7 +13606,6 @@ async function publicMetadataObj(url, env) {
     scanner_artifact: manifest.scanner_artifact || null,
     urls: {
       metadata: publicUrl(url, "/metadata"),
-      stats: publicUrl(url, "/stats"),
       schema: publicUrl(url, "/schema"),
       catalog_manifest: publicUrl(url, "/catalog/manifest"),
       catalog_artifact: buildHash ? `${url.origin}${publicCatalogArtifactPath(buildHash)}` : null,
@@ -13637,11 +13616,9 @@ async function publicMetadataObj(url, env) {
       catalog_jsonl_cdn: catalogHash
         ? iconoplasmGeneCardCdnUrl(env, publicCatalogJsonlDumpKey(catalogHash))
         : null,
-      changes: publicUrl(url, "/changes"),
       batch: publicUrl(url, "/genes/batch"),
       resolve: publicUrl(url, "/resolve"),
       search: publicUrl(url, "/genes/search"),
-      gallery: publicUrl(url, "/gallery"),
     },
     source_versions: {
       catalog_table: "ICONOPLASM_DB.icono_gene_catalog",
@@ -21424,18 +21401,6 @@ async function blacklistArtistStyle(
   }
 }
 
-function normalizeGalleryOrder(raw) {
-  return normalizeIconoplasmHomeOrder(raw, "votes")
-}
-
-function normalizeGalleryLimit(raw) {
-  return Math.max(1, Math.min(60, Number.parseInt(String(raw || "30"), 10) || 30))
-}
-
-function normalizeGalleryOffset(raw) {
-  return Math.max(0, Number.parseInt(String(raw || "0"), 10) || 0)
-}
-
 function normalizeGallerySeed(raw) {
   const value = String(raw || "")
     .trim()
@@ -21478,19 +21443,6 @@ function compareNullableNumberAscWithNullBottom(left, right) {
   if (!leftPresent) return 1
   if (!rightPresent) return -1
   return leftValue - rightValue
-}
-
-function compareGalleryPopularityFallback(left, right) {
-  return (
-    Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
-    Number(right.image_score || 0) - Number(left.image_score || 0) ||
-    Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-    compareNullableTextDesc(
-      left.published_at || left.asset_created_at,
-      right.published_at || right.asset_created_at,
-    ) ||
-    compareNullableTextAsc(left.symbol, right.symbol)
-  )
 }
 
 function compareDiscoveryNewestFallback(left, right) {
@@ -21590,16 +21542,6 @@ function sortDiscoveryRowsForOrder(rows, order, seed = null) {
   return sorted
 }
 
-function clearGallerySnapshotCache() {
-  gallerySnapshotCache.catalogHash = null
-  gallerySnapshotCache.base = null
-  gallerySnapshotCache.loadedAt = 0
-  gallerySnapshotCache.items = []
-  gallerySnapshotCache.publishedTotal = 0
-  gallerySnapshotCache.hasUniquenessRanks = false
-  gallerySnapshotCache.sorted = new Map()
-}
-
 function clearSharedD1CostCaches() {
   publishedPortraitRefsCache.key = null
   publishedPortraitRefsCache.value = null
@@ -21625,10 +21567,7 @@ export function resetIconoplasmRuntimeCachesForTest() {
   catalogCache.symbolByUniprot = new Map()
   catalogCache.symbolByAlias = new Map()
   catalogCache.loadedAt = 0
-  clearGallerySnapshotCache()
   clearSharedD1CostCaches()
-  galleryVersionCache.value = "0"
-  galleryVersionCache.loadedAt = 0
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
 }
@@ -21641,18 +21580,6 @@ async function readVersionedSharedJson(env, prefix, version) {
     return JSON.parse(raw)
   } catch {
     return null
-  }
-}
-
-async function writeVersionedSharedJson(env, prefix, version, value) {
-  if (!env?.KV || !version) return false
-  try {
-    await env.KV.put(`${prefix}${version}`, JSON.stringify(value))
-    return true
-  } catch {
-    // Shared-cache writes are an optimization barrier, not the source of truth.
-    // If KV write-through fails we can still fall back to the raw D1 result.
-    return false
   }
 }
 
@@ -21689,43 +21616,6 @@ async function hydratedCatalogArtifact(env, hash) {
   throw error
 }
 
-function gallerySnapshotMaxAgeMs(order) {
-  return order === "votes" ? GALLERY_VOTES_SNAPSHOT_TTL_MS : GALLERY_SNAPSHOT_TTL_MS
-}
-
-// B-898: the public gallery feed's cache version. The feed's rows come from
-// D1 (icono_publish_state joined to assets and votes); they change exactly
-// when a canonical publish event lands, and the quarter-hour catalog cron
-// records the newest such event id in KV when it dispatches the Actions
-// publisher (iconoplasm-catalog-dispatch.js). That integer is the version the
-// shared KV row snapshots and the edge cache key are stamped with: one KV read
-// per isolate per five seconds, written only by that background job, never
-// parsed from the 3.4 MB catalog object in a request. Fail mode: with no
-// dispatch token the key never moves and the gallery feed stays on its first
-// snapshot; the cron result names "no_token" in its logs.
-async function currentGalleryVersion(env) {
-  const now = Date.now()
-  if (
-    galleryVersionCache.loadedAt > 0 &&
-    now - galleryVersionCache.loadedAt < GALLERY_VERSION_CACHE_TTL_MS &&
-    galleryVersionCache.value
-  ) {
-    return galleryVersionCache.value
-  }
-  let value = "0"
-  if (env?.KV) {
-    try {
-      const raw = await env.KV.get(CATALOG_DISPATCH_WATERMARK_KEY)
-      value = String(Number(raw || 0) || 0)
-    } catch {
-      value = galleryVersionCache.value || "0"
-    }
-  }
-  galleryVersionCache.value = `catalog-v3:${value}`
-  galleryVersionCache.loadedAt = now
-  return galleryVersionCache.value
-}
-
 // B-1063: everything one gene's card is built from, in one D1 batch (one call,
 // about 2 rows per portrait plus six): the factory's rows (catalogue, essence,
 // portraits, blot) as the builder's content, and what readers did (vote
@@ -21754,6 +21644,7 @@ const GENE_CARD_ESSENCE_COLUMNS = [
   "family_surname",
   "family_members",
   "family_feature",
+  "leakage_percent",
 ]
 
 async function readPublicManifestationFact(env, symbol) {
@@ -22604,670 +22495,6 @@ export async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolVal
   }
 }
 
-function galleryCanUseEdgeCache(url) {
-  const order = normalizeGalleryOrder(url.searchParams.get("order"))
-  // Vote-sorted pages are the hot freshness path. Keeping them on the worker
-  // edge cache meant globally visible score changes could trail behind writes
-  // because cache invalidation was gated on eventually consistent KV version
-  // bumps. Other orders can stay cheap and cacheable.
-  if (order === "votes") return false
-  if (order !== "random") return true
-  return Boolean(normalizeGallerySeed(url.searchParams.get("seed")))
-}
-
-async function galleryEdgeCacheKey(url, env) {
-  const keyUrl = new URL("/__edge/iconoplasm/gallery", url.origin)
-  const order = normalizeGalleryOrder(url.searchParams.get("order"))
-  const limit = normalizeGalleryLimit(url.searchParams.get("limit"))
-  const offset = normalizeGalleryOffset(url.searchParams.get("offset"))
-  const seed = order === "random" ? normalizeGallerySeed(url.searchParams.get("seed")) : null
-  keyUrl.searchParams.set("v", await currentGalleryVersion(env))
-  keyUrl.searchParams.set("order", order)
-  keyUrl.searchParams.set("limit", String(limit))
-  keyUrl.searchParams.set("offset", String(offset))
-  if (seed) keyUrl.searchParams.set("seed", seed)
-  return new Request(keyUrl.toString(), { method: "GET" })
-}
-
-function galleryRandomRank(seed, symbol) {
-  const input = `${seed || "iconoplasm"}|${normalizeSymbol(symbol) || ""}`
-  let hash = 2166136261
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
-function buildGalleryUniquenessIndex(catalogBySymbol, essenceRows) {
-  const clanCounts = new Map()
-  const originsBySymbol = new Map()
-  const rows = Array.isArray(essenceRows) ? essenceRows : []
-  for (const row of rows) {
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
-    if (!symbol || !(catalogBySymbol instanceof Map) || !catalogBySymbol.has(symbol)) continue
-    let origins = []
-    try {
-      const parsed = JSON.parse(String(row?.aesthetics_origin_json || "[]"))
-      origins = normalizeTextList(parsed)
-    } catch {
-      origins = []
-    }
-    if (!origins.length) continue
-    originsBySymbol.set(symbol, origins)
-    for (const clan of origins) {
-      clanCounts.set(clan, Number(clanCounts.get(clan) || 0) + 1)
-    }
-  }
-
-  const out = new Map()
-  for (const [symbol, origins] of originsBySymbol.entries()) {
-    let dominantClanSize = 0
-    for (const clan of origins) {
-      dominantClanSize = Math.max(dominantClanSize, Number(clanCounts.get(clan) || 0))
-    }
-    if (dominantClanSize > 0) {
-      out.set(symbol, dominantClanSize)
-    }
-  }
-  return out
-}
-
-function gallerySortablePositiveMetric(value) {
-  const metric = Number(value)
-  return Number.isFinite(metric) && metric > 0 ? metric : null
-}
-
-function sortGalleryItems(items, order, seed = null) {
-  const sorted = Array.isArray(items) ? items.slice() : []
-  sorted.sort((left, right) => {
-    if (order === "symbol") {
-      return compareNullableTextAsc(left.symbol, right.symbol)
-    }
-    if (order === "shortest") {
-      const leftName = String(left.full_name || left.symbol || "").trim()
-      const rightName = String(right.full_name || right.symbol || "").trim()
-      return (
-        leftName.length - rightName.length ||
-        compareNullableTextAsc(leftName, rightName) ||
-        compareNullableTextAsc(left.symbol, right.symbol)
-      )
-    }
-    if (order === "heaviest") {
-      return (
-        compareNullableNumberDescWithNullBottom(
-          gallerySortablePositiveMetric(left.weight_kg),
-          gallerySortablePositiveMetric(right.weight_kg),
-        ) || compareGalleryPopularityFallback(left, right)
-      )
-    }
-    if (order === "lightest") {
-      return (
-        compareNullableNumberAscWithNullBottom(
-          gallerySortablePositiveMetric(left.weight_kg),
-          gallerySortablePositiveMetric(right.weight_kg),
-        ) || compareGalleryPopularityFallback(left, right)
-      )
-    }
-    if (order === "oldest") {
-      return (
-        compareNullableNumberDescWithNullBottom(
-          gallerySortablePositiveMetric(left.age_years),
-          gallerySortablePositiveMetric(right.age_years),
-        ) || compareGalleryPopularityFallback(left, right)
-      )
-    }
-    if (order === "youngest") {
-      return (
-        compareNullableNumberAscWithNullBottom(
-          gallerySortablePositiveMetric(left.age_years),
-          gallerySortablePositiveMetric(right.age_years),
-        ) || compareGalleryPopularityFallback(left, right)
-      )
-    }
-    if (order === "newest") {
-      // Keep popularity as the first fallback for newest.
-      // Many gallery items share the same publish timestamp or no timestamp at all,
-      // and alphabetical fallback made "newest" feel like reverse-A-to-Z browsing.
-      return (
-        compareNullableTextDesc(
-          left.published_at || left.asset_created_at,
-          right.published_at || right.asset_created_at,
-        ) || compareGalleryPopularityFallback(left, right)
-      )
-    }
-    if (order === "random") {
-      return (
-        galleryRandomRank(seed, left.symbol) - galleryRandomRank(seed, right.symbol) ||
-        compareNullableTextAsc(left.symbol, right.symbol)
-      )
-    }
-    if (order === "uniqueness") {
-      const leftRank = Number.isFinite(Number(left.uniqueness_rank))
-        ? Number(left.uniqueness_rank)
-        : null
-      const rightRank = Number.isFinite(Number(right.uniqueness_rank))
-        ? Number(right.uniqueness_rank)
-        : null
-      if (leftRank == null && rightRank == null) {
-        return compareGalleryPopularityFallback(left, right)
-      }
-      if (leftRank == null) return 1
-      if (rightRank == null) return -1
-      return leftRank - rightRank || compareGalleryPopularityFallback(left, right)
-    }
-    if (order === "popularity") {
-      return compareGalleryPopularityFallback(left, right)
-    }
-    return (
-      Number(right.image_score || 0) - Number(left.image_score || 0) ||
-      Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-      Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
-      compareNullableTextDesc(
-        left.published_at || left.asset_created_at,
-        right.published_at || right.asset_created_at,
-      ) ||
-      compareNullableTextAsc(left.symbol, right.symbol)
-    )
-  })
-  return sorted
-}
-
-function publishedGalleryItems(snapshot) {
-  const items = Array.isArray(snapshot?.items) ? snapshot.items : []
-  return items.filter((item) => {
-    if (!item || item.portrait?.status !== "published") return false
-    return Boolean(item.portrait?.medium_url || item.portrait?.thumb_url || item.portrait?.hero_url)
-  })
-}
-
-async function queryGalleryPublishedRows(env) {
-  if (!env.ICONOPLASM_DB) return []
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       ps.gene_symbol AS symbol,
-       ps.updated_at AS published_at,
-       pa.created_at AS asset_created_at,
-       ge.weight_kg,
-       ge.age_years,
-       pa.asset_sha256,
-       pa.candidate_image_id,
-       pa.vision_id,
-       pa.emulsion_id,
-       pa.width,
-       pa.height,
-       COALESCE(vs.upvotes, 0) AS image_upvotes,
-       COALESCE(vs.downvotes, 0) AS image_downvotes,
-       COALESCE(vs.score, 0) AS image_score
-     FROM icono_publish_state ps
-     JOIN icono_portrait_assets pa
-       ON pa.gene_symbol = ps.gene_symbol
-      AND pa.asset_sha256 = ps.current_asset_sha256
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = ps.gene_symbol
-     LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = ps.gene_symbol
-      AND vs.asset_sha256 = pa.asset_sha256
-     WHERE ps.current_asset_sha256 IS NOT NULL
-         AND COALESCE(pa.asset_sha256, '') <> ''`,
-  ).all()
-  return Array.isArray(rows?.results) ? rows.results : []
-}
-
-async function galleryPublishedRows(env, { fresh = false } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  if (fresh) return queryGalleryPublishedRows(env)
-  const version = await currentGalleryVersion(env)
-  if (
-    galleryPublishedRowsCache.version === version &&
-    Array.isArray(galleryPublishedRowsCache.value)
-  ) {
-    return galleryPublishedRowsCache.value
-  }
-  const cached = await readVersionedSharedJson(env, KV_GALLERY_PUBLISHED_ROWS_PREFIX, version)
-  if (Array.isArray(cached)) {
-    galleryPublishedRowsCache.version = version
-    galleryPublishedRowsCache.value = cached
-    return cached
-  }
-  const rows = await queryGalleryPublishedRows(env)
-  galleryPublishedRowsCache.version = version
-  galleryPublishedRowsCache.value = rows
-  await writeVersionedSharedJson(env, KV_GALLERY_PUBLISHED_ROWS_PREFIX, version, rows)
-  return rows
-}
-
-async function queryGalleryUniquenessRows(env) {
-  if (!env.ICONOPLASM_DB) return []
-  const uniquenessRowsRaw = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol, aesthetics_origin_json
-       FROM icono_gene_essence`,
-  ).all()
-  return Array.isArray(uniquenessRowsRaw?.results) ? uniquenessRowsRaw.results : []
-}
-
-async function galleryUniquenessRows(env, { fresh = false } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  if (fresh) return queryGalleryUniquenessRows(env)
-  const version = await currentGalleryVersion(env)
-  if (
-    galleryUniquenessRowsCache.version === version &&
-    Array.isArray(galleryUniquenessRowsCache.value)
-  ) {
-    return galleryUniquenessRowsCache.value
-  }
-  const cached = await readVersionedSharedJson(env, KV_GALLERY_UNIQUENESS_ROWS_PREFIX, version)
-  if (Array.isArray(cached)) {
-    galleryUniquenessRowsCache.version = version
-    galleryUniquenessRowsCache.value = cached
-    return cached
-  }
-  const rows = await queryGalleryUniquenessRows(env)
-  galleryUniquenessRowsCache.version = version
-  galleryUniquenessRowsCache.value = rows
-  await writeVersionedSharedJson(env, KV_GALLERY_UNIQUENESS_ROWS_PREFIX, version, rows)
-  return rows
-}
-
-async function gallerySnapshot(env, url, { order = "votes" } = {}) {
-  await warmCatalogCache(env)
-  const catalogTotal = catalogCache.bySymbol.size
-  const base = portraitBase(url, env)
-  const now = Date.now()
-  const snapshotMaxAgeMs = gallerySnapshotMaxAgeMs(order)
-  const needsUniquenessRanks = order === "uniqueness"
-  const cacheFresh =
-    gallerySnapshotCache.catalogHash === catalogCache.hash &&
-    gallerySnapshotCache.base === base &&
-    now - gallerySnapshotCache.loadedAt < snapshotMaxAgeMs &&
-    gallerySnapshotCache.items.length > 0 &&
-    (!needsUniquenessRanks || gallerySnapshotCache.hasUniquenessRanks)
-  if (cacheFresh) {
-    return {
-      items: gallerySnapshotCache.items,
-      published_total: gallerySnapshotCache.publishedTotal,
-      catalog_total: catalogTotal,
-    }
-  }
-
-  if (!env.ICONOPLASM_DB) {
-    clearGallerySnapshotCache()
-    return {
-      items: [],
-      published_total: 0,
-      catalog_total: catalogTotal,
-    }
-  }
-
-  // Cost barrier: this snapshot is allowed to read the full published gallery
-  // inventory exactly once per shared gallery version. Fresh isolates must load
-  // the shared snapshot from KV instead of repeating the D1 scan.
-  const publishedRows = await galleryPublishedRows(env)
-  const publishedMap = new Map()
-  for (const row of publishedRows) {
-    const symbol = normalizeSymbol(row?.symbol || "") || ""
-    if (!symbol) continue
-    const width = optionalInt(row?.width)
-    const height = optionalInt(row?.height)
-    publishedMap.set(symbol, {
-      width,
-      height,
-      weight_kg:
-        Number.isFinite(Number(row?.weight_kg)) && Number(row.weight_kg) > 0
-          ? Number(row.weight_kg)
-          : null,
-      age_years:
-        Number.isFinite(Number(row?.age_years)) && Number(row.age_years) >= 0
-          ? Number(row.age_years)
-          : null,
-      image_upvotes: Number(row?.image_upvotes || 0),
-      image_downvotes: Number(row?.image_downvotes || 0),
-      image_score: Number(row?.image_score || 0),
-      published_at: row?.published_at ? String(row.published_at) : null,
-      asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
-      ph: adminPortraitUrl(base, row?.asset_sha256, "full"),
-      pt: adminPortraitUrl(base, row?.asset_sha256, "medium"),
-      portrait: {
-        status: "published",
-        hero_url: adminPortraitUrl(base, row?.asset_sha256, "full"),
-        medium_url: adminPortraitUrl(base, row?.asset_sha256, "medium"),
-        thumb_url: adminPortraitUrl(base, row?.asset_sha256, "thumb"),
-        asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
-        candidate_image_id: optionalInt(row?.candidate_image_id),
-        vision_id: String(row?.vision_id || "").trim() || null,
-        emulsion_id: publicEmulsionIdForRow(row) || null,
-        artist_id: publicArtistIdForRow(row) || null,
-        ...(width != null ? { width } : {}),
-        ...(height != null ? { height } : {}),
-      },
-    })
-  }
-
-  let uniquenessBySymbol = new Map()
-  if (needsUniquenessRanks) {
-    // This full-table scan is only needed for the uniqueness sort. Running it for
-    // every gallery request pushed production D1 over its CPU limit and left the
-    // homepage with zero cards, so keep the expensive work behind the one order
-    // that actually uses it.
-    //
-    // Source of truth note: uniqueness must stay based on the synced NiceGUI
-    // mapping/demographics pipeline. aesthetics_origin_json is the stored clan list.
-    // Do not invent a separate website-only clan resolver here.
-    const uniquenessRows = await galleryUniquenessRows(env)
-    uniquenessBySymbol = buildGalleryUniquenessIndex(catalogCache.bySymbol, uniquenessRows)
-  }
-
-  const items = []
-  for (const [symbol, cached] of catalogCache.bySymbol.entries()) {
-    const published = publishedMap.get(symbol) || null
-    const uniquenessRank = uniquenessBySymbol.get(symbol)
-    const fullName = String(cached?.n || symbol || "").trim() || symbol
-    const color = String(cached?.c || "#888").trim() || "#888"
-    items.push({
-      symbol,
-      color,
-      full_name: fullName,
-      uniqueness_rank: Number.isFinite(Number(uniquenessRank)) ? Number(uniquenessRank) : null,
-      width: published?.width ?? null,
-      height: published?.height ?? null,
-      weight_kg: published?.weight_kg ?? null,
-      age_years: published?.age_years ?? null,
-      popularity_score: wikiPageviewsForSymbol(symbol),
-      image_upvotes: Number(published?.image_upvotes || 0),
-      image_downvotes: Number(published?.image_downvotes || 0),
-      image_score: Number(published?.image_score || 0),
-      published_at: published?.published_at || null,
-      asset_created_at: published?.asset_created_at || null,
-      ph: published?.ph || null,
-      pt: published?.pt || null,
-      portrait: published?.portrait || null,
-    })
-  }
-
-  gallerySnapshotCache.catalogHash = catalogCache.hash
-  gallerySnapshotCache.base = base
-  gallerySnapshotCache.loadedAt = now
-  gallerySnapshotCache.items = items
-  gallerySnapshotCache.publishedTotal = publishedRows.length
-  gallerySnapshotCache.hasUniquenessRanks = needsUniquenessRanks
-  gallerySnapshotCache.sorted = new Map()
-
-  return {
-    items,
-    published_total: publishedRows.length,
-    catalog_total: catalogTotal,
-  }
-}
-
-async function galleryVotesFeed(env, url, rawLimit, rawOffset) {
-  const limit = normalizeGalleryLimit(rawLimit)
-  const offset = normalizeGalleryOffset(rawOffset)
-  // Cost fence: the public gallery defaults to vote order. If this path goes
-  // back to live D1 sorting, every anonymous home pageview becomes an avoidable
-  // read-model scan and the billing graph starts screaming again.
-  const snapshot = await gallerySnapshot(env, url, { order: "votes" })
-  const publishedItems = publishedGalleryItems(snapshot)
-  const sorted = sortGalleryItems(publishedItems, "votes")
-  const items = sorted.slice(offset, offset + limit)
-
-  return {
-    order: "votes",
-    total: snapshot.catalog_total,
-    published_total: snapshot.published_total,
-    offset,
-    limit,
-    has_more: offset + items.length < publishedItems.length,
-    catalog_total: snapshot.catalog_total,
-    items,
-  }
-}
-
-function galleryMetricSpec(order) {
-  switch (order) {
-    case "heaviest":
-      return {
-        metricExpr: "ge.weight_kg",
-        metricDirection: "DESC",
-        invalidMetricExpr: "ge.weight_kg IS NULL OR ge.weight_kg <= 0",
-        uniquenessFromLeakage: false,
-      }
-    case "lightest":
-      return {
-        metricExpr: "ge.weight_kg",
-        metricDirection: "ASC",
-        invalidMetricExpr: "ge.weight_kg IS NULL OR ge.weight_kg <= 0",
-        uniquenessFromLeakage: false,
-      }
-    case "oldest":
-      return {
-        metricExpr: "ge.age_years",
-        metricDirection: "DESC",
-        invalidMetricExpr: "ge.age_years IS NULL OR ge.age_years <= 0",
-        uniquenessFromLeakage: false,
-      }
-    case "youngest":
-      return {
-        metricExpr: "ge.age_years",
-        metricDirection: "ASC",
-        invalidMetricExpr: "ge.age_years IS NULL OR ge.age_years <= 0",
-        uniquenessFromLeakage: false,
-      }
-    case "uniqueness":
-      return {
-        metricExpr: "ge.leakage_percent",
-        metricDirection: "ASC",
-        invalidMetricExpr: "ge.leakage_percent IS NULL",
-        uniquenessFromLeakage: true,
-      }
-    case "newest":
-      return {
-        metricExpr: "gr.live_created_at",
-        metricDirection: "DESC",
-        invalidMetricExpr: "gr.live_created_at IS NULL",
-        uniquenessFromLeakage: false,
-      }
-    default:
-      return null
-  }
-}
-
-async function galleryMetricFeed(env, url, order, rawLimit, rawOffset) {
-  const metricSpec = galleryMetricSpec(order)
-  if (!metricSpec) return null
-
-  const limit = normalizeGalleryLimit(rawLimit)
-  const offset = normalizeGalleryOffset(rawOffset)
-  const base = portraitBase(url, env)
-  const manifest = await catalogManifestObj(env)
-  const catalogTotal = Number(manifest?.gene_count || 0)
-
-  if (!env.ICONOPLASM_DB) {
-    return {
-      order,
-      total: 0,
-      published_total: 0,
-      offset,
-      limit,
-      has_more: false,
-      catalog_total: catalogTotal,
-      items: [],
-    }
-  }
-
-  const { metricExpr, metricDirection, invalidMetricExpr, uniquenessFromLeakage } = metricSpec
-  // Keep impossible zero-valued demographics visible on the site if they exist,
-  // but never let them outrank real positive values in youngest/lightest/oldest/
-  // heaviest sorts. The cards can show the raw data; the ordering logic should
-  // treat non-positive age/weight as "unknown for sorting" and sink them.
-  const orderByClause = `
-    CASE WHEN ${invalidMetricExpr} THEN 1 ELSE 0 END ASC,
-    CASE WHEN ${invalidMetricExpr} THEN NULL ELSE ${metricExpr} END ${metricDirection},
-    COALESCE(gr.live_score, 0) DESC,
-    COALESCE(gr.live_upvotes, 0) DESC,
-    COALESCE(gr.live_created_at, '') DESC,
-    gr.gene_symbol ASC`
-
-  const [publishedCountRow, rows] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT with_live AS published_total
-         FROM icono_admin_dashboard_summary
-        WHERE summary_key = ?
-        LIMIT 1`,
-    )
-      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
-      .first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         gr.gene_symbol AS symbol,
-         COALESCE(gc.full_name, gr.full_name) AS full_name,
-         gr.live_created_at AS published_at,
-         gr.live_created_at AS asset_created_at,
-         gr.current_asset_sha256 AS asset_sha256,
-         0 AS candidate_image_id,
-         gr.live_vision_id AS vision_id,
-         gr.live_emulsion_id AS emulsion_id,
-         NULL AS width,
-         NULL AS height,
-         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-         COALESCE(gr.live_score, 0) AS image_score,
-         gc.color_hex,
-         ge.weight_kg,
-         ge.age_years,
-         ge.leakage_percent
-       FROM icono_admin_gene_rollup gr
-       LEFT JOIN icono_gene_catalog gc
-         ON gc.gene_symbol = gr.gene_symbol
-       LEFT JOIN icono_gene_essence ge
-         ON ge.gene_symbol = gr.gene_symbol
-       LEFT JOIN icono_portrait_assets pa
-         ON pa.gene_symbol = gr.gene_symbol
-        AND pa.asset_sha256 = gr.current_asset_sha256
-       WHERE COALESCE(gr.current_asset_sha256, '') <> ''
-         AND COALESCE(gr.current_asset_missing, 0) = 0
-       ORDER BY ${orderByClause}
-       LIMIT ? OFFSET ?`,
-    )
-      .bind(limit, offset)
-      .all(),
-  ])
-
-  const publishedTotal = Number(publishedCountRow?.published_total || 0)
-  const results = Array.isArray(rows?.results) ? rows.results : []
-  const items = results
-    .map((row) => {
-      const symbol = normalizeSymbol(row?.symbol || "")
-      if (!symbol) return null
-      const width = optionalInt(row?.width)
-      const height = optionalInt(row?.height)
-      const weightKg =
-        Number.isFinite(Number(row?.weight_kg)) && Number(row.weight_kg) > 0
-          ? Number(row.weight_kg)
-          : null
-      const ageYears =
-        Number.isFinite(Number(row?.age_years)) && Number(row.age_years) >= 0
-          ? Number(row.age_years)
-          : null
-      const leakagePercent =
-        Number.isFinite(Number(row?.leakage_percent)) && Number(row.leakage_percent) >= 0
-          ? Number(row.leakage_percent)
-          : null
-      return {
-        symbol,
-        color: normalizeHexColor(row?.color_hex || "") || "#888",
-        full_name: sanitizeText(row?.full_name || "", 255) || symbol,
-        uniqueness_rank: uniquenessFromLeakage ? leakagePercent : null,
-        width,
-        height,
-        weight_kg: weightKg,
-        age_years: ageYears,
-        popularity_score: wikiPageviewsForSymbol(symbol),
-        image_upvotes: Number(row?.image_upvotes || 0),
-        image_downvotes: Number(row?.image_downvotes || 0),
-        image_score: Number(row?.image_score || 0),
-        published_at: row?.published_at ? String(row.published_at) : null,
-        asset_created_at: row?.asset_created_at ? String(row.asset_created_at) : null,
-        ph: adminPortraitUrl(base, row?.asset_sha256, "full"),
-        pt: adminPortraitUrl(base, row?.asset_sha256, "medium"),
-        portrait: {
-          status: "published",
-          hero_url: adminPortraitUrl(base, row?.asset_sha256, "full"),
-          medium_url: adminPortraitUrl(base, row?.asset_sha256, "medium"),
-          thumb_url: adminPortraitUrl(base, row?.asset_sha256, "thumb"),
-          asset_sha256: row?.asset_sha256 ? String(row.asset_sha256) : null,
-          candidate_image_id: optionalInt(row?.candidate_image_id),
-          vision_id: String(row?.vision_id || "").trim() || null,
-          emulsion_id: publicEmulsionIdForRow(row) || null,
-          artist_id: publicArtistIdForRow(row) || null,
-          ...(width != null ? { width } : {}),
-          ...(height != null ? { height } : {}),
-        },
-      }
-    })
-    .filter(Boolean)
-
-  return {
-    order,
-    total: catalogTotal,
-    published_total: publishedTotal,
-    offset,
-    limit,
-    has_more: offset + items.length < publishedTotal,
-    catalog_total: catalogTotal,
-    items,
-  }
-}
-
-async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
-  // Classic public gallery mode has its own order machinery. It is separate
-  // from signed-in shelves and account gallery windows, so no cache should infer
-  // "the next genes a user will see" from this path alone.
-  const order = normalizeGalleryOrder(rawOrder)
-  const limit = normalizeGalleryLimit(rawLimit)
-  const offset = normalizeGalleryOffset(rawOffset)
-  const seed =
-    order === "random" ? normalizeGallerySeed(rawSeed) || crypto.randomUUID().slice(0, 12) : null
-  if (order === "votes") {
-    return galleryVotesFeed(env, url, limit, offset)
-  }
-  const metricFeed = await galleryMetricFeed(env, url, order, limit, offset)
-  if (metricFeed) return metricFeed
-  const snapshot = await gallerySnapshot(env, url, { order })
-  if (!env.ICONOPLASM_DB) {
-    return {
-      order,
-      seed,
-      total: 0,
-      published_total: 0,
-      offset,
-      limit,
-      has_more: false,
-      catalog_total: snapshot.catalog_total,
-      items: [],
-    }
-  }
-
-  const sortKey = `${order}:${seed || ""}`
-  let sorted = gallerySnapshotCache.sorted.get(sortKey)
-  if (!sorted) {
-    sorted = sortGalleryItems(snapshot.items, order, seed)
-    gallerySnapshotCache.sorted.set(sortKey, sorted)
-  }
-  const pageItems = sorted.slice(offset, offset + limit)
-
-  return {
-    order,
-    ...(seed ? { seed } : {}),
-    total: snapshot.catalog_total,
-    published_total: snapshot.published_total,
-    offset,
-    limit,
-    has_more: offset + limit < sorted.length,
-    catalog_total: snapshot.catalog_total,
-    items: pageItems,
-  }
-}
-
 function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_LIMIT) {
   const values = Array.isArray(rawSymbols)
     ? rawSymbols
@@ -23431,41 +22658,6 @@ async function handlePublicMetadata(request, env) {
     })
   }
   return json(metadata, 200, { ETag: etag, "Cache-Control": "public, max-age=300" })
-}
-
-async function handlePublicStats(request, env) {
-  if (!env?.KV) {
-    return json({ error: "Public stats not available" }, 404, {
-      "Cache-Control": "public, max-age=300",
-    })
-  }
-  let payload = null
-  try {
-    const raw = await env.KV.get(KV_PUBLIC_STATS)
-    payload = normalizePublicStatsPayload(raw ? JSON.parse(raw) : null)
-  } catch {
-    payload = null
-  }
-  if (!payload) {
-    return json({ error: "Public stats not published yet" }, 404, {
-      "Cache-Control": "public, max-age=300",
-    })
-  }
-  const etag = await etagFor(payload)
-  if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-    return new Response(null, {
-      status: 304,
-      headers: {
-        ...corsHeaders(),
-        ETag: etag,
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-      },
-    })
-  }
-  return json(payload, 200, {
-    ETag: etag,
-    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-  })
 }
 
 function handlePublicSchema() {
@@ -24860,145 +24052,6 @@ async function handlePublicImageResolve(request, env) {
   )
 }
 
-async function handlePublicChanges(request, env) {
-  if (!env.ICONOPLASM_DB) return json({ error: "ICONOPLASM_DB binding missing" }, 500)
-  const url = new URL(request.url)
-  const since = sanitizeText(url.searchParams.get("since") || "", 64) || "1970-01-01T00:00:00Z"
-  const limit = Math.max(
-    1,
-    Math.min(500, Number.parseInt(url.searchParams.get("limit") || "200", 10)),
-  )
-  // COST: this is a public, uncached route. Every query below must be an index
-  // SEARCH bounded by the page size. The previous version wrapped updated_at in
-  // COALESCE (defeating the index) and read all ~19k icono_publish_state rows on
-  // every call: ~40-77k D1 rows per request, so ~65-125 calls could exhaust the
-  // free plan's 5M daily reads for the whole site. Now: <= 3 * perSourceLimit +
-  // limit rows (~875 at the default page size).
-  // NULL updated_at never matched before either: COALESCE(NULL, '') > since is
-  // false for any non-empty since, exactly like NULL > since.
-  const perSourceLimit = limit + 25
-  const [catalogRows, essenceRows, portraitRows] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol AS symbol, updated_at
-         FROM icono_gene_catalog
-        WHERE updated_at > ?
-        ORDER BY updated_at ASC, gene_symbol ASC
-        LIMIT ?`,
-    )
-      .bind(since, perSourceLimit)
-      .all(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol AS symbol, updated_at
-         FROM icono_gene_essence
-        WHERE updated_at > ?
-        ORDER BY updated_at ASC, gene_symbol ASC
-        LIMIT ?`,
-    )
-      .bind(since, perSourceLimit)
-      .all(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol AS symbol, updated_at
-         FROM icono_publish_state
-        WHERE updated_at > ?
-        ORDER BY updated_at ASC, gene_symbol ASC
-        LIMIT ?`,
-    )
-      .bind(since, perSourceLimit)
-      .all(),
-  ])
-
-  const merged = []
-  for (const row of Array.isArray(catalogRows?.results) ? catalogRows.results : []) {
-    merged.push({
-      symbol: normalizeSymbol(row?.symbol || ""),
-      changed_at: row?.updated_at ? String(row.updated_at) : null,
-      change_type: "catalog",
-    })
-  }
-  for (const row of Array.isArray(essenceRows?.results) ? essenceRows.results : []) {
-    merged.push({
-      symbol: normalizeSymbol(row?.symbol || ""),
-      changed_at: row?.updated_at ? String(row.updated_at) : null,
-      change_type: "essence",
-    })
-  }
-  for (const row of Array.isArray(portraitRows?.results) ? portraitRows.results : []) {
-    merged.push({
-      symbol: normalizeSymbol(row?.symbol || ""),
-      changed_at: row?.updated_at ? String(row.updated_at) : null,
-      change_type: "portrait",
-    })
-  }
-
-  merged.sort((left, right) => {
-    return (
-      compareNullableTextAsc(left.changed_at, right.changed_at) ||
-      compareNullableTextAsc(left.symbol, right.symbol) ||
-      compareNullableTextAsc(left.change_type, right.change_type)
-    )
-  })
-
-  // Asset hashes only for the symbols that can appear on this page (primary-key
-  // lookups), never the whole table.
-  const pageSymbols = []
-  const seenSymbols = new Set()
-  for (const row of merged) {
-    if (!row.symbol || !row.changed_at || seenSymbols.has(row.symbol)) continue
-    if (pageSymbols.length >= limit) break
-    seenSymbols.add(row.symbol)
-    pageSymbols.push(row.symbol)
-  }
-  const publishStateRows = pageSymbols.length
-    ? await env.ICONOPLASM_DB.prepare(
-        `SELECT gene_symbol AS symbol, current_asset_sha256
-           FROM icono_publish_state
-          WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
-      )
-        .bind(JSON.stringify(pageSymbols))
-        .all()
-    : { results: [] }
-  const publishStateBySymbol = new Map(
-    (Array.isArray(publishStateRows?.results) ? publishStateRows.results : [])
-      .map((row) => [
-        normalizeSymbol(row?.symbol || ""),
-        normalizeSha256(row?.current_asset_sha256 || "") || null,
-      ])
-      .filter(([symbol]) => Boolean(symbol)),
-  )
-
-  const results = []
-  const bySymbol = new Map()
-  for (const row of merged) {
-    if (!row.symbol || !row.changed_at) continue
-    let entry = bySymbol.get(row.symbol)
-    if (!entry) {
-      if (results.length >= limit) break
-      entry = {
-        symbol: row.symbol,
-        changed_at: row.changed_at,
-        change_types: [],
-        current_asset_sha256: publishStateBySymbol.get(row.symbol) || null,
-      }
-      bySymbol.set(row.symbol, entry)
-      results.push(entry)
-    }
-    entry.changed_at =
-      compareNullableTextAsc(entry.changed_at, row.changed_at) >= 0
-        ? entry.changed_at
-        : row.changed_at
-    if (!entry.change_types.includes(row.change_type)) entry.change_types.push(row.change_type)
-  }
-
-  const nextCursor = results.length ? results[results.length - 1]?.changed_at || since : since
-  return json({
-    api_version: PUBLIC_API_VERSION,
-    schema_version: API_SCHEMA_VERSION,
-    since,
-    next_cursor: nextCursor,
-    changes: results,
-  })
-}
-
 async function handlePublicMedia(request, env, symbol) {
   const url = new URL(request.url)
   const resolvedSymbol = normalizeSymbol(symbol)
@@ -25203,34 +24256,6 @@ async function handlePublicGeneSearch(request, env) {
   return json({ genes, query: qUpper, scope_applied: appliedScope }, 200, {
     "Cache-Control": cacheControl,
   })
-}
-
-async function handlePublicGallery(request, env, ctx) {
-  const url = new URL(request.url)
-  const order = normalizeGalleryOrder(url.searchParams.get("order"))
-  const edgeCacheable = request.method === "GET" && galleryCanUseEdgeCache(url)
-  const cache = edgeCacheable ? caches.default : null
-  const cacheKey = edgeCacheable ? await galleryEdgeCacheKey(url, env) : null
-  if (cache && cacheKey) {
-    const cached = await cache.match(cacheKey)
-    if (cached) return cached
-  }
-  const payload = await galleryFeed(
-    env,
-    url,
-    order,
-    url.searchParams.get("limit"),
-    url.searchParams.get("offset"),
-    url.searchParams.get("seed"),
-  )
-  payload.snapshot_version = await currentGalleryVersion(env)
-  const cacheControl =
-    order === "votes"
-      ? iconoplasmCacheControl("publicGalleryVotes")
-      : iconoplasmCacheControl("publicGallery")
-  const response = json(payload, 200, { "Cache-Control": cacheControl })
-  if (cache && cacheKey) ctx.waitUntil(cache.put(cacheKey, response.clone()))
-  return response
 }
 
 // Renders the live gene page and screenshots the horizontal "lit-archival" gene
@@ -25529,7 +24554,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(args.request, await publishedCardDeliveryHandlers.stableCatalog(args)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
-  public_stats: ({ request, env }) => handlePublicStats(request, env),
   public_schema: ({ request }) => asHead(request, handlePublicSchema()),
   public_catalog_manifest: ({ request, env }) => handlePublicCatalogManifest(request, env),
   public_catalog_artifact: async ({ request, env, path }) =>
@@ -25538,7 +24562,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicScannerArtifact(env, path)),
   public_catalog_dump: async ({ request, env, path }) =>
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
-  public_gallery: ({ request, env, ctx }) => handlePublicGallery(request, env, ctx),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
   public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
     asHead(
@@ -25595,7 +24618,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     }),
   public_resolve: ({ request, env }) => handlePublicResolve(request, env),
   public_image_resolve: ({ request, env }) => handlePublicImageResolve(request, env),
-  public_changes: ({ request, env }) => handlePublicChanges(request, env),
   public_media: ({ match, request, env }) =>
     handlePublicMedia(request, env, match.params.symbol || ""),
   portrait: ({ request, env, ctx, path }) =>

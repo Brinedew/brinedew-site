@@ -50,10 +50,6 @@ async function runBenchmark({
       url: `${baseUrl}/`,
     },
     {
-      name: "public_gallery_votes_24",
-      url: `${baseUrl}/api/public/v1/gallery?order=votes&limit=24&offset=0`,
-    },
-    {
       name: "mobile_card_manifest_5",
       url: `${baseUrl}/api/iconoplasm/mobile-card-manifest`,
       options: {

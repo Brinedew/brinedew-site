@@ -35,6 +35,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+      # Reads each gene's card from Bunny Storage's origin (B-1064).
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: ${{ secrets.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

@@ -128,7 +128,7 @@ What it shows:
 
 What API drives it:
 
-- `GET /api/public/v1/gallery`
+- `catalog/v3/index.json` on the CDN, paged and sorted in the browser by the publication reader (no Worker route)
 
 What it is **not**:
 
@@ -173,7 +173,7 @@ When the homepage loads, check this table first.
 | signed out                           | no account route; local starter + visited-dossier shelf |
 | signed in, normal user               | `/api/iconoplasm/discoveries/me`                        |
 | signed in, admin, classic toggle off | `/api/iconoplasm/discoveries/me`                        |
-| signed in, admin, classic toggle on  | `/api/public/v1/gallery`                                |
+| signed in, admin, classic toggle on  | `catalog/v3/index.json` (CDN)                           |
 
 If the wrong route is firing, you are debugging the wrong problem.
 

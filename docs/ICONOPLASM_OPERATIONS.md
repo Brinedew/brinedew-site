@@ -149,7 +149,7 @@ Before debugging a card or gallery bug, identify the active data path. Do not in
 
 The common paths are:
 
-- `/api/public/v1/gallery` for classic public gallery mode
+- `catalog/v3/index.json` on the CDN for classic public gallery mode (the browser's publication reader pages and sorts it; no Worker route)
 - `/api/iconoplasm/discoveries/me` for the signed-in personal shelf state
 - `/api/iconoplasm/account-gallery-window` for supported signed-in order windows
 - client-side discovery slicing plus `/api/iconoplasm/mobile-card-manifest`, which reads one stable gene object per symbol rather than D1-composed fallback cards
