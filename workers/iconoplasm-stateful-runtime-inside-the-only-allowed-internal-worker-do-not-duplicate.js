@@ -79,8 +79,8 @@ import {
   readReconcilePublishState,
 } from "./iconoplasm/reconcile-asset-selection.js"
 import {
-  d1DailyRowReadLimitResponse,
-  isD1DailyRowReadLimitError,
+  d1DailyRowLimitResponse,
+  isD1DailyRowLimitError,
   secondsUntilCloudflareDailyReset,
 } from "./lib/cloudflare-availability.js"
 import {
@@ -2029,13 +2029,14 @@ function isIconoplasmDailyBudgetError(error) {
       "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED",
       "ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE",
       "D1_ACCOUNT_READ_LIMIT",
+      "D1_ACCOUNT_WRITE_LIMIT",
       "COST_SHARED_DAILY_LIMIT",
       "COST_AUTHORITY_STORAGE_WRITE_QUOTA",
       "COST_AUTHORITY_STORAGE_READ_QUOTA",
       "QUEUE_ACCOUNT_DAILY_LIMIT",
       "MUTATION_PROVIDER_HEADROOM_RESERVED",
     ].includes(error?.code) ||
-    isD1DailyRowReadLimitError(error) ||
+    isD1DailyRowLimitError(error) ||
     isIconoplasmDurableObjectRowsWrittenFreeTierExceededError(error)
   )
 }
@@ -31710,7 +31711,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     ) {
       throw e
     }
-    const unavailable = d1DailyRowReadLimitResponse(e)
+    const unavailable = d1DailyRowLimitResponse(e)
     if (unavailable) return asHead(request, unavailable)
     if (e instanceof IconoplasmSessionUnavailableError) {
       return asHead(
