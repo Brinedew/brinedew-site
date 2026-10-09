@@ -247,10 +247,12 @@ test(
       )
       assert.equal(election.result.projection.code, "PROMOTED")
       // The gene's 20 candidates and their summaries plus a few point reads;
-      // a winner change writes the state row, its event and the approval, with
-      // their triggers (measured 2026-10-02: 40 read, 18 written).
+      // a winner change writes the state row and its event, with their indexes
+      // (measured 2026-10-02: 40 read, 18 written, when it also marked the winner
+      // "approved"; that label cost 17 rows a time on the live account and went on
+      // 2026-10-09, leaving about 4 + 4 by Cloudflare's per-statement analytics).
       assert.ok(election.actual.rows_read <= 48, JSON.stringify(election.actual))
-      assert.ok(election.actual.rows_written <= 20, JSON.stringify(election.actual))
+      assert.ok(election.actual.rows_written <= 10, JSON.stringify(election.actual))
       // The daily vote budget (vote-guards.js) holds a full day of admitted
       // votes at the worst case measured above, plus a winner change for one
       // vote in ten, to 40% of D1's free 100,000 rows written.

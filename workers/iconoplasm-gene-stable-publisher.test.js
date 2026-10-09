@@ -87,7 +87,14 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
   assert.equal(objects.written.at(-1).key, "genes/v3/TP53.json")
   assert.equal(card.portrait.status, "published")
   assert.equal(card.portrait.asset_sha256, A)
-  assert.equal(card.portrait_candidates[0].status, "approved", "the projection approved it")
+  // 2026-10-09: marking the winner "approved" cost 17 D1 rows written per
+  // election (34,068 rows of that day's write wall) for a label nothing reads.
+  assert.equal(card.portrait_candidates[0].status, "draft", "winning changes no status")
+  assert.equal(
+    db.database.prepare("SELECT status FROM icono_portrait_assets WHERE asset_sha256 = ?").get(A)
+      .status,
+    "draft",
+  )
   assert.equal(card.full_name, "tumor protein p53")
   assert.equal(card.essence.sex, "Female", "tmh 0 reads as soluble")
   assert.equal(card.uniqueness_rank, 12.5, "the catalogue's sort key travels on the card")
