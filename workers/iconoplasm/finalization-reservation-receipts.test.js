@@ -229,7 +229,7 @@ const countRows = async (sql, ...args) =>
 // B-1057: finalization marks visions and the request-picker job rebuilds every
 // marked vision once, in one batch. This runs that job against the same meter
 // and ledger; only the given visions are marked.
-async function rollupRun(visionIds) {
+async function rollupRun(visionIds, { failOn = null } = {}) {
   await database.db.prepare("DELETE FROM icono_vision_rollup_dirty").run()
   await database.db
     .prepare(
@@ -239,8 +239,18 @@ async function rollupRun(visionIds) {
     .run()
   const meter = liveD1Meter(database.db)
   const ledger = recordingMutationLedger(meter)
+  // failOn: a statement that fails the way a provider error would, mid-run.
+  const db = failOn
+    ? {
+        prepare(sql) {
+          if (sql.includes(failOn)) throw new Error(`injected failure at ${failOn}`)
+          return meter.db.prepare(sql)
+        },
+        batch: (statements) => meter.db.batch(statements),
+      }
+    : meter.db
   const env = {
-    ICONOPLASM_DB: meter.db,
+    ICONOPLASM_DB: db,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: ledger.namespace,
   }
   let result = null
@@ -513,7 +523,7 @@ test("a vision above the code bound is refused before any write, stays marked, a
       0,
       table,
     )
-  // The only rows written are its claim and the re-mark that keeps it waiting.
+  // The only rows written are the re-mark that keeps it waiting, at the back.
   assert.ok(
     refused.meter.totals.rows_written <= 2 * VISION_ROLLUP_DIRTY_MARK_ROWS,
     `refusal wrote ${refused.meter.totals.rows_written} rows`,
@@ -559,6 +569,25 @@ test("a vision above the code bound is refused before any write, stays marked, a
     ),
     0,
   )
+})
+
+test("a vision rebuild that fails part-way leaves every mark in place", async (t) => {
+  quiet(t)
+  const visionId = "anima-v1-29140"
+  await seedVisionWithCodes(visionId, emulsionCodes(2, 29140), { genes: 2 })
+  const run = await rollupRun([visionId], { failOn: "INSERT INTO icono_admin_vision_rollup" })
+  assert.match(String(run.error?.message), /injected failure/)
+  assert.equal(
+    await countRows(
+      "SELECT COUNT(*) AS n FROM icono_vision_rollup_dirty WHERE vision_id = ?",
+      visionId,
+    ),
+    1,
+    "the next run rebuilds it",
+  )
+  const retried = await rollupRun([visionId])
+  assert.equal(retried.error, null)
+  assert.equal(retried.result.visions, 1)
 })
 
 test("a vision above the code bound does not hold back the rest of its batch", async (t) => {

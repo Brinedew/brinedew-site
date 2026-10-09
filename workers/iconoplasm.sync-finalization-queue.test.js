@@ -1080,7 +1080,7 @@ test("a job left in the vision phase hands every vision to the picker job, throu
   assert.equal(resumed.acked, true)
   assert.equal(db.jobs.get("TP53").status, "completed")
   const marks = db.calls
-    .filter((c) => c.sql.includes("INSERT OR IGNORE INTO icono_vision_rollup_dirty"))
+    .filter((c) => c.sql.includes("INSERT INTO icono_vision_rollup_dirty"))
     .map((c) => JSON.parse(c.args[1]))
   assert.deepEqual(marks, [visions], "one delivery hands over every vision")
   assert.equal(
@@ -1729,7 +1729,7 @@ test("scoped queue drain completes all phases through automatic bounded deliveri
   )
   assert.deepEqual(
     env.ICONOPLASM_DB.calls
-      .filter((c) => c.sql.includes("INSERT OR IGNORE INTO icono_vision_rollup_dirty"))
+      .filter((c) => c.sql.includes("INSERT INTO icono_vision_rollup_dirty"))
       .map((c) => JSON.parse(c.args[1])),
     [["anima-v1-1"], ["anima-v1-1"]],
   )

@@ -17875,10 +17875,12 @@ export async function markVisionRollupsDirty(env, rawVisionIds, now = new Date()
     ),
   )
   if (!env?.ICONOPLASM_DB || !visionIds.length) return 0
-  // OR IGNORE: a vision already waiting costs no write.
+  // A vision already waiting gets the new time: a rebuild that read it before
+  // this change then leaves its mark in place (see rebuildDirtyVisionRollups).
   await env.ICONOPLASM_DB.prepare(
-    `INSERT OR IGNORE INTO icono_vision_rollup_dirty (vision_id, marked_at)
-     SELECT value, ? FROM json_each(?)`,
+    `INSERT INTO icono_vision_rollup_dirty (vision_id, marked_at)
+     SELECT value, ? FROM json_each(?) WHERE true
+     ON CONFLICT(vision_id) DO UPDATE SET marked_at = excluded.marked_at`,
   )
     .bind(now, JSON.stringify(visionIds))
     .run()
@@ -17886,7 +17888,7 @@ export async function markVisionRollupsDirty(env, rawVisionIds, now = new Date()
 }
 
 // A batch rebuild is about a dozen statements however many visions it holds;
-// one more attempt needs at most this many, plus one for the closing re-mark.
+// one more attempt needs at most this many, plus two for the closing statements.
 const VISION_ROLLUP_BATCH_MAX_STATEMENTS = 16
 
 export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIRTY_BATCH } = {}) {
@@ -17897,12 +17899,13 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
   const db = env.ICONOPLASM_DB
   const picked = await db
     .prepare(
-      `SELECT vision_id FROM icono_vision_rollup_dirty ORDER BY marked_at, vision_id LIMIT ?`,
+      `SELECT vision_id, marked_at FROM icono_vision_rollup_dirty ORDER BY marked_at, vision_id LIMIT ?`,
     )
     .bind(limit)
     .all()
-  let visionIds = (picked?.results || []).map((row) => row?.vision_id).filter(Boolean)
-  if (!visionIds.length) return { ok: true, visions: 0, refused: [] }
+  const marks = (picked?.results || []).filter((row) => row?.vision_id)
+  if (!marks.length) return { ok: true, visions: 0, refused: [] }
+  let visionIds = marks.map((row) => row.vision_id)
   const units = visionRollupBatchWriteUnits(visionIds.length)
   const operationId = reservationIdentity(
     `vision-rollups:${new Date().toISOString()}:${visionIds[0]}`,
@@ -17913,7 +17916,7 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
     operationId,
     units,
   })
-  // At the ceiling nothing is claimed: the marks wait for the next run.
+  // At the ceiling nothing is touched: the marks wait for the next run.
   if (admission?.ok !== true)
     return {
       ok: true,
@@ -17923,25 +17926,16 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
       mutation_lane: admission,
     }
   const refused = []
-  let rebuilt = 0
+  const rebuiltIds = []
   try {
-    // Claim. A gene finalized from here on marks its visions again, and the
-    // next run rebuilds them, so no change is lost.
-    await db
-      .prepare(
-        `DELETE FROM icono_vision_rollup_dirty WHERE vision_id IN (SELECT value FROM json_each(?))`,
-      )
-      .bind(JSON.stringify(visionIds))
-      .run()
-    while (visionIds.length && invocationBudget.canStart(VISION_ROLLUP_BATCH_MAX_STATEMENTS + 1)) {
+    while (visionIds.length && invocationBudget.canStart(VISION_ROLLUP_BATCH_MAX_STATEMENTS + 2)) {
       try {
         await rebuildVisionRollupsBatch(env, visionIds)
-        rebuilt += visionIds.length
+        rebuiltIds.push(...visionIds)
         visionIds = []
       } catch (error) {
         // B-946: a vision above its emulsion-code bound is refused before
-        // anything is written. Set it aside, keep it marked until its extra
-        // codes are removed, and rebuild the rest of the batch.
+        // anything is written. Set it aside and rebuild the rest of the batch.
         if (
           error?.code !== "VISION_EMULSION_CODE_BOUND_EXCEEDED" ||
           !visionIds.includes(error.visionId)
@@ -17951,16 +17945,39 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
         visionIds = visionIds.filter((visionId) => visionId !== error.visionId)
       }
     }
-  } finally {
-    try {
-      const remark = [...visionIds, ...refused.map((row) => row.vision_id)]
-      if (remark.length) await markVisionRollupsDirty(env, remark)
-    } finally {
-      await completeIconoplasmMutationReservation(env, operationId)
+    // Marks go only after their rebuild, and only as they were read: a gene
+    // finalized meanwhile gave its vision a newer time, so that mark stays and
+    // the next run rebuilds it. A run that fails leaves every mark in place.
+    if (rebuiltIds.length) {
+      const rebuilt = new Set(rebuiltIds)
+      await db
+        .prepare(
+          `DELETE FROM icono_vision_rollup_dirty
+           WHERE (vision_id, marked_at) IN (
+             SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)
+           )`,
+        )
+        .bind(
+          JSON.stringify(
+            marks
+              .filter((row) => rebuilt.has(row.vision_id))
+              .map((row) => [row.vision_id, row.marked_at]),
+          ),
+        )
+        .run()
     }
+    // A refused vision stays marked but moves behind the others, so it cannot
+    // hold the head of every later batch while its extra codes remain.
+    if (refused.length)
+      await markVisionRollupsDirty(
+        env,
+        refused.map((row) => row.vision_id),
+      )
+  } finally {
+    await completeIconoplasmMutationReservation(env, operationId)
   }
   for (const row of refused) console.warn("[Iconoplasm] vision rollup refused", row)
-  return { ok: true, visions: rebuilt, refused, remaining: visionIds.length }
+  return { ok: true, visions: rebuiltIds.length, refused, remaining: visionIds.length }
 }
 
 async function syncAdminReadModels(
