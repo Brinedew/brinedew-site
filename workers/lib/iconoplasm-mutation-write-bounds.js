@@ -58,6 +58,12 @@ export const MAX_EMULSION_CODES_PER_VISION = 24
 // reservation cannot know a vision's code count without scanning its assets.
 export const VISION_ROLLUP_ROWS = 194
 
+// B-1057: sync finalization marks the visions a gene touched instead of
+// rebuilding each one, and the request-picker job rebuilds every marked vision
+// once, in one batch. A mark is one row of icono_vision_rollup_dirty and its
+// primary-key index entry.
+export const VISION_ROLLUP_DIRTY_MARK_ROWS = 2
+
 // A reconcile writes the emulsion option rollups of every asset its gene holds,
 // republishes the gene, and restores or marks assets one statement group at a
 // time. Our 50-statement invocation budget (workers/lib/d1-invocation-budget.js)
@@ -108,16 +114,32 @@ function reconcileBodyRows(assetCount) {
   )
 }
 
-// One job phase is its claim, its body and its advance. keepCount and
-// legacyCount are the job's own lists for this one gene.
-export function finalizationPhaseWriteUnits({ phase, keepCount = 0, legacyCount = 0 } = {}) {
+// One job phase is its claim, its body and its advance. keepCount,
+// legacyCount and visionCount are the job's own lists for this one gene.
+export function finalizationPhaseWriteUnits({
+  phase,
+  keepCount = 0,
+  legacyCount = 0,
+  visionCount = 0,
+} = {}) {
   const transitions = 2 * FINALIZATION_JOB_TRANSITION_ROWS
+  const marks = VISION_ROLLUP_DIRTY_MARK_ROWS * count(visionCount)
   let body = 0
   if (phase === "reconcile") body = reconcileBodyRows(count(keepCount) + count(legacyCount))
   else if (phase === "vote_summaries") body = VOTE_SUMMARY_ROWS_PER_ASSET * count(keepCount)
-  else if (phase === "gene_rollups") body = GENE_ROLLUP_ROWS
-  else if (phase === "vision_rollups") body = VISION_ROLLUP_ROWS
+  else if (phase === "gene_rollups") body = GENE_ROLLUP_ROWS + marks
+  // A job that reached the old vision phase only marks its remaining visions.
+  else if (phase === "vision_rollups") body = marks
   return atLeastFloor(transitions + body)
+}
+
+// One run of the request-picker job's vision rebuild: every vision's rebuild,
+// its claim (the mark removed) and at worst its re-mark, when a vision above its
+// emulsion-code bound is set aside or the run stops early.
+export function visionRollupBatchWriteUnits(visionCount) {
+  const visions = count(visionCount)
+  if (!visions) throw new RangeError("A vision rollup batch rebuilds at least one vision")
+  return atLeastFloor(visions * (VISION_ROLLUP_ROWS + 2 * VISION_ROLLUP_DIRTY_MARK_ROWS))
 }
 
 // ---- The laptop routes (the laptop_delivery lane) ---------------------------

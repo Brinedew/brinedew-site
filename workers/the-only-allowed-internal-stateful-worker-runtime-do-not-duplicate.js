@@ -382,6 +382,7 @@ import {
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   publishRequestPickerObject,
+  rebuildDirtyVisionRollups,
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   migrateIconoplasmCompactDiscoveryForScheduled,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
@@ -2002,7 +2003,17 @@ export default {
         // not an Iconoplasm one.
         geneguessrBoard: () => publishLeaderboardObject(env),
         // B-896: the style picker's first page on the CDN (121 rows, written on change).
-        requestPicker: () => publishRequestPickerObject(env),
+        // B-1057: first rebuild, once each, the visions sync finalization marked, so
+        // the page is built from fresh rollups. A failed rebuild re-marks its visions
+        // and never blocks the page.
+        requestPicker: async () => {
+          const visionRollups = await rebuildDirtyVisionRollups(env).catch((error) => ({
+            ok: false,
+            error: String(error?.message || error),
+          }))
+          const picker = await publishRequestPickerObject(env)
+          return { ...picker, vision_rollups: visionRollups }
+        },
         accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),
         // B-985: after the projection drain, release uploads a caretaker abandoned and
         // never retried (at most 3 per run), so their reserved bytes and stored body return.
