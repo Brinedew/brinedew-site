@@ -973,9 +973,10 @@ test("account gallery window lists a missing stable object and fails loud on sto
 // B-885 (27 Sep 2026): the home collection died with Cloudflare 1102 "Worker
 // exceeded resource limits" for the two largest shelves (2,106 and 1,584
 // genes). Every window enriched the WHOLE shelf (a three-table join, 250 genes
-// per query, one mapped object per gene) and only then kept 24. The window
-// must enrich exactly the rows it returns, for both scopes, and those rows must
-// still carry the enriched fields.
+// per query, one mapped object per gene) and only then kept 24. B-1064 (9 Oct
+// 2026): the browser renders the page's published cards and reads only the
+// symbols from the discovery rows, so the window reads no gene facts at all,
+// for either scope, and its rows carry only the reader's own facts.
 function manyGeneDb() {
   const db = new FakeDb()
   db.rows = Array.from({ length: 101 }, (_, index) => {
@@ -999,7 +1000,7 @@ function enrichmentCalls(db) {
 }
 
 for (const scope of ["personal", "shared"]) {
-  test(`${scope} account gallery window enriches only the rows it returns (B-885)`, async () => {
+  test(`${scope} account gallery window reads no gene facts (B-885, B-1064)`, async () => {
     const db = manyGeneDb()
     resetIconoplasmRuntimeCachesForTest()
     const env = buildEnv({ db })
@@ -1016,18 +1017,14 @@ for (const scope of ["personal", "shared"]) {
     const payload = await first.json()
     assert.equal(first.status, 200)
     assert.equal(payload.items.length, 3)
-    const enriched = enrichmentCalls(db).flat()
-    assert.deepEqual(
-      [...enriched].sort(),
-      payload.items.map((item) => item.symbol).sort(),
-      `${scope}: enriched ${enriched.length} genes to return 3`,
-    )
+    assert.deepEqual(enrichmentCalls(db), [], `${scope}: the window joined gene facts`)
     for (const item of payload.items) {
-      assert.equal(
-        item.discovery.full_name,
-        `${item.symbol} full name`,
-        `${scope}: enrichment lost`,
+      assert.deepEqual(
+        Object.keys(item.discovery).sort(),
+        ["encounter_count", "first_discovered_at", "gene_symbol", "last_encountered_at"],
+        `${scope}: a discovery row carries more than the reader's facts`,
       )
+      assert.equal(item.discovery.gene_symbol, item.symbol)
     }
 
     // The next page (after the cursor) is still correct and still bounded.
@@ -1048,7 +1045,7 @@ for (const scope of ["personal", "shared"]) {
         payload.items[2].discovery.first_discovered_at,
       `${scope}: the next page is not older than the first`,
     )
-    assert.ok(enrichmentCalls(db).flat().length <= 3, `${scope}: second page enriched too much`)
+    assert.deepEqual(enrichmentCalls(db), [], `${scope}: the second page joined gene facts`)
   })
 }
 
