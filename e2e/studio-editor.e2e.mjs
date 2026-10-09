@@ -503,13 +503,16 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     assert.match(report.tourFirstStep, /1 of \d/)
     await touring.page.screenshot({ path: path.join(OUT, "studio-tour.png") })
     await touring.page.locator(".driver-popover-next-btn").click()
+    // driver.js swaps the popover between steps, so a "detached" wait can end on
+    // the swap: Escape goes to step 2 once it is on screen, and the remembered
+    // step is read when the tour has really closed.
+    await popover.filter({ hasText: /2 of \d/ }).waitFor({ state: "visible" })
     await touring.page.keyboard.press("Escape")
     await popover.waitFor({ state: "detached" })
-    assert.equal(
-      await touring.page.evaluate(() =>
-        window.localStorage.getItem("iconoplasm.diagramStudio.tour.v1"),
-      ),
-      "done",
+    await touring.page.waitForFunction(
+      () => window.localStorage.getItem("iconoplasm.diagramStudio.tour.v1") === "done",
+      null,
+      { timeout: 10_000 },
     )
     assert.deepEqual(touring.errors, [])
     await touring.context.close()
