@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   handleIconoplasmSyncFinalizationQueue,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 class MeteredSummaryStatement {
   constructor(db, sql) {
@@ -120,289 +122,6 @@ class CatalogUpsertDb {
   }
 }
 
-class FakeDailyBudgetNamespace {
-  constructor() {
-    this.dayRows = new Map()
-    this.attributionRows = new Map()
-    this.calls = []
-  }
-
-  idFromName(name) {
-    return String(name || "")
-  }
-
-  smartDailyLimit(monthlyRemainingAtStartOfDay, daysRemainingInCycle, burstMultiplier) {
-    const remaining = Math.max(0, Number(monthlyRemainingAtStartOfDay || 0) || 0)
-    const daysRemaining = Math.max(1, Number(daysRemainingInCycle || 1) || 1)
-    const burst = Math.max(1, Number(burstMultiplier || 1) || 1)
-    if (remaining <= 0) return 0
-    const baseAllowance = Math.ceil(remaining / daysRemaining)
-    return Math.min(remaining, Math.max(baseAllowance, Math.ceil(baseAllowance * burst)))
-  }
-
-  cycleDayRowsWithBudgetHistory(cycleKey, budgets) {
-    const cycleStart = new Date(String(cycleKey || "") + "T00:00:00.000Z")
-    const cycleStartMs = cycleStart.getTime()
-    const nextCycleStartMs = Number.isFinite(cycleStartMs)
-      ? Date.UTC(
-          cycleStart.getUTCFullYear(),
-          cycleStart.getUTCMonth() + 1,
-          cycleStart.getUTCDate(),
-          0,
-          0,
-          0,
-          0,
-        )
-      : NaN
-    const rowsReadMonthlyLimit = Math.max(0, Number(budgets?.rowsReadMonthlyLimit || 0) || 0)
-    const rowsWrittenMonthlyLimit = Math.max(0, Number(budgets?.rowsWrittenMonthlyLimit || 0) || 0)
-    const burstMultiplier = Math.max(1, Number(budgets?.dailyBurstMultiplier || 1) || 1)
-    let cycleRowsReadBeforeDay = 0
-    let cycleRowsWrittenBeforeDay = 0
-    return Array.from(this.dayRows.values())
-      .filter((item) => item.cycle_key === cycleKey)
-      .sort((left, right) =>
-        String(left?.day_key || "").localeCompare(String(right?.day_key || "")),
-      )
-      .map((row) => {
-        const dayStart = new Date(String(row?.day_key || "") + "T00:00:00.000Z")
-        const dayStartMs = dayStart.getTime()
-        const daysRemainingInCycle =
-          Number.isFinite(nextCycleStartMs) && Number.isFinite(dayStartMs)
-            ? Math.max(1, Math.ceil((nextCycleStartMs - dayStartMs) / 86400000))
-            : 1
-        const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
-        const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
-        const rowsReadDailySmartLimit =
-          rowsReadMonthlyLimit > 0
-            ? this.smartDailyLimit(
-                rowsReadMonthlyLimit - cycleRowsReadBeforeDay,
-                daysRemainingInCycle,
-                burstMultiplier,
-              )
-            : null
-        const rowsWrittenDailySmartLimit =
-          rowsWrittenMonthlyLimit > 0
-            ? this.smartDailyLimit(
-                rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeDay,
-                daysRemainingInCycle,
-                burstMultiplier,
-              )
-            : null
-        const out = {
-          ...row,
-          days_remaining_in_cycle: daysRemainingInCycle,
-          rows_read_daily_smart_limit: rowsReadDailySmartLimit,
-          rows_written_daily_smart_limit: rowsWrittenDailySmartLimit,
-          rows_read_daily_remaining:
-            rowsReadDailySmartLimit !== null
-              ? Math.max(0, rowsReadDailySmartLimit - rowsRead)
-              : null,
-          rows_written_daily_remaining:
-            rowsWrittenDailySmartLimit !== null
-              ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
-              : null,
-        }
-        cycleRowsReadBeforeDay += rowsRead
-        cycleRowsWrittenBeforeDay += rowsWritten
-        return out
-      })
-  }
-
-  get(id) {
-    return {
-      fetch: async (request) => {
-        const url = new URL(request.url)
-        const payload = (await request.json().catch(() => ({}))) || {}
-        const dayKey = String(payload?.day_key || "")
-        const cycleKey = String(payload?.cycle_key || dayKey)
-        const daysRemainingInCycle = Math.max(
-          1,
-          Number(payload?.days_remaining_in_cycle || 30) || 30,
-        )
-        const budgets = {
-          rowsReadMonthlyLimit: Math.max(
-            0,
-            Number(payload?.budgets?.rowsReadMonthlyLimit || 0) || 0,
-          ),
-          rowsWrittenMonthlyLimit: Math.max(
-            0,
-            Number(payload?.budgets?.rowsWrittenMonthlyLimit || 0) || 0,
-          ),
-          dailyBurstMultiplier: Math.max(
-            1,
-            Number(payload?.budgets?.dailyBurstMultiplier || 1) || 1,
-          ),
-        }
-        const row = this.dayRows.get(dayKey) || {
-          day_key: dayKey,
-          cycle_key: cycleKey,
-          rows_read: 0,
-          rows_written: 0,
-          query_count: 0,
-          request_count: 0,
-          updated_at: null,
-        }
-        const cycleRows = Array.from(this.dayRows.values()).filter(
-          (item) => item.cycle_key === cycleKey,
-        )
-        if (url.pathname === "/record") {
-          const deltaRowsRead = Math.max(0, Number(payload?.rows_read || 0) || 0)
-          const deltaRowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
-          const deltaQueryCount = Math.max(0, Number(payload?.query_count || 0) || 0)
-          const deltaRequestCount = Math.max(0, Number(payload?.request_count || 0) || 0)
-          row.rows_read += deltaRowsRead
-          row.rows_written += deltaRowsWritten
-          row.query_count += deltaQueryCount
-          row.request_count += deltaRequestCount
-          row.day_key = dayKey
-          row.updated_at = "2026-04-08T00:00:00Z"
-          this.dayRows.set(dayKey, row)
-          if (payload?.attribution) {
-            const attributionKey = [
-              dayKey,
-              cycleKey,
-              String(payload.attribution.route_family || "unknown"),
-              String(payload.attribution.budget_class || "unknown"),
-              String(payload.attribution.actor_class || "unknown"),
-              String(payload.attribution.source_class || "unknown"),
-            ].join("|")
-            const existingAttribution = this.attributionRows.get(attributionKey) || {
-              day_key: dayKey,
-              cycle_key: cycleKey,
-              route_family: String(payload.attribution.route_family || "unknown"),
-              budget_class: String(payload.attribution.budget_class || "unknown"),
-              actor_class: String(payload.attribution.actor_class || "unknown"),
-              source_class: String(payload.attribution.source_class || "unknown"),
-              rows_read: 0,
-              rows_written: 0,
-              query_count: 0,
-              request_count: 0,
-              updated_at: null,
-            }
-            existingAttribution.rows_read += deltaRowsRead
-            existingAttribution.rows_written += deltaRowsWritten
-            existingAttribution.query_count += deltaQueryCount
-            existingAttribution.request_count += deltaRequestCount
-            existingAttribution.updated_at = "2026-04-08T00:00:00Z"
-            this.attributionRows.set(attributionKey, existingAttribution)
-          }
-        }
-        const currentRow = this.dayRows.get(dayKey) || row
-        const cycleRowsAfterUpdate = Array.from(this.dayRows.values()).filter(
-          (item) => item.cycle_key === cycleKey,
-        )
-        const cycleTotals = cycleRowsAfterUpdate.reduce(
-          (totals, item) => {
-            totals.rows_read += item.rows_read || 0
-            totals.rows_written += item.rows_written || 0
-            totals.query_count += item.query_count || 0
-            totals.request_count += item.request_count || 0
-            return totals
-          },
-          { rows_read: 0, rows_written: 0, query_count: 0, request_count: 0 },
-        )
-        const cycleRowsReadBeforeToday = Math.max(0, cycleTotals.rows_read - currentRow.rows_read)
-        const cycleRowsWrittenBeforeToday = Math.max(
-          0,
-          cycleTotals.rows_written - currentRow.rows_written,
-        )
-        const smartDailyReadLimit =
-          budgets.rowsReadMonthlyLimit > 0
-            ? this.smartDailyLimit(
-                budgets.rowsReadMonthlyLimit - cycleRowsReadBeforeToday,
-                daysRemainingInCycle,
-                budgets.dailyBurstMultiplier,
-              )
-            : null
-        const smartDailyWriteLimit =
-          budgets.rowsWrittenMonthlyLimit > 0
-            ? this.smartDailyLimit(
-                budgets.rowsWrittenMonthlyLimit - cycleRowsWrittenBeforeToday,
-                daysRemainingInCycle,
-                budgets.dailyBurstMultiplier,
-              )
-            : null
-        const snapshot = {
-          day_key: dayKey,
-          cycle_key: cycleKey,
-          rows_read: currentRow.rows_read,
-          rows_written: currentRow.rows_written,
-          query_count: currentRow.query_count,
-          request_count: currentRow.request_count,
-          cycle_rows_read: cycleTotals.rows_read,
-          cycle_rows_written: cycleTotals.rows_written,
-          cycle_query_count: cycleTotals.query_count,
-          cycle_request_count: cycleTotals.request_count,
-          rows_read_monthly_limit: budgets.rowsReadMonthlyLimit || null,
-          rows_written_monthly_limit: budgets.rowsWrittenMonthlyLimit || null,
-          rows_read_monthly_remaining:
-            budgets.rowsReadMonthlyLimit > 0
-              ? Math.max(0, budgets.rowsReadMonthlyLimit - cycleTotals.rows_read)
-              : null,
-          rows_written_monthly_remaining:
-            budgets.rowsWrittenMonthlyLimit > 0
-              ? Math.max(0, budgets.rowsWrittenMonthlyLimit - cycleTotals.rows_written)
-              : null,
-          rows_read_daily_smart_limit: smartDailyReadLimit,
-          rows_written_daily_smart_limit: smartDailyWriteLimit,
-          rows_read_daily_remaining:
-            smartDailyReadLimit !== null
-              ? Math.max(0, smartDailyReadLimit - currentRow.rows_read)
-              : null,
-          rows_written_daily_remaining:
-            smartDailyWriteLimit !== null
-              ? Math.max(0, smartDailyWriteLimit - currentRow.rows_written)
-              : null,
-          days_remaining_in_cycle: daysRemainingInCycle,
-          daily_burst_multiplier: budgets.dailyBurstMultiplier,
-          exhausted:
-            (budgets.rowsReadMonthlyLimit > 0 &&
-              cycleTotals.rows_read >= budgets.rowsReadMonthlyLimit) ||
-            (budgets.rowsWrittenMonthlyLimit > 0 &&
-              cycleTotals.rows_written >= budgets.rowsWrittenMonthlyLimit) ||
-            (smartDailyReadLimit !== null && currentRow.rows_read >= smartDailyReadLimit) ||
-            (smartDailyWriteLimit !== null && currentRow.rows_written >= smartDailyWriteLimit),
-          exhausted_by:
-            budgets.rowsReadMonthlyLimit > 0 &&
-            cycleTotals.rows_read >= budgets.rowsReadMonthlyLimit
-              ? "rows_read_monthly"
-              : budgets.rowsWrittenMonthlyLimit > 0 &&
-                  cycleTotals.rows_written >= budgets.rowsWrittenMonthlyLimit
-                ? "rows_written_monthly"
-                : smartDailyReadLimit !== null && currentRow.rows_read >= smartDailyReadLimit
-                  ? "rows_read_daily_smart"
-                  : smartDailyWriteLimit !== null && currentRow.rows_written >= smartDailyWriteLimit
-                    ? "rows_written_daily_smart"
-                    : null,
-          updated_at: currentRow.updated_at,
-        }
-        this.calls.push({
-          id,
-          pathname: url.pathname,
-          payload,
-          snapshot,
-        })
-        if (url.pathname === "/report") {
-          const dailyAttribution = Array.from(this.attributionRows.values()).filter(
-            (item) => item.day_key === dayKey,
-          )
-          const cycleAttribution = Array.from(this.attributionRows.values()).filter(
-            (item) => item.cycle_key === cycleKey,
-          )
-          return Response.json({
-            snapshot,
-            cycle_days: this.cycleDayRowsWithBudgetHistory(cycleKey, budgets),
-            daily_attribution: dailyAttribution,
-            cycle_attribution: cycleAttribution,
-          })
-        }
-        return Response.json(snapshot)
-      },
-    }
-  }
-}
-
 function adminSummaryRequest() {
   return new Request(
     "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/assets/summary",
@@ -421,10 +140,6 @@ test("read-only Iconoplasm admin summaries are metered under the shared budget (
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "5000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
   }
 
   const first =
@@ -443,15 +158,12 @@ test("read-only Iconoplasm admin summaries are metered under the shared budget (
 
 test("an exhausted shared day makes admin read summaries fail closed (B-744)", async () => {
   const db = new MeteredSummaryDb({ rowsReadPerQuery: 2 })
-  const budgetNamespace = new FakeDailyBudgetNamespace()
+  // The account has already read Cloudflare's whole daily allowance today.
+  const budgetNamespace = new FakeDailyBudgetNamespace({ rowsRead: FREE_D1_DAILY_LIMITS.reads })
   const env = {
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
   }
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -460,6 +172,10 @@ test("an exhausted shared day makes admin read summaries fail closed (B-744)", a
       { waitUntil() {} },
     )
   assert.equal(response.status, 503)
+  const payload = await response.json()
+  assert.equal(payload?.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
+  assert.equal(payload?.budget?.exhausted_by, "rows_read_daily")
+  assert.equal(db.calls.length, 0, "an exhausted day stops the read before it reaches D1")
 })
 
 test("admin cost usage now points operators at Cloudflare observability instead of an internal ledger report", async () => {
@@ -469,10 +185,6 @@ test("admin cost usage now points operators at Cloudflare observability instead 
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
   }
 
   const summaryResponse =
@@ -522,10 +234,6 @@ test("admin cost snapshot serves the baked observability payload without touchin
       {
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -726,10 +434,6 @@ test("admin mutation limiter policy reports the live limiter basis so Website Op
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
   }
 
   const response =
@@ -752,10 +456,15 @@ test("admin mutation limiter policy reports the live limiter basis so Website Op
   assert.equal(payload?.mutation_limiter?.active, true)
   assert.equal(payload?.mutation_limiter?.budget_basis, "d1_rows_written_daily_smart_limit")
   assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
-  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit > 0, true)
+  // The limiter's wall is Cloudflare's own daily write allowance (B-1026), and its
+  // target ceiling is 85% of it.
+  assert.equal(
+    payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit,
+    FREE_D1_DAILY_LIMITS.writes,
+  )
   assert.equal(
     payload?.mutation_limiter?.target_rows_written_ceiling,
-    Math.floor(payload?.mutation_limiter?.budget_snapshot?.rows_written_daily_smart_limit * 0.85),
+    Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85),
   )
   assert.equal(payload?.mutation_limiter?.explains_do_cap, false)
   assert.match(
@@ -941,11 +650,6 @@ test("daily budget report survives constructor schema writes after DO free-tier 
         day_key: "2026-04-17",
         cycle_key: "2026-04-07",
         days_remaining_in_cycle: 20,
-        budgets: {
-          rowsReadMonthlyLimit: 24000000000,
-          rowsWrittenMonthlyLimit: 40000000,
-          dailyBurstMultiplier: 3,
-        },
       }),
     }),
   )
@@ -986,16 +690,12 @@ test("admin cost usage no longer queries the DO ledger even when that report pat
             cycle_rows_written: 0,
             cycle_query_count: 0,
             cycle_request_count: 0,
-            rows_read_monthly_limit: 24000000000,
-            rows_written_monthly_limit: 40000000,
-            rows_read_monthly_remaining: 24000000000,
-            rows_written_monthly_remaining: 40000000,
-            rows_read_daily_smart_limit: 3428571429,
-            rows_written_daily_smart_limit: 5714286,
-            rows_read_daily_remaining: 3428571429,
-            rows_written_daily_remaining: 5714286,
+            rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+            rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+            rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+            rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes,
             days_remaining_in_cycle: 21,
-            daily_burst_multiplier: 3,
+            daily_burst_multiplier: 1,
             exhausted: false,
             exhausted_by: null,
             updated_at: "2026-04-17T04:00:00Z",
@@ -1020,10 +720,6 @@ test("admin cost usage no longer queries the DO ledger even when that report pat
       {
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1099,7 +795,7 @@ test("write-heavy admin mutations fail before starting once the configured targe
               (this.snapshot.rows_written_daily_smart_limit != null &&
                 Number(this.snapshot.rows_written || 0) >=
                   Number(this.snapshot.rows_written_daily_smart_limit || 0))
-            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily_smart" : null
+            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily" : null
           }
           return Response.json(this.snapshot)
         },
@@ -1107,28 +803,34 @@ test("write-heavy admin mutations fail before starting once the configured targe
     }
   }
 
+  // The account has written one row more than the limiter's target share (85%) of
+  // Cloudflare's daily write allowance, and is still under the allowance itself.
+  const targetCeiling = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85)
+  const written = targetCeiling + 1
   const db = new CatalogUpsertDb({ rowsWrittenPerRun: 2 })
   const budgetNamespace = new FixedSnapshotBudgetNamespace({
     day_key: "2026-04-17",
     cycle_key: "2026-04-07",
     rows_read: 0,
-    rows_written: 18,
+    rows_written: written,
     query_count: 3,
     request_count: 1,
     cycle_rows_read: 0,
-    cycle_rows_written: 18,
+    cycle_rows_written: written,
     cycle_query_count: 3,
     cycle_request_count: 1,
-    rows_read_monthly_limit: 24000000000,
-    rows_written_monthly_limit: 100,
-    rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 82,
-    rows_read_daily_smart_limit: 1000,
-    rows_written_daily_smart_limit: 20,
-    rows_read_daily_remaining: 1000,
-    rows_written_daily_remaining: 2,
+    rows_read_monthly_limit: null,
+    rows_written_monthly_limit: null,
+    rows_read_monthly_remaining: null,
+    rows_written_monthly_remaining: null,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+    rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes - written,
+    account_rows_read: 0,
+    account_rows_written: written,
     days_remaining_in_cycle: 20,
-    daily_burst_multiplier: 3,
+    daily_burst_multiplier: 1,
     exhausted: false,
     exhausted_by: null,
     updated_at: "2026-04-17T05:00:00Z",
@@ -1156,10 +858,6 @@ test("write-heavy admin mutations fail before starting once the configured targe
         ICONOPLASM_DB: db,
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1170,7 +868,7 @@ test("write-heavy admin mutations fail before starting once the configured targe
   assert.equal(payload?.limiter?.stage, "preflight")
   assert.equal(payload?.limiter?.reason, "rows_written_target_cap_reached_before_start")
   assert.equal(payload?.limiter?.target_daily_percent, 85)
-  assert.equal(payload?.limiter?.target_rows_written_ceiling, 17)
+  assert.equal(payload?.limiter?.target_rows_written_ceiling, targetCeiling)
   assert.equal(payload?.limiter?.rows_written_target_remaining, 0)
   assert.equal(db.catalogUpsertRuns, 0)
   assert.deepEqual(
@@ -1241,7 +939,7 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
               (this.snapshot.rows_written_daily_smart_limit != null &&
                 Number(this.snapshot.rows_written || 0) >=
                   Number(this.snapshot.rows_written_daily_smart_limit || 0))
-            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily_smart" : null
+            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily" : null
           }
           return Response.json(this.snapshot)
         },
@@ -1250,6 +948,12 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
   }
 
   const db = new CatalogUpsertDb({ rowsWrittenPerRun: 2 })
+  // The budget object answers for a day that is deliberately tiny: a wall of 12 writes
+  // with 4 used. The limiter's target (85% of 12 is 10) has room for the preflight,
+  // while the five-gene batch's reservation is larger than the 8 writes left under the
+  // wall, so the atomic reservation, not the preflight, is what refuses it. (At
+  // Cloudflare's real allowance of 100,000 the target cap would trip first, long
+  // before a five-gene batch could outgrow what is left.)
   const budgetNamespace = new FixedSnapshotBudgetNamespace({
     day_key: "2026-04-17",
     cycle_key: "2026-04-07",
@@ -1261,16 +965,16 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
     cycle_rows_written: 4,
     cycle_query_count: 1,
     cycle_request_count: 1,
-    rows_read_monthly_limit: 24000000000,
-    rows_written_monthly_limit: 100,
-    rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 96,
-    rows_read_daily_smart_limit: 1000,
+    rows_read_monthly_limit: null,
+    rows_written_monthly_limit: null,
+    rows_read_monthly_remaining: null,
+    rows_written_monthly_remaining: null,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
     rows_written_daily_smart_limit: 12,
-    rows_read_daily_remaining: 1000,
+    rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
     rows_written_daily_remaining: 8,
     days_remaining_in_cycle: 20,
-    daily_burst_multiplier: 3,
+    daily_burst_multiplier: 1,
     exhausted: false,
     exhausted_by: null,
     updated_at: "2026-04-17T05:00:00Z",
@@ -1317,10 +1021,6 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
         ICONOPLASM_DB: db,
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1366,10 +1066,6 @@ test("iconoplasm health stays up and does not touch the limiter DO on read-only 
       new Request("https://the-only-allowed-internal-stateful-worker-do-not-duplicate/health"),
       {
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1428,10 +1124,6 @@ test("write-heavy admin mutations still fail closed when snapshot telemetry is l
         ICONOPLASM_DB: db,
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1497,10 +1189,6 @@ test("all sync-owned admin mutation routes still hit the limiter preflight befor
         {
           ICONOPLASM_ADMIN_TOKEN: "founder-secret",
           ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-          ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-          ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-          ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-          ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
         },
         { waitUntil() {} },
       )
@@ -1584,7 +1272,7 @@ test("write-heavy admin mutations flush the shared budget ledger once even when 
               (this.snapshot.rows_written_daily_smart_limit != null &&
                 Number(this.snapshot.rows_written || 0) >=
                   Number(this.snapshot.rows_written_daily_smart_limit || 0))
-            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily_smart" : null
+            this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily" : null
           }
           return Response.json(this.snapshot)
         },
@@ -1604,16 +1292,16 @@ test("write-heavy admin mutations flush the shared budget ledger once even when 
     cycle_rows_written: 0,
     cycle_query_count: 0,
     cycle_request_count: 0,
-    rows_read_monthly_limit: 24000000000,
-    rows_written_monthly_limit: 50000,
-    rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 50000,
-    rows_read_daily_smart_limit: 100000,
-    rows_written_daily_smart_limit: 10000,
-    rows_read_daily_remaining: 100000,
-    rows_written_daily_remaining: 10000,
+    rows_read_monthly_limit: null,
+    rows_written_monthly_limit: null,
+    rows_read_monthly_remaining: null,
+    rows_written_monthly_remaining: null,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+    rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes,
     days_remaining_in_cycle: 20,
-    daily_burst_multiplier: 3,
+    daily_burst_multiplier: 1,
     exhausted: false,
     exhausted_by: null,
     updated_at: "2026-04-17T05:00:00Z",
@@ -1647,10 +1335,6 @@ test("write-heavy admin mutations flush the shared budget ledger once even when 
         ICONOPLASM_DB: db,
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "50000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     )
@@ -1781,11 +1465,6 @@ test("daily budget durable object records only shared totals and skips hot-path 
         day_key: "2026-04-17",
         cycle_key: "2026-04-07",
         days_remaining_in_cycle: 20,
-        budgets: {
-          rowsReadMonthlyLimit: 24000000000,
-          rowsWrittenMonthlyLimit: 40000000,
-          dailyBurstMultiplier: 3,
-        },
         rows_read: 11,
         rows_written: 22,
         query_count: 3,
@@ -1813,10 +1492,6 @@ function authorityLaneEnv(overrides = {}) {
     ICONOPLASM_DB: new MeteredSummaryDb({ rowsReadPerQuery: 1 }),
     ICONOPLASM_ADMIN_TOKEN: "founder-secret",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "5000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "10",
     ...overrides,
   }
 }
@@ -1853,22 +1528,14 @@ test("unauthenticated replica reads stop before budget or database work", async 
 })
 
 test("replica reads without a prediction stop before D1 even on an exhausted day", async () => {
+  // The account has already read Cloudflare's whole daily allowance today.
   const env = authorityLaneEnv({
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "2",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace({
+      rowsRead: FREE_D1_DAILY_LIMITS.reads,
+    }),
   })
-  const budgetNamespace = env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE
   const db = env.ICONOPLASM_DB
   env.ICONOPLASM_AUTHORITY_REPLICA_TOKEN = "replica-secret"
-  const todayKey = new Date().toISOString().slice(0, 10)
-  budgetNamespace.dayRows.set(todayKey, {
-    day_key: todayKey,
-    cycle_key: todayKey,
-    rows_read: 2,
-    rows_written: 0,
-    query_count: 0,
-    request_count: 0,
-    updated_at: new Date().toISOString(),
-  })
 
   const request = authorityLaneRequest()
   request.headers.set("Authorization", "Bearer replica-secret")
@@ -1925,10 +1592,6 @@ function syncFinalizationQueueEnv(budgetNamespace, db) {
       }),
     },
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
   }
 }
 
@@ -2008,14 +1671,14 @@ test("sync finalization queue consumer fails closed when the shared daily ledger
           Response.json({
             day_key: "2026-01-01",
             cycle_key: "2026-01-01",
-            rows_read: 999999999999,
+            rows_read: FREE_D1_DAILY_LIMITS.reads,
             rows_written: 0,
-            rows_read_daily_smart_limit: 1000,
-            rows_written_daily_smart_limit: 1000000,
+            rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+            rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
             rows_read_daily_remaining: 0,
-            rows_written_daily_remaining: 1000000,
+            rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes,
             exhausted: true,
-            exhausted_by: "rows_read_daily_smart",
+            exhausted_by: "rows_read_daily",
             days_remaining_in_cycle: 1,
           }),
       }

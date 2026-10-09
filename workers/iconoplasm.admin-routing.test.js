@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -129,6 +130,7 @@ test("admin canon audit derives portrait URLs from asset sha even when legacy ke
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: new FakeDb(),
       },
       { waitUntil() {} },
@@ -214,6 +216,7 @@ test("admin assets list derives portrait URLs from asset sha instead of copied k
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: new FakeDb(),
       },
       { waitUntil() {} },
@@ -281,7 +284,9 @@ test("admin asset repair scope falls back to unverified published portraits when
       ) {
         return { results: this.db.repairableRows() }
       }
-      throw new Error(`Unexpected SQL in durable repair-scope all(): ${this.sql}`)
+      // The budget wrapper reads first() through all(): answer it from first().
+      const row = await this.first()
+      return { results: row ? [row] : [] }
     }
 
     async run() {
@@ -491,6 +496,7 @@ test("admin asset repair scope falls back to unverified published portraits when
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: new FakeDb(),
         ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
       },
@@ -573,7 +579,9 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
             })),
         }
       }
-      throw new Error(`Unexpected SQL in durable storage-audit all(): ${this.sql}`)
+      // The budget wrapper reads first() through all(): answer it from first().
+      const row = await this.first()
+      return { results: row ? [row] : [] }
     }
 
     async run() {
@@ -807,6 +815,7 @@ test("admin asset storage audit consumes queued work and refreshes the persisted
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: new FakeDb(),
         ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
       },

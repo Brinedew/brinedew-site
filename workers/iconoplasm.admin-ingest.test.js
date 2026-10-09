@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 let lastPortraitAssetInsertBoundValues = []
 
@@ -100,12 +102,15 @@ function bindOnlyAllowedGateway(env, gatewayEnv = env, ctx = { waitUntil() {} })
   return env
 }
 
+// B-1026: the gateway enforces Cloudflare's daily allowance whenever the shared budget
+// object is bound, so every ingest runs against one. This one starts the day idle.
 function buildEnv({ bindGateway = true } = {}) {
   const gatewayDb = new FakeIconoplasmDb()
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   const env = {
     ...gatewayEnv,
@@ -243,6 +248,7 @@ test("normal external-storage ingest does not run read-after-write retries per r
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   const env = bindOnlyAllowedGateway({ ...gatewayEnv, ICONOPLASM_DB: null, gatewayDb }, gatewayEnv)
   const base64 = Buffer.from("fake-webp-payload").toString("base64")
@@ -325,42 +331,16 @@ test("admin ingest can explicitly clear sample hash for unknown provenance", asy
 })
 
 test("admin ingest success returns current mutation-limiter telemetry for sync forecasting", async () => {
-  const budgetNamespace = {
-    idFromName(name) {
-      return String(name || "")
-    },
-    get() {
-      return {
-        fetch: async () =>
-          new Response(
-            JSON.stringify({
-              day_key: "2026-04-16",
-              cycle_key: "2026-04",
-              days_remaining_in_cycle: 12,
-              rows_written: 24,
-              rows_written_daily_smart_limit: 100,
-              rows_written_daily_remaining: 76,
-              rows_written_monthly_limit: 1000,
-              rows_written_monthly_remaining: 976,
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-      }
-    },
-  }
+  // The account has written 24 rows today; the limiter's wall is Cloudflare's daily
+  // write allowance and its target is 85% of it.
+  const writtenToday = 24
+  const budgetNamespace = new FakeDailyBudgetNamespace({ rowsWritten: writtenToday })
   const gatewayDb = new FakeIconoplasmDb()
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
   }
   const env = bindOnlyAllowedGateway(
     {
@@ -396,9 +376,13 @@ test("admin ingest success returns current mutation-limiter telemetry for sync f
 
   assert.equal(response.status, 200)
   assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
-  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 85)
-  assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 61)
-  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
+  const targetCeiling = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85)
+  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, targetCeiling)
+  assert.equal(
+    payload?.mutation_limiter?.rows_written_target_remaining,
+    targetCeiling - writtenToday,
+  )
+  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, writtenToday)
 })
 
 test("admin ingest proxy forwards POST bodies without cloning them into text first", async () => {
