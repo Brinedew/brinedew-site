@@ -5,7 +5,7 @@
 // the gene, which heals a stale object. A republish failure never turns a
 // committed delete into an error: the remove_candidate event lets the Actions
 // publisher repair the object on its next run.
-const REQUIRED_SERVICES = Object.freeze(["remove", "wasRemoved", "republish", "afterRemoval"])
+const REQUIRED_SERVICES = Object.freeze(["remove", "wasRemoved", "republish"])
 
 export function createIconoplasmCandidateRemoval(services) {
   for (const name of REQUIRED_SERVICES) {
@@ -13,7 +13,7 @@ export function createIconoplasmCandidateRemoval(services) {
       throw new TypeError(`Iconoplasm candidate removal service is missing: ${name}`)
     }
   }
-  const { remove, wasRemoved, republish, afterRemoval } = services
+  const { remove, wasRemoved, republish } = services
 
   async function republishQuietly(symbol) {
     try {
@@ -52,7 +52,6 @@ export function createIconoplasmCandidateRemoval(services) {
       }
     }
     if (!removal?.ok) return { status: 404, body: { error: "Asset not found" } }
-    await afterRemoval(symbol)
     return {
       status: 200,
       body: {

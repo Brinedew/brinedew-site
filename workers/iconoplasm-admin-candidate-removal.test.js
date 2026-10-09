@@ -21,7 +21,7 @@ import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-r
 const SHA = "a".repeat(64)
 
 function services(overrides = {}) {
-  const calls = { remove: [], wasRemoved: [], republish: [], afterRemoval: [] }
+  const calls = { remove: [], wasRemoved: [], republish: [] }
   const removal = createIconoplasmCandidateRemoval({
     remove: async (input) => {
       calls.remove.push(input)
@@ -36,9 +36,6 @@ function services(overrides = {}) {
       if (overrides.republishThrows) throw new Error("Bunny PUT refused")
       return { symbol }
     },
-    afterRemoval: async (symbol) => {
-      calls.afterRemoval.push(symbol)
-    },
   })
   return { removal, calls }
 }
@@ -51,7 +48,6 @@ test("a committed delete republishes the gene before it answers", async () => {
   assert.equal(result.body.republished, true)
   assert.equal(result.body.already_removed, undefined)
   assert.deepEqual(calls.republish, ["ABCC11"])
-  assert.deepEqual(calls.afterRemoval, ["ABCC11"])
 })
 
 test("deleting an already removed candidate succeeds and heals the stale object", async () => {
@@ -65,7 +61,6 @@ test("deleting an already removed candidate succeeds and heals the stale object"
   assert.equal(result.body.republished, true)
   assert.deepEqual(calls.wasRemoved, [["ABCC11", SHA]])
   assert.deepEqual(calls.republish, ["ABCC11"])
-  assert.deepEqual(calls.afterRemoval, [])
 })
 
 test("an asset that never belonged to the gene stays a 404", async () => {
