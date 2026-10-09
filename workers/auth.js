@@ -8,7 +8,7 @@ import {
 } from "./lib/brinedew-account-identity.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import {
-  isD1DailyRowReadLimitError,
+  isD1DailyRowLimitError,
   isDurableObjectDailyDurationLimitError,
   secondsUntilCloudflareDailyReset,
 } from "./lib/cloudflare-availability.js"
@@ -570,7 +570,7 @@ export async function handleCallback(request, env) {
       now,
     })
   } catch (error) {
-    if (isD1DailyRowReadLimitError(error)) {
+    if (isD1DailyRowLimitError(error)) {
       console.error("Discord OAuth account resolution deferred until the D1 daily reset")
       return oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr })
     }
@@ -634,7 +634,7 @@ export async function handleCallback(request, env) {
       )
       .run()
   } catch (error) {
-    if (!isD1DailyRowReadLimitError(error)) throw error
+    if (!isD1DailyRowLimitError(error)) throw error
     console.error("Discord OAuth profile projection deferred until the D1 daily reset")
     return oauthAuthorityUnavailableResponse({ oauthCookieName, cookieDomainAttr })
   }
