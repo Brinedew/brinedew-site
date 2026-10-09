@@ -6,6 +6,11 @@ import {
   requireReaderRecoveryHeadroom,
   selectReleaseOriginRunId,
 } from "./read-iconoplasm-release-state.mjs"
+import {
+  FREE_PLAN_DAILY_LIMITS,
+  KV_ACCOUNT_CEILINGS,
+  OPERATOR_ACCOUNT_CEILINGS,
+} from "../shared/iconoplasm-d1-budget-policy.js"
 
 const credentials = { accountId: "a".repeat(32), token: "test-private-token" }
 const binding = (name, text) => ({ name, type: "plain_text", text })
@@ -101,8 +106,9 @@ test("zero-D1 reader recovery preserves Worker and KV headroom even when D1 is e
     kv_measured_at: now,
     requests: 5000,
     kv_reads: 1000,
-    rows_read: 5000000,
-    rows_written: 100000,
+    // D1 is spent: both D1 meters sit at Cloudflare's wall.
+    rows_read: FREE_PLAN_DAILY_LIMITS.rows_read,
+    rows_written: FREE_PLAN_DAILY_LIMITS.rows_written,
   }
   assert.deepEqual(requireReaderRecoveryHeadroom(sample, now), {
     rows_read: 0,
@@ -118,12 +124,22 @@ test("zero-D1 reader recovery preserves Worker and KV headroom even when D1 is e
     { ...sample, day: "2026-09-07" },
   ])
     assert.throws(() => requireReaderRecoveryHeadroom(bad, now), /USAGE_UNAVAILABLE/)
+  // The recovery needs 20 requests and 100 KV reads under the account's batch
+  // ceilings; one unit short of that room is refused.
   assert.throws(
-    () => requireReaderRecoveryHeadroom({ ...sample, requests: 74981 }, now),
+    () =>
+      requireReaderRecoveryHeadroom(
+        { ...sample, requests: OPERATOR_ACCOUNT_CEILINGS.requests - 20 + 1 },
+        now,
+      ),
     /HEADROOM: requests/,
   )
   assert.throws(
-    () => requireReaderRecoveryHeadroom({ ...sample, kv_reads: 69901 }, now),
+    () =>
+      requireReaderRecoveryHeadroom(
+        { ...sample, kv_reads: KV_ACCOUNT_CEILINGS.kv_reads - 100 + 1 },
+        now,
+      ),
     /HEADROOM: kv_reads/,
   )
 })

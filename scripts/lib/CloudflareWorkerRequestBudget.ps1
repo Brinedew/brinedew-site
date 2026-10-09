@@ -14,7 +14,7 @@ function Get-IconoplasmBudgetPolicy {
     # Node turns the plain path into a file URL itself, and the path travels in the
     # environment: on Linux CI, pwsh dropped a trailing Node argument and .NET's
     # [Uri] produced an unusable URL.
-    $reader = "import { pathToFileURL } from 'node:url'; const p = await import(pathToFileURL(process.env.ICONOPLASM_BUDGET_POLICY_PATH).href); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.OPERATOR_DAILY_REQUEST_LIMIT }))"
+    $reader = "import { pathToFileURL } from 'node:url'; const p = await import(pathToFileURL(process.env.ICONOPLASM_BUDGET_POLICY_PATH).href); console.log(JSON.stringify({ account: p.OPERATOR_ACCOUNT_CEILINGS, requests: p.FREE_PLAN_DAILY_LIMITS.requests }))"
     $previousPath = $env:ICONOPLASM_BUDGET_POLICY_PATH
     $env:ICONOPLASM_BUDGET_POLICY_PATH = $policyPath
     try {

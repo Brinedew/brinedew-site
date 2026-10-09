@@ -9,7 +9,9 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   DailyMutationLaneReservations,
+  MUTATION_BACKGROUND_CEILING,
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
+  MUTATION_USER_ACTION_CEILING,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
 import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
 
@@ -198,51 +200,72 @@ test("a completed operation counts once: in the live tally, not again as a recei
   t.after(() => raw.close())
   const day = "2026-10-06"
   const now = "2026-10-06T13:40:00.000Z"
-  for (let index = 0; index < 600; index += 1) {
+  // Every size is a share of the background ceiling, so the scenario keeps its
+  // shape when the ceiling moves. A rewrite reserves 96 units.
+  const ceiling = MUTATION_BACKGROUND_CEILING
+  const rewrite = 96
+  // 1. The local tally holds 70% of the ceiling. Completed receipts worth 82% of
+  // it sit beside the tally: counted a second time they would cross the ceiling.
+  const tally = Math.floor(ceiling * 0.7)
+  const completedReceipts = Math.ceil((ceiling * 0.82) / rewrite)
+  assert.ok(tally + completedReceipts * rewrite > ceiling)
+  assert.ok(tally + rewrite <= ceiling)
+  for (let index = 0; index < completedReceipts; index += 1) {
     const id = `rewrite:${index}`
     assert.equal(
-      ledger.reserve({ day, lane: "laptop_delivery", operation_id: id, units: 96, now }).ok,
+      ledger.reserve({ day, lane: "laptop_delivery", operation_id: id, units: rewrite, now }).ok,
       true,
     )
     ledger.complete({ operation_id: id, completed_at: now })
   }
-  // 600 x 96 = 57,600 completed receipts; their real writes are in the tally.
-  const next = { day, lane: "laptop_delivery", units: 96, local_rows_written: 49_300, now }
-  assert.equal(ledger.reserve({ ...next, operation_id: "rewrite:600" }).ok, true) // 1
+  // Their real writes are in the tally.
+  const next = { day, lane: "laptop_delivery", units: rewrite, local_rows_written: tally, now }
+  assert.equal(ledger.reserve({ ...next, operation_id: "rewrite:open" }).ok, true) // 1
 
-  // 2. Open receipts still count: 49,300 + 20,096 open + 1,000 is over 70,000.
-  for (let index = 0; index < 20; index += 1) {
-    ledger.reserve({ ...next, operation_id: `open:${index}`, units: 1_000 })
+  // 2. Open receipts still count: the tally, the open rewrite and open
+  // reservations of 1,000 each, up to the last whole thousand under the
+  // ceiling, leave no room for one more 1,000.
+  const openReservations = Math.floor((ceiling - tally - rewrite) / 1_000)
+  for (let index = 0; index < openReservations; index += 1) {
+    assert.equal(ledger.reserve({ ...next, operation_id: `open:${index}`, units: 1_000 }).ok, true)
   }
-  const crowded = ledger.reserve({ ...next, operation_id: "rewrite:601", units: 1_000 })
+  const crowded = ledger.reserve({ ...next, operation_id: "rewrite:crowded", units: 1_000 })
   assert.equal(crowded.ok, false)
   assert.equal(crowded.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
 
   // 3. With a provider sample, receipts made since its window count against it,
-  // completed or not: the sample cannot see them yet.
+  // completed or not: the sample cannot see them yet. The sample reads 60% of
+  // the ceiling and enough recent receipts follow it to fill the other 40%.
   const { raw: raw2, ledger: sampled } = pressureLedger()
   t.after(() => raw2.close())
   const observed = { observed_at: "2026-10-06T13:39:00.000Z", now }
-  for (let index = 0; index < 300; index += 1) {
+  const sample = Math.floor(ceiling * 0.6)
+  const recentReceipts = Math.ceil((ceiling - sample) / rewrite)
+  assert.ok(sample + rewrite <= ceiling) // unseen receipts are the only reason to refuse
+  for (let index = 0; index < recentReceipts; index += 1) {
     const id = `recent:${index}`
-    sampled.reserve({ day, lane: "laptop_delivery", operation_id: id, units: 96, ...observed })
+    sampled.reserve({ day, lane: "laptop_delivery", operation_id: id, units: rewrite, ...observed })
     sampled.complete({ operation_id: id, completed_at: now })
   }
   const lagging = sampled.reserve({
     day,
     lane: "laptop_delivery",
-    operation_id: "recent:300",
-    units: 96,
-    provider_rows_written: 41_300,
+    operation_id: "recent:next",
+    units: rewrite,
+    provider_rows_written: sample,
     local_rows_written: 0,
     ...observed,
   })
-  assert.equal(lagging.ok, false) // 41,300 + 28,800 + 96 is over 70,000
+  assert.equal(lagging.ok, false) // the sample + the recent receipts + 96 is over the ceiling
 
-  // 4. user_action receipts always count on the tally side.
+  // 4. user_action receipts always count on the tally side. The tally holds 60%
+  // of the ceiling and the votes (1,000 each) fill the rest.
   const { raw: raw3, ledger: votes } = pressureLedger()
   t.after(() => raw3.close())
-  for (let index = 0; index < 30; index += 1) {
+  const voteTally = Math.floor(ceiling * 0.6)
+  const voteCount = Math.ceil((ceiling - voteTally) / 1_000)
+  assert.ok(voteTally + rewrite <= ceiling) // the votes are the only reason to refuse
+  for (let index = 0; index < voteCount; index += 1) {
     const id = `discovery:${index}`
     votes.reserve({ day, lane: "user_action", operation_id: id, units: 1_000, now })
     votes.complete({ operation_id: id, completed_at: now })
@@ -251,11 +274,11 @@ test("a completed operation counts once: in the live tally, not again as a recei
     day,
     lane: "laptop_delivery",
     operation_id: "after-votes",
-    units: 96,
-    local_rows_written: 41_000,
+    units: rewrite,
+    local_rows_written: voteTally,
     now,
   })
-  assert.equal(background.ok, false) // 41,000 + 30,000 + 96 is over 70,000
+  assert.equal(background.ok, false) // the tally + the votes + 96 is over the ceiling
 })
 
 // B-897: the old fixed lanes summed every reservation started today at its
@@ -298,33 +321,36 @@ test("recent reservations accumulate until the background ceiling refuses", (t) 
     observed_at: "2026-09-30T12:00:00.000Z",
     now: "2026-09-30T12:01:00.000Z",
   }
-  for (let index = 0; index < 7; index += 1) {
+  // Bursts of up to 10,000 fill the background ceiling exactly.
+  for (let reserved = 0, index = 0; reserved < MUTATION_BACKGROUND_CEILING; index += 1) {
+    const units = Math.min(10_000, MUTATION_BACKGROUND_CEILING - reserved)
     assert.equal(
       ledger.reserve({
         day,
         lane: "laptop_delivery",
         operation_id: `burst:${index}`,
-        units: 10_000,
+        units,
         ...at,
       }).ok,
       true,
     )
+    reserved += units
   }
   const refused = ledger.reserve({
     day,
     lane: "laptop_delivery",
-    operation_id: "burst:7",
+    operation_id: "burst:over",
     units: 1,
     ...at,
   })
   assert.equal(refused.ok, false)
   assert.equal(refused.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
-  assert.equal(refused.in_flight_units, 70_000)
-  assert.equal(refused.ceiling, 70_000)
+  assert.equal(refused.in_flight_units, MUTATION_BACKGROUND_CEILING)
+  assert.equal(refused.ceiling, MUTATION_BACKGROUND_CEILING)
   // Users keep the band above background work.
+  const band = MUTATION_USER_ACTION_CEILING - MUTATION_BACKGROUND_CEILING
   assert.equal(
-    ledger.reserve({ day, lane: "user_action", operation_id: "burst:user", units: 20_000, ...at })
-      .ok,
+    ledger.reserve({ day, lane: "user_action", operation_id: "burst:user", units: band, ...at }).ok,
     true,
   )
   assert.equal(
@@ -338,11 +364,14 @@ test("without any provider observation today every reservation since midnight co
   const { raw, ledger } = pressureLedger()
   t.after(() => raw.close())
   const day = "2026-09-30"
+  // The early reservation leaves 50 units under the ceiling; every later one
+  // asks for 51.
+  const earlyUnits = MUTATION_BACKGROUND_CEILING - 50
   const early = ledger.reserve({
     day,
     lane: "finalization_recovery",
     operation_id: "blind:early",
-    units: 69_950,
+    units: earlyUnits,
     now: "2026-09-30T00:05:00.000Z",
   })
   assert.equal(early.ok, true)
@@ -354,7 +383,7 @@ test("without any provider observation today every reservation since midnight co
     now: "2026-09-30T23:55:00.000Z",
   })
   assert.equal(late.ok, false)
-  assert.equal(late.in_flight_units, 69_950)
+  assert.equal(late.in_flight_units, earlyUnits)
   // Yesterday's observation is not a baseline for today.
   const stale = ledger.reserve({
     day,
@@ -379,12 +408,14 @@ test("without any provider observation today every reservation since midnight co
   assert.equal(future.ok, false)
 })
 
-test("user actions are admitted above the background ceiling up to 90 percent", (t) => {
+test("user actions are admitted above the background ceiling up to the user-action ceiling", (t) => {
   const { raw, ledger } = pressureLedger()
   t.after(() => raw.close())
   const day = "2026-09-30"
+  // The provider meter sits one unit under the background ceiling.
+  const provider = MUTATION_BACKGROUND_CEILING - 1
   const at = {
-    provider_rows_written: 69_999,
+    provider_rows_written: provider,
     observed_at: "2026-09-30T12:00:00.000Z",
     now: "2026-09-30T12:01:00.000Z",
   }
@@ -393,8 +424,13 @@ test("user actions are admitted above the background ceiling up to 90 percent", 
     false,
   )
   assert.equal(
-    ledger.reserve({ day, lane: "user_action", operation_id: "tier:user", units: 20_001, ...at })
-      .ok,
+    ledger.reserve({
+      day,
+      lane: "user_action",
+      operation_id: "tier:user",
+      units: MUTATION_USER_ACTION_CEILING - provider,
+      ...at,
+    }).ok,
     true,
   )
   assert.equal(
@@ -504,10 +540,14 @@ test("locally recorded writes and recent reservations share the background ceili
   // the request on that same UTC day so this contract does not turn into a
   // midnight-expiry test merely because the calendar advanced.
   const day = new Date().toISOString().slice(0, 10)
+  // The tally and the open user-action reservation together fill the background
+  // ceiling exactly; the user action itself is far below its own ceiling.
+  const openUnits = 5_000
+  const recordedRows = MUTATION_BACKGROUND_CEILING - openUnits
   const recorded = await post("/record", {
     day_key: day,
     cycle_key: day,
-    rows_written: 65_000,
+    rows_written: recordedRows,
   })
   assert.equal(recorded.status, 200)
 
@@ -515,7 +555,7 @@ test("locally recorded writes and recent reservations share the background ceili
     day_key: day,
     lane: "user_action",
     operation_id: "known-headroom:accepted",
-    units: 5_000,
+    units: openUnits,
   })
   assert.equal(accepted.status, 200)
 
@@ -534,9 +574,9 @@ test("locally recorded writes and recent reservations share the background ceili
     ),
     {
       code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
-      provider_rows_written: 65_000,
-      in_flight_units: 5_000,
-      ceiling: 70_000,
+      provider_rows_written: recordedRows,
+      in_flight_units: openUnits,
+      ceiling: MUTATION_BACKGROUND_CEILING,
     },
   )
 })
@@ -584,9 +624,12 @@ test("missing provider telemetry admits against our own worst-case receipts, nev
 test("staging admission reads the shared account-wide provider observation from PROD_KV", async (t) => {
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
+  // The shared observation leaves exactly 20,000 units under the background
+  // ceiling; the request asks for one more.
+  const observedRows = MUTATION_BACKGROUND_CEILING - 20_000
   const owner = budgetOwner(raw, {
     KV: { get: async () => null },
-    PROD_KV: providerObservationKv({ rowsWritten: 50_000 }),
+    PROD_KV: providerObservationKv({ rowsWritten: observedRows }),
   })
   const response = await reserveThrough(owner, {
     lane: "laptop_delivery",
@@ -594,7 +637,7 @@ test("staging admission reads the shared account-wide provider observation from 
     units: 20_001,
   })
   assert.equal(response.status, 429)
-  assert.equal((await response.json()).provider_rows_written, 50_000)
+  assert.equal((await response.json()).provider_rows_written, observedRows)
 })
 
 test("a late projection is refreshed once from the live provider authority", async (t) => {
@@ -681,6 +724,9 @@ test("a failed live refresh keeps the last good same-day observation", async (t)
   const raw = new DatabaseSync(":memory:")
   t.after(() => raw.close())
   let kvReads = 0
+  // The last good sample sits 10 units under the background ceiling: 5 more
+  // fit, then 6 more do not.
+  const lastGoodRows = MUTATION_BACKGROUND_CEILING - 10
   const owner = budgetOwner(
     raw,
     {
@@ -693,7 +739,7 @@ test("a failed live refresh keeps the last good same-day observation", async (t)
             providerAdmission: {
               accountId: "account-test",
               dayKey: new Date().toISOString().slice(0, 10),
-              rowsWritten: 69_990,
+              rowsWritten: lastGoodRows,
             },
           }
         },
@@ -723,7 +769,7 @@ test("a failed live refresh keeps the last good same-day observation", async (t)
     units: 6,
   })
   assert.equal(refused.status, 429)
-  assert.equal((await refused.json()).provider_rows_written, 69_990)
+  assert.equal((await refused.json()).provider_rows_written, lastGoodRows)
 })
 
 test("daily-budget owner schedules terminal compaction at the next no-traffic eligibility", async (t) => {
@@ -822,7 +868,12 @@ test("unresolved reservations survive indefinitely while old completed identitie
       .get().n,
     0,
   )
-  assert.equal(MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY, 4_480_000)
+  // The ceiling's worth of identities a day, kept for the 32-day retry horizon
+  // plus the 32-day anti-reuse window the dates above walk through.
+  assert.equal(
+    MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
+    MUTATION_BACKGROUND_CEILING * (32 + 32),
+  )
   raw.close()
 })
 
@@ -837,6 +888,7 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
         assert.equal(body.lane, "user_action")
         assert.equal(body.units, 8)
         // Reservations in flight are the only reason it does not fit (60,000 + 8 would).
+        // The fixture states the user-action ceiling the real lane answers with.
         return Response.json(
           {
             ok: false,
@@ -846,7 +898,7 @@ test("discovery overload stays pending and refuses before any D1 mutation", asyn
             requested_units: 8,
             provider_rows_written: 60_000,
             in_flight_units: 40_000,
-            ceiling: 90_000,
+            ceiling: MUTATION_USER_ACTION_CEILING,
           },
           { status: 429 },
         )

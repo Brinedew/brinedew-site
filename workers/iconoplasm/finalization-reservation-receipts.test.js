@@ -21,6 +21,7 @@ import {
   finalizationPhaseWriteUnits,
   finalizationRecoveryWriteUnits,
 } from "../lib/iconoplasm-mutation-write-bounds.js"
+import { MUTATION_BACKGROUND_CEILING } from "../lib/iconoplasm-mutation-lane-reservations.js"
 import { ICONOPLASM_FACTORY_CATALOG } from "../generated/iconoplasm-factory-catalog.js"
 import { advanceEnrolledIconoplasmGeneCardMaterialization } from "../iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import {
@@ -771,7 +772,7 @@ test("at the ceiling a large phase refuses before any D1 write, and runs once pr
   const units = finalizationPhaseWriteUnits({ phase: "vote_summaries", keepCount: keep.length })
   assert.ok(units > MUTATION_WRITE_FLOOR_UNITS)
   // Room for the old 50 but not for what the phase writes.
-  const ledger = realBudgetLedger(70_000 - units + 1)
+  const ledger = realBudgetLedger(MUTATION_BACKGROUND_CEILING - units + 1)
   t.after(() => ledger.close())
   const refused = await invokeAgainst(ledger, [symbol])
   assert.match(String(refused.error?.message), /ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED/)
@@ -803,7 +804,7 @@ test("at the ceiling a full completion page refuses before its UPDATE, and compl
   for (const symbol of symbols) await seedJob(symbol, "completed_pending_finalize", {})
   const units = finalizationCompletionPageWriteUnits(FINALIZATION_COMPLETION_PAGE_SIZE)
   assert.ok(units > MUTATION_WRITE_FLOOR_UNITS)
-  const ledger = realBudgetLedger(70_000 - units + 1)
+  const ledger = realBudgetLedger(MUTATION_BACKGROUND_CEILING - units + 1)
   t.after(() => ledger.close())
   const refused = await invokeAgainst(ledger, symbols, { finalizeIfDrained: true })
   assert.match(String(refused.error?.message), /ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED/)

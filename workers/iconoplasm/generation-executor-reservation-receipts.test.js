@@ -37,6 +37,7 @@ import {
   generationCompletionWriteUnits,
   laptopReservation,
 } from "../lib/iconoplasm-mutation-write-bounds.js"
+import { MUTATION_BACKGROUND_CEILING } from "../lib/iconoplasm-mutation-lane-reservations.js"
 import {
   liveD1Meter,
   openMigratedD1,
@@ -978,7 +979,7 @@ test("at the ceiling a claim refuses before any D1 call, and is admitted again w
   const { ids } = await seedOpenRequests(25)
   const units = generationClaimWriteUnits(50)
   // Room for the old 50 but not for what this claim can write.
-  const fixture = gatewayFixture(t, 70_000 - units + 1)
+  const fixture = gatewayFixture(t, MUTATION_BACKGROUND_CEILING - units + 1)
   const refused = await fixture.call(CLAIM, claimBody(50))
   assert.equal(refused.status, 503)
   assert.equal(refused.payload.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
@@ -1006,7 +1007,7 @@ test("as pressure rises a claim is refused first, while a renew, a fail and a sm
   const failTarget = await leaseFor(ids[1])
   const claimUnits = generationClaimWriteUnits(50)
   // Pressure at which a 50-lease claim no longer fits but a 50-unit operation does.
-  const fixture = gatewayFixture(t, 70_000 - claimUnits + 50)
+  const fixture = gatewayFixture(t, MUTATION_BACKGROUND_CEILING - claimUnits + 50)
   const claim = await fixture.call(CLAIM, claimBody(50))
   assert.equal(claim.status, 503)
 
@@ -1044,7 +1045,7 @@ test("a refused renew leaves the lease as it was, and the identical renew is adm
   await cancelOpenReceiptRequests()
   const { ids } = await seedOpenRequests(1)
   const target = await leaseFor(ids[0])
-  const fixture = gatewayFixture(t, 70_000 - MUTATION_WRITE_FLOOR_UNITS + 1)
+  const fixture = gatewayFixture(t, MUTATION_BACKGROUND_CEILING - MUTATION_WRITE_FLOOR_UNITS + 1)
   const path = `/api/iconoplasm/authority/generation-leases/${target.lease.generation_lease_token}/renew`
   const body = {
     lease_owner_id: OWNER,
@@ -1084,7 +1085,7 @@ test("reading a lease's material is metered but reserves no write capacity, even
   await cancelOpenReceiptRequests()
   const { ids } = await seedOpenRequests(1)
   const target = await leaseFor(ids[0])
-  const fixture = gatewayFixture(t, 70_000 - MUTATION_WRITE_FLOOR_UNITS + 1)
+  const fixture = gatewayFixture(t, MUTATION_BACKGROUND_CEILING - MUTATION_WRITE_FLOOR_UNITS + 1)
   const response = await fixture.call(
     `/api/iconoplasm/authority/generation-leases/${target.lease.generation_lease_token}/material`,
     { lease_owner_id: OWNER, expected_lease_version: target.lease.generation_lease_version },
@@ -1118,7 +1119,7 @@ test("an oversized completion reserves nothing, and a refused small one is untou
     publication_id: "publication-gateway-small",
     items: [{ request_ids: [1] }],
   }
-  const ceiling = gatewayFixture(t, 70_000 - MUTATION_WRITE_FLOOR_UNITS + 1)
+  const ceiling = gatewayFixture(t, MUTATION_BACKGROUND_CEILING - MUTATION_WRITE_FLOOR_UNITS + 1)
   const refused = await ceiling.call("/api/iconoplasm/authority/generation-leases/complete", small)
   assert.equal(refused.status, 503)
   assert.equal(ceiling.meter.totals.calls, 0)

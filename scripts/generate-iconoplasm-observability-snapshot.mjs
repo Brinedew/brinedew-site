@@ -7,7 +7,6 @@ import toml from "toml"
 
 import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
 import {
-  d1DailyAllowance,
   FREE_D1_DAILY_LIMITS,
   FREE_PLAN_DAILY_LIMITS,
   FREE_PLAN_UNSAMPLED_DAILY_LIMITS,
@@ -987,20 +986,8 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
       Number.isFinite(dayStartMs) && Number.isFinite(nextCycleStartMs)
         ? Math.max(1, Math.ceil((nextCycleStartMs - dayStartMs) / 86400000))
         : 1
-    const rowsReadDailySmartLimit = d1DailyAllowance({
-      resource: "reads",
-      monthlyLimit: config.rowsReadHardMonthlyBudget,
-      usedBeforeDay: cycleRowsReadBeforeDay,
-      daysRemaining: daysRemainingInCycle,
-      burstMultiplier: config.dailyBurstMultiplier,
-    })
-    const rowsWrittenDailySmartLimit = d1DailyAllowance({
-      resource: "writes",
-      monthlyLimit: config.rowsWrittenHardMonthlyBudget,
-      usedBeforeDay: cycleRowsWrittenBeforeDay,
-      daysRemaining: daysRemainingInCycle,
-      burstMultiplier: config.dailyBurstMultiplier,
-    })
+    const rowsReadDailySmartLimit = FREE_D1_DAILY_LIMITS.reads
+    const rowsWrittenDailySmartLimit = FREE_D1_DAILY_LIMITS.writes
     cycleRowsReadBeforeDay += row.rowsRead
     cycleRowsWrittenBeforeDay += row.rowsWritten
     return {
@@ -1073,20 +1060,8 @@ async function fetchD1Snapshot({ apiToken, accountId, config }) {
     0,
     cycleTotalsBase.rowsWritten - currentDayRowsWritten,
   )
-  const currentDayRowsReadDailySmartLimit = d1DailyAllowance({
-    resource: "reads",
-    monthlyLimit: config.rowsReadHardMonthlyBudget,
-    usedBeforeDay: cycleRowsReadBeforeToday,
-    daysRemaining: cycle.daysRemainingInCycle,
-    burstMultiplier: config.dailyBurstMultiplier,
-  })
-  const currentDayRowsWrittenDailySmartLimit = d1DailyAllowance({
-    resource: "writes",
-    monthlyLimit: config.rowsWrittenHardMonthlyBudget,
-    usedBeforeDay: cycleRowsWrittenBeforeToday,
-    daysRemaining: cycle.daysRemainingInCycle,
-    burstMultiplier: config.dailyBurstMultiplier,
-  })
+  const currentDayRowsReadDailySmartLimit = FREE_D1_DAILY_LIMITS.reads
+  const currentDayRowsWrittenDailySmartLimit = FREE_D1_DAILY_LIMITS.writes
   const storageRow = Array.isArray(storageAccount.d1StorageAdaptiveGroups)
     ? storageAccount.d1StorageAdaptiveGroups[0] || null
     : null

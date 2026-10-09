@@ -8,6 +8,8 @@ import {
   chooseReleaseAdmission,
 } from "./preflight-operation-cost-release.mjs"
 import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import { KV_ACCOUNT_CEILINGS, KV_DAILY_LIMITS } from "../workers/lib/operation-cost-meters.js"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 import { createMigrationOperationCostAdapters } from "../workers/iconoplasm/operation-cost-migration-adapters.js"
 import { createSchemaDropMigrationCostAdapter } from "../workers/iconoplasm/operation-cost-schema-drop-migration-adapter.js"
@@ -238,12 +240,19 @@ test("catalog initialization keeps its key-value reads and writes in the release
   assert.equal(result.maximum.kv_writes, 1)
   await preflightOperationCostRelease({
     ...options,
-    reader: { refresh: async () => ({ ...sample, kv_deletes: 1000, kv_lists: 1000 }) },
+    // Meters the release does not spend are not checked, even at Cloudflare's wall.
+    reader: {
+      refresh: async () => ({
+        ...sample,
+        kv_deletes: KV_DAILY_LIMITS.kv_deletes,
+        kv_lists: KV_DAILY_LIMITS.kv_lists,
+      }),
+    },
   })
   await assert.rejects(
     preflightOperationCostRelease({
       ...options,
-      reader: { refresh: async () => ({ ...sample, kv_writes: 700 }) },
+      reader: { refresh: async () => ({ ...sample, kv_writes: KV_ACCOUNT_CEILINGS.kv_writes }) },
     }),
     /ACCOUNT_HEADROOM/,
   )
@@ -348,11 +357,14 @@ test("explicit maintenance checks capacity before mutations and refreshes before
 
 test("underfunded, invalid and oversized migration work is refused before telemetry or deployment", async () => {
   let calls = 0
+  // A release's own maximum is bounded by Cloudflare's daily allowance. A single
+  // step that reads the whole allowance leaves no room for the inventories the
+  // release also runs, so the sum is over.
   const oversized = {
     resource: "iconoplasm",
     migration_protocol: "one-migration-per-release-v1",
     prepare: async () => ({
-      bound: { rows_read: ACCOUNT_CEILINGS.rows_read, rows_written: 0, requests: 1 },
+      bound: { rows_read: FREE_D1_DAILY_LIMITS.reads, rows_written: 0, requests: 1 },
     }),
   }
   const verify = (item, extra = {}) =>
@@ -389,7 +401,7 @@ test("underfunded, invalid and oversized migration work is refused before teleme
     verify(
       {
         ...original,
-        prediction: { rows_read: ACCOUNT_CEILINGS.rows_read, rows_written: 0, requests: 1 },
+        prediction: { rows_read: FREE_D1_DAILY_LIMITS.reads, rows_written: 0, requests: 1 },
       },
       { adapters },
     ),

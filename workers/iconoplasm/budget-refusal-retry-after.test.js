@@ -136,9 +136,11 @@ test("a claim the provider's own count already blocks is told the seconds to the
 })
 
 test("a claim refused only by reservations in flight is told the 15 minutes they take to age out", async (t) => {
-  // Failure mode 4: 60,000 written + 9,000 held + 2,000 asked is over 70,000, but
-  // 60,000 + 2,000 is not, so time alone clears it.
-  const fixture = laptopGateway(t, 60_000)
+  // Failure mode 4: the written count leaves 8,000 units of room beyond the claim, so
+  // that count + the 2,000 asked fits, and the 9,000 held tips it over the ceiling.
+  // Time alone clears it.
+  const written = MUTATION_BACKGROUND_CEILING - CLAIM_UNITS - 8_000
+  const fixture = laptopGateway(t, written)
   await fixture.hold("finalization_recovery", 9_000, "in-flight:finalization")
   const answer = await stated(await fixture.claim())
   assert.equal(answer.status, 503)
@@ -149,9 +151,11 @@ test("a claim refused only by reservations in flight is told the 15 minutes they
 })
 
 test("a few reservations in flight do not turn a refusal only the reset can clear into a 15 minute one", async (t) => {
-  // Failure mode 3, the case the first draft of B-968 got wrong: 69,000 written plus the
-  // 2,000 asked is already over 70,000, so the held 500 units are not the reason.
-  const fixture = laptopGateway(t, 69_000)
+  // Failure mode 3, the case the first draft of B-968 got wrong: the written count sits
+  // 1,000 under the ceiling, so it plus the 2,000 asked is already over, and the held
+  // 500 units are not the reason.
+  assert.ok(CLAIM_UNITS > 1_000)
+  const fixture = laptopGateway(t, MUTATION_BACKGROUND_CEILING - 1_000)
   await fixture.hold("finalization_recovery", 500, "in-flight:small")
   const answer = await untilTheReset(async () => stated(await fixture.claim()))
   assert.equal(answer.status, 503)
@@ -179,8 +183,12 @@ test("the 15 minute hint is honest: the real ledger admits the request within tw
     provider_rows_written: provider,
     local_rows_written: 0,
   })
+  // The meter starts 8,000 units short of the claim's room, so the 9,000 held is what
+  // refuses; 3,000 of the held units' real writes reach the meter between the waits.
+  const meterBefore = MUTATION_BACKGROUND_CEILING - CLAIM_UNITS - 8_000
+  const meterAfter = meterBefore + 3_000
   const held = lanes.reserve({
-    ...ask(t0, 60_000),
+    ...ask(t0, meterBefore),
     lane: "finalization_recovery",
     operation_id: "walk:held",
     units: 9_000,
@@ -189,7 +197,7 @@ test("the 15 minute hint is honest: the real ledger admits the request within tw
 
   let now = t0
   let waits = 0
-  let provider = 60_000
+  let provider = meterBefore
   for (;;) {
     const answer = lanes.reserve(ask(now, provider))
     if (answer.ok) break
@@ -198,7 +206,7 @@ test("the 15 minute hint is honest: the real ledger admits the request within tw
     assert.equal(wait, 900)
     now += wait * 1000
     // Between the waits the held operation's real writes (3,000 of its 9,000) reach the meter.
-    provider = 63_000
+    provider = meterAfter
     waits += 1
     assert.ok(waits <= 2, "a refusal that time alone clears took more than two stated waits")
   }
@@ -278,7 +286,7 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
     rows_read_daily_smart_limit: 5_000_000,
     rows_written_daily_smart_limit: 100_000,
     exhausted: true,
-    exhausted_by: "rows_read_daily_smart",
+    exhausted_by: "rows_read_daily",
   }
   const answer = await untilTheReset(async () =>
     stated(
@@ -302,7 +310,7 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
   )
   assert.equal(answer.status, 503)
   assert.equal(answer.payload.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
-  assert.equal(answer.payload.budget.exhausted_by, "rows_read_daily_smart")
+  assert.equal(answer.payload.budget.exhausted_by, "rows_read_daily")
   assertStatesTheReset(answer)
 })
 

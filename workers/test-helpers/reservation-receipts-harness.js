@@ -209,9 +209,9 @@ function sqliteDoStorage(raw) {
 
 // The real shared daily-budget Durable Object over in-memory SQLite, fed a
 // provider observation of `providerRowsWritten`.
-export function realBudgetLedger(providerRowsWritten = 0) {
+export function realBudgetLedger(providerRowsWritten = 0, { providerRowsRead } = {}) {
   const raw = new DatabaseSync(":memory:")
-  const observation = { rowsWritten: providerRowsWritten }
+  const observation = { rowsWritten: providerRowsWritten, rowsRead: providerRowsRead }
   const owner = new IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate(
     { storage: sqliteDoStorage(raw), blockConcurrencyWhile: (callback) => callback() },
     {
@@ -224,6 +224,7 @@ export function realBudgetLedger(providerRowsWritten = 0) {
               accountId: "reservation-receipts",
               dayKey: new Date().toISOString().slice(0, 10),
               rowsWritten: observation.rowsWritten,
+              ...(observation.rowsRead === undefined ? {} : { rowsRead: observation.rowsRead }),
             },
           }
         },

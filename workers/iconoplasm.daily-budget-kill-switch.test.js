@@ -1329,7 +1329,9 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
   assert.equal(response.status, 503)
   assert.equal(payload?.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
   assert.equal(payload?.budget?.rows_written, 4)
-  assert.equal(payload?.budget?.exhausted_by, "rows_written_daily_smart")
+  // B-1026: the daily wall is Cloudflare's own, so the refusal names the day, not a
+  // private "smart" slice of it.
+  assert.equal(payload?.budget?.exhausted_by, "rows_written_daily")
   assert.equal(db.catalogUpsertRuns, 0)
   assert.deepEqual(
     budgetNamespace.calls.map((call) => call.pathname),

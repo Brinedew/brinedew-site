@@ -15,7 +15,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
-import { D1_OPERATOR_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import { OPERATOR_ACCOUNT_CEILINGS } from "../shared/iconoplasm-d1-budget-policy.js"
 
 const ROOT = new URL("../", import.meta.url)
 const CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
@@ -28,8 +28,9 @@ export const ONLINE_MIGRATION_DATABASES = Object.freeze({
 // the same numbers as the operator ledger and its B-1026 tiers, so no path has a
 // budget of its own. It used to have one (4.5M reads, 70k writes against 1M and 20k),
 // which made a one-off bundle look cheaper than the designed outbox route.
-export const MIGRATION_READ_CEILING = D1_OPERATOR_DAILY_LIMITS.reads
-export const MIGRATION_WRITE_CEILING = D1_OPERATOR_DAILY_LIMITS.writes
+// A migration is batch work: it stops where the account's batch work stops.
+export const MIGRATION_READ_CEILING = OPERATOR_ACCOUNT_CEILINGS.rows_read
+export const MIGRATION_WRITE_CEILING = OPERATOR_ACCOUNT_CEILINGS.rows_written
 
 function requirePrediction(prediction, key) {
   if (
