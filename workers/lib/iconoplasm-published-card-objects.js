@@ -154,33 +154,48 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     const url = externalPortraitStorageUrl(env, key)
     const password = externalPortraitStoragePassword(env)
     if (!url || !password) throw new Error("Bunny published-object writes are not configured")
-    const response = await send(
-      url,
-      {
-        method: "PUT",
-        headers: {
-          AccessKey: password,
-          "Content-Type": "application/json",
-          "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+    // The read-back below is what proves a write, so a PUT that failed or never
+    // answered is judged by it too. 2026-10-09: Bunny stored ATP2A2's and C4B's
+    // objects but answered every PUT after its 8 s deadline (their files sit on
+    // storage nodes 946 and 1315; MFNG's answered in a second), and 42 readers'
+    // publication failed on objects that were already in place.
+    let putError = null
+    try {
+      const response = await send(
+        url,
+        {
+          method: "PUT",
+          headers: {
+            AccessKey: password,
+            "Content-Type": "application/json",
+            "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+          },
+          body: bytes,
         },
-        body: bytes,
-      },
-      key,
-    )
-    await response.body?.cancel().catch(() => {})
-    if (!response.ok) throw new Error(`Stable gene object PUT failed (${response.status})`)
-    const check = await send(
-      url,
-      { method: "GET", headers: { AccessKey: password, Accept: "application/json" } },
-      key,
-    )
+        key,
+      )
+      await response.body?.cancel().catch(() => {})
+      if (!response.ok) throw new Error(`Stable gene object PUT failed (${response.status})`)
+    } catch (error) {
+      putError = error
+    }
+    let check
+    try {
+      check = await send(
+        url,
+        { method: "GET", headers: { AccessKey: password, Accept: "application/json" } },
+        key,
+      )
+    } catch (error) {
+      throw putError || error
+    }
     if (!check.ok) {
       await check.body?.cancel().catch(() => {})
-      throw new Error("Stable gene object PUT is not yet readable")
+      throw putError || new Error("Stable gene object PUT is not yet readable")
     }
     const readBack = await boundedBytes(check, identity.limit, bodyTimeoutMs)
     if ((await publishedObjectHash(readBack)) !== hash)
-      throw new Error("Stable gene object read-back hash mismatch")
+      throw putError || new Error("Stable gene object read-back hash mismatch")
     return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
   }
 

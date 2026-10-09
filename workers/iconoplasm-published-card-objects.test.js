@@ -89,6 +89,52 @@ test("a transient storage timeout is retried and the stable object commits (B-75
   }
 })
 
+// 2026-10-09: Bunny stored two genes' objects but answered their PUTs after every
+// deadline, and the publication failed on objects already in place.
+test("a PUT stored but answered too late is a committed write, judged by its read-back", async () => {
+  const objects = new Map()
+  const calls = []
+  const store = createPublishedCardObjectStore(env, {
+    request: async (url, init, key) => {
+      calls.push(init.method)
+      if (init.method === "PUT") {
+        objects.set(key, init.body.slice())
+        throw new DOMException("The operation was aborted", "AbortError")
+      }
+      return new Response(objects.get(key))
+    },
+  })
+  const receipt = await store.writeStable("genes/v3/ATP2A2.json", { symbol: "ATP2A2" })
+  assert.equal(receipt.symbol, "ATP2A2")
+  assert.deepEqual(calls, ["PUT", "GET"])
+})
+
+test("a PUT that never landed fails with its own error, whatever the read-back finds", async () => {
+  const previous = new TextEncoder().encode('{"symbol":"C4B","old":true}')
+  for (const stored of [previous, null]) {
+    const store = createPublishedCardObjectStore(env, {
+      request: async (url, init) => {
+        if (init.method === "PUT") throw new DOMException("The operation was aborted", "AbortError")
+        return stored ? new Response(stored) : new Response(null, { status: 404 })
+      },
+    })
+    await assert.rejects(
+      store.writeStable("genes/v3/C4B.json", { symbol: "C4B" }),
+      /The operation was aborted/,
+    )
+  }
+  const unreachable = createPublishedCardObjectStore(env, {
+    request: async (url, init) => {
+      if (init.method === "PUT") throw new Error("Stable gene object PUT failed (503)")
+      throw new Error("read-back unreachable")
+    },
+  })
+  await assert.rejects(
+    unreachable.writeStable("genes/v3/C4B.json", { symbol: "C4B" }),
+    /PUT failed \(503\)/,
+  )
+})
+
 // B-898 Stage 1: the stable gene object writer.
 test("the stable gene object is written to a fixed key with a short TTL and verified by read-back", async () => {
   const { store, calls, objects } = fixture()
