@@ -69,11 +69,12 @@ export const VISION_ROLLUP_DIRTY_MARK_ROWS = 2
 // (workers/lib/d1-invocation-budget.js) stops the restoring after
 // RECONCILE_RESTORES_PER_INVOCATION assets. Measured on 2026-10-09 (CI receipts,
 // finalization-reservation-receipts.test.js) once reconcile stopped writing the
-// unread emulsion option rollup: 32 rows with nothing to restore, 16 more per
-// restore, and up to about 70 for marking the stale assets past the cap, 375
-// at most. 20 rows per restore covers the marking at the cap (377 reserved).
-export const RECONCILE_FIXED_ROWS = 19
-export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 20
+// unread emulsion option rollup and elections stopped marking winners
+// "approved": 21 rows with nothing to restore, about 16 more per restore, and
+// at most 375 with the marking of stale assets past the cap. A fixed row and 21
+// per restore fits every measured count within the guard's 35%.
+export const RECONCILE_FIXED_ROWS = 1
+export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 21
 export const RECONCILE_RESTORES_PER_INVOCATION = 17
 // The after-response republish of a touched gene (route row and card
 // materialization wake-up).
