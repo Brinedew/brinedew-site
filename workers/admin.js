@@ -3,7 +3,7 @@
  * Restricted to the admin Discord session identity.
  */
 
-import { parseCookies } from "./auth.js"
+import { readSession } from "./lib/sealed-session.js"
 import { sanitizeProteinSummary } from "./lib/structure-utils.js"
 import {
   buildDiscordRecapImageKey,
@@ -701,23 +701,9 @@ export const normalizeGraphicsSettings = (payload) => {
 
 export async function isAdmin(request, env) {
   try {
-    const cookies = parseCookies(request.headers.get("Cookie") || "")
-    const sessionId = cookies.session
-    if (!sessionId) {
-      return false
-    }
-
-    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-    const stub = env.GAME_SESSIONS.get(id)
-    const resp = await stub.fetch("http://internal/get")
-    if (!resp.ok) {
-      return false
-    }
-
-    const session = await resp.json()
-    if (!session || !session.user_id) {
-      return false
-    }
+    const read = await readSession(request, env)
+    if (read.status !== "signed_in") return false
+    const session = read.session
 
     const allowedDiscordId =
       typeof env.ADMIN_DISCORD_USER_ID === "string" && env.ADMIN_DISCORD_USER_ID.trim()

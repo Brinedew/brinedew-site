@@ -369,8 +369,8 @@ import {
   handleCallback,
   handleMe,
   handleLogout,
-  resolveDiscordSessionAuthorization,
 } from "./auth.js"
+import { readSession } from "./lib/sealed-session.js"
 // Import Iconoplasm stateful handlers
 import {
   isIconoplasmRequest,
@@ -497,10 +497,6 @@ import {
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { publishLeaderboardObject } from "./lib/leaderboard-publication.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
-import {
-  BrinedewAccountIdentityError,
-  hydrateBrinedewSessionAccountIdentity,
-} from "./lib/brinedew-account-identity.js"
 import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
 import { selectAvailableDailyTarget } from "./lib/daily-target-availability.js"
@@ -822,17 +818,10 @@ function draftNotFoundResponse(method) {
 }
 
 async function getUserAccessLevel(request, env) {
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = cookies.session
-  if (!sessionId) return 1
-
   try {
-    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-    const stub = env.GAME_SESSIONS.get(id)
-    const resp = await stub.fetch("http://internal/get")
-    const session = await resp.json()
-    if (!session || !session.user_id) return 1
-    if (Date.now() > session.expires_at) return 1
+    const read = await readSession(request, env)
+    if (read.status !== "signed_in") return 1
+    const session = read.session
 
     const adminUserId = String(env.ADMIN_DISCORD_USER_ID || "").trim()
     if (adminUserId.length > 0 && session.user_id === adminUserId) return 4
@@ -2277,19 +2266,9 @@ function parseCookies(cookieHeader) {
 }
 
 async function getAuthenticatedUserIdFromRequest(request, env) {
-  const cookieHeader = request.headers.get("Cookie") || ""
-  const cookies = parseCookies(cookieHeader)
-  const authSession = cookies.session
-  if (!authSession) return null
-  if (!/^[a-zA-Z0-9_-]+$/.test(authSession)) return null
-
   try {
-    const id = env.GAME_SESSIONS.idFromName(`session:${authSession}`)
-    const stub = env.GAME_SESSIONS.get(id)
-    const resp = await stub.fetch("http://internal/get")
-    if (!resp.ok) return null
-    const session = await resp.json()
-    return session?.user_id || null
+    const read = await readSession(request, env)
+    return read.status === "signed_in" ? read.session.user_id : null
   } catch {
     return null
   }
@@ -2500,23 +2479,9 @@ export class GameSession {
       const { date } = await request.json()
       await ackCompletedResult(this.state.storage, date)
       return Response.json({ success: true })
-    } else if (path === "/store" && request.method === "POST") {
-      // Internal route for OAuth session storage
-      return this.storeData(request)
-    } else if (path === "/get" && request.method === "GET") {
-      // Internal route for OAuth session retrieval
-      return this.getData()
-    } else if (path === "/consume" && request.method === "POST") {
-      // OAuth callbacks must be one-shot. Reading and deleting in one Durable
-      // Object transaction prevents two callback requests from reusing state.
-      return this.consumeData()
     } else if (path === "/reset" && request.method === "POST") {
-      // Internal route for clearing OAuth session
+      // Account erasure clears a player's game state.
       return this.clearData()
-    } else if (path === "/auth/resolve" && request.method === "POST") {
-      return this.resolveAuthSession()
-    } else if (path === "/auth/patch" && request.method === "POST") {
-      return this.patchAuthSession(request)
     } else {
       return new Response("Not found", { status: 404 })
     }
@@ -2537,164 +2502,6 @@ export class GameSession {
     })
   }
 
-  /**
-   * Store arbitrary data (for OAuth sessions)
-   * Internal route only
-   */
-  async storeData(request) {
-    const data = await request.json()
-    await this.state.storage.put("data", data)
-    if (Number.isFinite(data?.delete_storage_at)) {
-      await this.state.storage.setAlarm(data.delete_storage_at)
-    }
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  /**
-   * Get stored data (for OAuth sessions)
-   * Internal route only
-   */
-  async getData() {
-    let data = (await this.state.storage.get("data")) || {}
-    if (data.user_id && this.env?.DB) {
-      let hydrated
-      try {
-        hydrated = await hydrateBrinedewSessionAccountIdentity(this.env.DB, data)
-      } catch (error) {
-        if (error instanceof BrinedewAccountIdentityError && error.status < 500) {
-          await this.state.storage.deleteAll()
-          return Response.json(
-            { error: "Brinedew account identity is not active" },
-            { status: 401, headers: { "X-Brinedew-Account-Status": "identity_unlinked" } },
-          )
-        }
-        console.warn("Brinedew account status could not be verified for a stored session", {
-          error: error?.message || String(error || "unknown"),
-        })
-        return Response.json({ error: "Account status unavailable" }, { status: 503 })
-      }
-      if (!hydrated.active) {
-        await this.state.storage.deleteAll()
-        return Response.json(
-          { error: "Brinedew account is not active" },
-          {
-            status: 401,
-            headers: { "X-Brinedew-Account-Status": hydrated.session.account_status },
-          },
-        )
-      }
-      data = hydrated.session
-      if (hydrated.changed) await this.state.storage.put("data", data)
-    }
-    return new Response(JSON.stringify(data || {}), {
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  async resolveAuthSession() {
-    const resolve = async () => {
-      let stored = (await this.state.storage.get("data")) || {}
-      let accountIdentityChanged = false
-      if (stored?.user_id && this.env?.DB) {
-        let hydrated
-        try {
-          hydrated = await hydrateBrinedewSessionAccountIdentity(this.env.DB, stored)
-        } catch (error) {
-          if (error instanceof BrinedewAccountIdentityError && error.status < 500) {
-            await this.state.storage.deleteAll()
-            return Response.json(
-              { error: "Brinedew account identity is not active" },
-              { status: 401, headers: { "X-Brinedew-Account-Status": "identity_unlinked" } },
-            )
-          }
-          console.warn("Brinedew account status could not be verified for an auth session", {
-            error: error?.message || String(error || "unknown"),
-          })
-          return Response.json({ error: "Account status unavailable" }, { status: 503 })
-        }
-        if (!hydrated.active) {
-          await this.state.storage.deleteAll()
-          return Response.json(
-            { error: "Brinedew account is not active" },
-            {
-              status: 401,
-              headers: { "X-Brinedew-Account-Status": hydrated.session.account_status },
-            },
-          )
-        }
-        stored = hydrated.session
-        accountIdentityChanged = hydrated.changed
-      }
-      const result = await resolveDiscordSessionAuthorization(stored, this.env)
-      const resolvedSession = result.session
-      if (result.changed || accountIdentityChanged) {
-        await this.state.storage.put("data", resolvedSession)
-        if (
-          result.outcome === "reauthorization_required" &&
-          stored.tier !== "registered" &&
-          this.env?.DB
-        ) {
-          try {
-            await this.env.DB.prepare(
-              `UPDATE users SET tier = ?, updated_at = ? WHERE discord_id = ?`,
-            )
-              .bind("registered", Date.now(), stored.user_id)
-              .run()
-          } catch (error) {
-            console.warn("Discord authorization downgrade could not update the user projection", {
-              error: error?.message || String(error || "unknown"),
-            })
-          }
-        }
-      }
-      return new Response(JSON.stringify(resolvedSession || {}), {
-        headers: {
-          "Content-Type": "application/json",
-          "X-Brinedew-Discord-Authorization": result.outcome,
-        },
-      })
-    }
-    return typeof this.state.blockConcurrencyWhile === "function"
-      ? this.state.blockConcurrencyWhile(resolve)
-      : resolve()
-  }
-
-  async patchAuthSession(request) {
-    const patch = await request.json()
-    const stored = (await this.state.storage.get("data")) || {}
-    const expectedAccessToken = String(patch?.expected_access_token || "")
-    if (expectedAccessToken && expectedAccessToken !== String(stored.access_token || "")) {
-      return Response.json({ applied: false }, { status: 409 })
-    }
-    for (const key of ["tier", "is_guild_member", "last_discord_role_verify"]) {
-      if (Object.hasOwn(patch || {}, key)) stored[key] = patch[key]
-    }
-    await this.state.storage.put("data", stored)
-    return Response.json({ applied: true })
-  }
-
-  /**
-   * Atomically retrieve and delete one-time data (OAuth callback state).
-   */
-  async consumeData() {
-    let data
-    await this.state.storage.transaction(async (transaction) => {
-      data = await transaction.get("data")
-      if (data !== undefined) {
-        await transaction.delete("data")
-      }
-    })
-    return new Response(JSON.stringify(data || {}), {
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  /**
-   * Clear stored data (for logout)
-   * Internal route only
-   */
   async clearData() {
     await this.state.storage.deleteAll()
     return new Response(JSON.stringify({ success: true }), {
@@ -2703,9 +2510,8 @@ export class GameSession {
   }
 
   async alarm() {
-    // OAuth attempts that are abandoned at Discord should not leave Durable
-    // Object storage behind forever. Only records with delete_storage_at set
-    // schedule this alarm; persistent login sessions are unaffected.
+    // OAuth handshakes stored here before B-1069 scheduled this alarm to delete
+    // themselves after ten minutes; new ones are sealed cookies and store nothing.
     await this.state.storage.deleteAll()
   }
 }

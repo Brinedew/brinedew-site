@@ -1,3 +1,4 @@
+import { readSession } from "./lib/sealed-session.js"
 import assert from "node:assert/strict"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
@@ -184,6 +185,14 @@ async function eraseToCompletion(env, world, body = {}, limit = 16) {
 
 const botPosts = (world) => world.network.messages.filter((message) => message.author.bot)
 
+// What the site's one session reader makes of a browser's sealed cookie (B-1069).
+function sessionOf(world, cookie) {
+  return readSession(
+    new Request("https://iconoplasm.brinedew.bio/", { headers: { Cookie: cookie } }),
+    world.env,
+  )
+}
+
 test("the admin erasure route refuses non-admins and malformed requests", async () => {
   const world = await erasedWorld()
   const env = routeEnv(world.env)
@@ -228,7 +237,7 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
       `the seed has no row of the erased person in ${database}.${step.table}`,
     )
   }
-  assert.ok(seeded.some((entry) => entry.startsWith("do:session:alice-session")))
+  assert.equal((await sessionOf(world, world.cookies.erased)).status, "signed_in")
   assert.ok(seeded.includes("accounts.brinedew_account_identity_events"))
   assert.ok(seeded.includes("accounts.brinedew_account_lifecycle_events"))
   const tallies = () =>
@@ -260,12 +269,12 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
       external: world.network.calls.length - externalBefore,
     })
     if (attempt === 1) {
-      // The person's own browser session is refused and wiped by its next request: the account is
-      // already pending, so nothing is written under the Discord id from here on.
+      // The person's own browser session is refused from its next request (the server stores none
+      // to wipe): the account is already pending, so nothing is written under the Discord id.
       assert.equal(payload.account.status, "erasure_pending")
-      const held = await world.sessions.get("session:alice-session").fetch("http://internal/get")
-      assert.equal(held.status, 401)
-      assert.equal(world.sessions.objects.get("session:alice-session").storage.map.size, 0)
+      const held = await sessionOf(world, world.cookies.erased)
+      assert.equal(held.status, "invalid")
+      assert.equal(held.accountStatus, "erasure_pending")
     }
     if (payload.erasure.complete) break
   }
@@ -470,7 +479,7 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
   }
   assert.ok(row(world.accounts, "SELECT 1 FROM users WHERE discord_id = ?", OTHER_USER))
   assert.ok(world.sessions.objects.get(`user_${OTHER_USER}`).storage.map.has("game_state"))
-  assert.ok(world.sessions.objects.get("session:bob-session").storage.map.has("data"))
+  assert.equal((await sessionOf(world, world.cookies.other)).status, "signed_in")
   const otherKeys = iconoplasmUserKvKeyScopes(OTHER_USER)
   for (const key of otherKeys.exact) assert.ok(world.kv.map.has(key), key)
   assert.ok(world.kv.map.has("iconoplasm:catalog:v1:abc"))
@@ -548,8 +557,7 @@ test("a failure in the middle of an erasure resumes where it stopped and never c
     complete = (await response.json()).erasure.complete
   }
   assert.equal(complete, true)
-  // The person's own session is refused and wiped by its next request.
-  await world.sessions.get("session:alice-session").fetch("http://internal/get")
+  assert.equal((await sessionOf(world, world.cookies.erased)).status, "invalid")
   assert.deepEqual(findTraces(world, [ERASED_USER, ERASED_NAME, ERASED_NAME.toUpperCase()]), [])
 })
 

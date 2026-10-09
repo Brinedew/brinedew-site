@@ -14,6 +14,7 @@ import {
   claimCompactDiscoveryMigrationLease,
   migrateLegacyDiscoveryPage,
 } from "./iconoplasm/discovery-compact-migrate.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
 // the actual handlers with the actual compact SQL, not a SQL-string mock.
@@ -144,22 +145,6 @@ class FakeKv {
   }
 }
 
-class FakeGameSessions {
-  constructor(sessions = {}) {
-    this.sessions = sessions
-  }
-  idFromName(name) {
-    return String(name || "")
-  }
-  get(id) {
-    const session = this.sessions[String(id || "")]
-    return {
-      fetch: async () =>
-        session ? Response.json(session) : new Response("missing", { status: 404 }),
-    }
-  }
-}
-
 function acceptingMutationAuthority() {
   return {
     idFromName: () => "global",
@@ -170,7 +155,6 @@ function acceptingMutationAuthority() {
 }
 
 async function buildEnv({
-  sessions,
   migrationComplete = true,
   mutationAuthority = acceptingMutationAuthority(),
 } = {}) {
@@ -197,7 +181,7 @@ async function buildEnv({
     .run("TP53", 3, 3, "2025-04-01T00:00:01Z", "a".repeat(64))
   const gatewayEnv = {
     ICONOPLASM_DB: db,
-    GAME_SESSIONS: new FakeGameSessions(sessions),
+    SESSION_SECRET: TEST_SESSION_SECRET,
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: mutationAuthority,
     KV: new FakeKv(),
@@ -242,14 +226,13 @@ async function invoke(request, env) {
   return viaStatefulWorker(request, env, {})
 }
 
-function sessionFor(userId) {
-  return { "session:abc": { user_id: userId, username: userId } }
-}
+// The reader's browser, signed in (B-1069: a sealed cookie, no session store).
+const READER = await sessionCookieFor({ user_id: "reader", username: "reader" })
 
 async function postBatch(env, { userId, batchId, encounters }) {
   const response = await invoke(
     post("/api/iconoplasm/discoveries/batch", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { batch_id: batchId, encounters },
     }),
     env,
@@ -279,7 +262,7 @@ test("the retired per-hover encounter writer is a write-free 410", async () => {
   const env = await buildEnv()
   const response = await invoke(
     post("/api/iconoplasm/discoveries/encounter", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { symbol: "TP53", source: "extension_hover", trigger: "hover_dwell", dwell_ms: 900 },
     }),
     env,
@@ -306,7 +289,7 @@ test("signed-out batches are acknowledged without touching storage", async () =>
 })
 
 test("a ten-hover batch commits one compact state and replays without duplicates", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const encounters = [
     "TP53",
     "BRCA1",
@@ -369,7 +352,7 @@ test("a ten-hover batch commits one compact state and replays without duplicates
 // keeps the encounter on its guest shelf. Batch 3 after signing back in used to
 // get 400 DISCOVERY_BATCH_SEQUENCE_GAP forever.
 test("a device that sent a batch while signed out keeps syncing after signing back in", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const first = await postBatch(env, {
     userId: "reader",
     batchId: "41db9ccfb8f31e7f7695cbc7:1",
@@ -400,7 +383,7 @@ test("a device that sent a batch while signed out keeps syncing after signing ba
 })
 
 test("activation blocks incomplete legacy migration, then migrated membership remains visible without request-time scans", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader"), migrationComplete: false })
+  const env = await buildEnv({ migrationComplete: false })
   env.gatewayDb.raw
     .prepare(
       `INSERT INTO icono_gene_discoveries
@@ -412,7 +395,7 @@ test("activation blocks incomplete legacy migration, then migrated membership re
     .run()
   const request = get(
     `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
-    { cookie: "session=abc" },
+    { cookie: READER },
   )
   const blocked = await invoke(request, env)
   assert.equal(blocked.status, 503)
@@ -438,7 +421,7 @@ test("activation blocks incomplete legacy migration, then migrated membership re
     await invoke(
       get(
         `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
-        { cookie: "session=abc" },
+        { cookie: READER },
       ),
       env,
     )
@@ -447,7 +430,7 @@ test("activation blocks incomplete legacy migration, then migrated membership re
 })
 
 test("shared aggregates stay exact through the durable deferred delivery drain", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   await postBatch(env, {
     userId: "reader",
     batchId: "device-a:1",
@@ -500,10 +483,10 @@ test("shared aggregates stay exact through the durable deferred delivery drain",
 })
 
 test("guest merge converges into compact membership without double counting", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const first = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { symbols: ["TP53", "BRCA1"] },
     }),
     env,
@@ -521,7 +504,7 @@ test("guest merge converges into compact membership without double counting", as
 
   const replay = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { symbols: ["TP53", "BRCA1"] },
     }),
     env,
@@ -540,10 +523,10 @@ test("guest merge converges into compact membership without double counting", as
 // 2026-09-26). A merged catalog gene nobody has discovered yet must be
 // recorded, and a name outside the catalog must be reported, not stored.
 test("guest merge records never-seen catalog genes and reports non-catalog names", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const response = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { symbols: ["TP53", "NOTAGENE"] },
     }),
     env,
@@ -575,10 +558,10 @@ test("collecting never asks the budget referee", async () => {
       },
     }),
   }
-  const env = await buildEnv({ sessions: sessionFor("reader"), mutationAuthority: referee })
+  const env = await buildEnv({ mutationAuthority: referee })
   const merged = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
-      cookie: "session=abc",
+      cookie: READER,
       body: { symbols: ["TP53"] },
     }),
     env,
@@ -597,7 +580,7 @@ test("collecting never asks the budget referee", async () => {
 })
 
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   await postBatch(env, {
     userId: "reader",
     batchId: "device-a:1",
@@ -607,10 +590,7 @@ test("discoveries me returns the compact shelf with exact first/last and counts"
       hoverEncounter("EGFR", 1020),
     ],
   })
-  const response = await invoke(
-    get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }),
-    env,
-  )
+  const response = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: READER }), env)
   const payload = await response.json()
   assert.equal(payload.authenticated, true)
   const tp53 = payload.discoveries.find((row) => row.gene_symbol === "TP53")
@@ -623,17 +603,17 @@ test("discoveries me returns the compact shelf with exact first/last and counts"
 })
 
 test("passive discovery reads never manufacture starter membership", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
-  const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
+  const env = await buildEnv()
+  const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: READER }), env)
   const firstPayload = await first.json()
   assert.deepEqual(firstPayload.discovered_symbols, [])
   assert.equal(await compactRowCount(env), 0)
-  await invoke(get("/api/iconoplasm/discoveries/me", { cookie: "session=abc" }), env)
+  await invoke(get("/api/iconoplasm/discoveries/me", { cookie: READER }), env)
   assert.equal(await compactRowCount(env), 0)
 })
 
 test("the hourly symbol publisher reads compact shared state", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   await postBatch(env, {
     userId: "reader",
     batchId: "device-a:1",
@@ -653,7 +633,7 @@ test("the hourly symbol publisher reads compact shared state", async () => {
 })
 
 test("admins may show the full catalog while non-admins cannot", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const adminRequest = new Request(
     "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1",
     {
@@ -667,7 +647,7 @@ test("admins may show the full catalog while non-admins cannot", async () => {
   assert.equal(payload.discoveries.length, CATALOG.length)
   assert.ok(payload.discovered_symbols.includes("FURIN"))
   const nonAdmin = await (
-    await invoke(get("/api/iconoplasm/discoveries/me?show_all=1", { cookie: "session=abc" }), env)
+    await invoke(get("/api/iconoplasm/discoveries/me?show_all=1", { cookie: READER }), env)
   ).json()
   assert.equal(nonAdmin.show_all_applied, false)
 })
@@ -678,7 +658,7 @@ test("admins may show the full catalog while non-admins cannot", async () => {
 // since the published list; a quiet hour costs the shared-state row alone. A
 // renamed canonical symbol is picked up by one full rebuild per UTC day.
 test("the hourly symbol publisher names only new shared ordinals (B-887)", async () => {
-  const env = await buildEnv({ sessions: sessionFor("reader") })
+  const env = await buildEnv()
   const db = env.gatewayEnv.ICONOPLASM_DB
   const named = []
   const prepare = db.prepare.bind(db)

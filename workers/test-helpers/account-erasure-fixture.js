@@ -3,6 +3,7 @@
 // foreign keys and CHECK constraints included); the adapter gives them D1's async surface, its
 // 100-bound-parameter limit and a call counter. Durable Objects are the real GameSession class on
 // in-memory storage; KV is a Map.
+import { sealSession } from "../lib/sealed-session.js"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 
@@ -257,12 +258,9 @@ export async function storeGameState(namespace, name, state) {
   })
 }
 
-async function storeSession(namespace, name, data) {
-  await namespace.get(name).fetch("http://internal/store", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  })
+// A browser's sealed session cookie (B-1069), its account check already due.
+async function sealedSessionCookie(env, data) {
+  return `session=${await sealSession(env, { ...data, account_checked_at: 0 })}`
 }
 
 // --- The world ---------------------------------------------------------------------------------
@@ -425,6 +423,7 @@ export async function seedWorld() {
     DISCORD_ICONOPLASM_CHANNEL_ID: CHANNEL_ID,
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
+    SESSION_SECRET: "erasure-fixture-session-secret-0000000000",
   }
   const network = new FakeNetwork()
   const sessions = gameSessionNamespace(env)
@@ -837,6 +836,7 @@ export async function seedDiscordMirror(world, postComment) {
 /** Game state and sessions need the KV key builder of the runtime, so the test seeds them. */
 export async function seedSessionsAndKv(world, userKvKeyScopes) {
   const { sessions, kv, erasedAccount, otherAccount } = world
+  if (!world.env) throw new Error("seedSessionsAndKv needs the world's env")
   const game = (user) => ({
     date: "2026-10-03",
     guesses: [{ uniprot: "P04637", by: user }],
@@ -849,18 +849,20 @@ export async function seedSessionsAndKv(world, userKvKeyScopes) {
     practiceMode: true,
   })
   await storeGameState(sessions, `user_${OTHER_USER}`, game(OTHER_USER))
-  await storeSession(sessions, "session:alice-session", {
-    user_id: ERASED_USER,
-    account_id: erasedAccount,
-    username: ERASED_NAME,
-    access_token: "alice-token",
-  })
-  await storeSession(sessions, "session:bob-session", {
-    user_id: OTHER_USER,
-    account_id: otherAccount,
-    username: OTHER_NAME,
-    access_token: "bob-token",
-  })
+  world.cookies = {
+    erased: await sealedSessionCookie(world.env, {
+      user_id: ERASED_USER,
+      account_id: erasedAccount,
+      username: ERASED_NAME,
+      access_token: "alice-token",
+    }),
+    other: await sealedSessionCookie(world.env, {
+      user_id: OTHER_USER,
+      account_id: otherAccount,
+      username: OTHER_NAME,
+      access_token: "bob-token",
+    }),
+  }
   for (const user of [ERASED_USER, OTHER_USER]) {
     const scopes = userKvKeyScopes(user)
     for (const key of scopes.exact) kv.map.set(key, "openai:gpt-image-1")
