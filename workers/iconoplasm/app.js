@@ -12,7 +12,14 @@ import { HTTPException } from "hono/http-exception"
 // evaluated by every cold isolate to check two routes' bodies.
 import * as z from "zod/mini"
 
-import { d1DailyRowLimitResponse } from "../lib/cloudflare-availability.js"
+import {
+  FREE_PLAN_DAILY_LIMITS,
+  criticalityShareLimit,
+} from "../../shared/iconoplasm-d1-budget-policy.js"
+import {
+  d1DailyRowLimitResponse,
+  secondsUntilCloudflareDailyReset,
+} from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
@@ -60,6 +67,9 @@ const registerSchema = z
   .object({
     created_by: z.string().check(z.trim(), z.minLength(1), z.maxLength(255)),
     portraits: z.array(portraitSchema).check(z.minLength(1), z.maxLength(REGISTER_MAX_PORTRAITS)),
+    // A session drawn for a reader's own request runs to Cloudflare's wall;
+    // everything else the factory sends is batch work.
+    criticality: z._default(z.enum(["critical", "sheddable_plus"]), "sheddable_plus"),
   })
   .check(
     z.refine((body) => new Set(body.portraits.map((p) => p.symbol)).size <= MAX_GENES_PER_REQUEST, {
@@ -168,8 +178,47 @@ async function outsideMaintenance(c, next) {
   return next()
 }
 
-export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
+export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, accountUsage }) {
   const app = new Hono()
+
+  // B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
+  // whole 100,000-row D1 write wall by 21:00 UTC, because taking publication out
+  // of the budget referee also took it out of the tier rule (batch work stops at
+  // 85% of a wall, a reader's own action runs to it; shared/iconoplasm-d1-budget-policy.js).
+  // The factory routes now apply that rule themselves, against Cloudflare's own
+  // usage meter, so no caller (the Drain, a sweep script, the catalogue run, a
+  // future agent) can spend readers' share. A meter that can't be read never
+  // stops work: Cloudflare's own wall still does.
+  const shedBatchWork = (criticalityOf) => async (c, next) => {
+    const criticality = criticalityOf(c)
+    if (criticality === "critical") return next()
+    const usage = await accountUsage(c.env).catch(() => null)
+    for (const meter of ["rows_read", "rows_written"]) {
+      const limit = criticalityShareLimit(FREE_PLAN_DAILY_LIMITS[meter], criticality)
+      const used = Number(usage?.[meter] || 0)
+      if (used < limit) continue
+      const retryAfter = secondsUntilCloudflareDailyReset()
+      c.header("Retry-After", String(retryAfter))
+      c.header("Cache-Control", "no-store")
+      return c.json(
+        {
+          ok: false,
+          code: "D1_BATCH_SHARE_SPENT",
+          error: {
+            code: "D1_BATCH_SHARE_SPENT",
+            message: `Batch work stops at ${limit.toLocaleString("en-US")} D1 ${meter.replace("_", " ")} a day (${used.toLocaleString("en-US")} used); readers keep the rest until 00:00 UTC.`,
+          },
+          meter,
+          used,
+          limit,
+          retry_after_seconds: retryAfter,
+          reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
+        },
+        503,
+      )
+    }
+    return next()
+  }
   // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
   // thrown error leaves the app as it is: the Worker's error reporting
   // (withErrorReporting, B-832) sends it to Sentry with its stack, as it did
@@ -200,6 +249,7 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
     factoryAuth,
     outsideMaintenance,
     zValidator("json", registerSchema),
+    shedBatchWork((c) => c.req.valid("json").criticality),
     async (c) => {
       const { created_by: createdBy, portraits: sent } = c.req.valid("json")
       const db = drizzle(c.env.ICONOPLASM_DB)
@@ -283,6 +333,7 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
         symbols: z.array(symbolSchema).check(z.minLength(1), z.maxLength(MAX_GENES_PER_REQUEST)),
       }),
     ),
+    shedBatchWork(() => "sheddable_plus"),
     async (c) => {
       const symbols = [...new Set(c.req.valid("json").symbols)]
       const results = []

@@ -107,6 +107,7 @@ function routePoster({
       published.push(symbol)
       return { symbol, withdrawn: false }
     },
+    accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
   })
   const post = async (symbols) => {
     calls.push([...symbols])

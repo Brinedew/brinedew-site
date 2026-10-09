@@ -27,7 +27,7 @@ import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } fr
 const TOKEN = "factory-token-0000000000000000000000001"
 const sha = (char) => char.repeat(64)
 
-function harness({ failOn = null } = {}) {
+function harness({ failOn = null, usage = async () => ({ rows_read: 0, rows_written: 0 }) } = {}) {
   const db = iconoplasmDatabase()
   for (const [symbol, name] of [
     ["TP53", "tumor protein p53"],
@@ -59,6 +59,7 @@ function harness({ failOn = null } = {}) {
       })
     },
     refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
+    accountUsage: usage,
   })
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const register = async (body, { token = TOKEN } = {}) => {
@@ -300,4 +301,47 @@ test("a full registration writes all its rows with two statements", async () => 
     h.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE action = 'candidate_added'")[0].n,
     REGISTER_MAX_PORTRAITS,
   )
+})
+
+// B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
+// whole D1 write wall. Batch work stops at the tier table's 85% of a wall,
+// measured on Cloudflare's own meter; a reader's own request runs to the wall;
+// an unreadable meter stops nothing.
+test("batch registrations and rebuilds stop at 85% of a D1 wall, a reader's session does not", async () => {
+  const spent = async () => ({ rows_read: 1_000_000, rows_written: 85_000 })
+  const h = harness({ usage: spent })
+  const body = { created_by: "drain:local", portraits: [portrait("TP53", "a")] }
+  const refused = await h.register(body)
+  assert.equal(refused.status, 503)
+  assert.equal(refused.body.code, "D1_BATCH_SHARE_SPENT")
+  assert.equal(refused.body.meter, "rows_written")
+  assert.equal(refused.body.limit, 85_000)
+  assert.match(refused.body.reset_at, /T00:00:0\d\.\d{3}Z$/)
+  assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n, 0, "nothing written")
+
+  const reader = await h.register({ ...body, criticality: "critical" })
+  assert.equal(reader.status, 200, JSON.stringify(reader.body))
+  assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n, 1)
+
+  const rebuild = await h.app.request(
+    "/api/iconoplasm/admin/publication/republish",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ symbols: ["TP53"] }),
+    },
+    h.env,
+  )
+  assert.equal(rebuild.status, 503)
+  assert.equal((await rebuild.json()).code, "D1_BATCH_SHARE_SPENT")
+})
+
+test("a usage meter that can't be read stops no registration", async () => {
+  const h = harness({
+    usage: async () => {
+      throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
+    },
+  })
+  const result = await h.register({ created_by: "drain:local", portraits: [portrait("TP53", "a")] })
+  assert.equal(result.status, 200, JSON.stringify(result.body))
 })
