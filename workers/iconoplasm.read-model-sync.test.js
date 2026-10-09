@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -73,7 +74,9 @@ class FakeStatement {
         ],
       }
     }
-    return { results: [] }
+    // The budget wrapper reads first() through all(): answer it from first().
+    const row = await this.first()
+    return { results: row ? [row] : [] }
   }
 
   async first() {
@@ -199,6 +202,7 @@ function buildEnv({ bindGateway = true } = {}) {
   ])
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     KV: {

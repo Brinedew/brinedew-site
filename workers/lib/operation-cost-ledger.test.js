@@ -89,6 +89,24 @@ function enableKv(f, overrides = {}) {
   })
 }
 
+// 2026-10-09: a private cap of 500 plan registrations a day failed the owner's
+// Image Lab runs at 12:00 and 12:40 UTC (each gene registers one plan), with the
+// account's Durable Object writes at about 15% of Cloudflare's 100,000. Plans
+// are admitted by what they spend, at their tier's share; their number is not
+// a wall.
+test("a 1,200-gene Image Lab day registers every plan", () => {
+  const f = fixture()
+  try {
+    for (let gene = 0; gene < 1_200; gene++)
+      f.ledger.register({ ...f.input, id: `image-lab-gene-${gene}` })
+    const day = f.db.prepare("SELECT registrations FROM operation_cost_days").get()
+    assert.equal(day.registrations, 1_200)
+    assert.equal(f.ledger.readPlan("image-lab-gene-1199").status, "active")
+  } finally {
+    f.db.close()
+  }
+})
+
 // B-1035, 2026-10-06: the B-994 rewrite batch (about 78 rows a gene) was counted
 // twice, once in the shared counter and again inside the provider's account
 // sample, and would have stopped at about half its 535 genes.

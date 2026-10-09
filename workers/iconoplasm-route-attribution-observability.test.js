@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 class CatalogUpsertStatement {
@@ -124,7 +125,7 @@ class FixedSnapshotBudgetNamespace {
             (this.snapshot.rows_written_daily_smart_limit != null &&
               Number(this.snapshot.rows_written || 0) >=
                 Number(this.snapshot.rows_written_daily_smart_limit || 0))
-          this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily_smart" : null
+          this.snapshot.exhausted_by = this.snapshot.exhausted ? "rows_written_daily" : null
         }
         return Response.json(this.snapshot)
       },
@@ -165,16 +166,16 @@ test("successful sync-style admin mutations emit one Workers Observability route
     cycle_rows_written: 4,
     cycle_query_count: 1,
     cycle_request_count: 1,
-    rows_read_monthly_limit: 24000000000,
-    rows_written_monthly_limit: 50000,
-    rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 49996,
-    rows_read_daily_smart_limit: 100000,
-    rows_written_daily_smart_limit: 10000,
-    rows_read_daily_remaining: 100000,
-    rows_written_daily_remaining: 9996,
+    rows_read_monthly_limit: null,
+    rows_written_monthly_limit: null,
+    rows_read_monthly_remaining: null,
+    rows_written_monthly_remaining: null,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+    rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes - 4,
     days_remaining_in_cycle: 20,
-    daily_burst_multiplier: 3,
+    daily_burst_multiplier: 1,
     exhausted: false,
     exhausted_by: null,
     updated_at: "2026-04-17T05:00:00Z",
@@ -201,10 +202,6 @@ test("successful sync-style admin mutations emit one Workers Observability route
         ICONOPLASM_DB: db,
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
         ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "50000",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     ),
@@ -226,6 +223,8 @@ test("successful sync-style admin mutations emit one Workers Observability route
 })
 
 test("fail-closed limiter rejections still emit one Workers Observability route log", async () => {
+  // One row past the limiter's target share (85%) of Cloudflare's daily write allowance.
+  const written = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85) + 1
   const { result: response, logs } = await withCapturedRouteLogs(() =>
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -251,31 +250,29 @@ test("fail-closed limiter rejections still emit one Workers Observability route 
           day_key: "2026-04-17",
           cycle_key: "2026-04-07",
           rows_read: 0,
-          rows_written: 18,
+          rows_written: written,
           query_count: 3,
           request_count: 1,
           cycle_rows_read: 0,
-          cycle_rows_written: 18,
+          cycle_rows_written: written,
           cycle_query_count: 3,
           cycle_request_count: 1,
-          rows_read_monthly_limit: 24000000000,
-          rows_written_monthly_limit: 100,
-          rows_read_monthly_remaining: 24000000000,
-          rows_written_monthly_remaining: 82,
-          rows_read_daily_smart_limit: 1000,
-          rows_written_daily_smart_limit: 20,
-          rows_read_daily_remaining: 1000,
-          rows_written_daily_remaining: 2,
+          rows_read_monthly_limit: null,
+          rows_written_monthly_limit: null,
+          rows_read_monthly_remaining: null,
+          rows_written_monthly_remaining: null,
+          rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+          rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+          rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+          rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes - written,
+          account_rows_read: 0,
+          account_rows_written: written,
           days_remaining_in_cycle: 20,
-          daily_burst_multiplier: 3,
+          daily_burst_multiplier: 1,
           exhausted: false,
           exhausted_by: null,
           updated_at: "2026-04-17T05:00:00Z",
         }),
-        ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-        ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
-        ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-        ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
       },
       { waitUntil() {} },
     ),

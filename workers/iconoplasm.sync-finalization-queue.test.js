@@ -13,6 +13,8 @@ import {
 } from "./iconoplasm/sync-finalization-publication.js"
 import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 
+import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
@@ -1114,12 +1116,12 @@ test("finalization hands an exhausted day to a durable reset wake before D1 and 
         return Response.json({
           day_key: body.day_key,
           cycle_key: body.cycle_key,
-          rows_read: exhausted ? 1000000 : 0,
+          rows_read: exhausted ? FREE_D1_DAILY_LIMITS.reads : 0,
           rows_written: 0,
-          rows_read_daily_smart_limit: 1000000,
-          rows_written_daily_smart_limit: 20000,
+          rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+          rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
           exhausted,
-          exhausted_by: exhausted ? "rows_read_daily_smart" : null,
+          exhausted_by: exhausted ? "rows_read_daily" : null,
         })
       },
     }),
@@ -1129,8 +1131,6 @@ test("finalization hands an exhausted day to a durable reset wake before D1 and 
     ICONOPLASM_DB: db,
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budget,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
     KV: testKv(),
   }
   const { values, governor } = finalizationGovernorForTest(env)
@@ -1301,6 +1301,7 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
           ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
           ICONOPLASM_DB: env.gatewayDb,
           ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+          ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         },
         { waitUntil() {} },
       )
@@ -1396,32 +1397,10 @@ test("admin finalization enqueue stores normalized durable job rows", async () =
 })
 
 test("admin finalization enqueue returns current mutation-limiter telemetry for workstation accounting", async () => {
-  const budgetNamespace = {
-    idFromName(name) {
-      return String(name || "")
-    },
-    get() {
-      return {
-        fetch: async () =>
-          new Response(
-            JSON.stringify({
-              day_key: "2026-04-16",
-              cycle_key: "2026-04",
-              days_remaining_in_cycle: 12,
-              rows_written: 24,
-              rows_written_daily_smart_limit: 100,
-              rows_written_daily_remaining: 76,
-              rows_written_monthly_limit: 1000,
-              rows_written_monthly_remaining: 976,
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-      }
-    },
-  }
+  // The account has written 24 rows today; the limiter's wall is Cloudflare's daily
+  // write allowance and its target is 85% of it.
+  const writtenToday = 24
+  const budgetNamespace = new FakeDailyBudgetNamespace({ rowsWritten: writtenToday })
   const gatewayDb = new FakeIconoplasmDb()
   const queue = buildFakeQueue()
   const gatewayEnv = {
@@ -1429,10 +1408,6 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-    ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-    ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "1000",
-    ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
-    ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY: "3",
   }
   const env = bindOnlyAllowedGateway(
     {
@@ -1467,9 +1442,13 @@ test("admin finalization enqueue returns current mutation-limiter telemetry for 
 
   assert.equal(response.status, 200)
   assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
-  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, 85)
-  assert.equal(payload?.mutation_limiter?.rows_written_target_remaining, 61)
-  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, 24)
+  const targetCeiling = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85)
+  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, targetCeiling)
+  assert.equal(
+    payload?.mutation_limiter?.rows_written_target_remaining,
+    targetCeiling - writtenToday,
+  )
+  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, writtenToday)
   assert.equal(payload?.queue_enabled, true)
   assert.equal(payload?.queue_messages, 1)
 })
@@ -1479,6 +1458,7 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
   const env = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   const { values } = finalizationGovernorForTest(env, { providerHealthy: false })
   const response =
@@ -1518,6 +1498,7 @@ test("admin finalization kick fails loud with the Cloudflare Queue send error", 
   const env = {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   bindHealthySyncGovernorForTest(env)
   const response =
@@ -1561,6 +1542,7 @@ test("admin finalization kick refuses before Queue dispatch when the governor ca
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
         ICONOPLASM_SYNC_FINALIZATION_QUEUE: queue,
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
       },
       { waitUntil() {} },
     )

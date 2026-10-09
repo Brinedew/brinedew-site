@@ -375,16 +375,12 @@ async function loadWranglerConfig(rootDir, envName) {
     scriptName: String(envName === "staging" ? envConfig.name : parsed.name),
     databaseId: String(iconoplasmDb.database_id),
     databaseName: String(iconoplasmDb.database_name || "iconoplasm"),
-    billingCycleDayOfMonth: asNumber(
-      vars.ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY,
-    ),
-    dailyBurstMultiplier: asNumber(vars.ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY),
-    rowsReadHardMonthlyBudget: asNumber(
-      vars.ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY,
-    ),
-    rowsWrittenHardMonthlyBudget: asNumber(
-      vars.ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY,
-    ),
+    // B-1026 (10-09): no paid-plan monthly budget or burst factor; the free plan's
+    // limits reset every UTC day. The cycle is the calendar month, for history only.
+    billingCycleDayOfMonth: 1,
+    dailyBurstMultiplier: 1,
+    rowsReadHardMonthlyBudget: 0,
+    rowsWrittenHardMonthlyBudget: 0,
     databaseStorageHardLimitBytes: asNumber(
       vars.ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY,
     ),
