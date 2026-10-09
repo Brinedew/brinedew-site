@@ -390,6 +390,7 @@ import {
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
+import { createOperationCostAccountUsageReader } from "./iconoplasm/operation-cost-account-usage.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -1938,10 +1939,20 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
 // B-1063: Hono answers the routes it knows and hands every other request to
 // the legacy handler above.
+let factoryUsageReader = null
 const app = createIconoplasmApp({
   legacy: handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishGene: publishIconoplasmGeneStableObject,
   refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
+  // Today's account-wide D1 usage from Cloudflare's analytics, one reader per
+  // isolate (it caches 30 s and backs off after a failure).
+  accountUsage: (env) => {
+    factoryUsageReader ??= createOperationCostAccountUsageReader({
+      accountId: env.CLOUDFLARE_ACCOUNT_ID,
+      token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+    })
+    return factoryUsageReader.refresh()
+  },
 })
 
 export default {
