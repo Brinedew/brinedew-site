@@ -21712,7 +21712,7 @@ export async function publishIconoplasmGeneStableObject(
       portraitOverrides: selected ? { [symbol]: selected } : null,
     })
     const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
-    if (!card) return { symbol, withdrawn: true, stable: null }
+    if (!card) return await withdrawIconoplasmGeneStableObject(db, store, symbol)
     if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
     stableCard = adapter.stable(card)
     const projected = adapter.project(stableCard.payload)
@@ -21748,6 +21748,26 @@ export async function publishIconoplasmGeneStableObject(
     published_at: object.published_at,
     ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
+}
+
+// B-1055: a gene with no card is withdrawn. Only a gene the catalogue no longer
+// carries loses its page (its stable object and its route membership); the D1
+// read is the proof, because on 2026-10-01 a republish that mistook "no
+// selection" for "withdraw" wiped a live gene's portrait. Without D1, or with
+// the gene still in the catalogue, nothing is deleted.
+async function withdrawIconoplasmGeneStableObject(db, store, symbol) {
+  if (!db) return { symbol, withdrawn: true, stable: null, page_deleted: false }
+  const listed = await db
+    .prepare("SELECT 1 AS listed FROM icono_gene_catalog WHERE gene_symbol = ? LIMIT 1")
+    .bind(symbol)
+    .first()
+  if (listed) return { symbol, withdrawn: true, stable: null, page_deleted: false }
+  await store.deleteStable(stableGeneObjectKey(symbol))
+  await db
+    .prepare("DELETE FROM icono_published_gene_routes WHERE gene_symbol = ?")
+    .bind(symbol)
+    .run()
+  return { symbol, withdrawn: true, stable: null, page_deleted: true }
 }
 
 // Republishes one gene in process. Returns the receipt, or null after logging

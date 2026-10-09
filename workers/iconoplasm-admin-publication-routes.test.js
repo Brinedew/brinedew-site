@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
+import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -109,8 +111,32 @@ test("catalog state requires explicit valid scopes without touching D1 otherwise
   }
 })
 
-test("catalog upsert owns its write boundary and can defer read models", async () => {
-  const writes = []
+// B-1055: real production schema and triggers, because the event decision is SQL.
+// Before this, neither catalogue route wrote a publication event: 600 genes added
+// on 10-07 never got a page and 613 removed on 10-08 kept theirs.
+function catalogItem(overrides = {}) {
+  return {
+    gene_symbol: "TP53",
+    full_name: "tumor protein p53",
+    uniprot: "P04637",
+    color_hex: "#35353C",
+    tmh: false,
+    aliases_json: "[]",
+    ...overrides,
+  }
+}
+
+function catalogEvents(db) {
+  return db.database
+    .prepare(
+      "SELECT gene_symbol, action FROM icono_publish_events WHERE action LIKE 'catalog_%' ORDER BY id",
+    )
+    .all()
+    .map((row) => [row.gene_symbol, row.action])
+}
+
+test("catalog upsert records a publication event only for a new or changed row", async () => {
+  const db = iconoplasmDatabase()
   let readModelCalls = 0
   const handlers = createIconoplasmAdminPublicationHandlers(
     publicationServices({
@@ -119,42 +145,37 @@ test("catalog upsert owns its write boundary and can defer read models", async (
       },
     }),
   )
-  const response = await responseFrom(handlers["admin_publication.catalog_upsert"], {
-    body: {
-      defer_read_models: true,
-      items: [
-        {
-          gene_symbol: "TP53",
-          full_name: "tumor protein p53",
-          uniprot: "P04637",
-          color_hex: "#35353C",
-          tmh: false,
-          aliases_json: "[]",
-        },
-      ],
-    },
-    env: {
-      ICONOPLASM_DB: {
-        prepare(sql) {
-          return {
-            bind(...args) {
-              return { sql, args }
-            },
-          }
-        },
-        async batch(statements, options) {
-          assert.deepEqual(options, { maxRowsWritten: 4 })
-          writes.push(...statements)
-        },
-      },
-    },
-  })
-  const payload = await response.json()
+  const upsert = async (items) => {
+    const response = await responseFrom(handlers["admin_publication.catalog_upsert"], {
+      body: { defer_read_models: true, items },
+      env: { ICONOPLASM_DB: db },
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get("Cache-Control"), "no-store")
+    return response.json()
+  }
 
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(payload.processed, 1)
-  assert.equal(writes.length, 1)
+  assert.equal((await upsert([catalogItem()])).processed, 1)
+  assert.deepEqual(catalogEvents(db), [["TP53", "catalog_upserted"]])
+  // A resent unchanged row schedules nothing.
+  await upsert([catalogItem()])
+  assert.deepEqual(catalogEvents(db), [["TP53", "catalog_upserted"]])
+  // A changed row does; so does a new gene in the same request, one D1 call for both.
+  const calls = db.calls
+  await upsert([catalogItem({ color_hex: "#28302D" }), catalogItem({ gene_symbol: "ADISSP" })])
+  assert.equal(db.calls - calls, 1)
+  assert.deepEqual(catalogEvents(db), [
+    ["TP53", "catalog_upserted"],
+    ["TP53", "catalog_upserted"],
+    ["ADISSP", "catalog_upserted"],
+  ])
+  assert.equal(
+    db.database.prepare("SELECT color_hex FROM icono_gene_catalog WHERE gene_symbol = 'TP53'").get()
+      .color_hex,
+    "#28302D",
+  )
+  for (const [, action] of catalogEvents(db))
+    assert.equal(PUBLICATION_AFFECTING_ACTIONS.includes(action), true)
   assert.equal(readModelCalls, 0)
 })
 
@@ -245,34 +266,30 @@ test("essence upsert uses quota-reserved bounded transactions and can defer read
   assert.equal(readModelCalls, 0)
 })
 
-test("catalog reconcile deletes only explicit normalized symbols", async () => {
-  const deleted = []
+test("catalog reconcile removes explicit symbols and records each removal, even of a row already gone", async () => {
+  const db = iconoplasmDatabase()
+  db.database
+    .prepare(
+      "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
+    )
+    .run()
   const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
+  const calls = db.calls
   const response = await responseFrom(handlers["admin_publication.catalog_reconcile"], {
-    body: { delete_symbols: [" tp53 ", "TP53"], defer_read_models: true },
-    env: {
-      ICONOPLASM_DB: {
-        prepare(sql) {
-          return {
-            bind(symbol) {
-              return {
-                async run() {
-                  deleted.push({ sql, symbol })
-                },
-              }
-            },
-          }
-        },
-      },
-    },
+    body: { delete_symbols: [" tp53 ", "TP53", "ADGRE4P"], defer_read_models: true },
+    env: { ICONOPLASM_DB: db },
   })
 
   assert.equal(response.status, 200)
-  assert.equal((await response.json()).deleted, 1)
-  assert.deepEqual(
-    deleted.map((entry) => entry.symbol),
-    ["TP53"],
-  )
+  assert.equal((await response.json()).deleted, 2)
+  assert.equal(db.database.prepare("SELECT COUNT(*) AS n FROM icono_gene_catalog").get().n, 0)
+  // ADGRE4P's row went on 10-08 while its page stayed: the resend still takes the page down.
+  assert.deepEqual(catalogEvents(db), [
+    ["TP53", "catalog_removed"],
+    ["ADGRE4P", "catalog_removed"],
+  ])
+  // One D1 call per symbol: 1,000 calls per invocation bounds a request at about 1,000 symbols.
+  assert.equal(db.calls - calls, 2)
 })
 
 test("catalog reconcile rejects the unadmitted keep-symbols whole-state mode", async () => {
