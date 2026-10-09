@@ -232,6 +232,30 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, acc
     throw error
   })
 
+  // What the shedding above sees: today's account-wide D1 use from Cloudflare's
+  // own meter, each wall, and where batch work stops. The Drain's forecast plans
+  // from this answer instead of keeping copies of the numbers (its copy of the
+  // write share stayed at 70% after the tier table moved to 85%). No D1 read.
+  app.get("/api/iconoplasm/admin/d1-usage", factoryAuth, async (c) => {
+    const usage = await accountUsage(c.env).catch(() => null)
+    const retryAfter = secondsUntilCloudflareDailyReset()
+    c.header("Cache-Control", "no-store")
+    return c.json({
+      ok: usage !== null,
+      reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
+      meters: Object.fromEntries(
+        ["rows_read", "rows_written"].map((meter) => [
+          meter,
+          {
+            used: usage === null ? null : Number(usage[meter] || 0),
+            wall: FREE_PLAN_DAILY_LIMITS[meter],
+            batch_limit: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS[meter], "sheddable_plus"),
+          },
+        ]),
+      ),
+    })
+  })
+
   /**
    * The factory registers portraits it has already uploaded to the CDN
    * (portraits/v1/<sha>/{full,medium,thumb}.webp), then each touched gene's
