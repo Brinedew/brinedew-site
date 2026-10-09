@@ -29,8 +29,14 @@ Iconoplasm publishes two objects on Bunny:
   cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
   `repository_dispatch` when the newest publication-affecting event moved.
   `PUBLICATION_AFFECTING_ACTIONS` in that file is the one list of event actions
-  that change a stable object (a winner or a candidate change); the publisher
+  that change what readers see: a winner or candidate change, or a catalogue
+  row added, changed (`catalog_upserted`) or removed (`catalog_removed`, written
+  by `delete_symbols` even when the row is already gone). The publisher
   republishes every gene with one of them after its watermark.
+- A gene the catalogue no longer carries has no card. Its republish deletes its
+  stable object and its `icono_published_gene_routes` row, after a D1 read
+  proves the gene is absent, and the catalog run drops its row. Its page then
+  reads "Page not found", as for a gene the site never had.
 
 ## Stable gene object
 

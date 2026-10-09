@@ -9,10 +9,12 @@ export const CATALOG_DISPATCH_WATERMARK_KEY = "iconoplasm:catalog-dispatch-water
 export const CATALOG_DISPATCH_EVENT_TYPE = "iconoplasm-catalog"
 const DISPATCH_URL = "https://api.github.com/repos/Brinedew/brinedew-site/dispatches"
 // THE ONE LIST of icono_publish_events actions that change what readers see in
-// a gene's stable object or in the catalog object: its winner or its candidate
-// gallery. Every path that adds, removes or changes a gene's candidates or
-// winner writes one of these, and the Actions publisher republishes every gene
-// with one after its watermark (scripts/publish-iconoplasm-catalog.mjs imports
+// a gene's stable object or in the catalog object: its winner, its candidate
+// gallery, or its place in the catalogue. Every path that adds, removes or
+// changes a gene's candidates or winner, or adds, changes or removes its
+// catalogue row (B-1055: until then a new gene stayed invisible and a removed
+// one kept its page), writes one of these, and the Actions publisher
+// republishes every gene with one after its watermark (scripts/publish-iconoplasm-catalog.mjs imports
 // this list, as do the runtime's blot backlog and gallery version). Bookkeeping
 // actions such as gene_card_materialized stay out, so one publish never
 // schedules a second no-op publish.
@@ -34,6 +36,8 @@ export const PUBLICATION_AFFECTING_ACTIONS = Object.freeze([
   "edit_candidate",
   "generate_candidate",
   "unstale",
+  "catalog_upserted",
+  "catalog_removed",
 ])
 
 export async function dispatchIconoplasmCatalogPublication(env, { fetchImpl = fetch } = {}) {

@@ -209,5 +209,21 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
     return { key, bytes, symbol: identity.symbol }
   }
 
-  return { writeStable, readStable }
+  // B-1055: a gene the catalogue no longer carries loses its page. Deleting a
+  // missing object is success: the outcome (no object) is what was asked for.
+  async function deleteStable(key) {
+    const identity = stableGeneObjectIdentity(key)
+    // Only a gene's own object: the catalog, picker and leaderboard objects are never deleted.
+    if (!identity.symbol) throw new Error("Only a stable gene object can be deleted")
+    const url = externalPortraitStorageUrl(env, key)
+    const password = externalPortraitStoragePassword(env)
+    if (!url || !password) throw new Error("Bunny published-object writes are not configured")
+    const response = await send(url, { method: "DELETE", headers: { AccessKey: password } }, key)
+    await response.body?.cancel().catch(() => {})
+    if (!response.ok && response.status !== 404)
+      throw new Error(`Stable gene object DELETE failed (${response.status})`)
+    return { key, symbol: identity.symbol, deleted: response.ok }
+  }
+
+  return { writeStable, readStable, deleteStable }
 }
