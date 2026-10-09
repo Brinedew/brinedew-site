@@ -45,13 +45,7 @@ export function reviewedMigrationStatements(directory, name, expectedTriggers, e
 // the generated `<PREFIX>_MIGRATION_NAME` and `<PREFIX>_MIGRATION_STATEMENTS`.
 // The entry is deleted once the deploy shows the migration applied.
 function pendingMigrations() {
-  return [
-    [
-      "VISION_ROLLUP_DIRTY",
-      "0117_vision_rollup_dirty.sql",
-      reviewedMigrationStatements("migrations-iconoplasm", "0117_vision_rollup_dirty.sql", 0, 1),
-    ],
-  ]
+  return []
 }
 
 function output() {
