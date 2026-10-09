@@ -181,35 +181,76 @@ function sha256(bytes) {
 
 // B-898 (deletion stage): before the catalog is rebuilt, every changed gene
 // gets its stable object rewritten by the Worker, which alone can read the
-// authoring store. Eight genes per call keeps the Worker under its subrequest
-// ceiling; a gene that fails is retried once and then reported, never silently
-// skipped, so the catalog row and the gene object are rebuilt from the same
-// D1 state.
-async function republishGenes(symbols) {
+// authoring store. A gene that fails is reported, never silently skipped, so the
+// catalog row and the gene object are rebuilt from the same D1 state.
+//
+// B-1055: one catalogue delivery dirties a thousand genes at once (613 removed and
+// 604 added on 2026-10-09). At eight genes a call about one call in five dies at
+// the free plan's 10 ms CPU cap (3,521 of 16,979 on 2026-10-03), so two tries per
+// batch made a 150-call run all but certain to throw, and with its watermark held
+// every later run would retry the same genes and throw again, freezing the catalog.
+// The operator sweep's policy came through 17k genes that night: four genes a call,
+// two retries with backoff, then one gene a call. Only a gene that fails all of that
+// fails the run, which then repeats on the next dispatch.
+export const REPUBLISH_BATCH_SYMBOLS = 4
+export const REPUBLISH_RETRY_DELAYS_MS = Object.freeze([2000, 5000])
+
+async function postRepublish(symbols) {
+  const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ symbols }),
+  })
+  const body = await response.json().catch(() => null)
+  return { ok: response.ok && body?.ok === true, status: response.status, body }
+}
+
+export async function republishGenes(
+  symbols,
+  {
+    post = postRepublish,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    batchSize = REPUBLISH_BATCH_SYMBOLS,
+    retryDelaysMs = REPUBLISH_RETRY_DELAYS_MS,
+  } = {},
+) {
   const failed = []
   let published = 0
-  for (let index = 0; index < symbols.length; index += 8) {
-    const batch = symbols.slice(index, index + 8)
-    let reply = null
-    for (let attempt = 1; attempt <= 2 && !reply; attempt += 1) {
-      const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ symbols: batch }),
-      })
-      const body = await response.json().catch(() => null)
-      if (response.ok && body?.ok === true) reply = body
-      else if (attempt === 2)
-        throw new Error(`Republish failed (${response.status}): ${JSON.stringify(body)}`)
-      else await new Promise((resolve) => setTimeout(resolve, 2000))
+  let calls = 0
+  async function attempt(batch) {
+    let last = null
+    for (let tryIndex = 0; tryIndex <= retryDelaysMs.length; tryIndex += 1) {
+      if (tryIndex > 0) await sleep(retryDelaysMs[tryIndex - 1])
+      calls += 1
+      last = await post(batch).catch((error) => ({ ok: false, status: 0, body: String(error) }))
+      if (last.ok) return { reply: last.body, last }
     }
-    published += Number(reply.published || 0)
-    for (const result of reply.results || []) if (result.ok !== true) failed.push(result)
+    return { reply: null, last }
   }
-  return { published, failed }
+  for (let index = 0; index < symbols.length; index += batchSize) {
+    const batch = symbols.slice(index, index + batchSize)
+    const replies = []
+    const whole = await attempt(batch)
+    if (whole.reply) replies.push(whole.reply)
+    else {
+      for (const symbol of batch) {
+        const single = batch.length > 1 ? await attempt([symbol]) : whole
+        if (!single.reply)
+          throw new Error(
+            `Republish of ${symbol} failed after retries (${single.last?.status}): ${JSON.stringify(single.last?.body)}`,
+          )
+        replies.push(single.reply)
+      }
+    }
+    for (const reply of replies) {
+      published += Number(reply.published || 0)
+      for (const result of reply.results || []) if (result.ok !== true) failed.push(result)
+    }
+  }
+  return { published, failed, calls }
 }
 
 async function upload(bytes) {
