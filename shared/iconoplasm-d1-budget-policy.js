@@ -62,25 +62,30 @@ export function criticalityShareLimit(limit, criticality) {
   return Math.floor(Number(limit) * share)
 }
 
-// B-897: write reservations are shed on the provider's write meter. Background
-// work stops at 70%, a person's own action at 90%, so readers' votes and
-// discoveries always keep the last 10,000 rows.
-export const D1_BACKGROUND_WRITE_CEILING = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.7)
-export const D1_USER_ACTION_DAILY_WRITE_CEILING = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.9)
+// Write reservations (B-897) shed on the same tiers: background and delivery
+// lanes are batch, a person's own action is critical. No other share exists.
+export const D1_BACKGROUND_WRITE_CEILING = criticalityShareLimit(
+  FREE_D1_DAILY_LIMITS.writes,
+  "sheddable_plus",
+)
+export const D1_USER_ACTION_DAILY_WRITE_CEILING = criticalityShareLimit(
+  FREE_D1_DAILY_LIMITS.writes,
+  "critical",
+)
 
 // The operation-cost ledger (replica pulls, releases, migrations) is batch work:
-// it stops when the whole account reaches these. KV follows the write lanes'
-// 70%, because the free plan's 1,000 KV writes a day are the scarcest meter.
+// it stops when the whole account reaches the batch share of each meter.
+const batchShare = (limit) => criticalityShareLimit(limit, "sheddable_plus")
 export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
-  rows_read: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS.rows_read, "sheddable_plus"),
-  rows_written: D1_BACKGROUND_WRITE_CEILING,
-  requests: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS.requests, "sheddable_plus"),
+  rows_read: batchShare(FREE_PLAN_DAILY_LIMITS.rows_read),
+  rows_written: batchShare(FREE_PLAN_DAILY_LIMITS.rows_written),
+  requests: batchShare(FREE_PLAN_DAILY_LIMITS.requests),
 })
 export const KV_ACCOUNT_CEILINGS = Object.freeze({
-  kv_reads: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_reads * 0.7),
-  kv_writes: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_writes * 0.7),
-  kv_deletes: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_deletes * 0.7),
-  kv_lists: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_lists * 0.7),
+  kv_reads: batchShare(FREE_PLAN_DAILY_LIMITS.kv_reads),
+  kv_writes: batchShare(FREE_PLAN_DAILY_LIMITS.kv_writes),
+  kv_deletes: batchShare(FREE_PLAN_DAILY_LIMITS.kv_deletes),
+  kv_lists: batchShare(FREE_PLAN_DAILY_LIMITS.kv_lists),
 })
 
 // The account's use of a meter today: the latest provider sample plus our own

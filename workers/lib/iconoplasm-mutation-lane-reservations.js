@@ -28,8 +28,9 @@
 // B-897 (30 Sep 2026): the previous four fixed lanes summed every reservation
 // *started* today at worst case and never subtracted. 200 retried 50-unit
 // finalization phases parked laptop delivery for a whole UTC day while the
-// provider meter sat near 12%. Background work now stops at 70% of the meter
-// and user actions at 90%, so users always keep a band background cannot take.
+// provider meter sat near 12%. The lanes now shed on the B-1026 tiers:
+// background work stops at the batch share (85%) of the provider meter and a
+// person's own action is critical, so people keep the band above batch.
 
 import { secondsUntilCloudflareDailyReset } from "./cloudflare-availability.js"
 import {

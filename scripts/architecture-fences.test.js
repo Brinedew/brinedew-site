@@ -334,7 +334,8 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   assert.match(lanes, /MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING/)
   assert.doesNotMatch(lanes, /_CEILING = d/)
   assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING > D1_BACKGROUND_WRITE_CEILING)
-  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING < FREE_D1_DAILY_LIMITS.writes)
+  // B-1026: a person's action is critical and runs to Cloudflare's own wall.
+  assert.equal(D1_USER_ACTION_DAILY_WRITE_CEILING, FREE_D1_DAILY_LIMITS.writes)
   assert.match(lanes, /MUTATION_ANALYTICS_LAG_MS = 15 \* 60_000/)
   assert.doesNotMatch(lanes, /daily_mutation_lane_usage \(/)
   assert.doesNotMatch(runtime, /MUTATION_PROVIDER_OBSERVATION_(MISSING|STALE|MALFORMED)/)
