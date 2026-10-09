@@ -102,6 +102,15 @@ test("only the factory's token registers, and every other request reaches the le
     "POST /api/iconoplasm/admin/ingest",
     "GET /api/iconoplasm/genes/TP53",
   ])
+
+  // An error thrown behind the router reaches the Worker's error reporting as it is.
+  const throwing = createIconoplasmApp({
+    legacy: async () => {
+      throw new Error("legacy exploded")
+    },
+    publishGene: async () => null,
+  })
+  await assert.rejects(throwing.request("/anything", {}, h.env), /legacy exploded/)
 })
 
 test("new portraits land on the gene's card with one candidate_added event each", async () => {

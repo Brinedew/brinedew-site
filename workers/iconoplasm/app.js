@@ -7,6 +7,7 @@ import { inArray, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
+import { HTTPException } from "hono/http-exception"
 import { z } from "zod"
 
 import { geneCatalog, portraitAssets, publishEvents } from "./db/schema.js"
@@ -154,6 +155,14 @@ async function outsideMaintenance(c, next) {
 
 export function createIconoplasmApp({ legacy, publishGene }) {
   const app = new Hono()
+  // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
+  // thrown error leaves the app as it is: the Worker's error reporting
+  // (withErrorReporting, B-832) sends it to Sentry with its stack, as it did
+  // before Hono stood in front.
+  app.onError((error) => {
+    if (error instanceof HTTPException) return error.getResponse()
+    throw error
+  })
 
   /**
    * The factory registers portraits it has already uploaded to the CDN
