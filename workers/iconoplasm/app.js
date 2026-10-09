@@ -156,7 +156,7 @@ async function outsideMaintenance(c, next) {
   return next()
 }
 
-export function createIconoplasmApp({ legacy, publishGene }) {
+export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
   const app = new Hono()
   // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
   // thrown error leaves the app as it is: the Worker's error reporting
@@ -177,10 +177,11 @@ export function createIconoplasmApp({ legacy, publishGene }) {
    * card is rebuilt. Two D1 reads (which genes the catalogue carries, which
    * portraits exist), one D1 batch for the rows and a `candidate_added` event
    * per new portrait (the catalogue builder follows those), then one card
-   * build per gene. A portrait of a gene the catalogue doesn't carry is
-   * refused, not stored: it would have no card to land on. Re-sending the same
-   * body changes nothing and rebuilds the cards again, so the factory retries
-   * a failed gene by sending its portraits again.
+   * build per gene, then the genes' admin and picker summaries. A portrait of
+   * a gene the catalogue doesn't carry is refused, not stored: it would have
+   * no card to land on. Re-sending the same body changes no row and rebuilds
+   * the cards and summaries again, so the factory retries a failed gene by
+   * sending its portraits again.
    */
   app.post(
     "/api/iconoplasm/admin/portraits/register",
@@ -248,6 +249,10 @@ export function createIconoplasmApp({ legacy, publishGene }) {
           genes.push({ symbol, ok: false, error: String(error?.message || error).slice(0, 300) })
         }
       }
+      await refreshSummaries(c.env, {
+        symbols,
+        visionIds: [...new Set(portraits.map((portrait) => portrait.vision_id).filter(Boolean))],
+      })
       return c.json({
         ok: genes.every((gene) => gene.ok),
         registered: portraits.length,

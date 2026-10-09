@@ -21852,6 +21852,10 @@ export async function publishIconoplasmGeneStableObject(
             : portrait,
         )
         card = buildGeneCard(content, { ...facts, previous_winner: winner })
+        // Readers' shelves and the admin pages still read the winner from the
+        // gene rollup (B-1064 moves the shelf to the cards); nothing else
+        // refreshes it when a vote or a first portrait changes the winner.
+        await rebuildGeneRollupForSymbols(env, [symbol])
       }
     }
     stable = await store.writeStable(stableGeneObjectKey(symbol), card)
@@ -21880,6 +21884,19 @@ export async function publishIconoplasmGeneStableObject(
     published_at: card.published_at,
     ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
+}
+
+// B-1063: after the factory registers portraits, the summaries the old ingest
+// and reconcile refreshed for those genes: the gene rollup (its counts), the
+// request picker's emulsion examples, and the visions the picker job rebuilds
+// once each (B-1057). They go when B-1064 retires these tables' readers.
+export async function refreshIconoplasmRegisteredGeneSummaries(
+  env,
+  { symbols = [], visionIds = [] } = {},
+) {
+  await rebuildGeneRollupForSymbols(env, symbols)
+  await rebuildUserEmulsionOptionRollupsForSymbols(env, symbols)
+  await markVisionRollupsDirty(env, visionIds)
 }
 
 // B-1055: a gene with no card is withdrawn. Only a gene the catalogue no longer
