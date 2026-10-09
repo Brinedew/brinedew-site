@@ -3,6 +3,7 @@ import test from "node:test"
 
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 test("an unimplemented AI well-known route is a real 404, not the app shell", async () => {
   const response = await worker.fetch(
@@ -220,7 +221,8 @@ test("the Iconoplasm admin page has no unsafe-inline or unsafe-eval in script-sr
 
 // B-972: a logged-in admin's cookie must not let another site, or a form post, change the
 // recognition policies. The check runs before the admin check and before any binding is read
-// (the env is empty here, so a binding read would throw).
+// (the env holds only the session secret here, so a binding read would throw). The browser is
+// signed in by a real sealed session cookie (B-1069) whose account is not the configured admin.
 test("admin policy mutations refuse cross-site, foreign-origin and non-JSON requests first", async () => {
   const refused = [
     [
@@ -247,14 +249,15 @@ test("admin policy mutations refuse cross-site, foreign-origin and non-JSON requ
       },
     ],
   ]
+  const cookie = await sessionCookieFor({ user_id: "not-the-admin", username: "visitor" })
   const post = (path, headers) =>
     worker.fetch(
       new Request(`https://iconoplasm.brinedew.bio${path}`, {
         method: "POST",
-        headers: { Cookie: "session=admin", ...headers },
+        headers: { Cookie: cookie, ...headers },
         body: JSON.stringify({ terms: ["AMID"], expected_revision: 1 }),
       }),
-      {},
+      { SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   for (const path of [

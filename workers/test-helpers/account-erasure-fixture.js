@@ -258,9 +258,10 @@ export async function storeGameState(namespace, name, state) {
   })
 }
 
-// A browser's sealed session cookie (B-1069), its account check already due.
+// A browser's sealed session cookie (B-1069), its account check already due. A due check needs
+// the session id the sign-out list is keyed by.
 async function sealedSessionCookie(env, data) {
-  return `session=${await sealSession(env, { ...data, account_checked_at: 0 })}`
+  return `session=${await sealSession(env, { sid: `sid-${data.user_id}`, ...data, account_checked_at: 0 })}`
 }
 
 // --- The world ---------------------------------------------------------------------------------

@@ -10,10 +10,13 @@
  * nobody could sign in until 00:00 UTC, though sign-in itself had read about
  * 300 rows all day. A sealed cookie shares no wall with anything.
  *
- * Revocation keeps its guarantee through the account check: the cookie carries
+ * Revocation keeps its guarantees through the account check: the cookie carries
  * the time its account was last found active in D1. Older than five minutes,
- * the reader checks again before trusting it, and /api/auth/me re-seals it. An
- * erased or unlinked account is refused within five minutes.
+ * the reader checks again before trusting it, and /api/auth/me re-seals it. The
+ * check also reads whether this session was signed out (auth_session_revocations,
+ * keyed by the session id every re-sealed copy shares). So an erased or unlinked
+ * account, or a copy of a cookie whose owner signed out, is refused within five
+ * minutes.
  */
 import { EncryptJWT, jwtDecrypt } from "jose"
 
@@ -75,6 +78,7 @@ export async function unseal(env, value, { purpose, now = Date.now() }) {
 }
 
 const SESSION_FIELDS = [
+  "sid",
   "user_id",
   "account_id",
   "account_status",
@@ -128,8 +132,15 @@ export async function readSession(request, env, { now = Date.now() } = {}) {
   if (now - Number(session.account_checked_at || 0) < ACCOUNT_RECHECK_MS) {
     return { status: "signed_in", session, checked: false }
   }
+  if (!session.sid) return { status: "invalid" }
   let hydrated
   try {
+    const revoked = await env.ICONOPLASM_DB.prepare(
+      "SELECT 1 AS revoked FROM auth_session_revocations WHERE session_id = ?",
+    )
+      .bind(String(session.sid))
+      .first()
+    if (revoked) return { status: "invalid" }
     hydrated = await hydrateBrinedewSessionAccountIdentity(env.DB, session)
   } catch (error) {
     if (error instanceof BrinedewAccountIdentityError && error.status < 500) {
@@ -142,5 +153,37 @@ export async function readSession(request, env, { now = Date.now() } = {}) {
     status: "signed_in",
     session: { ...hydrated.session, account_checked_at: now },
     checked: true,
+  }
+}
+
+/**
+ * Sign out the session in `request`'s cookie everywhere a copy of it lives: one
+ * row until the cookie would have expired, and the rows of cookies that already
+ * have go. Returns false when D1 could not take the row; the browser's own
+ * cookie is cleared either way.
+ */
+export async function revokeSession(request, env, { now = Date.now() } = {}) {
+  const cookies = parseCookies(request.headers.get("Cookie"))
+  const session = await unseal(env, cookies[SESSION_COOKIE], { purpose: "session", now }).catch(
+    () => null,
+  )
+  if (!session?.sid) return true
+  const expiresAt = Number(session.exp || 0) * 1000 || now + SESSION_MAX_AGE_SECONDS * 1000
+  try {
+    await env.ICONOPLASM_DB.batch([
+      env.ICONOPLASM_DB.prepare(
+        `INSERT INTO auth_session_revocations (session_id, expires_at) VALUES (?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET expires_at = max(expires_at, excluded.expires_at)`,
+      ).bind(String(session.sid), expiresAt),
+      env.ICONOPLASM_DB.prepare("DELETE FROM auth_session_revocations WHERE expires_at < ?").bind(
+        now,
+      ),
+    ])
+    return true
+  } catch (error) {
+    console.warn("Sign-out could not record its revocation; a copied cookie stays valid", {
+      error: error?.message || String(error || "unknown"),
+    })
+    return false
   }
 }

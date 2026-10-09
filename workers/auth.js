@@ -15,6 +15,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
   parseCookies,
   readSession,
+  revokeSession,
   seal,
   sealSession,
   sessionCookie,
@@ -550,6 +551,7 @@ export async function handleCallback(request, env) {
   }
 
   const sealedSession = await sealSession(env, {
+    sid: crypto.randomUUID(),
     user_id: user.id,
     account_id: accountIdentity.account_id,
     account_status: accountIdentity.status,
@@ -706,7 +708,11 @@ export async function handleLogout(request, env) {
   const cookieDomain = getSharedCookieDomain(url.hostname)
   const cookieDomainAttr = cookieDomain ? `; Domain=${cookieDomain}` : ""
 
-  // The cookie is the session: clearing it signs out. Do not redirect from this API endpoint because
+  // Clearing the cookie signs this browser out; the revocation signs out any
+  // copy of it at its next account check.
+  await revokeSession(request, env)
+
+  // Do not redirect from this API endpoint because
   // `fetch(..., { credentials: "include" })` callers can hit CORS on cross-origin 302 follow.
   const headers = new Headers()
   headers.set(
