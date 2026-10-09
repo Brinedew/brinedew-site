@@ -3,7 +3,7 @@
 // New routes are written here with Hono, Zod and Drizzle, never added to the
 // legacy if-chain.
 import { zValidator } from "@hono/zod-validator"
-import { inArray, sql } from "drizzle-orm"
+import { inArray } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
@@ -11,7 +11,7 @@ import { HTTPException } from "hono/http-exception"
 import { z } from "zod"
 
 import { d1DailyRowReadLimitResponse } from "../lib/cloudflare-availability.js"
-import { geneCatalog, portraitAssets, publishEvents } from "./db/schema.js"
+import { geneCatalog, portraitAssets } from "./db/schema.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
 // allows one request (the canonical text's body, the card's PUT and its
@@ -91,44 +91,56 @@ const FACTORY_COLUMNS = {
   sampleTextHash: "sample_text_hash",
   isStale: "is_stale",
 }
-const FACTORY_UPDATE = {
-  ...Object.fromEntries(
-    Object.entries(FACTORY_COLUMNS).map(([key, column]) => [key, sql.raw(`excluded.${column}`)]),
-  ),
-  isLegacy: 0,
-}
-const FACTORY_CHANGED = sql.raw(
-  [
-    ...Object.values(FACTORY_COLUMNS).map(
-      (column) => `icono_portrait_assets.${column} IS NOT excluded.${column}`,
-    ),
+const FACTORY_VALUES = Object.values(FACTORY_COLUMNS)
+
+// One statement per table, the rows as one JSON parameter (SQLite's json_each;
+// the SELECT's WHERE keeps an upsert from parsing as a join). Building one
+// Drizzle statement per row cost 10-27 ms of CPU for 192 rows, past the free
+// plan's allowance: a 96-portrait call was killed at 60 ms on 2026-10-09.
+const PORTRAIT_UPSERT_SQL = `INSERT INTO icono_portrait_assets (
+    gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
+    mime, status, autopick_eligible, is_legacy, ${FACTORY_VALUES.join(", ")}, created_by, created_at)
+  SELECT json_extract(value, '$.gene_symbol'), json_extract(value, '$.asset_sha256'),
+    json_extract(value, '$.r2_key_full'), json_extract(value, '$.r2_key_medium'),
+    json_extract(value, '$.r2_key_thumb'), 'image/webp', 'draft', 1, 0,
+    ${FACTORY_VALUES.map((column) => `json_extract(value, '$.${column}')`).join(", ")},
+    json_extract(value, '$.created_by'), CURRENT_TIMESTAMP
+  FROM json_each(?) WHERE true
+  ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+    ${FACTORY_VALUES.map((column) => `${column} = excluded.${column}`).join(", ")}, is_legacy = 0
+  WHERE ${[
+    ...FACTORY_VALUES.map((column) => `icono_portrait_assets.${column} IS NOT excluded.${column}`),
     "icono_portrait_assets.is_legacy IS NOT 0",
-  ].join(" OR "),
-)
+  ].join(" OR ")}`
+const CANDIDATE_ADDED_SQL = `INSERT INTO icono_publish_events
+    (gene_symbol, to_asset_sha256, action, actor, reason)
+  SELECT json_extract(value, '$.symbol'), json_extract(value, '$.asset_sha256'),
+    'candidate_added', ?, 'factory_registration'
+  FROM json_each(?)`
 
 function portraitRow(portrait, createdBy) {
   return {
-    geneSymbol: portrait.symbol,
-    assetSha256: portrait.asset_sha256,
-    keyFull: portraitKey(portrait.asset_sha256, "full"),
-    keyMedium: portraitKey(portrait.asset_sha256, "medium"),
-    keyThumb: portraitKey(portrait.asset_sha256, "thumb"),
+    gene_symbol: portrait.symbol,
+    asset_sha256: portrait.asset_sha256,
+    r2_key_full: portraitKey(portrait.asset_sha256, "full"),
+    r2_key_medium: portraitKey(portrait.asset_sha256, "medium"),
+    r2_key_thumb: portraitKey(portrait.asset_sha256, "thumb"),
     width: portrait.width,
     height: portrait.height,
     bytes: portrait.bytes ?? null,
-    visionId: portrait.vision_id ?? null,
-    emulsionId: portrait.emulsion_id ?? null,
-    workflowId: portrait.workflow_id ?? null,
-    workflowLabel: portrait.workflow_label ?? null,
-    workflowPath: portrait.workflow_path ?? null,
-    promptVersion: portrait.prompt_version ?? null,
-    variantSlot: portrait.variant_slot ?? null,
-    candidateImageId: portrait.candidate_image_id ?? null,
-    sampleLabel: portrait.sample_label ?? null,
-    sampleNumber: portrait.sample_number,
-    sampleTextHash: portrait.sample_text_hash ?? null,
-    isStale: portrait.is_stale ? 1 : 0,
-    createdBy,
+    vision_id: portrait.vision_id ?? null,
+    emulsion_id: portrait.emulsion_id ?? null,
+    workflow_id: portrait.workflow_id ?? null,
+    workflow_label: portrait.workflow_label ?? null,
+    workflow_path: portrait.workflow_path ?? null,
+    prompt_version: portrait.prompt_version ?? null,
+    variant_slot: portrait.variant_slot ?? null,
+    candidate_image_id: portrait.candidate_image_id ?? null,
+    sample_label: portrait.sample_label ?? null,
+    sample_number: portrait.sample_number,
+    sample_text_hash: portrait.sample_text_hash ?? null,
+    is_stale: portrait.is_stale ? 1 : 0,
+    created_by: createdBy,
   }
 }
 
@@ -214,27 +226,19 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
       const added = portraits.filter(
         (portrait) => !known.has(`${portrait.symbol}|${portrait.asset_sha256}`),
       )
-      const statements = portraits.map((portrait) =>
-        db
-          .insert(portraitAssets)
-          .values(portraitRow(portrait, createdBy))
-          .onConflictDoUpdate({
-            target: [portraitAssets.geneSymbol, portraitAssets.assetSha256],
-            set: FACTORY_UPDATE,
-            setWhere: FACTORY_CHANGED,
-          }),
-      )
-      for (const portrait of added)
-        statements.push(
-          db.insert(publishEvents).values({
-            geneSymbol: portrait.symbol,
-            toAssetSha256: portrait.asset_sha256,
-            action: "candidate_added",
-            actor: createdBy,
-            reason: "factory_registration",
-          }),
+      const writes = [
+        c.env.ICONOPLASM_DB.prepare(PORTRAIT_UPSERT_SQL).bind(
+          JSON.stringify(portraits.map((portrait) => portraitRow(portrait, createdBy))),
+        ),
+      ]
+      if (added.length)
+        writes.push(
+          c.env.ICONOPLASM_DB.prepare(CANDIDATE_ADDED_SQL).bind(
+            createdBy,
+            JSON.stringify(added.map(({ symbol, asset_sha256 }) => ({ symbol, asset_sha256 }))),
+          ),
         )
-      await db.batch(statements)
+      await c.env.ICONOPLASM_DB.batch(writes)
 
       for (const symbol of symbols) {
         try {
