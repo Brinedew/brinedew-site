@@ -90,12 +90,19 @@ inspect the reason and use the owned change path; do not replay it blindly.
 
 Verify all of the following from current sources:
 
-1. The intended operation has one named owner and one idempotent identity.
-2. Its worst-case work is bounded and admitted before dispatch.
-3. The shared capacity ledger is available and includes retained uncertain
-   reservations.
-4. The operation leaves protected headroom for public reading and recovery.
-5. A failure has one durable retry owner rather than a blind retry loop.
+1. **Price it on every meter, per statement.** D1 counts each index entry and
+   each trigger's writes as rows: a winner change wrote 17 rows for one status
+   update until 2026-10-09. Take the numbers from Cloudflare's
+   `d1QueriesAdaptiveGroups` (rows written per query text) or the measured
+   table in `ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, never from "the route
+   only upserts". On 2026-10-09 a card sweep priced at "0 rows written" and the
+   Drain's backlog spent the whole 100,000-row write wall by 21:00 UTC.
+2. **Check today's meter first:** if the account is already past 50% of a wall,
+   find out who is spending before adding batch work.
+3. **Send it through a route that sheds batch work** (the factory's register and
+   rebuild routes stop it at 85% of a wall). Never write around them.
+4. The operation has one named owner and one idempotent identity, and a failure
+   has one durable retry owner rather than a blind retry loop.
 
 Exhausted evidence refuses new mutation work. Missing or late telemetry does
 not refuse it: D1 write admission then counts every worst-case receipt since the
