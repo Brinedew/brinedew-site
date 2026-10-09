@@ -21644,6 +21644,7 @@ const GENE_CARD_ESSENCE_COLUMNS = [
   "family_surname",
   "family_members",
   "family_feature",
+  "leakage_percent",
 ]
 
 async function readPublicManifestationFact(env, symbol) {
