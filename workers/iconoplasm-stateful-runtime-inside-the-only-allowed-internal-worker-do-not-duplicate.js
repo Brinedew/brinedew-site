@@ -4316,6 +4316,19 @@ async function markRequestNotificationsRead(
     markAll,
   })
 }
+// What a reader's discovery says about the reader: which gene, when they first
+// and last met it, how often. Facts about the gene itself (name, winner,
+// votes, essence) are on its published card and in the catalogue file, which
+// the browser already holds; these rows never carry them.
+function discoveryFacts(row) {
+  return {
+    gene_symbol: row.gene_symbol,
+    first_discovered_at: row.first_discovered_at,
+    last_encountered_at: row.last_encountered_at,
+    encounter_count: row.encounter_count,
+  }
+}
+
 function mapGeneDiscoveryRow(row) {
   const weightKg = Number(row?.weight_kg)
   const ageYears = Number(row?.age_years)
@@ -12208,11 +12221,11 @@ async function listUserGeneDiscoveryWindow(
     1,
     Math.min(ACCOUNT_GALLERY_WINDOW_LIMIT_MAX, Number.parseInt(String(limit || "24"), 10) || 24),
   )
-  // Page first, then enrich only the page (B-885). Paging needs only the
-  // symbol and first-discovery time, which the compact rows already carry.
-  // Enriching the whole shelf first cost a three-table join per 250 genes and
-  // one mapped object per gene on every home view; at 1,584 and 2,106 genes it
-  // tipped the free plan's CPU cap into a Cloudflare 1102 on every load.
+  // Paging needs only the symbol and first-discovery time, which the compact
+  // rows carry. B-885 stopped enriching the whole shelf (a three-table join per
+  // 250 genes tipped the CPU cap into a Cloudflare 1102 at 1,584 and 2,106
+  // genes); B-1064 stops enriching the page too: the browser renders the page's
+  // published cards and reads only the symbols from these rows.
   const page = paginateCompactDiscoveryRows({
     decorated: await compactShelfBaseRows(env, { userId: userIdNorm }),
     limit: cleanedLimit,
@@ -12222,7 +12235,7 @@ async function listUserGeneDiscoveryWindow(
     before,
     cursorValue,
   })
-  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
+  return { ...page, rows: page.rows.map(discoveryFacts) }
 }
 
 async function listSharedGeneDiscoveryWindow(
@@ -12264,7 +12277,7 @@ async function listSharedGeneDiscoveryWindow(
     env.ICONOPLASM_DB,
     summaries.map((summary) => summary.ordinal),
   )
-  // Page first, then enrich only the page (B-885), as in the personal window.
+  // The reader's facts only, as in the personal window (B-1064).
   const page = paginateCompactDiscoveryRows({
     decorated: compactSharedRowsFromSummaries(summaries, symbols),
     limit: cleanedLimit,
@@ -12274,7 +12287,7 @@ async function listSharedGeneDiscoveryWindow(
     before,
     cursorValue,
   })
-  return { ...page, rows: await enrichGeneDiscoveryRows(env, page.rows) }
+  return { ...page, rows: page.rows.map(discoveryFacts) }
 }
 
 async function countUserGeneDiscoveries(env, { userId } = {}) {
@@ -25660,12 +25673,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // was ~4.6 D1 rows per gene on every non-newest home view) and no
         // server sort. Newest first, the order the page shows by default.
         const compactRows = (await compactShelfBaseRows(env, { userId }))
-          .map((row) => ({
-            gene_symbol: row.gene_symbol,
-            first_discovered_at: row.first_discovered_at,
-            last_encountered_at: row.last_encountered_at,
-            encounter_count: row.encounter_count,
-          }))
+          .map(discoveryFacts)
           .reverse()
         return done(
           "discoveries_me",
