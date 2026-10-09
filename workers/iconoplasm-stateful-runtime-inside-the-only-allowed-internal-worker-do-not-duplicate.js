@@ -21677,13 +21677,8 @@ export async function publishIconoplasmGeneStableObject(
         overflow: false,
         winner: { asset_sha256: winner },
       })
-      // The projection approves a draft winner; the card says so too.
+      // The projected winner is the card's previous winner from now on (the tie-break).
       if (projection.changed) {
-        content.portraits = content.portraits.map((portrait) =>
-          portrait.asset_sha256 === winner && portrait.status === "draft"
-            ? { ...portrait, status: "approved" }
-            : portrait,
-        )
         card = buildGeneCard(content, { ...facts, previous_winner: winner })
         // The clans page and the admin pages read the winner from the gene
         // rollup (B-1064 moves clans to the cards); nothing else refreshes it
