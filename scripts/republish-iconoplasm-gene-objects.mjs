@@ -208,10 +208,10 @@ export async function republishGeneObjects({
 
   let plan
   if (only) {
-    const known = new Set(symbols)
-    const unknown = only.filter((symbol) => !known.has(symbol))
-    if (unknown.length)
-      throw fail("ONLY_UNKNOWN_SYMBOL", `not in the catalog: ${unknown.join(", ")}`)
+    // Named genes go as named. The CDN catalogue object is derived and can lag:
+    // the 600 genes the catalogue gained on 2026-10-09 had no card, so no build
+    // listed them. The route checks D1's catalogue itself and reports a gene it
+    // doesn't carry as withdrawn.
     plan = [...new Set(only)].sort()
     if (from) {
       const start = plan.findIndex((symbol) => symbol >= from)
