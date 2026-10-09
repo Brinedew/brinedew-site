@@ -109,7 +109,6 @@ const SHEDDABLE_ROUTE_FAMILIES = new Set([
   "admin_assets_summary",
   "admin_assets_storage_audit",
   "admin_assets_repair_scope",
-  "admin_assets_state",
   "admin_blots_backlog",
   "admin_gallery",
 ])
@@ -130,6 +129,10 @@ export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
     "background_sync_finalization",
     "admin_reconcile",
     "admin_read_models",
+    // B-1026 (10-09): every publication reads the site's asset state for its
+    // own genes. Filed with the diagnostics, it stopped every publication at
+    // 60%, a player's delivery included.
+    "admin_assets_state",
   ]),
 )
 

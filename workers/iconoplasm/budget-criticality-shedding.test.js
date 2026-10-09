@@ -379,3 +379,22 @@ test("our own work is no longer stopped at a private 1M slice of the day", async
   const diagnostic = await audit.diagnostic()
   assert.ok(!shed(diagnostic), JSON.stringify(diagnostic))
 })
+
+test("publishing's asset-state read is batch, and runs when a delivery declares it", async (t) => {
+  // 10-09: filed with the diagnostics, this read stopped every publication at 60%.
+  const read = (rowsRead, declared) =>
+    fixture(t, { rowsRead }).send("/api/iconoplasm/admin/assets/state", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-iconoplasm-admin-token": ADMIN_TOKEN,
+        ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
+      },
+      body: JSON.stringify({ symbols: ["C10ORF62"] }),
+    })
+  assert.ok(!shed(await read(0.61 * OPERATOR_READS, false)), "batch runs past 60%")
+  const batch = await read(0.86 * OPERATOR_READS, false)
+  assert.ok(shed(batch), JSON.stringify(batch))
+  assert.equal(batch.payload.budget.exhausted_by, "rows_read_sheddable_plus")
+  assert.ok(!shed(await read(0.86 * OPERATOR_READS, true)), "a declared delivery runs")
+})
