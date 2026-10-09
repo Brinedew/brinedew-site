@@ -13786,7 +13786,7 @@ export async function fetchAssetStateRows(env, requestedSymbols = null) {
          COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
          COALESCE(SUM(iv.vote_value), 0) AS score
        FROM scoped_assets a
-       CROSS JOIN icono_image_votes iv INDEXED BY idx_icono_image_votes_candidate
+       CROSS JOIN icono_image_votes iv INDEXED BY sqlite_autoindex_icono_image_votes_1
        WHERE iv.candidate_ref = 'a:' || a.gene_symbol || '|' || a.asset_sha256
        GROUP BY iv.candidate_ref
      )
