@@ -21,9 +21,9 @@ import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "./app.js"
 // 5. a malformed body, or more genes than one request can rebuild, writes
 //    anything;
 // 6. one gene's failed card build hides the others' success or loses rows;
-// 7. the summaries the admin pages, readers' shelves and the request picker
-//    still read (gene rollup, emulsion examples, vision marks) miss the new
-//    portraits, because only the old ingest refreshed them.
+// 7. the summaries the clans page, the admin pages and the request picker
+//    still read (gene rollup, vision marks) miss the new portraits, because
+//    only the old ingest refreshed them.
 const TOKEN = "factory-token-0000000000000000000000001"
 const sha = (char) => char.repeat(64)
 
@@ -171,12 +171,6 @@ test("new portraits land on the gene's card with one candidate_added event each"
       .rows("SELECT current_asset_sha256, total_assets FROM icono_admin_gene_rollup")
       .map((row) => ({ ...row })),
     [{ current_asset_sha256: sha("a"), total_assets: 2 }],
-  )
-  assert.deepEqual(
-    h
-      .rows("SELECT emulsion_id FROM icono_user_emulsion_option_rollup")
-      .map((row) => row.emulsion_id),
-    ["C9-23013"],
   )
   assert.deepEqual(
     h.rows("SELECT vision_id FROM icono_vision_rollup_dirty").map((row) => row.vision_id),

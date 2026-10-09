@@ -4,7 +4,6 @@ import test from "node:test"
 import {
   collapseGenerationRequestFactorySlotOptions,
   rebuildGenerationRequestFactoryOptionRollupsBatch,
-  rebuildUserEmulsionOptionRollupsBatch,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const require = createRequire(import.meta.url)
@@ -56,7 +55,6 @@ async function withDatabase(run) {
       "CREATE TABLE icono_publish_state(gene_symbol TEXT PRIMARY KEY,current_asset_sha256 TEXT)",
       "CREATE TABLE icono_vote_asset_summary(gene_symbol TEXT,asset_sha256 TEXT,upvotes INTEGER,score INTEGER,PRIMARY KEY(gene_symbol,asset_sha256))",
       "CREATE TABLE icono_generation_request_factory_option_rollup(public_emulsion_code TEXT PRIMARY KEY,emulsion_slot INTEGER,image_count INTEGER,live_count INTEGER,score INTEGER,vote_h_index INTEGER,preview_assets_json TEXT,updated_at TEXT)",
-      "CREATE TABLE icono_user_emulsion_option_rollup(emulsion_id TEXT PRIMARY KEY,image_count INTEGER,live_count INTEGER,preview_assets_json TEXT,updated_at TEXT)",
     ])
       await db.prepare(sql).run()
     for (const [gene, asset, createdAt] of ASSETS) {
@@ -137,28 +135,6 @@ test("factory picker examples come from five different genes, winners first", as
     const previews = JSON.parse(row.preview_assets_json)
     assertDiverseExamples(previews)
     assert.equal(previews[1].gene_symbol, "U", "upvoted portraits follow the winner")
-  })
-})
-
-test("style picker examples come from five different genes, winners first", async () => {
-  const sql = await capturedSql(
-    (env) => rebuildUserEmulsionOptionRollupsBatch(env, [STYLE]),
-    "INSERT INTO icono_user_emulsion_option_rollup",
-  )
-  await withDatabase(async (db) => {
-    await db
-      .prepare(sql)
-      .bind(JSON.stringify([STYLE]))
-      .run()
-    const row = await db
-      .prepare(
-        "SELECT image_count, live_count, preview_assets_json FROM icono_user_emulsion_option_rollup WHERE emulsion_id = ?",
-      )
-      .bind(STYLE)
-      .first()
-    assert.equal(row.image_count, ASSETS.length)
-    assert.equal(row.live_count, 1)
-    assertDiverseExamples(JSON.parse(row.preview_assets_json))
   })
 })
 
