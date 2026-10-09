@@ -1033,7 +1033,10 @@ test("the existing governor coalesces one reset wake and retains it through depl
   assert.equal(sent.length, 1, "an empty alarm does no Queue work")
 })
 
-test("finalization preserves its remaining vision cursor through daily refusal and lease recovery", async (t) => {
+test("a job left in the vision phase hands every vision to the picker job, through a daily refusal", async (t) => {
+  // B-1057: finalization no longer rebuilds one vision per Queue message. A job
+  // that reached the old vision phase marks all its remaining visions for the
+  // request-picker job in one delivery; a refused mark loses nothing.
   let now = Date.now()
   t.mock.method(Date, "now", () => now)
   const queue = buildFakeQueue()
@@ -1051,54 +1054,39 @@ test("finalization preserves its remaining vision cursor through daily refusal a
   }
   const { values, governor } = finalizationGovernorForTest(env)
   const body = { kind: "drain_finalization_ledger", run_id: "same-retained-run", symbols: ["TP53"] }
-  const first = await deliverFinalizationForTest(env, body)
-  assert.equal(first.result.processed, 1)
-  assert.equal(first.acked, true)
-  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), visions.slice(1))
-  assert.equal(db.jobs.get("TP53").phase, "vision_rollups")
 
-  const originalBatch = db.batch.bind(db)
+  const originalPrepare = db.prepare.bind(db)
   let refused = false
-  db.batch = async (statements) => {
-    if (
-      !refused &&
-      statements.some((s) => s.sql.includes("INSERT INTO icono_admin_vision_rollup"))
-    ) {
+  db.prepare = (sql) => {
+    if (!refused && sql.includes("icono_vision_rollup_dirty")) {
       refused = true
       throw new Error("D1 free tier daily row read limit exceeded")
     }
-    return originalBatch(statements)
+    return originalPrepare(sql)
   }
   const paused = await deliverFinalizationForTest(env, body)
   assert.equal(paused.acked, true, "transport ack follows a durable reset wake, not completion")
   assert.equal(paused.retries.length, 0)
   assert.ok(values.get("finalization_reset_wake").due_at > now)
-  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), visions.slice(1))
-  assert.equal(
-    db.jobs.get("TP53").status,
-    "running",
-    "a refused failure write cannot replace the claim",
-  )
+  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), visions, "nothing is lost")
 
   queue.sent.length = 0 // Original transport messages may expire; the D1 cursor remains.
   now = values.get("finalization_reset_wake").due_at
   await observeHealthyGovernorForTest(governor)
   await governor.alarm()
   assert.equal(queue.sent.length, 1)
-  for (let pass = 0; pass < 2; pass++) {
-    const resumed = await deliverFinalizationForTest({ ...env }, body)
-    assert.equal(resumed.result.processed, 1)
-    assert.equal(resumed.acked, true)
-  }
-  assert.deepEqual(JSON.parse(db.jobs.get("TP53").vision_ids_json), [])
+  const resumed = await deliverFinalizationForTest({ ...env }, body)
+  assert.equal(resumed.result.processed, 1)
+  assert.equal(resumed.acked, true)
   assert.equal(db.jobs.get("TP53").status, "completed")
-  const executed = db.calls
-    .filter((c) => c.sql.includes("INSERT INTO icono_admin_vision_rollup"))
-    .map((c) => JSON.parse(c.args[0]))
-  assert.deepEqual(
-    executed,
-    visions.map((vision) => [vision]),
-    "the already committed prefix is not rebuilt",
+  const marks = db.calls
+    .filter((c) => c.sql.includes("INSERT OR IGNORE INTO icono_vision_rollup_dirty"))
+    .map((c) => JSON.parse(c.args[1]))
+  assert.deepEqual(marks, [visions], "one delivery hands over every vision")
+  assert.equal(
+    db.calls.filter((c) => c.sql.includes("INSERT INTO icono_admin_vision_rollup")).length,
+    0,
+    "no vision is rebuilt inside finalization",
   )
 })
 
@@ -1730,8 +1718,21 @@ test("scoped queue drain completes all phases through automatic bounded deliveri
     finalized += result.finalized
     body = queue.sent.shift()
   }
-  assert.equal(processed, 8)
+  // B-1057: reconcile, vote summaries and gene rollups per gene; the gene's
+  // visions are marked for the request-picker job, not rebuilt here.
+  assert.equal(processed, 6)
   assert.equal(finalized, 2)
+  assert.equal(
+    env.ICONOPLASM_DB.calls.filter((c) => c.sql.includes("INSERT INTO icono_admin_vision_rollup"))
+      .length,
+    0,
+  )
+  assert.deepEqual(
+    env.ICONOPLASM_DB.calls
+      .filter((c) => c.sql.includes("INSERT OR IGNORE INTO icono_vision_rollup_dirty"))
+      .map((c) => JSON.parse(c.args[1])),
+    [["anima-v1-1"], ["anima-v1-1"]],
+  )
   assert.deepEqual(
     symbols.map((symbol) => env.ICONOPLASM_DB.jobs.get(symbol)?.phase),
     ["completed", "completed"],
