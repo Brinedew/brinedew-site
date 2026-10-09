@@ -6,7 +6,7 @@ import {
 } from "./iconoplasm-generation-lease.js"
 
 import { IconoplasmGenerationSourceError } from "./lib/iconoplasm-generation-provenance.js"
-import { d1DailyRowReadLimitResponse } from "./lib/cloudflare-availability.js"
+import { d1DailyRowLimitResponse } from "./lib/cloudflare-availability.js"
 import {
   GENERATION_COMPLETION_MAX_REQUESTS,
   generationCompletionSize,
@@ -42,7 +42,7 @@ async function parseJson(request) {
 }
 
 function rejected(error, fallbackCode, fallbackMessage) {
-  const unavailable = d1DailyRowReadLimitResponse(error)
+  const unavailable = d1DailyRowLimitResponse(error)
   if (unavailable) return unavailable
   const expected =
     error instanceof IconoplasmGenerationLeaseError ||
