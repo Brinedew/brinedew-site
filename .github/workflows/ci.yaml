@@ -14,6 +14,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # A clean run takes 11-16 minutes. Without a limit GitHub waits 6 hours: on
+    # 2026-10-09 a hung browser E2E held main's test run, and every production
+    # deploy queued behind it ("Require successful tests for the exact deployed commit").
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -107,7 +111,8 @@ jobs:
       # B-839: the caretaker dialog is checked in a real browser (the runner's
       # installed Chrome) by geometry and computed fonts, not CSS regexes.
       - name: Caretaker dialog geometry (browser E2E)
-        run: node --test e2e/*.e2e.mjs
+        timeout-minutes: 15
+        run: node --test --test-timeout=300000 e2e/*.e2e.mjs
 
       - name: Upload E2E screenshots and measurements
         if: ${{ always() }}
