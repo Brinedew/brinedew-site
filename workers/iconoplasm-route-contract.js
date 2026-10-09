@@ -1253,15 +1253,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     apiHandler: "admin_publication.pull_zone_reconcile",
   }),
   iconoplasmApiContract({
-    // B-898: the Actions publisher rewrites changed genes' stable objects here.
-    id: "admin_publication_republish",
-    match: exact("/api/iconoplasm/admin/publication/republish"),
-    methods: POST,
-    auth: "administrator",
-    budgetFamily: "admin_publication_republish",
-    apiHandler: "admin_publication.republish",
-  }),
-  iconoplasmApiContract({
     // B-898: the GitHub Actions publisher uploads the one catalog object here.
     id: "admin_publication_catalog_object",
     match: exact("/api/iconoplasm/admin/publication/catalog-object"),

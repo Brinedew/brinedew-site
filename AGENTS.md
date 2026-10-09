@@ -37,6 +37,23 @@ This `AGENTS.md` is loaded automatically when work happens inside `D:\Coding\Web
 
 From a feature worktree, merge with `gh pr merge <number> --squash` and clean up the local worktree separately. GitHub CLI's `--delete-branch` can complete the remote merge and then exit with a local checkout error because `main` is in the primary worktree. After any uncertain merge result, read `gh pr view <number> --json state,mergeCommit` before retrying or reporting failure; `MERGED` and the merge commit are the source of truth.
 
+## Worker routes: Hono, Zod and Drizzle
+
+The internal Worker's front door is a Hono app (`workers/iconoplasm/app.js`,
+B-1063). Hono answers the routes it knows; every other request falls through
+to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
+
+- **New routes go in Hono**, never in the `if` chain. Validate bodies with
+  Zod (`@hono/zod-validator`) and use Drizzle for D1. A table's Drizzle
+  definition (`workers/iconoplasm/db/schema.js`) is added with its first
+  Hono route; the SQL migrations stay the schema of record.
+- **Attach auth to each route**, never to a path prefix. The legacy admin
+  routes behind the fall-through keep their own checks (admin sessions, the
+  `X-Iconoplasm-Admin-Token` header). The factory's routes take the admin
+  token as a standard bearer token (`hono/bearer-auth`).
+- **When a step touches a legacy route, move it to Hono.** The aim is an
+  empty `if` chain.
+
 ## Architecture fence registry
 
 The executable registry is `architecture-fences.json`: every entry carries its full decision, reason, change control, linked runbook and required markers, and `scripts/architecture-fences.test.js` enforces those markers across instructions, runbooks, source, tests and deploy. Read the registry entry and the runbook it names before changing a fence's domain; replace a fence only by an explicit migration that updates every enforcement point together.
@@ -71,7 +88,7 @@ Off-Cloudflare recovery for every D1 database is the nightly dump from `scripts/
 
 **ARCHITECTURE FENCE [IPD-011]** — The canonical public machine image is the Iconoplasm gene blot. Every public canonical blot, gene record, catalog row, passive candidate summary, and shared vote total comes from the one stable gene object (`genes/v3/<SYMBOL>.json`) or the one catalog object (`catalog/v3/index.json`). The source portrait remains available as subordinate source material. On any healthy network, website readers use Bunny; failure is a visible reader error and never reconstructs from state. Registry: `architecture-fences.json`; runbooks: `docs/ICONOPLASM_HOME_PERFORMANCE.md`, `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
-The **only canonical blot publication path** is `publishIconoplasmGeneStableObject` in the stateful runtime (B-898): it materializes the gene from D1 and the authoring store, composes the stable object (`workers/lib/iconoplasm-stable-gene-object.js`), writes it with a verified read-back and purges its CDN URL. The existing Worker resolves the stable first-party `/blot/{symbol}.webp` route from that object; no other writer of gene or blot objects exists.
+The **only canonical blot publication path** is `publishIconoplasmGeneStableObject` in the stateful runtime (B-898): it reads the gene's rows in one D1 batch plus its canonical text, builds the card with `buildGeneCard` (`workers/lib/iconoplasm-stable-gene-object.js`, the one place the card's shape and the winner rule live) and writes it with a verified read-back. The 60 s edge rule, not a purge, bounds how long the CDN serves the previous card (B-1063). The existing Worker resolves the stable first-party `/blot/{symbol}.webp` route from that object; no other writer of gene or blot objects exists.
 
 **ARCHITECTURE FENCE [GG-001]** — Automatic GeneGuessr daily selection gives each normalized surname exactly one lottery slot. Registry: `architecture-fences.json`; runbook: `docs/GENEGUESSR_DAILY_SELECTION_RUNBOOK.md`.
 
