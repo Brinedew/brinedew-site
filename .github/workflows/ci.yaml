@@ -14,6 +14,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # A clean run takes 11-16 minutes. Without a limit GitHub waits 6 hours: on
+    # 2026-10-09 a hung browser E2E held main's test run, and every production
+    # deploy queued behind it ("Require successful tests for the exact deployed commit").
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -106,7 +110,11 @@ jobs:
 
       # B-839: the caretaker dialog is checked in a real browser (the runner's
       # installed Chrome) by geometry and computed fonts, not CSS regexes.
+      # The step's limit stops a hung browser (the E2E files take about 6
+      # minutes together). No --test-timeout: Node applies it to each whole
+      # file too, and geneguessr-direct-structures alone runs about 310 s.
       - name: Caretaker dialog geometry (browser E2E)
+        timeout-minutes: 15
         run: node --test e2e/*.e2e.mjs
 
       - name: Upload E2E screenshots and measurements
