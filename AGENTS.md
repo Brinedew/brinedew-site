@@ -53,6 +53,11 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
   0.05–0.15 ms of CPU each, and a free-plan request is stopped near 10 ms:
   on 2026-10-09 a 96-portrait registration (192 statements) was killed at
   60 ms. Drizzle stays right for reads and single-row writes.
+- **A route that does batch work sheds it** with `shedBatchWork` in
+  `workers/iconoplasm/app.js`: it reads Cloudflare's own D1 meter and answers
+  503 `D1_BATCH_SHARE_SPENT` at the tier table's 85% of a wall, so readers keep
+  the rest. A reader's own action runs to the wall. On 2026-10-09 step 1's new
+  route had no shedding, and a batch spent the whole 100,000-row write wall.
 - **Attach auth to each route**, never to a path prefix. The legacy admin
   routes behind the fall-through keep their own checks (admin sessions, the
   `X-Iconoplasm-Admin-Token` header). The factory's routes take the admin
