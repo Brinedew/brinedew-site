@@ -37,12 +37,7 @@ const HASH = /^[a-f0-9]{64}$/
 const SYMBOL = /^[A-Z0-9][A-Z0-9-]{0,63}$/
 
 export const STABLE_GENE_OBJECT_VERSION = 3
-export const GENE_CONTENT_VERSION = 1
 export const ICONOPLASM_CANONICAL_ORIGIN = "https://iconoplasm.brinedew.bio"
-
-export function geneContentKey(symbol) {
-  return `content/v${GENE_CONTENT_VERSION}/${symbol}.json`
-}
 
 function normalizeSymbol(value) {
   const symbol = String(value ?? "")

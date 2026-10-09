@@ -45,20 +45,17 @@ test("route policy is method-aware and leaves private and unrelated traffic alon
 test("the registry owns every intentionally quota-limited public route class", () => {
   const cases = [
     ["GET", "/api/public/v1/metadata", "metadata", 60],
-    ["GET", "/api/public/v1/stats", "stats", 60],
     ["GET", "/api/public/v1/schema", "schema", 60],
     ["GET", "/api/public/v1/catalog/manifest", "catalog_manifest", 60],
     ["GET", "/api/public/v1/catalog/catalog.deadbeef.json", "catalog_artifact", 120],
     ["GET", "/api/public/v1/catalog/scanner.deadbeef.json", "catalog_scanner", 120],
     ["GET", "/api/public/v1/dumps/catalog.deadbeef.jsonl", "catalog_dump", 60],
-    ["GET", "/api/public/v1/gallery", "gallery", 60],
     ["GET", "/api/public/v1/genes/search?q=TP53", "gene_search", 120],
     ["GET", "/api/public/v1/card-snapshots/card-v1/genes/TP53", "gene_detail", 120],
     ["GET", "/api/public/v1/card-snapshots/card-v1/portraits/TP53", "portrait_locator", 120],
     ["POST", "/api/public/v1/genes/batch", "gene_batch", 60],
     ["POST", "/api/public/v1/resolve", "resolve", 60],
     ["POST", "/api/public/v1/images/resolve", "image_resolve", 60],
-    ["GET", "/api/public/v1/changes", "changes", 60],
     ["GET", "/api/public/v1/media/TP53", "media", 120],
     ["POST", "/api/iconoplasm/artist-blacklist-submissions", "artist_blocklist_submission", 5],
   ]
@@ -77,7 +74,7 @@ test("allowed direct requests consume a native binding and receive truthful poli
   const keys = []
   let upstreamCalls = 0
   const response = await worker.fetch(
-    request("/api/public/v1/gallery?order=votes"),
+    request("/api/public/v1/schema"),
     {
       PUBLIC_RATE_LIMIT_60: {
         async limit({ key }) {
@@ -99,7 +96,7 @@ test("allowed direct requests consume a native binding and receive truthful poli
   assert.equal(keys.length, 1)
   assert.match(keys[0], /^[a-f0-9]{64}$/)
   assert.equal(keys[0].includes("203.0.113.42"), false)
-  assert.equal(response.headers.get("RateLimit-Policy"), '"gallery";q=60;w=60')
+  assert.equal(response.headers.get("RateLimit-Policy"), '"schema";q=60;w=60')
   assert.equal(response.headers.get("X-RateLimit-Limit"), "60")
   assert.equal(response.headers.get("X-RateLimit-Period"), "60")
   assert.equal(response.headers.has("RateLimit"), false)
@@ -128,7 +125,7 @@ test("a denied request returns 429 before entering the stateful runtime", async 
 })
 
 test("a missing or failed native binding fails closed", async () => {
-  const missing = await enforceIconoplasmRateLimit(request("/api/public/v1/stats"), {})
+  const missing = await enforceIconoplasmRateLimit(request("/api/public/v1/schema"), {})
   assert.equal(missing.response?.status, 503)
   assert.equal((await missing.response.json()).code, "ICONOPLASM_RATE_LIMIT_UNAVAILABLE")
 
