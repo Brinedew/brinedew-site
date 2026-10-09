@@ -301,7 +301,7 @@ with an uncached unavailable or missing response.
 If publication appears stuck, fix it at the publication boundary:
 
 - distinguish an expected D1 lead from a failed per-gene publication (the
-  republish route, `admin_publication.republish`, re-runs it);
+  rebuild route, `POST /api/iconoplasm/admin/publication/republish`, re-runs it);
 - use the authenticated admin read-model sync path for genuinely stuck
   publication state;
 - let the Actions catalog publisher's republish pass rewrite the dirty genes; and
