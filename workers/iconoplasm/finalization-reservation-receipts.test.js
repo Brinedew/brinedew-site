@@ -2,7 +2,10 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test, { after, before } from "node:test"
 
-import { processPendingSyncFinalizationJobs } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  processPendingSyncFinalizationJobs,
+  rebuildDirtyVisionRollups,
+} from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createD1InvocationBudget } from "../lib/d1-invocation-budget.js"
 import {
   FINALIZATION_COMPLETION_PAGE_SIZE,
@@ -12,6 +15,7 @@ import {
   GENE_ROLLUP_ROWS,
   MAX_EMULSION_CODES_PER_VISION,
   MUTATION_WRITE_FLOOR_UNITS,
+  VISION_ROLLUP_DIRTY_MARK_ROWS,
   VISION_ROLLUP_ROWS,
   finalizationCompletionPageWriteUnits,
   finalizationPhaseWriteUnits,
@@ -216,6 +220,40 @@ async function phaseRun(phase, { keep = [], legacy = [], visionIds = [] } = {}, 
   return { result, entry: operation(result, `finalization:${symbol}:`) }
 }
 
+const countRows = async (sql, ...args) =>
+  database.db
+    .prepare(sql)
+    .bind(...args)
+    .first("n")
+
+// B-1057: finalization marks visions and the request-picker job rebuilds every
+// marked vision once, in one batch. This runs that job against the same meter
+// and ledger; only the given visions are marked.
+async function rollupRun(visionIds) {
+  await database.db.prepare("DELETE FROM icono_vision_rollup_dirty").run()
+  await database.db
+    .prepare(
+      "INSERT INTO icono_vision_rollup_dirty(vision_id, marked_at) SELECT value, ? FROM json_each(?)",
+    )
+    .bind(NOW, JSON.stringify(visionIds))
+    .run()
+  const meter = liveD1Meter(database.db)
+  const ledger = recordingMutationLedger(meter)
+  const env = {
+    ICONOPLASM_DB: meter.db,
+    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: ledger.namespace,
+  }
+  let result = null
+  let error = null
+  try {
+    result = await rebuildDirtyVisionRollups(env)
+  } catch (caught) {
+    error = caught
+  }
+  const settled = ledger.settle(meter.totals.rows_written)
+  return { meter, result, error, settled, entry: operation({ settled }, "vision-rollups:") }
+}
+
 function assertCovered(label, { entry }, { tightness = 1.3 } = {}) {
   assert.ok(entry.units >= entry.wrote, `${label} under-reserved: ${JSON.stringify(entry)}`)
   if (entry.units > MUTATION_WRITE_FLOOR_UNITS)
@@ -234,6 +272,34 @@ test("vote summaries reserve four rows for each new asset in the job's keep list
     assertCovered(`vote_summaries ${assets}`, run)
     assert.equal(run.result.error, null)
     t.diagnostic(JSON.stringify({ site: "phase", phase: "vote_summaries", assets, ...run.entry }))
+  }
+})
+
+test("gene rollups reserve the marks of the gene's visions on top of their own rows", async (t) => {
+  quiet(t)
+  await database.db.prepare("DELETE FROM icono_vision_rollup_dirty").run()
+  for (const visions of [1, 5, 40]) {
+    const symbol = fresh("MARK")
+    await seedGene(symbol, 3)
+    const base = 55000 + counter * 50
+    const visionIds = Array.from({ length: visions }, (_, index) => `anima-v1-${base + index}`)
+    const run = await phaseRun("gene_rollups", { visionIds }, symbol)
+    assertCovered(`gene_rollups marking ${visions} visions`, run, { tightness: 4 })
+    assert.ok(
+      run.entry.wrote <=
+        2 * FINALIZATION_JOB_TRANSITION_ROWS +
+          GENE_ROLLUP_ROWS +
+          VISION_ROLLUP_DIRTY_MARK_ROWS * visions,
+    )
+    assert.equal(
+      await countRows(
+        "SELECT COUNT(*) AS n FROM icono_vision_rollup_dirty WHERE vision_id IN (SELECT value FROM json_each(?))",
+        JSON.stringify(visionIds),
+      ),
+      visions,
+      "every vision of the gene waits for the request-picker job",
+    )
+    t.diagnostic(JSON.stringify({ site: "phase", phase: "gene_rollups", visions, ...run.entry }))
   }
 })
 
@@ -279,8 +345,9 @@ test("vision rollups reserve the worst rewrite of one vision with many genes", a
       MAX_EMULSION_CODES_PER_VISION,
     )
     .run()
-  const first = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VISJOB"))
-  assertCovered("vision_rollups first build", first, { tightness: 100 })
+  const first = await rollupRun([visionId])
+  assert.equal(first.error, null)
+  assertCovered("vision rebuild first build", first, { tightness: 100 })
   // Every aggregate the vision row and its option rollups hold moves: the
   // image count, votes, live count, rejected count and the previews.
   await database.db
@@ -310,10 +377,10 @@ test("vision rollups reserve the worst rewrite of one vision with many genes", a
       "UPDATE icono_portrait_assets SET status='rejected' WHERE gene_symbol LIKE 'VIS%' AND rowid % 3 = 0",
     )
     .run()
-  const second = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VISJOB"))
-  assertCovered("vision_rollups rewrite", second, { tightness: 100 })
+  const second = await rollupRun([visionId])
+  assertCovered("vision rebuild rewrite", second, { tightness: 100 })
   for (const run of [first, second])
-    assert.ok(run.entry.wrote <= 2 * FINALIZATION_JOB_TRANSITION_ROWS + VISION_ROLLUP_ROWS)
+    assert.ok(run.entry.wrote <= VISION_ROLLUP_DIRTY_MARK_ROWS + VISION_ROLLUP_ROWS)
   t.diagnostic(
     JSON.stringify({
       site: "phase",
@@ -360,8 +427,8 @@ test("a vision at the code bound reserves what its first build, a full replaceme
     visionId,
     emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29101),
   )
-  const first = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
-  assert.equal(first.result.error, null)
+  const first = await rollupRun([visionId])
+  assert.equal(first.error, null)
 
   // Every code replaced at once: the registered pairs go, the new ones come, and
   // the option rollup of each old and each new code is rewritten or removed.
@@ -370,11 +437,11 @@ test("a vision at the code bound reserves what its first build, a full replaceme
     visionId,
     emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29102, { revisions: [8, 7, 6, 5, 4, 3, 2, 1] }),
   )
-  const replaced = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
-  assert.equal(replaced.result.error, null)
+  const replaced = await rollupRun([visionId])
+  assert.equal(replaced.error, null)
   // And back again.
   await recodeVision(prefix, visionId, emulsionCodes(MAX_EMULSION_CODES_PER_VISION, 29101))
-  const restored = await phaseRun("vision_rollups", { visionIds: [visionId] }, fresh("VCJOB"))
+  const restored = await rollupRun([visionId])
   const worst = Math.max(first.entry.wrote, replaced.entry.wrote, restored.entry.wrote)
   t.diagnostic(
     JSON.stringify({
@@ -390,7 +457,7 @@ test("a vision at the code bound reserves what its first build, a full replaceme
   assertCovered("vision at bound, full replacement", replaced, { tightness: 100 })
   assertCovered("vision at bound, restored", restored, { tightness: 100 })
   assert.equal(
-    worst - 2 * FINALIZATION_JOB_TRANSITION_ROWS,
+    worst - VISION_ROLLUP_DIRTY_MARK_ROWS,
     VISION_ROLLUP_ROWS,
     "the vision constant is the worst body measured at the bound, not an estimate",
   )
@@ -402,16 +469,16 @@ test("codes shared with other visions add no rows to a rebuild beyond its own co
   // option rollups are already settled.
   const alone = "anima-v1-29104"
   await seedVisionWithCodes(alone, emulsionCodes(8, 29104))
-  const aloneRun = await phaseRun("vision_rollups", { visionIds: [alone] }, fresh("VCJOB"))
+  const aloneRun = await rollupRun([alone])
   const sharedCodes = emulsionCodes(8, 29105)
   for (let other = 0; other < 5; other += 1) {
     const otherVision = `anima-v1-291${10 + other}`
     await seedVisionWithCodes(otherVision, sharedCodes, { genes: 4 })
-    await phaseRun("vision_rollups", { visionIds: [otherVision] }, fresh("VCJOB"))
+    await rollupRun([otherVision])
   }
   const sharer = "anima-v1-29106"
   await seedVisionWithCodes(sharer, sharedCodes)
-  const sharedRun = await phaseRun("vision_rollups", { visionIds: [sharer] }, fresh("VCJOB"))
+  const sharedRun = await rollupRun([sharer])
   assertCovered("vision sharing its codes", sharedRun, { tightness: 100 })
   t.diagnostic(
     JSON.stringify({
@@ -428,90 +495,103 @@ test("codes shared with other visions add no rows to a rebuild beyond its own co
   )
 })
 
-test("a vision above the code bound is refused before any write, its job stays retryable, and it completes once the excess is removed", async (t) => {
+test("a vision above the code bound is refused before any write, stays marked, and is rebuilt once the excess is removed", async (t) => {
   quiet(t)
   const visionId = "anima-v1-29120"
   const codes = emulsionCodes(MAX_EMULSION_CODES_PER_VISION + 1, 29120)
   const prefix = await seedVisionWithCodes(visionId, codes)
-  const jobSymbol = fresh("VCREFUSE")
-  await seedJob(jobSymbol, "vision_rollups", { visionIds: [visionId] })
-  const refused = await invoke({ symbols: [jobSymbol] })
-  const count = async (sql, ...args) =>
-    database.db
-      .prepare(sql)
-      .bind(...args)
-      .first("n")
+  const refused = await rollupRun([visionId])
+  assert.equal(refused.error, null)
   // Nothing of the vision was written: no rollup row, no registered pair, no option rollup.
-  assert.equal(
-    await count(
-      "SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?",
-      visionId,
-    ),
-    0,
-  )
-  assert.equal(
-    await count(
-      "SELECT COUNT(*) AS n FROM icono_generation_request_factory_option_sources WHERE vision_id = ?",
-      visionId,
-    ),
-    0,
-  )
-  assert.equal(
-    await count(
-      "SELECT COUNT(*) AS n FROM icono_generation_request_vision_option_rollup WHERE vision_id = ?",
-      visionId,
-    ),
-    0,
-  )
-  // The only rows written are the job's own claim and failure transitions.
+  for (const table of [
+    "icono_admin_vision_rollup",
+    "icono_generation_request_factory_option_sources",
+    "icono_generation_request_vision_option_rollup",
+  ])
+    assert.equal(
+      await countRows(`SELECT COUNT(*) AS n FROM ${table} WHERE vision_id = ?`, visionId),
+      0,
+      table,
+    )
+  // The only rows written are its claim and the re-mark that keeps it waiting.
   assert.ok(
-    refused.meter.totals.rows_written <= 2 * FINALIZATION_JOB_TRANSITION_ROWS,
+    refused.meter.totals.rows_written <= 2 * VISION_ROLLUP_DIRTY_MARK_ROWS,
     `refusal wrote ${refused.meter.totals.rows_written} rows`,
   )
-  // The job is still in its ledger, retryable, and says why in words.
-  const job = await database.db
-    .prepare(
-      "SELECT status, phase, last_error, vision_ids_json FROM icono_sync_finalization_jobs WHERE gene_symbol = ?",
-    )
-    .bind(jobSymbol)
-    .first()
-  assert.ok(["retrying", "queued"].includes(job.status), JSON.stringify(job))
-  assert.equal(job.phase, "vision_rollups")
-  assert.deepEqual(JSON.parse(job.vision_ids_json), [visionId])
-  assert.match(job.last_error, new RegExp(visionId))
-  assert.match(job.last_error, new RegExp(String(MAX_EMULSION_CODES_PER_VISION + 1)))
-  assert.match(job.last_error, new RegExp(`limit is ${MAX_EMULSION_CODES_PER_VISION}`))
+  assertCovered("refused vision", refused, { tightness: 1000 })
+  assert.equal(
+    await countRows(
+      "SELECT COUNT(*) AS n FROM icono_vision_rollup_dirty WHERE vision_id = ?",
+      visionId,
+    ),
+    1,
+  )
+  // The run says why in words.
+  assert.equal(refused.result.refused.length, 1)
+  const message = refused.result.refused[0].error
+  assert.match(message, new RegExp(visionId))
+  assert.match(message, new RegExp(String(MAX_EMULSION_CODES_PER_VISION + 1)))
+  assert.match(message, new RegExp(`limit is ${MAX_EMULSION_CODES_PER_VISION}`))
 
   // Repair: the vision gives back the code it should not have carried.
   await recodeVision(prefix, visionId, codes.slice(0, MAX_EMULSION_CODES_PER_VISION))
-  await database.db
-    .prepare(
-      "UPDATE icono_sync_finalization_jobs SET status = 'queued', next_attempt_at = ? WHERE gene_symbol = ?",
-    )
-    .bind(NOW, jobSymbol)
-    .run()
-  const repaired = await invoke({ symbols: [jobSymbol] })
+  const repaired = await rollupRun([visionId])
   assert.equal(repaired.error, null)
+  assert.deepEqual(repaired.result.refused, [])
   assert.equal(
-    await count(
+    await countRows(
       "SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?",
       visionId,
     ),
     1,
   )
   assert.equal(
-    await count(
+    await countRows(
       "SELECT COUNT(*) AS n FROM icono_generation_request_factory_option_sources WHERE vision_id = ?",
       visionId,
     ),
     MAX_EMULSION_CODES_PER_VISION,
   )
   assert.equal(
-    await database.db
-      .prepare("SELECT phase FROM icono_sync_finalization_jobs WHERE gene_symbol = ?")
-      .bind(jobSymbol)
-      .first("phase"),
-    "completed_pending_finalize",
+    await countRows(
+      "SELECT COUNT(*) AS n FROM icono_vision_rollup_dirty WHERE vision_id = ?",
+      visionId,
+    ),
+    0,
+  )
+})
+
+test("a vision above the code bound does not hold back the rest of its batch", async (t) => {
+  quiet(t)
+  const bad = "anima-v1-29130"
+  const good = "anima-v1-29131"
+  await seedVisionWithCodes(bad, emulsionCodes(MAX_EMULSION_CODES_PER_VISION + 1, 29130), {
+    genes: 4,
+  })
+  await seedVisionWithCodes(good, emulsionCodes(2, 29131), { genes: 4 })
+  const run = await rollupRun([bad, good])
+  assert.equal(run.error, null)
+  assert.equal(run.result.visions, 1)
+  assert.deepEqual(
+    run.result.refused.map((row) => row.vision_id),
+    [bad],
+  )
+  assertCovered("batch with a refused vision", run, { tightness: 100 })
+  assert.equal(
+    await countRows(
+      "SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?",
+      good,
+    ),
+    1,
+  )
+  assert.equal(
+    await countRows("SELECT COUNT(*) AS n FROM icono_admin_vision_rollup WHERE vision_id = ?", bad),
+    0,
+  )
+  const waiting = await database.db.prepare("SELECT vision_id FROM icono_vision_rollup_dirty").all()
+  assert.deepEqual(
+    waiting.results.map((row) => row.vision_id),
+    [bad],
   )
 })
 
