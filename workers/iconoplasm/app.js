@@ -8,7 +8,9 @@ import { drizzle } from "drizzle-orm/d1"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { HTTPException } from "hono/http-exception"
-import { z } from "zod"
+// Zod's slim build (B-1070): the full one was 772 KiB of the Worker's 6.5 MB,
+// evaluated by every cold isolate to check two routes' bodies.
+import * as z from "zod/mini"
 
 import { d1DailyRowReadLimitResponse } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
@@ -19,31 +21,27 @@ import { geneCatalog, portraitAssets } from "./db/schema.js"
 export const MAX_GENES_PER_REQUEST = 8
 export const REGISTER_MAX_PORTRAITS = 100
 
-const sha256 = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[a-f0-9]{64}$/)
+const sha256 = z.string().check(z.trim(), z.toLowerCase(), z.regex(/^[a-f0-9]{64}$/))
 const optionalText = (max) =>
-  z
-    .string()
-    .trim()
-    .max(max)
-    .transform((value) => value || null)
-    .nullish()
+  z.nullish(
+    z.pipe(
+      z.string().check(z.trim(), z.maxLength(max)),
+      z.transform((value) => value || null),
+    ),
+  )
+const positiveInt = z.int().check(z.positive())
+const countingInt = z.int().check(z.nonnegative())
 
 const symbolSchema = z
   .string()
-  .trim()
-  .toUpperCase()
-  .regex(/^[A-Z0-9][A-Z0-9-]{0,63}$/)
+  .check(z.trim(), z.toUpperCase(), z.regex(/^[A-Z0-9][A-Z0-9-]{0,63}$/))
 
 const portraitSchema = z.object({
   symbol: symbolSchema,
   asset_sha256: sha256,
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
-  bytes: z.number().int().positive().nullish(),
+  width: positiveInt,
+  height: positiveInt,
+  bytes: z.nullish(positiveInt),
   vision_id: optionalText(255),
   emulsion_id: optionalText(64),
   workflow_id: optionalText(32),
@@ -51,21 +49,23 @@ const portraitSchema = z.object({
   workflow_path: optionalText(512),
   prompt_version: optionalText(16),
   variant_slot: optionalText(32),
-  candidate_image_id: z.number().int().nonnegative().nullish(),
+  candidate_image_id: z.nullish(countingInt),
   sample_label: optionalText(64),
-  sample_number: z.number().int().nonnegative().default(0),
-  sample_text_hash: sha256.nullish(),
-  is_stale: z.boolean().default(false),
+  sample_number: z._default(countingInt, 0),
+  sample_text_hash: z.nullish(sha256),
+  is_stale: z._default(z.boolean(), false),
 })
 
 const registerSchema = z
   .object({
-    created_by: z.string().trim().min(1).max(255),
-    portraits: z.array(portraitSchema).min(1).max(REGISTER_MAX_PORTRAITS),
+    created_by: z.string().check(z.trim(), z.minLength(1), z.maxLength(255)),
+    portraits: z.array(portraitSchema).check(z.minLength(1), z.maxLength(REGISTER_MAX_PORTRAITS)),
   })
-  .refine((body) => new Set(body.portraits.map((p) => p.symbol)).size <= MAX_GENES_PER_REQUEST, {
-    message: `At most ${MAX_GENES_PER_REQUEST} genes per registration`,
-  })
+  .check(
+    z.refine((body) => new Set(body.portraits.map((p) => p.symbol)).size <= MAX_GENES_PER_REQUEST, {
+      message: `At most ${MAX_GENES_PER_REQUEST} genes per registration`,
+    }),
+  )
 
 function portraitKey(assetSha256, rendition) {
   return `portraits/v1/${assetSha256.slice(0, 2)}/${assetSha256}/${rendition}.webp`
@@ -279,7 +279,9 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
     outsideMaintenance,
     zValidator(
       "json",
-      z.object({ symbols: z.array(symbolSchema).min(1).max(MAX_GENES_PER_REQUEST) }),
+      z.object({
+        symbols: z.array(symbolSchema).check(z.minLength(1), z.maxLength(MAX_GENES_PER_REQUEST)),
+      }),
     ),
     async (c) => {
       const symbols = [...new Set(c.req.valid("json").symbols)]
