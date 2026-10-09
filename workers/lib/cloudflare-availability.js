@@ -1,18 +1,35 @@
-const DAILY_ROW_READ_LIMIT_MARKERS = [
-  "exceeded d1's free tier daily row read limit",
-  "d1 free tier daily row read limit exceeded",
-]
+// Cloudflare's two daily D1 walls on the free plan, as its errors word them. On
+// 2026-10-09 at about 21:00 UTC the write wall answered "Your account has
+// exceeded D1's free tier daily row write limit"; the register route turned it
+// into a 500, and the factory failed a publication instead of waiting.
+const DAILY_ROW_LIMIT_MARKERS = {
+  read: [
+    "exceeded d1's free tier daily row read limit",
+    "d1 free tier daily row read limit exceeded",
+  ],
+  write: [
+    "exceeded d1's free tier daily row write limit",
+    "d1 free tier daily row write limit exceeded",
+  ],
+}
 
-export function isD1DailyRowReadLimitError(error) {
+// "read" or "write" when the error (or one of its causes) is Cloudflare's daily D1
+// limit, otherwise null.
+export function d1DailyRowLimitKind(error) {
   const visited = new Set()
   let current = error
   while (current && !visited.has(current)) {
     visited.add(current)
     const message = String(current?.message || current || "").toLowerCase()
-    if (DAILY_ROW_READ_LIMIT_MARKERS.some((marker) => message.includes(marker))) return true
+    for (const [kind, markers] of Object.entries(DAILY_ROW_LIMIT_MARKERS))
+      if (markers.some((marker) => message.includes(marker))) return kind
     current = current?.cause
   }
-  return false
+  return null
+}
+
+export function isD1DailyRowLimitError(error) {
+  return d1DailyRowLimitKind(error) !== null
 }
 
 export function isDurableObjectDailyDurationLimitError(error) {
@@ -47,17 +64,18 @@ export function secondsUntilCloudflareDailyReset(now = Date.now(), marginSeconds
   return Math.max(1, Math.ceil((resetAt - current.getTime()) / 1000))
 }
 
-export function d1DailyRowReadLimitResponse(error, now = Date.now()) {
-  if (!isD1DailyRowReadLimitError(error)) return null
+export function d1DailyRowLimitResponse(error, now = Date.now()) {
+  const kind = d1DailyRowLimitKind(error)
+  if (!kind) return null
   const retryAfter = secondsUntilCloudflareDailyReset(now)
+  const code = kind === "write" ? "D1_ACCOUNT_WRITE_LIMIT" : "D1_ACCOUNT_READ_LIMIT"
   return Response.json(
     {
       ok: false,
-      code: "D1_ACCOUNT_READ_LIMIT",
+      code,
       error: {
-        code: "D1_ACCOUNT_READ_LIMIT",
-        message:
-          "Website database reads are paused because the account's daily allowance is exhausted. Saved work is retained.",
+        code,
+        message: `Website database ${kind}s are paused because the account's daily allowance is exhausted. Saved work is retained.`,
       },
       retry_after_seconds: retryAfter,
       reset_at: new Date(now + retryAfter * 1000).toISOString(),

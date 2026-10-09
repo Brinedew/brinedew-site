@@ -2,7 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  isD1DailyRowReadLimitError,
+  d1DailyRowLimitKind,
+  d1DailyRowLimitResponse,
   secondsUntilCloudflareDailyReset,
 } from "./lib/cloudflare-availability.js"
 
@@ -10,8 +11,23 @@ test("recognizes Cloudflare's daily D1 row-read exhaustion through wrapped error
   const cause = new Error(
     "D1_ERROR: Your account has exceeded D1's free tier daily row read limit.",
   )
-  assert.equal(isD1DailyRowReadLimitError(new Error("query failed", { cause })), true)
-  assert.equal(isD1DailyRowReadLimitError(new Error("D1 database unavailable")), false)
+  assert.equal(d1DailyRowLimitKind(new Error("query failed", { cause })), "read")
+  assert.equal(d1DailyRowLimitKind(new Error("D1 database unavailable")), null)
+})
+
+// 2026-10-09, about 21:00 UTC: the write wall, worded as Cloudflare logged it.
+// The factory waits for the reset only when the answer is a 503 with reset_at.
+test("Cloudflare's daily D1 write wall answers 503 with the reset, like the read wall", async () => {
+  const wall = new Error(
+    "D1_ERROR: Your account has exceeded D1's free tier daily row write limit. Upgrade to a paid plan or wait until tomorrow (midnight UTC) to continue. See https://developers.cloudflare.com/d1/platform/limits/ for more details.",
+  )
+  assert.equal(d1DailyRowLimitKind(wall), "write")
+  const response = d1DailyRowLimitResponse(wall, Date.parse("2026-10-09T21:02:47.000Z"))
+  assert.equal(response.status, 503)
+  const body = await response.json()
+  assert.equal(body.code, "D1_ACCOUNT_WRITE_LIMIT")
+  assert.equal(body.reset_at, "2026-10-10T00:00:05.000Z")
+  assert.equal(Number(response.headers.get("Retry-After")), body.retry_after_seconds)
 })
 
 test("retry-after targets five seconds after the next midnight UTC reset", () => {

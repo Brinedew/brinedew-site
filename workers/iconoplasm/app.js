@@ -12,7 +12,7 @@ import { HTTPException } from "hono/http-exception"
 // evaluated by every cold isolate to check two routes' bodies.
 import * as z from "zod/mini"
 
-import { d1DailyRowReadLimitResponse } from "../lib/cloudflare-availability.js"
+import { d1DailyRowLimitResponse } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
@@ -173,12 +173,12 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries }) {
   // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
   // thrown error leaves the app as it is: the Worker's error reporting
   // (withErrorReporting, B-832) sends it to Sentry with its stack, as it did
-  // before Hono stood in front. Cloudflare's own daily D1 read limit is not a bug
-  // either: it answers 503 with the reset time, which the factory turns into a
-  // deferral it sleeps through (Iconoplasm drain/deferred_retry.py).
+  // before Hono stood in front. Cloudflare's own daily D1 limits (rows read, rows
+  // written) are not bugs either: they answer 503 with the reset time, which the
+  // factory turns into a deferral it sleeps through (Iconoplasm drain/deferred_retry.py).
   app.onError((error) => {
     if (error instanceof HTTPException) return error.getResponse()
-    const wall = d1DailyRowReadLimitResponse(error)
+    const wall = d1DailyRowLimitResponse(error)
     if (wall) return wall
     throw error
   })

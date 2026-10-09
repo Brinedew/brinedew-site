@@ -132,6 +132,17 @@ test("only the factory's token registers, and every other request reaches the le
   assert.equal(body.code, "D1_ACCOUNT_READ_LIMIT")
   assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/, "the next 00:00 UTC, plus Cloudflare's slack")
   assert.equal(Number(wall.headers.get("Retry-After")), body.retry_after_seconds)
+
+  // 2026-10-09: the write wall came back as a 500 and failed a publication.
+  const writeWalled = createIconoplasmApp({
+    legacy: async () => {
+      throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row write limit.")
+    },
+    publishGene: async () => null,
+  })
+  const writeWall = await writeWalled.request("/anything", {}, h.env)
+  assert.equal(writeWall.status, 503)
+  assert.equal((await writeWall.json()).code, "D1_ACCOUNT_WRITE_LIMIT")
 })
 
 test("new portraits land on the gene's card with one candidate_added event each", async () => {
