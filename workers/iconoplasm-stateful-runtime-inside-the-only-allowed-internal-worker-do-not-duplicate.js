@@ -21714,15 +21714,13 @@ export async function publishIconoplasmGeneStableObject(
   }
 }
 
-// B-1063: after the factory registers portraits, the summaries the old ingest
-// and reconcile refreshed for those genes: the gene rollup (its counts; the
-// clans page and the admin pages read it) and the visions the request-picker
-// job rebuilds once each (B-1057). They go when B-1064 retires their readers.
-export async function refreshIconoplasmRegisteredGeneSummaries(
-  env,
-  { symbols = [], visionIds = [] } = {},
-) {
-  await rebuildGeneRollupForSymbols(env, symbols)
+// B-1063: after the factory registers portraits, the visions the request-picker
+// job rebuilds once each (B-1057). The gene rollup is not rebuilt here: an
+// election that changes the winner rebuilds it (the clans page reads that
+// winner), and its candidate counts are read only by admin pages. Rebuilding it
+// for every registered gene cost 6.6 D1 rows written each, twice for a new gene
+// (2026-10-09 write wall). It goes when B-1064 retires its readers.
+export async function refreshIconoplasmRegisteredGeneSummaries(env, { visionIds = [] } = {}) {
   await markVisionRollupsDirty(env, visionIds)
 }
 
