@@ -111,6 +111,20 @@ test("only the factory's token registers, and every other request reaches the le
     publishGene: async () => null,
   })
   await assert.rejects(throwing.request("/anything", {}, h.env), /legacy exploded/)
+
+  // Cloudflare's own daily read limit answers 503 with the reset, for the factory to wait out.
+  const walled = createIconoplasmApp({
+    legacy: async () => {
+      throw new Error("D1_ERROR: Exceeded D1's free tier daily row read limit")
+    },
+    publishGene: async () => null,
+  })
+  const wall = await walled.request("/anything", {}, h.env)
+  assert.equal(wall.status, 503)
+  const body = await wall.json()
+  assert.equal(body.code, "D1_ACCOUNT_READ_LIMIT")
+  assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/, "the next 00:00 UTC, plus Cloudflare's slack")
+  assert.equal(Number(wall.headers.get("Retry-After")), body.retry_after_seconds)
 })
 
 test("new portraits land on the gene's card with one candidate_added event each", async () => {
