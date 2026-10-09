@@ -135,6 +135,50 @@ test("a PUT that never landed fails with its own error, whatever the read-back f
   )
 })
 
+// 2026-10-09: ATP2A2's storage node applied each write ~30 s late, after the
+// read-back, and every attempt carries a new published_at stamp.
+test("after a failed PUT, the same content under an earlier stamp is that content published", async () => {
+  const earlier = {
+    symbol: "ATP2A2",
+    portrait: { sha: "a" },
+    published_at: "2026-10-09T14:37:15.760Z",
+  }
+  const stored = new TextEncoder().encode(JSON.stringify(earlier))
+  const late = createPublishedCardObjectStore(env, {
+    request: async (url, init) => {
+      if (init.method === "PUT") throw new DOMException("The operation was aborted", "AbortError")
+      return new Response(stored)
+    },
+  })
+  const receipt = await late.writeStable("genes/v3/ATP2A2.json", {
+    ...earlier,
+    published_at: "2026-10-09T14:47:00.000Z",
+  })
+  assert.equal(receipt.size, stored.byteLength)
+
+  // Different content is not published, whatever its stamp.
+  await assert.rejects(
+    late.writeStable("genes/v3/ATP2A2.json", {
+      ...earlier,
+      portrait: { sha: "b" },
+      published_at: "2026-10-09T14:47:00.000Z",
+    }),
+    /The operation was aborted/,
+  )
+  // A PUT that succeeded is still held to its own bytes.
+  const answered = createPublishedCardObjectStore(env, {
+    request: async (url, init) =>
+      init.method === "PUT" ? new Response(null, { status: 201 }) : new Response(stored),
+  })
+  await assert.rejects(
+    answered.writeStable("genes/v3/ATP2A2.json", {
+      ...earlier,
+      published_at: "2026-10-09T14:47:00.000Z",
+    }),
+    /hash mismatch/,
+  )
+})
+
 // B-898 Stage 1: the stable gene object writer.
 test("the stable gene object is written to a fixed key with a short TTL and verified by read-back", async () => {
   const { store, calls, objects } = fixture()

@@ -124,6 +124,19 @@ async function boundedBytes(response, limit, timeoutMs) {
   return bytes
 }
 
+function sameContentApartFromStamp(storedBytes, value) {
+  let stored
+  try {
+    stored = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(storedBytes))
+  } catch {
+    return false
+  }
+  if (!stored || typeof stored !== "object" || !value || typeof value !== "object") return false
+  const { published_at: _storedStamp, ...storedContent } = stored
+  const { published_at: _stamp, ...content } = value
+  return canonicalPublishedJson(storedContent) === canonicalPublishedJson(content)
+}
+
 export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8000 } = {}) {
   const send =
     request ||
@@ -194,9 +207,15 @@ export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8
       throw putError || new Error("Stable gene object PUT is not yet readable")
     }
     const readBack = await boundedBytes(check, identity.limit, bodyTimeoutMs)
-    if ((await publishedObjectHash(readBack)) !== hash)
-      throw putError || new Error("Stable gene object read-back hash mismatch")
-    return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
+    const readBackHash = await publishedObjectHash(readBack)
+    if (readBackHash === hash) return { key, hash, size: bytes.byteLength, symbol: identity.symbol }
+    // A storage node that applies writes ~30 s late (ATP2A2's, 2026-10-09) never
+    // shows this attempt's bytes before the read-back, because every attempt
+    // stamps a new published_at. After a failed PUT, an object that holds the same
+    // content under an earlier stamp is that content published.
+    if (putError && sameContentApartFromStamp(readBack, value))
+      return { key, hash: readBackHash, size: readBack.byteLength, symbol: identity.symbol }
+    throw putError || new Error("Stable gene object read-back hash mismatch")
   }
 
   // First-party read of a stable gene object for the canonical-origin fallback
