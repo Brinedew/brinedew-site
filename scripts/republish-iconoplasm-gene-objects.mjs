@@ -8,7 +8,7 @@
 // bytes until something rewrites them, and nothing does that for an unchanged
 // gene: the Actions catalog publisher only republishes the genes whose winner or
 // candidates changed. This script drives the existing admin republish route
-// (`admin_publication.republish`, up to eight genes a call, four by default) over
+// (the Hono rebuild route in workers/iconoplasm/app.js, up to eight genes a call, four by default) over
 // the catalog. It is a one-shot, not a cron: delete it once `--verify` reports
 // every object clean.
 //
@@ -27,7 +27,7 @@
 // gene of the earliest batch that did not finish; every batch before it reached a
 // final outcome, and the genes that failed are listed apart.
 //
-// TONIGHT, AFTER 20:00 UTC (each execute needs ICONOPLASM_ADMIN_TOKEN):
+// Any hour (each execute needs ICONOPLASM_ADMIN_TOKEN):
 //   1. node scripts/republish-iconoplasm-gene-objects.mjs --verify
 //        Reads every public object from the CDN (no Worker request, any hour) and
 //        writes a receipt listing every gene still carrying Tags.
@@ -46,8 +46,8 @@
 //   node scripts/republish-iconoplasm-gene-objects.mjs --execute --batch 2  # genes a call, 1 to 8 (default 4)
 //
 // Dry run is the default and sends nothing to the Worker. `--execute` needs
-// ICONOPLASM_ADMIN_TOKEN, refuses before 20:00 UTC unless an incident reason is
-// given (AGENTS.md: spend the daily allowance at the end of the UTC day), stops
+// ICONOPLASM_ADMIN_TOKEN, runs at any hour (Cloudflare's daily limit is the only
+// wall; the 20:00 UTC window it once had was a private wall, B-1067), stops
 // after too many failed genes, prints where to resume, and writes a receipt to
 // artifacts/iconoplasm-republish/. Every run is idempotent: the route rewrites a
 // gene from D1 and the authoring store as they stand. `--verify` only reads the
@@ -58,15 +58,14 @@ import path from "node:path"
 import process from "node:process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-import { REPUBLISH_MAX_SYMBOLS } from "../workers/iconoplasm-admin-republish-route.js"
+import { MAX_GENES_PER_REQUEST } from "../workers/iconoplasm/app.js"
 
-export const LATE_UTC_HOUR = 20
 export const ORIGIN = "https://iconoplasm.brinedew.bio"
 export const CDN = "https://iconoplasmportraits.b-cdn.net"
 const SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const TAG_KEYS = new Set(["accepted_tags_derivative", "tags_text", "fields_json"])
 const MAX_CONCURRENCY = 6
-// Genes a call carries. The route takes up to REPUBLISH_MAX_SYMBOLS (a limit, not
+// Genes a call carries. The route takes up to MAX_GENES_PER_REQUEST (a limit, not
 // a target); the CPU cap killed about one call in five at eight.
 export const DEFAULT_BATCH_SYMBOLS = 4
 // Pauses before the first and second retry of a call that got a 5xx or a network
@@ -194,7 +193,6 @@ export async function republishGeneObjects({
   concurrency = 3,
   maxFailures = 10,
   retryDelaysMs = RETRY_DELAYS_MS,
-  allowEarlyReason = null,
   canary = null,
   log = () => {},
 }) {
@@ -205,8 +203,8 @@ export async function republishGeneObjects({
     throw fail("LIMIT_INVALID", "limit must be a whole number of at least 1")
   if (!(Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= MAX_CONCURRENCY))
     throw fail("CONCURRENCY_INVALID", `concurrency must be 1 to ${MAX_CONCURRENCY}`)
-  if (!(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= REPUBLISH_MAX_SYMBOLS))
-    throw fail("BATCH_INVALID", `batch must be 1 to ${REPUBLISH_MAX_SYMBOLS} genes a call`)
+  if (!(Number.isInteger(batchSize) && batchSize >= 1 && batchSize <= MAX_GENES_PER_REQUEST))
+    throw fail("BATCH_INVALID", `batch must be 1 to ${MAX_GENES_PER_REQUEST} genes a call`)
 
   let plan
   if (only) {
@@ -226,16 +224,8 @@ export async function republishGeneObjects({
   const targets = limit === null ? plan : plan.slice(0, limit)
   const afterTargets = plan[targets.length] ?? null
 
-  const early = now.getUTCHours() < LATE_UTC_HOUR
-  if (execute) {
-    if (typeof post !== "function")
-      throw fail("POSTER_REQUIRED", "execute needs a way to call the republish route")
-    if (early && !String(allowEarlyReason || "").trim())
-      throw fail(
-        "RUN_LATE_IN_THE_UTC_DAY",
-        `execute runs at or after ${LATE_UTC_HOUR}:00 UTC; now is ${now.toISOString()}. During an incident, pass --allow-early with the reason`,
-      )
-  }
+  if (execute && typeof post !== "function")
+    throw fail("POSTER_REQUIRED", "execute needs a way to call the republish route")
 
   const receipt = {
     mode: execute ? "execute" : "dry-run",
@@ -248,7 +238,6 @@ export async function republishGeneObjects({
     calls: 0,
     retries: 0,
     stopped: null,
-    early_reason: execute && early ? String(allowEarlyReason).trim() : null,
     cost: sweepCost(targets.length, batchSize),
     next_from: targets[0] ?? null,
     done: false,
@@ -538,7 +527,6 @@ export function parseRepublishArgs(argv) {
     fromVerify: null,
     batch: DEFAULT_BATCH_SYMBOLS,
     concurrency: 3,
-    allowEarlyReason: null,
   }
   const valued = [
     "--from",
@@ -547,7 +535,6 @@ export function parseRepublishArgs(argv) {
     "--from-verify",
     "--batch",
     "--concurrency",
-    "--allow-early",
     "--verify-sample",
   ]
   for (let index = 0; index < argv.length; index += 1) {
@@ -560,12 +547,11 @@ export function parseRepublishArgs(argv) {
       if (flag === "--from") parsed.from = symbolValue(flag, value)
       else if (flag === "--limit") parsed.limit = wholeNumber(flag, value, { min: 1 })
       else if (flag === "--batch")
-        parsed.batch = wholeNumber(flag, value, { min: 1, max: REPUBLISH_MAX_SYMBOLS })
+        parsed.batch = wholeNumber(flag, value, { min: 1, max: MAX_GENES_PER_REQUEST })
       else if (flag === "--concurrency")
         parsed.concurrency = wholeNumber(flag, value, { min: 1, max: MAX_CONCURRENCY })
       else if (flag === "--verify-sample")
         parsed.verifySample = wholeNumber(flag, value, { min: 1 })
-      else if (flag === "--allow-early") parsed.allowEarlyReason = String(value)
       else if (flag === "--from-verify") {
         if (!String(value).trim()) throw new Error("--from-verify needs a receipt file")
         parsed.fromVerify = String(value)
@@ -643,7 +629,6 @@ async function main() {
     only,
     batchSize: options.batch,
     concurrency: options.concurrency,
-    allowEarlyReason: options.allowEarlyReason,
     canary: options.execute ? { fetchObject: cdnObjectFetcher() } : null,
     log: (line) => console.error(line),
   })
@@ -653,7 +638,7 @@ async function main() {
       fetchObject: cdnObjectFetcher(),
     })
   }
-  receipt.args = { ...options, allowEarlyReason: options.allowEarlyReason ? "(given)" : null }
+  receipt.args = { ...options }
   receipt.file = writeReceipt(receiptDir, receipt)
   console.log(JSON.stringify(receipt, null, 2))
   if (!receipt.done && options.execute)

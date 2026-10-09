@@ -174,10 +174,12 @@ import {
   electAndProjectGeneWinner,
   geneElectionReceipt,
   importGeneVotes,
+  projectGeneElection,
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
 import {
+  GENE_VOTE_VERSION_SQL,
   VOTE_DAILY_BUDGET_EXHAUSTED,
   capImageEditInheritedUpvotes,
   imageEditInheritedUpvotes,
@@ -191,16 +193,9 @@ import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-rou
 import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
-import {
-  REPUBLISH_MAX_SYMBOLS,
-  createIconoplasmAdminRepublishHandlers,
-} from "./iconoplasm-admin-republish-route.js"
+import { MAX_GENES_PER_REQUEST } from "./iconoplasm/app.js"
 import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-removal.js"
-import {
-  composeStableGeneObject,
-  enrichPublishedGeneCandidates,
-  projectCardBlot,
-} from "./lib/iconoplasm-stable-gene-object.js"
+import { buildGeneCard } from "./lib/iconoplasm-stable-gene-object.js"
 import { iconoplasmGeneName } from "./lib/iconoplasm-gene-name.js"
 import { createIconoplasmAdminExtensionBlocklistHandlers } from "./iconoplasm-admin-extension-blocklist-routes.js"
 import { createIconoplasmAdminPublicationAliasHandlers } from "./iconoplasm-admin-publication-alias-routes.js"
@@ -1628,8 +1623,6 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
     family === "admin_blots_upload" ||
-    // B-898: about four subrequests and a few D1 rows per gene, bounded per call.
-    family === "admin_publication_republish" ||
     // B-859: a call that writes converts one body (one D1 query, at most 41 storage
     // requests); a call that only reads scans at most ten.
     family === "admin_plaintext_bodies" ||
@@ -11830,38 +11823,24 @@ async function recordCompactDiscoveryEncounters(
   if (!env.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
   const db = env.ICONOPLASM_DB
   // The cutover fence is deliberately first: a pending migration performs no
-  // dictionary mutation and consumes no mutation-lane reservation.
+  // dictionary mutation.
   await assertCompactDiscoveryActivated(db)
+  // A reader's collecting writes straight to D1, like a vote (B-1067). It used to
+  // reserve its writes in the budget referee first, and every reservation
+  // rescanned the day's reservations: on a viral day the collecting alone would
+  // have spent Cloudflare's Durable Object reads, as publication did on
+  // 2026-10-09 at 16:00 UTC, and taken GeneGuessr down with it.
   const names = encounters.map((encounter) => encounter.symbol)
   const beforeDictionary = await loadDiscoveryDictionaryForNames(db, names)
   const unresolvedNames = beforeDictionary.names.filter(
     (name) => !beforeDictionary.byName.has(name),
   )
-  const dictionaryWriteUnits = unresolvedNames.length ? 1 + unresolvedNames.length : 0
-  const operationId = `discovery:${normalizeUserId(userId || "")}:${String(batchId || "")}`
-  const admission = await reserveIconoplasmMutationWrites(env, {
-    lane: "user_action",
-    operationId,
-    // Real D1 receipts: three writes for the compact personal batch, one
-    // receipt and one indexed outbox delete for its shared delivery, plus one
-    // conservative unit for the page-level shared-state update.
-    units: 6 + dictionaryWriteUnits,
-  })
-  if (admission?.ok !== true) {
-    const error = new Error(
-      "Discovery capacity is reserved for other mutation lanes; retain the exact batch for retry",
-    )
-    error.code = admission?.code || "MUTATION_PROVIDER_HEADROOM_RESERVED"
-    error.mutation_lane = admission
-    throw error
-  }
   const lookup = await ensureDiscoveryDictionaryForNames(db, names, {
-    maxMutationWrites: dictionaryWriteUnits,
+    maxMutationWrites: unresolvedNames.length ? 1 + unresolvedNames.length : 0,
   })
   const unknown = lookup.names.filter((name) => !lookup.byName.has(name))
   const known = encounters.filter((encounter) => lookup.byName.has(encounter.symbol))
   if (!known.length) {
-    await completeIconoplasmMutationReservation(env, operationId)
     return { ok: true, replay: false, recorded: 0, dropped: unknown, state_version: 0 }
   }
   const dictionary = discoveryCompactDictionaryFromLookup(lookup)
@@ -11872,7 +11851,6 @@ async function recordCompactDiscoveryEncounters(
     dictionary,
     encounters: known,
   })
-  await completeIconoplasmMutationReservation(env, operationId)
   return { ...result, recorded: known.length, dropped: unknown }
 }
 
@@ -21748,29 +21726,173 @@ async function currentGalleryVersion(env) {
   return galleryVersionCache.value
 }
 
-// B-898: the one publication source: how a gene becomes a card. The per-gene
-// publisher below materializes through it; nothing else reads cards from D1.
-function cardPublicationSourceForEnv(env) {
-  return {
-    async materialize(symbols, { portraitOverrides = null } = {}) {
-      const records = await cardCatalogRecordsForArtifact(env, {
-        requestUrl: "https://iconoplasm.brinedew.bio/",
-        symbols,
-        snapshotVersion: "content-addressed",
-        portraitOverrides,
-      })
-      return records.map((record) =>
-        buildMobileCardVMFromGeneRecord(record, {
-          snapshotVersion: "content-addressed",
-          source: "published_card_catalog",
-        }),
-      )
-    },
-    complete: assertCompleteMobileCardVM,
-    stable: stableCardCatalogMaterialValue,
-    project: (payload) => stableCardCatalogMaterialValue(projectGeneRecord(payload, null)),
-    locator: (card) => publishedPortraitLocatorFromCard(card, ""),
+// B-1063: everything one gene's card is built from, in one D1 batch (one call,
+// about 2 rows per portrait plus six): the factory's rows (catalogue, essence,
+// portraits, blot) as the builder's content, and what readers did (vote
+// tallies, the caretaker supervote, the published state, the vote version) as
+// its facts. The canonical text comes from the manifestation authority; a gene
+// that has none yet (599 genes on 2026-10-09) gets a card without one instead
+// of no card at all. Returns null for a gene the catalogue doesn't carry.
+const GENE_CARD_ESSENCE_COLUMNS = [
+  "weight_kg",
+  "molecular_weight_kda",
+  "height_cm",
+  "sex",
+  "age",
+  "age_years",
+  "first_publication_year",
+  "faction",
+  "skin_hex",
+  "skin_name",
+  "tissue_tau",
+  "primary_tissue",
+  "loeuf",
+  "constraint_percentile",
+  "aesthetics_json",
+  "aesthetics_origin_json",
+  "politics_origin_json",
+  "family_surname",
+  "family_members",
+  "family_feature",
+]
+
+async function readPublicManifestationFact(env, symbol) {
+  try {
+    const [record] = await hydratePublicCanonicalGeneRecords(env, [
+      { symbol, canonical_symbol: symbol },
+    ])
+    return record?.canonical_manifestation ?? null
+  } catch (error) {
+    if (error?.code === "PUBLIC_CANONICAL_PROJECTION_NOT_FOUND") return null
+    throw error
   }
+}
+
+function geneCardPortraitContent(row) {
+  return {
+    asset_sha256: normalizeSha256(row.asset_sha256 || ""),
+    width: row.width,
+    height: row.height,
+    status: row.status,
+    autopick_eligible: coerceBoolean(row.autopick_eligible, true),
+    is_stale: coerceBoolean(row.is_stale, false),
+    is_legacy: coerceBoolean(row.is_legacy, false),
+    created_at: row.created_at,
+    candidate_image_id: row.candidate_image_id,
+    vision_id: row.vision_id,
+    emulsion_id: publicEmulsionIdForRow(row) || null,
+    emulsion_label: generationRequestVisionLabel(row) || null,
+    sample_label: row.sample_label,
+    sample_number: row.sample_number,
+    sample_text_hash: row.sample_text_hash,
+    artist_id: publicArtistIdForRow(row) || null,
+  }
+}
+
+async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
+  const db = env?.ICONOPLASM_DB
+  if (!db) throw new Error("ICONOPLASM_DB binding missing")
+  const [catalog, essence, portraits, blots, votes, caretaker, state, version] = await db.batch([
+    db
+      .prepare(
+        `SELECT full_name AS catalog_full_name, color_hex, tmh
+           FROM icono_gene_catalog WHERE gene_symbol = ?1 LIMIT 1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT ${GENE_CARD_ESSENCE_COLUMNS.join(", ")}
+           FROM icono_gene_essence WHERE gene_symbol = ?1 LIMIT 1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT asset_sha256, width, height, status, autopick_eligible, is_stale, is_legacy,
+                created_at, candidate_image_id, vision_id, emulsion_id, workflow_id,
+                workflow_label, workflow_path, prompt_version, variant_slot, sample_label,
+                sample_number, sample_text_hash, artist_tag, artist_name
+           FROM icono_portrait_assets
+          WHERE gene_symbol = ?1 AND asset_sha256 <> ''`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT portrait_asset_sha256, blot_fingerprint, blot_asset_sha256 AS asset_sha256,
+                object_key, width, height
+           FROM icono_gene_blot_materializations WHERE gene_symbol = ?1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT asset_sha256, upvotes, downvotes, score
+           FROM icono_vote_asset_summary WHERE gene_symbol = ?1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT s.asset_sha256, s.direction, s.active, a.status AS assignment_status
+           FROM icono_caretaker_supervote_projection s
+           LEFT JOIN icono_caretaker_vote_assignment_projection a ON a.gene_symbol = s.gene_symbol
+          WHERE s.gene_symbol = ?1
+          LIMIT 1`,
+      )
+      .bind(symbol),
+    db
+      .prepare(
+        `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
+           FROM icono_publish_state WHERE gene_symbol = ?1 LIMIT 1`,
+      )
+      .bind(symbol),
+    db.prepare(`SELECT ${GENE_VOTE_VERSION_SQL} AS version`).bind(symbol),
+  ])
+  const catalogRow = catalog?.results?.[0]
+  if (!catalogRow) return null
+  const essenceRow = essence?.results?.[0] || {}
+  const stateRow = state?.results?.[0] || null
+  const supervoteRow = caretaker?.results?.[0] || null
+  const supervoteDirection = Number(supervoteRow?.direction)
+  const supervoteCounts =
+    Number(supervoteRow?.active) === 1 &&
+    [-1, 1].includes(supervoteDirection) &&
+    ["active", "suspended"].includes(String(supervoteRow?.assignment_status || ""))
+  const currentAsset = normalizeSha256(stateRow?.current_asset_sha256 || "") || null
+  const { aesthetics_json, aesthetics_origin_json, politics_origin_json, ...essenceFields } =
+    essenceRow
+  return {
+    content: {
+      symbol,
+      catalog: {
+        full_name: catalogRow.catalog_full_name,
+        color_hex: catalogRow.color_hex,
+        tmh: catalogRow.tmh == null ? null : coerceBoolean(catalogRow.tmh, false),
+      },
+      essence: {
+        ...essenceFields,
+        aesthetics: parseJsonTextList(aesthetics_json),
+        aesthetics_origin: parseJsonTextList(aesthetics_origin_json),
+        politics_origin: parseJsonTextList(politics_origin_json),
+      },
+      portraits: (portraits?.results || []).map(geneCardPortraitContent),
+      blots: blots?.results || [],
+    },
+    facts: {
+      votes: votes?.results || [],
+      supervote: supervoteCounts
+        ? { asset_sha256: supervoteRow.asset_sha256, direction: supervoteDirection }
+        : null,
+      pin: Number(stateRow?.admin_override || 0) > 0 ? currentAsset : null,
+      previous_winner: currentAsset,
+      vote_version: Math.max(0, Number(version?.results?.[0]?.version || 0) || 0),
+      manifestation: await (readManifestation || readPublicManifestationFact)(env, symbol),
+    },
+  }
+}
+
+// The card the gene would get now, unwritten: the blot lane fingerprints it
+// before rendering a print copy for a winner that isn't published yet.
+async function currentGeneCard(env, symbol, options = {}) {
+  const inputs = await readGeneCardInputs(env, symbol, options)
+  return inputs ? buildGeneCard(inputs.content, inputs.facts) : null
 }
 
 // The most times one publish writes a gene's object while votes keep landing.
@@ -21778,82 +21900,93 @@ const STABLE_GENE_OBJECT_MAX_PASSES = 3
 
 /**
  * ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
- * B-898: THE ONLY per-gene publisher. Rewrites the gene's stable object
- * genes/v3/<SYMBOL>.json from D1 and the authoring store, purges its CDN URL,
- * keeps the gene's route membership, and advances its print-copy
- * materialization. About five subrequests and three D1 point reads per pass
- * besides the materialization, no index tree. Called after every changed vote or
- * supervote, after uploads and admin changes that touch a few genes, and by
- * the republish admin route the Actions publisher drives for every other
- * canonical change.
+ * B-898, B-1063: THE ONLY per-gene publisher. Reads the gene's inputs (one D1
+ * batch and its canonical text), builds the card with buildGeneCard, writes
+ * genes/v3/<SYMBOL>.json with a verified read-back and keeps the gene's route
+ * membership. Called after every changed vote or supervote, after uploads and
+ * admin changes that touch a few genes, and by the republish admin route.
  *
- * No selection publishes whatever D1 holds. An explicit winner (the
- * administrator's /admin/publish pin, already written to D1) is the portrait
- * override and the pool's current mark; the publisher never writes it back.
+ * The builder elects the winner on every build, so a gene's first portrait
+ * shows as soon as its card is rebuilt (on 2026-10-09 ERVK11-1's card said "no
+ * portrait" next to its one candidate, because only a vote or the 23:58 UTC
+ * repair elected). When the elected winner differs from icono_publish_state,
+ * the election is projected there first (the gallery feeds and the catalogue
+ * builder still read it), under the same vote-version guard a vote uses.
+ *
+ * `portraitAssetSha256` pins that portrait for this build: the administrator's
+ * /admin/publish choice, already written to D1 as the override.
  *
  * Votes race with this write. The object is stamped with the gene's vote
- * version read before the materialization, and the version is read again
- * after every write: a vote that committed in between may have finished its
- * own republish before this older object landed on top of it, so a moved
- * version materializes and writes the gene again from the fresh rows, at most
- * STABLE_GENE_OBJECT_MAX_PASSES passes in all. After the last pass the vote
- * that moved the version is left to its own republish.
+ * version read with the inputs, and the version is read again after every
+ * write: a vote that committed in between may have finished its own republish
+ * before this older object landed on top of it, so a moved version builds and
+ * writes the gene again from fresh rows, at most STABLE_GENE_OBJECT_MAX_PASSES
+ * passes in all. After the last pass the vote that moved the version is left
+ * to its own republish.
  */
 export async function publishIconoplasmGeneStableObject(
   env,
   symbolValue,
-  { portraitAssetSha256 = null, source = null, objects = null } = {},
+  { portraitAssetSha256 = null, objects = null, readManifestation = null } = {},
 ) {
   const symbol = normalizeSymbol(symbolValue)
   if (!symbol) throw new Error("A symbol is required to publish a gene")
   const selected = normalizeSha256(portraitAssetSha256 || "") || null
-  const adapter = source || cardPublicationSourceForEnv(env)
   const store = objects || createPublishedCardObjectStore(env)
   const db = env?.ICONOPLASM_DB || null
   let republishedAfterVote = false
-  let stableCard
-  let object
+  let card
   let stable
   for (let pass = 1; ; pass += 1) {
-    const voteVersion = db ? await readGeneVoteVersion(db, symbol) : null
-    const cards = await adapter.materialize([symbol], {
-      portraitOverrides: selected ? { [symbol]: selected } : null,
-    })
-    const card = cards.find((candidate) => normalizeSymbol(candidate?.symbol || "") === symbol)
-    if (!card) return await withdrawIconoplasmGeneStableObject(db, store, symbol)
-    if (!adapter.complete(card)) throw new Error(`Invalid canonical card: ${symbol}`)
-    stableCard = adapter.stable(card)
-    const projected = adapter.project(stableCard.payload)
-    object = composeStableGeneObject(projected, {
-      ...(selected ? { selectedAssetSha256: selected } : {}),
-      voteVersion,
-    })
-    stable = await store.writeStable(stableGeneObjectKey(symbol), object)
-    if (!db || pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
-    if ((await readGeneVoteVersion(db, symbol)) === voteVersion) break
+    const inputs = await readGeneCardInputs(env, symbol, { readManifestation })
+    if (!inputs) return await withdrawIconoplasmGeneStableObject(db, store, symbol)
+    const { content, facts } = inputs
+    if (selected) facts.pin = selected
+    card = buildGeneCard(content, facts)
+    const winner = card.portrait?.asset_sha256 || null
+    if (winner && winner !== facts.previous_winner && !facts.pin) {
+      const projection = await projectGeneElection(db, {
+        symbol,
+        version: facts.vote_version,
+        current_asset_sha256: facts.previous_winner,
+        admin_override: false,
+        overflow: false,
+        winner: { asset_sha256: winner },
+      })
+      // The projection approves a draft winner; the card says so too.
+      if (projection.changed) {
+        content.portraits = content.portraits.map((portrait) =>
+          portrait.asset_sha256 === winner && portrait.status === "draft"
+            ? { ...portrait, status: "approved" }
+            : portrait,
+        )
+        card = buildGeneCard(content, { ...facts, previous_winner: winner })
+      }
+    }
+    stable = await store.writeStable(stableGeneObjectKey(symbol), card)
+    if (pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
+    if ((await readGeneVoteVersion(db, symbol)) === facts.vote_version) break
     republishedAfterVote = true
   }
-  if (db) {
-    await db
-      .prepare(
-        `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
-         SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ?`,
-      )
-      .bind(symbol)
-      .run()
-    // B-997: publication does not re-render print copies. The 8 browser launches a day go to
-    // readers who click "request print copy"; the status and PNG routes only ever serve a PNG of
-    // the current card, and a click enrols the current fingerprint, so a stale copy is never
-    // served. Re-rendering every requested gene on each publication spent all 8 launches on
-    // genes nobody was asking for (16 of 16 on 2026-10-03 and 10-04).
-  }
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO icono_published_gene_routes (gene_symbol)
+       SELECT gene_symbol FROM icono_gene_catalog WHERE gene_symbol = ?`,
+    )
+    .bind(symbol)
+    .run()
+  // B-997: publication does not re-render print copies. The 8 browser launches a day go to
+  // readers who click "request print copy"; the status and PNG routes only ever serve a PNG of
+  // the current card, and a click enrols the current fingerprint, so a stale copy is never
+  // served.
   return {
     symbol,
     withdrawn: false,
     selected_asset_sha256: selected,
-    vote_version: object.vote_version,
+    winner_asset_sha256: card.portrait?.asset_sha256 || null,
+    vote_version: card.vote_version,
     stable: { key: stable.key, hash: stable.hash, size: stable.size },
-    published_at: object.published_at,
+    published_at: card.published_at,
     ...(republishedAfterVote ? { republished_after_vote: true } : {}),
   }
 }
@@ -21902,7 +22035,7 @@ function republishGeneAfterResponse(env, ctx, symbol) {
 }
 
 // Uploads and reconcile republish their touched genes in process when they
-// touch at most REPUBLISH_MAX_SYMBOLS of them (about four external
+// touch at most MAX_GENES_PER_REQUEST of them (about four external
 // subrequests each), so a new candidate reaches readers within seconds.
 // Larger batches rely on their publication-affecting events and the Actions
 // publisher, which works through them eight genes per call.
@@ -21910,7 +22043,7 @@ function republishTouchedGenesAfterResponse(env, ctx, symbols) {
   const unique = [
     ...new Set((symbols || []).map((value) => normalizeSymbol(value)).filter(Boolean)),
   ]
-  if (!unique.length || unique.length > REPUBLISH_MAX_SYMBOLS) return false
+  if (!unique.length || unique.length > MAX_GENES_PER_REQUEST) return false
   const work = (async () => {
     for (const symbol of unique) await republishGene(env, symbol)
   })()
@@ -21930,307 +22063,6 @@ function parseJsonTextList(raw) {
   } catch {
     return []
   }
-}
-
-function cardCatalogEssenceFromRow(row) {
-  const aesthetics = parseJsonTextList(row?.aesthetics_json)
-  const aestheticsOrigin = parseJsonTextList(row?.aesthetics_origin_json)
-  const politicsOrigin = parseJsonTextList(row?.politics_origin_json)
-  return {
-    ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
-    ...(row?.height_cm != null ? { height_cm: Number(row.height_cm) } : {}),
-    ...(row?.sex ? { sex: String(row.sex) } : {}),
-    ...(row?.age ? { age: String(row.age) } : {}),
-    ...(row?.age_years != null ? { age_years: Number(row.age_years) } : {}),
-    ...(row?.faction ? { faction: String(row.faction), politics: String(row.faction) } : {}),
-    ...(row?.skin_hex ? { skin_hex: String(row.skin_hex) } : {}),
-    ...(row?.skin_name ? { skin_name: String(row.skin_name) } : {}),
-    ...(row?.tissue_tau != null ? { tissue_tau: Number(row.tissue_tau) } : {}),
-    ...(row?.loeuf != null ? { loeuf: Number(row.loeuf) } : {}),
-    ...(row?.constraint_percentile != null
-      ? { constraint_percentile: Number(row.constraint_percentile) }
-      : {}),
-    ...(aesthetics.length ? { aesthetics } : {}),
-    ...(aestheticsOrigin.length ? { aesthetics_origin: aestheticsOrigin } : {}),
-    ...(politicsOrigin.length ? { politics_origin: politicsOrigin } : {}),
-    ...(row?.family_surname ? { family_surname: String(row.family_surname) } : {}),
-    ...(row?.family_members != null ? { family_members: Number(row.family_members) } : {}),
-    ...(row?.family_feature ? { family_feature: String(row.family_feature) } : {}),
-  }
-}
-
-function cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }) {
-  const symbol = normalizeSymbol(row?.gene_symbol || "")
-  if (!symbol) return null
-  const assetSha = normalizeSha256(row?.asset_sha256 || "")
-  const essence = cardCatalogEssenceFromRow(row)
-  // Mirror the projected /genes/batch fields used by the existing Simple and
-  // lab-label card renderers. These companion fields belong to the synced
-  // essence read model; the artifact mapper only copies them through.
-  const molecularWeightKda = optionalFloat(row?.molecular_weight_kda, { min: 0 })
-  const firstPublicationYear = optionalInt(row?.first_publication_year)
-  const primaryTissue = sanitizeText(row?.primary_tissue || "", 64) || ""
-  // B-908: the gene's public name is the catalog row's HGNC name, through the
-  // one rule the catalog builder shares (lib/iconoplasm-gene-name.js). The
-  // essence row's name is a UniProt protein name and never names a gene.
-  const fullName = iconoplasmGeneName(row?.catalog_full_name, symbol)
-  const portrait = assetSha
-    ? {
-        status: "published",
-        hero_url: adminPortraitUrl(base, assetSha, "full"),
-        medium_url: adminPortraitUrl(base, assetSha, "medium"),
-        thumb_url: adminPortraitUrl(base, assetSha, "thumb"),
-        width: optionalInt(row?.width),
-        height: optionalInt(row?.height),
-        asset_sha256: assetSha,
-        candidate_image_id: optionalInt(row?.candidate_image_id),
-        vision_id: sanitizeText(row?.vision_id || "", 128) || null,
-        emulsion_id: publicEmulsionIdForRow(row) || null,
-        emulsion_label: generationRequestVisionLabel(row) || null,
-        sample_label: sanitizeText(row?.sample_label || "", 64) || null,
-        sample_number: optionalInt(row?.sample_number),
-        sample_text_hash: normalizeSha256(row?.sample_text_hash || "") || null,
-        artist_id: publicArtistIdForRow(row) || null,
-      }
-    : {
-        status: "missing",
-        hero_url: null,
-        medium_url: null,
-        thumb_url: null,
-        width: null,
-        height: null,
-        asset_sha256: null,
-        candidate_image_id: null,
-        emulsion_id: null,
-        emulsion_label: null,
-        sample_label: null,
-        sample_number: null,
-        sample_text_hash: null,
-        artist_id: null,
-      }
-  const record = {
-    api_version: PUBLIC_API_VERSION,
-    schema_version: API_SCHEMA_VERSION,
-    canonical_key: "symbol",
-    canonical_symbol: symbol,
-    symbol,
-    full_name: fullName,
-    color: normalizeHexColor(row?.color_hex || "") || null,
-    ...(row?.weight_kg != null ? { weight_kg: Number(row.weight_kg) } : {}),
-    ...(molecularWeightKda != null ? { molecular_weight_kda: molecularWeightKda } : {}),
-    ...(firstPublicationYear != null ? { first_publication_year: firstPublicationYear } : {}),
-    ...(primaryTissue ? { primary_tissue: primaryTissue } : {}),
-    ...(row?.tissue_tau != null ? { tissue_tau: Number(row.tissue_tau) } : {}),
-    ...(row?.loeuf != null ? { loeuf: Number(row.loeuf) } : {}),
-    ...(row?.constraint_percentile != null
-      ? { constraint_percentile: Number(row.constraint_percentile) }
-      : {}),
-    essence: {
-      ...essence,
-      name: fullName,
-      ...(essence.sex
-        ? {}
-        : row?.tmh != null
-          ? { sex: coerceBoolean(row.tmh, false) ? "Male" : "Female" }
-          : {}),
-      ...(essence.sex_origin
-        ? {}
-        : row?.tmh != null
-          ? { sex_origin: [coerceBoolean(row.tmh, false) ? "Transmembrane" : "Soluble"] }
-          : {}),
-    },
-    portrait,
-    resolved_from: "published_card_catalog_bulk",
-    snapshot_version: snapshotVersion,
-  }
-  const readyBlot = exactReadyGeneBlotProjection(record, row)
-  if (readyBlot) record.blot = readyBlot
-  return record
-}
-
-function exactReadyGeneBlotProjection(cardPayload, row, { env = null, origin = "" } = {}) {
-  const symbol = normalizeSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol || "")
-  const portraitAssetSha = normalizeSha256(cardPayload?.portrait?.asset_sha256 || "")
-  if (!symbol || cardPayload?.portrait?.status !== "published" || !portraitAssetSha) return null
-  const blotFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
-  const readyBlotFingerprint = String(row?.gene_blot_fingerprint || "")
-    .trim()
-    .toLowerCase()
-  const readyPortraitAssetSha = normalizeSha256(row?.gene_blot_portrait_asset_sha256 || "")
-  const readyBlotAssetSha = normalizeSha256(row?.gene_blot_asset_sha256 || "")
-  const blotObjectKey = String(row?.gene_blot_object_key || "").trim()
-  if (
-    readyBlotFingerprint !== blotFingerprint ||
-    readyPortraitAssetSha !== portraitAssetSha ||
-    !readyBlotAssetSha ||
-    blotObjectKey !== iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
-  )
-    return null
-  const canonicalOrigin = String(origin || ICONOPLASM_CANONICAL_ORIGIN).replace(/\/+$/, "")
-  return {
-    status: "ready",
-    blot_fingerprint: readyBlotFingerprint,
-    portrait_asset_sha256: readyPortraitAssetSha,
-    asset_sha256: readyBlotAssetSha,
-    object_key: blotObjectKey,
-    image_url: iconoplasmGeneBlotCdnUrl(env, blotObjectKey),
-    canonical_url: `${canonicalOrigin}/${blotObjectKey}`,
-    semantic_url: `${canonicalOrigin}/blot/${encodeURIComponent(symbol)}.webp`,
-    width: optionalInt(row?.gene_blot_width) || ICONOPLASM_GENE_BLOT_WIDTH,
-    height: optionalInt(row?.gene_blot_height) || ICONOPLASM_GENE_BLOT_HEIGHT,
-    filename: iconoplasmGeneBlotFilename(symbol),
-    renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-  }
-}
-
-async function cardCatalogRecordsForArtifact(
-  env,
-  { requestUrl, symbols = null, snapshotVersion, portraitOverrides = null },
-) {
-  if (!env?.ICONOPLASM_DB) throw new Error("ICONOPLASM_DB binding missing")
-  const base = portraitBase(new URL(requestUrl || "https://iconoplasm.brinedew.bio/"), env)
-  const symbolList = Array.isArray(symbols)
-    ? normalizeRequestedSymbols(symbols, MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT)
-    : []
-  const sql = `SELECT
-       gc.gene_symbol,
-       gc.full_name AS catalog_full_name,
-       gc.color_hex,
-       gc.tmh,
-       ge.weight_kg,
-       ge.molecular_weight_kda,
-       ge.height_cm,
-       ge.sex,
-       ge.age,
-       ge.age_years,
-       ge.first_publication_year,
-       ge.faction,
-       ge.skin_hex,
-       ge.skin_name,
-       ge.tissue_tau,
-       ge.primary_tissue,
-       ge.loeuf,
-       ge.constraint_percentile,
-       ge.aesthetics_json,
-       ge.aesthetics_origin_json,
-       ge.politics_origin_json,
-       ge.family_surname,
-       ge.family_members,
-       ge.family_feature,
-       ps.current_asset_sha256 AS asset_sha256,
-       pa.width,
-       pa.height,
-       pa.vision_id,
-       pa.candidate_image_id,
-       pa.emulsion_id,
-       pa.workflow_id,
-       pa.workflow_label,
-       pa.workflow_path,
-       pa.prompt_version,
-       pa.variant_slot,
-       pa.sample_label,
-       pa.sample_number,
-       pa.sample_text_hash,
-       gbm.blot_fingerprint AS gene_blot_fingerprint,
-       gbm.portrait_asset_sha256 AS gene_blot_portrait_asset_sha256,
-       gbm.blot_asset_sha256 AS gene_blot_asset_sha256,
-       gbm.object_key AS gene_blot_object_key,
-       gbm.width AS gene_blot_width,
-       gbm.height AS gene_blot_height
-     FROM icono_gene_catalog gc
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = gc.gene_symbol
-     LEFT JOIN icono_publish_state ps
-       ON ps.gene_symbol = gc.gene_symbol
-     LEFT JOIN icono_portrait_assets pa
-       ON pa.gene_symbol = ps.gene_symbol
-      AND pa.asset_sha256 = ps.current_asset_sha256
-     LEFT JOIN icono_gene_blot_materializations gbm
-       ON gbm.gene_symbol = gc.gene_symbol`
-  // D1 caps bound parameters at 100 per query. Batch the symbol IN-list so a large
-  // incremental delta or a rebuild chunk never trips "too many SQL variables". The
-  // unscoped (full) path stays a single query.
-  const D1_MAX_BOUND_PARAMS = 90
-  const rows = []
-  if (!symbolList.length) {
-    const result = await env.ICONOPLASM_DB.prepare(`${sql}\n     ORDER BY gc.gene_symbol ASC`).all()
-    if (Array.isArray(result?.results)) rows.push(...result.results)
-  } else {
-    for (let i = 0; i < symbolList.length; i += D1_MAX_BOUND_PARAMS) {
-      const batch = symbolList.slice(i, i + D1_MAX_BOUND_PARAMS)
-      const batchSql = `${sql}\n     WHERE gc.gene_symbol IN (${batch.map(() => "?").join(",")})\n     ORDER BY gc.gene_symbol ASC`
-      const result = await env.ICONOPLASM_DB.prepare(batchSql)
-        .bind(...batch)
-        .all()
-      if (Array.isArray(result?.results)) rows.push(...result.results)
-    }
-  }
-  // B-762: an explicit per-symbol portrait override (the administrator's
-  // /admin/publish pin) materializes that asset as the gene's portrait. The
-  // override reads only that gene's exact asset row; a missing asset fails the
-  // materialization instead of silently publishing a different candidate. A
-  // value that is not an asset SHA overrides nothing.
-  let resolvedRows = rows
-  if (portraitOverrides && typeof portraitOverrides === "object") {
-    const overrideBySymbol = new Map()
-    for (const [key, value] of Object.entries(portraitOverrides)) {
-      const overrideSymbol = normalizeSymbol(key)
-      const overrideSha = normalizeSha256(String(value || ""))
-      if (overrideSymbol && overrideSha) overrideBySymbol.set(overrideSymbol, overrideSha)
-    }
-    const overrideRows = []
-    for (const row of rows) {
-      const overrideSymbol = normalizeSymbol(row?.gene_symbol || "")
-      const override = overrideBySymbol.get(overrideSymbol)
-      if (override === undefined) {
-        overrideRows.push(row)
-        continue
-      }
-      const currentSha = normalizeSha256(row?.asset_sha256 || "") || ""
-      if (override === currentSha) {
-        overrideRows.push(row)
-        continue
-      }
-      const assetRow = await env.ICONOPLASM_DB.prepare(
-        `SELECT width, height, vision_id, candidate_image_id, emulsion_id,
-                workflow_id, workflow_label, workflow_path, prompt_version,
-                variant_slot, sample_label, sample_number, sample_text_hash
-           FROM icono_portrait_assets
-          WHERE gene_symbol = ?
-            AND asset_sha256 = ?
-          LIMIT 1`,
-      )
-        .bind(overrideSymbol, override)
-        .first()
-      if (!assetRow) {
-        const error = new Error(`Selected winner asset is unavailable for ${overrideSymbol}`)
-        error.code = "SELECTED_ASSET_UNAVAILABLE"
-        throw error
-      }
-      overrideRows.push({ ...row, ...assetRow, asset_sha256: override })
-    }
-    resolvedRows = overrideRows
-  }
-  const records = resolvedRows
-    .map((row) => cardCatalogRecordFromJoinedRow(row, { base, snapshotVersion }))
-    .filter(Boolean)
-  const hydratedRecords = await hydratePublicCanonicalGeneRecords(env, records)
-  const publicationRecords = symbolList.length
-    ? await enrichPublishedGeneCandidates(hydratedRecords, (record) =>
-        portraitCandidatesForGene(
-          env,
-          new URL(requestUrl || "https://iconoplasm.brinedew.bio/"),
-          normalizeSymbol(record?.symbol || record?.canonical_symbol || ""),
-          record?.portrait?.asset_sha256 || null,
-        ),
-      )
-    : hydratedRecords
-  const rowsBySymbol = new Map(rows.map((row) => [normalizeSymbol(row?.gene_symbol || ""), row]))
-  return publicationRecords.map((record) => {
-    const symbol = normalizeSymbol(record?.symbol || record?.canonical_symbol || "")
-    const readyBlot = exactReadyGeneBlotProjection(record, rowsBySymbol.get(symbol))
-    return projectCardBlot(record, readyBlot)
-  })
 }
 
 function geneBlotServiceError(status, code, message) {
@@ -22598,12 +22430,7 @@ async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
       "Blot scope must be published or candidate.",
     )
   }
-  const records = await cardCatalogRecordsForArtifact(env, {
-    requestUrl,
-    symbols: [symbol],
-    snapshotVersion: "candidate",
-  })
-  return records[0] || null
+  return await currentGeneCard(env, symbol)
 }
 
 export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
@@ -23441,114 +23268,6 @@ async function galleryFeed(env, url, rawOrder, rawLimit, rawOffset, rawSeed) {
   }
 }
 
-async function portraitCandidatesForGene(env, url, symbol, currentAssetSha256 = null) {
-  if (!env.ICONOPLASM_DB) return []
-  const rows = await env.ICONOPLASM_DB.prepare(
-    // D1 cost fence: this query runs on gene pages. gene_symbol + asset_sha256
-    // are already normalized primary keys, so raw equality is the cheap path.
-    // upper()/lower() here turns a single gene-page read into a scan.
-    `SELECT
-       pa.asset_sha256,
-       pa.width,
-       pa.height,
-       pa.status,
-       pa.autopick_eligible,
-       pa.created_at,
-       pa.candidate_image_id,
-       pa.vision_id,
-       pa.emulsion_id,
-       pa.sample_label,
-       pa.sample_number,
-       pa.sample_text_hash,
-       COALESCE(vs.upvotes, 0) AS image_upvotes,
-       COALESCE(vs.downvotes, 0) AS image_downvotes,
-       COALESCE(vs.score, 0) AS image_score,
-       CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
-         ELSE 0
-       END AS caretaker_supervote,
-       CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256
-         THEN COALESCE(caretaker.direction, 1)
-         ELSE NULL
-       END AS caretaker_supervote_direction,
-       COALESCE(vs.score, 0) + CASE
-         WHEN COALESCE(caretaker.active, 0) = 1
-          AND caretaker.asset_sha256 = pa.asset_sha256
-         THEN 10 * COALESCE(caretaker.direction, 1)
-         ELSE 0
-       END AS weighted_score
-     FROM icono_portrait_assets pa
-     LEFT JOIN icono_vote_asset_summary vs
-       ON vs.gene_symbol = pa.gene_symbol
-      AND vs.asset_sha256 = pa.asset_sha256
-     LEFT JOIN icono_caretaker_supervote_projection caretaker
-       ON caretaker.gene_symbol = pa.gene_symbol
-     WHERE pa.gene_symbol = ?
-       AND COALESCE(pa.status, '') <> 'rejected'
-         AND COALESCE(pa.asset_sha256, '') <> ''
-     ORDER BY pa.created_at DESC`,
-  )
-    .bind(symbol)
-    .all()
-
-  const base = portraitBase(url, env)
-  const currentSha = normalizeSha256(currentAssetSha256 || "")
-  const items = (Array.isArray(rows?.results) ? rows.results : []).map((row) => {
-    const assetSha = normalizeSha256(row?.asset_sha256 || "") || null
-    const width = optionalInt(row?.width)
-    const height = optionalInt(row?.height)
-    return {
-      asset_sha256: assetSha,
-      status: String(row?.status || "").trim() || "draft",
-      autopick_eligible: coerceBoolean(row?.autopick_eligible, true),
-      is_current: !!(assetSha && currentSha && assetSha === currentSha),
-      candidate_image_id: optionalInt(row?.candidate_image_id),
-      vision_id: String(row?.vision_id || "").trim() || null,
-      emulsion_id: publicEmulsionIdForRow(row) || null,
-      emulsion_label: generationRequestVisionLabel(row) || null,
-      sample_label: sanitizeText(row?.sample_label || "", 64) || null,
-      sample_number: optionalInt(row?.sample_number),
-      sample_text_hash: normalizeSha256(row?.sample_text_hash || "") || null,
-      artist_id: publicArtistIdForRow(row) || null,
-      image_upvotes: Number(row?.image_upvotes || 0),
-      image_downvotes: Number(row?.image_downvotes || 0),
-      image_score: Number(row?.image_score || 0),
-      caretaker_supervote: Number(row?.caretaker_supervote || 0) > 0,
-      caretaker_supervote_direction: [-1, 1].includes(Number(row?.caretaker_supervote_direction))
-        ? Number(row.caretaker_supervote_direction)
-        : null,
-      caretaker_supervote_weight: [-1, 1].includes(Number(row?.caretaker_supervote_direction))
-        ? Number(row.caretaker_supervote_direction) * 10
-        : 0,
-      weighted_score: Number(row?.weighted_score || row?.image_score || 0),
-      created_at: row?.created_at ? String(row.created_at) : null,
-      full_url: adminPortraitUrl(base, assetSha, "full"),
-      medium_url: adminPortraitUrl(base, assetSha, "medium"),
-      thumb_url: adminPortraitUrl(base, assetSha, "thumb"),
-      ...(width != null ? { width } : {}),
-      ...(height != null ? { height } : {}),
-    }
-  })
-
-  items.sort((left, right) => {
-    return (
-      Number(right.is_current) - Number(left.is_current) ||
-      Number(right.weighted_score || 0) - Number(left.weighted_score || 0) ||
-      Number(right.caretaker_supervote_direction === 1) -
-        Number(left.caretaker_supervote_direction === 1) ||
-      Number(right.image_score || 0) - Number(left.image_score || 0) ||
-      Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-      compareNullableTextDesc(left.created_at, right.created_at) ||
-      compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
-    )
-  })
-
-  return items
-}
-
 function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_LIMIT) {
   const values = Array.isArray(rawSymbols)
     ? rawSymbols
@@ -24195,24 +23914,6 @@ function assertCompleteMobileCardVM(vm) {
     )
   }
   return payloadPortraitStatus !== "published"
-}
-
-function stableCardCatalogMaterialValue(value) {
-  if (Array.isArray(value)) return value.map((item) => stableCardCatalogMaterialValue(item))
-  if (!value || typeof value !== "object") return value === undefined ? null : value
-  const out = {}
-  for (const key of Object.keys(value).sort()) {
-    if (
-      key === "snapshot_version" ||
-      key === "artifact_version" ||
-      key === "artifact_validated_at" ||
-      key === "data_source"
-    ) {
-      continue
-    }
-    out[key] = stableCardCatalogMaterialValue(value[key])
-  }
-  return out
 }
 
 function cardArtifactUnavailablePayload(version, detail = "") {
@@ -26653,11 +26354,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     json,
     putObject: putPortraitStorageObject,
   }),
-  ...createIconoplasmAdminRepublishHandlers({
-    isAdmin: isIconoplasmAdmin,
-    json,
-    publish: (env, symbol) => publishIconoplasmGeneStableObject(env, symbol),
-  }),
   ...createIconoplasmAdminExtensionBlocklistHandlers({
     actor,
     isAdmin: isIconoplasmAdmin,
@@ -26979,26 +26675,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               },
               503,
               { "Cache-Control": "no-store", "Retry-After": "300" },
-            ),
-          )
-        }
-        if (code === "MUTATION_PROVIDER_HEADROOM_RESERVED") {
-          const retryAfter = mutationRefusalRetryAfterSeconds(error.mutation_lane)
-          return done(
-            "discoveries_batch_capacity",
-            json(
-              {
-                ok: false,
-                persisted: false,
-                pending: true,
-                code,
-                error:
-                  "Discovery capacity is reserved for other mutation lanes; keep this exact batch pending and retry later.",
-                batch_id: batchId,
-                retry_after_seconds: retryAfter,
-              },
-              429,
-              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
             ),
           )
         }
@@ -27490,30 +27166,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
       } catch (error) {
         const code = String(error?.code || "")
-        const capacityRefusal = code === "MUTATION_PROVIDER_HEADROOM_RESERVED"
-        if (capacityRefusal || code === "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR") {
-          // Only a capacity refusal clears at a time the ledger can state; a missing
-          // binding is a configuration fault someone has to fix, so it keeps its 60.
-          const retryAfter = capacityRefusal
-            ? mutationRefusalRetryAfterSeconds(error.mutation_lane)
-            : 60
-          return done(
-            "discoveries_merge_capacity",
-            json(
-              {
-                ok: false,
-                persisted: false,
-                pending: true,
-                code,
-                error: "Discovery capacity is unavailable; keep these exact symbols pending.",
-                symbols: requestedSymbols,
-                ...(capacityRefusal ? { retry_after_seconds: retryAfter } : {}),
-              },
-              capacityRefusal ? 429 : 503,
-              { "Cache-Control": "no-store", "Retry-After": String(retryAfter) },
-            ),
-          )
-        }
         if (code === "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE") {
           return done(
             "discoveries_merge_migration_incomplete",

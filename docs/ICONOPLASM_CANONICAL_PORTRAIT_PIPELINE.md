@@ -20,8 +20,9 @@ Iconoplasm publishes two objects on Bunny:
   `publishIconoplasmGeneStableObject` in the stateful runtime
   rewrites it in place (about three subrequests, no Durable Object). Every vote and supervote calls it after the response; an
   upload or reconcile that touches at most eight genes, `/admin/publish` and
-  `/admin/reject` call it in process; the admin republish route
-  (`admin_publication.republish`) calls it for everything else.
+  `/admin/reject` call it in process; the rebuild route
+  (`POST /api/iconoplasm/admin/publication/republish`, Hono, `workers/iconoplasm/app.js`)
+  calls it for everything else.
 - `catalog/v3/index.json` is the one catalog object. GitHub Actions
   (`scripts/publish-iconoplasm-catalog.mjs`) builds it from D1 and uploads it
   through `admin_publication.catalog_object_put`; the same run republishes the
@@ -262,11 +263,12 @@ refresh; treat it as a hint, not proof.
 
 ### 2. Republish the gene from D1
 
-Republishing is the check and the repair in one step. With no selection the
-publisher publishes what D1 holds and writes nothing back to D1, so this call
-cannot change a winner: if `portrait` changes afterwards, D1 was ahead and the
-object is now right; if it does not, the object already matched D1. It rewrites `genes/v3/PRL.json` and returns the new
-`published_at`; the CDN shows it within about a minute. Up to `REPUBLISH_MAX_SYMBOLS` (8) per call.
+Republishing is the check and the repair in one step. The card builder elects
+the winner on every build (B-1063), so a republish can change a gene's portrait:
+when the votes, the candidates or a pin say another portrait should win, the
+card shows it and `icono_publish_state` follows. An exact tie keeps the portrait
+the card already shows. It rewrites `genes/v3/PRL.json` and returns the new
+`published_at`; the CDN shows it within about a minute. Up to `MAX_GENES_PER_REQUEST` (8) per call.
 
 ```powershell
 @'
@@ -274,7 +276,7 @@ const token = process.env.ICONOPLASM_ADMIN_TOKEN;
 if (!token) throw new Error("ICONOPLASM_ADMIN_TOKEN missing");
 const res = await fetch("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/publication/republish", {
   method: "POST",
-  headers: { "content-type": "application/json", "x-iconoplasm-admin-token": token },
+  headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
   body: JSON.stringify({ symbols: ["PRL"] }),
 });
 console.log(JSON.stringify({ status: res.status, payload: await res.json() }, null, 2));

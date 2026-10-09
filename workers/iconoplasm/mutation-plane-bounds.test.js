@@ -13,7 +13,6 @@ import {
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
   MUTATION_USER_ACTION_CEILING,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
-import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
 
 class BoundStatement {
   constructor(raw, sql, args = []) {
@@ -125,32 +124,6 @@ function providerObservationKv({ rowsWritten = 0, generatedAt = new Date().toISO
           rowsWritten,
         },
       }
-    },
-  }
-}
-
-function discoveryAdmissionFixtureDb(onMutation) {
-  return {
-    prepare(sql) {
-      const text = String(sql)
-      if (text.includes("icono_discovery_compact_activation_v2")) {
-        return { first: async () => ({ status: "complete" }) }
-      }
-      if (text.includes("FROM icono_discovery_ordinals_v2")) {
-        return {
-          bind() {
-            return this
-          },
-          all: async () => ({ results: [] }),
-        }
-      }
-      if (text.includes("icono_discovery_dictionary_meta_v2")) {
-        return { first: async () => ({ version: 1 }) }
-      }
-      throw new Error(`Unexpected discovery admission query: ${text}`)
-    },
-    batch() {
-      onMutation()
     },
   }
 }
@@ -877,180 +850,8 @@ test("unresolved reservations survive indefinitely while old completed identitie
   raw.close()
 })
 
-test("discovery overload stays pending and refuses before any D1 mutation", async () => {
-  let d1Mutations = 0
-  const capacity = {
-    idFromName: () => "global",
-    get: () => ({
-      async fetch(request) {
-        assert.equal(new URL(request.url).pathname, "/reserve-mutation-writes")
-        const body = await request.json()
-        assert.equal(body.lane, "user_action")
-        assert.equal(body.units, 8)
-        // Reservations in flight are the only reason it does not fit (60,000 + 8 would).
-        // The fixture states the user-action ceiling the real lane answers with.
-        return Response.json(
-          {
-            ok: false,
-            code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
-            disposition: "pending_or_retryable_refusal",
-            lane: "user_action",
-            requested_units: 8,
-            provider_rows_written: 60_000,
-            in_flight_units: 40_000,
-            ceiling: MUTATION_USER_ACTION_CEILING,
-          },
-          { status: 429 },
-        )
-      },
-    }),
-  }
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=test" },
-          body: JSON.stringify({
-            batch_id: "device-1:7",
-            encounters: [
-              {
-                symbol: "TP53",
-                at: 1_800_000_000,
-                source: "extension_hover",
-                trigger: "hover_dwell",
-                dwell_ms: 900,
-              },
-            ],
-          }),
-        },
-      ),
-      {
-        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
-          d1Mutations += 1
-        }),
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: capacity,
-        GAME_SESSIONS: {
-          idFromName: () => "session",
-          get: () => ({ fetch: async () => Response.json({ user_id: "reader-1" }) }),
-        },
-      },
-      { waitUntil() {} },
-    )
-  const payload = await response.json()
-  assert.equal(response.status, 429)
-  assert.equal(payload.pending, true)
-  assert.equal(payload.persisted, false)
-  assert.equal(payload.batch_id, "device-1:7")
-  assert.equal(d1Mutations, 0)
-  // B-968: told when to ask again (15 minutes, in the header and the body), not a made-up 60.
-  assert.equal(response.headers.get("Retry-After"), "900")
-  assert.equal(payload.retry_after_seconds, 900)
-})
-
-test("provider headroom refusal reaches discovery unchanged before D1 dispatch", async () => {
-  let d1Mutations = 0
-  const before = secondsUntilCloudflareDailyReset()
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=test" },
-          body: JSON.stringify({
-            batch_id: "device-1:provider-headroom",
-            encounters: [
-              {
-                symbol: "TP53",
-                at: 1_800_000_000,
-                source: "extension_hover",
-                trigger: "hover_dwell",
-                dwell_ms: 900,
-              },
-            ],
-          }),
-        },
-      ),
-      {
-        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
-          d1Mutations += 1
-        }),
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
-          idFromName: () => "global",
-          get: () => ({
-            fetch: async () =>
-              Response.json(
-                {
-                  ok: false,
-                  code: "MUTATION_PROVIDER_HEADROOM_RESERVED",
-                  disposition: "pending_or_retryable_refusal",
-                },
-                { status: 429 },
-              ),
-          }),
-        },
-        GAME_SESSIONS: {
-          idFromName: () => "session",
-          get: () => ({ fetch: async () => Response.json({ user_id: "reader-1" }) }),
-        },
-      },
-      { waitUntil() {} },
-    )
-  const after = secondsUntilCloudflareDailyReset()
-  const payload = await response.json()
-  assert.equal(response.status, 429)
-  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
-  assert.equal(payload.pending, true)
-  assert.equal(payload.persisted, false)
-  assert.equal(d1Mutations, 0)
-  // B-968: a refusal that says nothing more clears only at the UTC reset.
-  assert.equal(Number(response.headers.get("Retry-After")), payload.retry_after_seconds)
-  assert.ok(payload.retry_after_seconds <= before && payload.retry_after_seconds >= after)
-})
-
-test("discovery request fails closed before D1 when the shared mutation authority is unbound", async () => {
-  let d1Mutations = 0
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(
-        "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=test" },
-          body: JSON.stringify({
-            batch_id: "device-1:missing-authority",
-            encounters: [
-              {
-                symbol: "TP53",
-                at: 1_800_000_000,
-                source: "extension_hover",
-                trigger: "hover_dwell",
-                dwell_ms: 900,
-              },
-            ],
-          }),
-        },
-      ),
-      {
-        ICONOPLASM_DB: discoveryAdmissionFixtureDb(() => {
-          d1Mutations += 1
-        }),
-        GAME_SESSIONS: {
-          idFromName: () => "session",
-          get: () => ({ fetch: async () => Response.json({ user_id: "reader-1" }) }),
-        },
-      },
-      { waitUntil() {} },
-    )
-  const payload = await response.json()
-  assert.equal(response.status, 503)
-  assert.equal(payload.code, "ICONOPLASM_D1_DAILY_BUDGET_CONFIGURATION_ERROR")
-  assert.equal(d1Mutations, 0)
-})
-
-test("cold ten-symbol discovery reserves measured dictionary writes while the warm retry reserves six", async (t) => {
+// B-1067: collecting writes straight to D1, so what a batch costs is measured here directly.
+test("a cold ten-symbol collecting batch writes at most 17 rows and its warm retry at most 6, with no referee", async (t) => {
   const migrationRoot = new URL("../../migrations-iconoplasm/", import.meta.url)
   const schema = readdirSync(migrationRoot)
     .filter((name) => name.endsWith(".sql"))
@@ -1069,15 +870,14 @@ test("cold ten-symbol discovery reserves measured dictionary writes while the wa
       "UPDATE icono_discovery_compact_activation_v2 SET status='complete', completed_at=CURRENT_TIMESTAMP WHERE singleton=1",
     )
     .run()
-  const reservations = []
+  const refereeCalls = []
   const env = {
     ICONOPLASM_DB: db,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
       idFromName: () => "global",
       get: () => ({
         async fetch(request) {
-          const body = await request.json()
-          if (new URL(request.url).pathname === "/reserve-mutation-writes") reservations.push(body)
+          refereeCalls.push(new URL(request.url).pathname)
           return Response.json({ ok: true })
         },
       }),
@@ -1113,16 +913,13 @@ test("cold ten-symbol discovery reserves measured dictionary writes while the wa
   const beforeCold = db.rowsWritten
   assert.equal((await send("cold:1")).status, 200)
   const coldWrites = db.rowsWritten - beforeCold
-  assert.equal(reservations[0].units, 17)
-  assert.ok(reservations[0].units >= coldWrites, JSON.stringify({ coldWrites }))
+  assert.ok(coldWrites <= 17, JSON.stringify({ coldWrites }))
 
   const beforeWarm = db.rowsWritten
   assert.equal((await send("warm:2")).status, 200)
   const warmWrites = db.rowsWritten - beforeWarm
-  assert.equal(reservations[1].units, 6)
-  assert.ok(reservations[1].units >= warmWrites, JSON.stringify({ warmWrites }))
+  assert.ok(warmWrites <= 6, JSON.stringify({ warmWrites }))
   assert.ok(coldWrites > warmWrites, JSON.stringify({ coldWrites, warmWrites }))
-  t.diagnostic(
-    JSON.stringify({ operation: "discovery-batch-10", coldWrites, warmWrites, coldUnits: 17 }),
-  )
+  assert.deepEqual(refereeCalls, [], "collecting never asks the budget referee")
+  t.diagnostic(JSON.stringify({ operation: "discovery-batch-10", coldWrites, warmWrites }))
 })

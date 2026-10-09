@@ -385,8 +385,10 @@ import {
   rebuildDirtyVisionRollups,
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   migrateIconoplasmCompactDiscoveryForScheduled,
+  publishIconoplasmGeneStableObject,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { createIconoplasmApp } from "./iconoplasm/app.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -1932,6 +1934,13 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
   return applySecurityHeaders(response, request)
 }
 
+// B-1063: Hono answers the routes it knows and hands every other request to
+// the legacy handler above.
+const app = createIconoplasmApp({
+  legacy: handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+  publishGene: publishIconoplasmGeneStableObject,
+})
+
 export default {
   async fetch(request, env, ctx) {
     // B-832: thrown errors and 5xx responses go to Sentry after the response.
@@ -1941,11 +1950,7 @@ export default {
       // service-binding traffic and cannot be bypassed by changing entry hosts.
       const rateLimit = await enforceIconoplasmRateLimit(request, env)
       if (rateLimit.response) return rateLimit.response
-      const response = await handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        request,
-        env,
-        ctx,
-      )
+      const response = await app.fetch(request, env, ctx)
       return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
     })
   },
