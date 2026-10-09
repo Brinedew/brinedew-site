@@ -337,6 +337,37 @@ test("batch registrations and rebuilds stop at 85% of a D1 wall, a reader's sess
   assert.equal((await rebuild.json()).code, "D1_BATCH_SHARE_SPENT")
 })
 
+test("the usage route reports what the shedding sees, and an unread meter as null", async () => {
+  const read = async (h, token = TOKEN) => {
+    const response = await h.app.request(
+      "/api/iconoplasm/admin/d1-usage",
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      h.env,
+    )
+    return { status: response.status, body: response.ok ? await response.json() : null }
+  }
+  const h = harness({ usage: async () => ({ rows_read: 1_234_567, rows_written: 85_000 }) })
+  assert.equal((await read(h, null)).status, 401)
+  const { status, body } = await read(h)
+  assert.equal(status, 200)
+  assert.deepEqual(body.meters, {
+    rows_read: { used: 1_234_567, wall: 5_000_000, batch_limit: 4_250_000 },
+    rows_written: { used: 85_000, wall: 100_000, batch_limit: 85_000 },
+  })
+  assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/)
+  assert.equal(h.legacyCalls.length, 0)
+
+  const blind = await read(
+    harness({
+      usage: async () => {
+        throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
+      },
+    }),
+  )
+  assert.equal(blind.body.ok, false)
+  assert.equal(blind.body.meters.rows_written.used, null)
+})
+
 test("a usage meter that can't be read stops no registration", async () => {
   const h = harness({
     usage: async () => {
