@@ -33,14 +33,14 @@
 
 import { secondsUntilCloudflareDailyReset } from "./cloudflare-availability.js"
 import {
-  D1_OPERATOR_DAILY_LIMITS,
+  D1_BACKGROUND_WRITE_CEILING,
   D1_USER_ACTION_DAILY_WRITE_CEILING,
   FREE_D1_DAILY_LIMITS,
 } from "../../shared/iconoplasm-d1-budget-policy.js"
 
 // The numbers live once, in the budget policy (B-1036).
 export const D1_PROVIDER_DAILY_WRITE_LIMIT = FREE_D1_DAILY_LIMITS.writes
-export const MUTATION_BACKGROUND_CEILING = D1_OPERATOR_DAILY_LIMITS.writes
+export const MUTATION_BACKGROUND_CEILING = D1_BACKGROUND_WRITE_CEILING
 export const MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING
 export const MUTATION_ANALYTICS_LAG_MS = 15 * 60_000
 export const MUTATION_PRESSURE_BUCKET_MS = 15 * 60_000

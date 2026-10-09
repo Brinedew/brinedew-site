@@ -3,12 +3,11 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { OperationCostLedger, REPLICA_DAILY_ADMISSION } from "./operation-cost-ledger.js"
 import { OperationCostExecutor } from "./operation-cost-executor.js"
-import {
-  D1_OPERATOR_DAILY_LIMITS,
-  OPERATOR_DAILY_REQUEST_LIMIT,
-} from "../../shared/iconoplasm-d1-budget-policy.js"
+import { FREE_PLAN_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 
-const DAILY_WRITES = D1_OPERATOR_DAILY_LIMITS.writes
+// B-1026: the ledger's own tally is bounded only by Cloudflare's daily wall.
+const DAILY_WRITES = FREE_PLAN_DAILY_LIMITS.rows_written
+const DAILY_REQUESTS = FREE_PLAN_DAILY_LIMITS.requests
 const ADMITTED_WRITES = REPLICA_DAILY_ADMISSION.rows_written
 
 function fixture() {
@@ -121,10 +120,10 @@ test("the account check counts shared writes once the provider's sample provably
 // 2026-10-06: this ledger admitted replica work up to the whole operator day on a
 // private 2,500-request cap, beside the B-1026 tier table, and stopped an 870-gene
 // Image Lab batch. Replica work now sheds at its tier's share like the rest.
-test("replica work is shed at its tier's share of the operator day", () => {
+test("replica work is shed at its tier's share of the day", () => {
   const f = fixture()
   try {
-    assert.ok(REPLICA_DAILY_ADMISSION.rows_read < D1_OPERATOR_DAILY_LIMITS.reads)
+    assert.ok(REPLICA_DAILY_ADMISSION.rows_read < FREE_PLAN_DAILY_LIMITS.rows_read)
     f.ledger.register(f.input)
     f.ledger.readOtherUsage = () => ({
       rows_read: REPLICA_DAILY_ADMISSION.rows_read,
@@ -507,10 +506,10 @@ test("control traffic shares the request allocation and remains available after 
     assert.throws(() => f.ledger.reserve(f.step()), /SHARED_DAILY_LIMIT/)
     f.ledger.recordControlRequest()
     assert.equal(requests(), admitted + 1)
-    setRequests(OPERATOR_DAILY_REQUEST_LIMIT - 1)
+    setRequests(DAILY_REQUESTS - 1)
     f.ledger.recordControlRequest()
     assert.throws(() => f.ledger.recordControlRequest(), /SHARED_DAILY_LIMIT/)
-    assert.equal(requests(), OPERATOR_DAILY_REQUEST_LIMIT)
+    assert.equal(requests(), DAILY_REQUESTS)
   } finally {
     f.db.close()
   }

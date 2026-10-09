@@ -38,89 +38,60 @@ export const FREE_D1_DAILY_LIMITS = Object.freeze({
   writes: FREE_PLAN_DAILY_LIMITS.rows_written,
 })
 
-// ARCHITECTURE FENCE [IPD-012]: the administrative/authoring ledger covers
-// only its own traffic. Giving it the entire account allowance starves login,
-// readers, migrations and other databases. This allocation is deliberately
-// separate from provider entitlement; historical monthly settings cannot lift it.
-// Writes: 70,000 of the Free plan's 100,000 since 2026-10-06 (B-1035), leaving 30,000
-// for readers, votes and caretaker saves, which this ledger never meters. 20,000 held
-// a regeneration batch to about 250 genes a day (78 rows each, measured) while the
-// owner queues about 800 portraits at once. It matches the online-migration ceiling.
-export const D1_OPERATOR_DAILY_LIMITS = Object.freeze({ reads: 1_000_000, writes: 70_000 })
-
-// Workers requests the operator's cost ledger may spend in a day, shed by the
-// tiers below like the D1 allowance. A busy day measured on 2026-10-06: a 670-gene
-// rewrite batch plus replica pulls spent the old 2,500, and an 870-gene Image Lab
-// batch fetches each gene's prose and Tags (about 1,740 more). 10,000 is 10% of the
-// Free plan's 100,000; the ledger's account ceiling still refuses operator work
-// first when readers fill the account.
-export const OPERATOR_DAILY_REQUEST_LIMIT = 10_000
-
-// Readers' own D1 writes (discoveries, votes) may push the account to 90,000 of the
-// Free plan's 100,000, so a reader always keeps a band that operator work, stopped at
-// D1_OPERATOR_DAILY_LIMITS.writes (70,000), can't take (B-897).
-export const D1_USER_ACTION_DAILY_WRITE_CEILING = 90_000
-
-// Operator work also stops when the whole account, readers included, reaches these
-// (the operation-cost ledger and its release scripts read them). Reads: 3.5M of the
-// Free plan's 5M; Workers requests: 75,000 of 100,000.
-export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
-  rows_read: 3_500_000,
-  rows_written: D1_OPERATOR_DAILY_LIMITS.writes,
-  requests: 75_000,
-})
-
-// Operator KV work, kept apart from the D1 allowance in the same ledger: a protected
-// operator share of each KV meter, and the account level at which operator KV work
-// stops so readers keep the rest.
-export const KV_OPERATOR_LIMITS = Object.freeze({
-  kv_reads: 10_000,
-  kv_writes: 200,
-  kv_deletes: 100,
-  kv_lists: 100,
-})
-export const KV_ACCOUNT_CEILINGS = Object.freeze({
-  kv_reads: 70_000,
-  kv_writes: 700,
-  kv_deletes: 700,
-  kv_lists: 700,
-})
-
-export function d1OperationalAllowance(options) {
-  return Math.min(d1DailyAllowance(options), D1_OPERATOR_DAILY_LIMITS[options.resource])
-}
-
-export function d1DailyAllowance({
-  resource,
-  monthlyLimit = 0,
-  usedBeforeDay = 0,
-  daysRemaining = 1,
-  burstMultiplier = 1,
-}) {
-  if (!Object.hasOwn(FREE_D1_DAILY_LIMITS, resource)) {
-    throw new Error(`Unknown D1 budget resource: ${resource}`)
-  }
-  const hardLimit = FREE_D1_DAILY_LIMITS[resource]
-  const monthly = Math.max(0, Number(monthlyLimit) || 0)
-  if (!monthly) return hardLimit
-  const remaining = Math.max(0, monthly - Math.max(0, Number(usedBeforeDay) || 0))
-  const days = Math.max(1, Number(daysRemaining) || 1)
-  const burst = Math.max(1, Number(burstMultiplier) || 1)
-  const allocation = Math.min(remaining, Math.ceil(Math.ceil(remaining / days) * burst))
-  return Math.min(hardLimit, allocation)
-}
-
-// B-1026: the operator ledger is shed by criticality, lowest tier first, after
-// Google SRE's "Handling Overload" (CRITICAL / SHEDDABLE_PLUS / SHEDDABLE) and
-// Stripe's reserved share for critical requests. A request is refused once the
-// day's operator reads or writes reach its tier's share, so a diagnostic or a
-// batch job can't spend the slice that player deliveries need. Readers, votes
-// and caretaker saves are not in this ledger at all.
+// B-1026, finished 2026-10-09: every meter has one wall, Cloudflare's daily
+// allowance above, and our own work is shed by criticality against the account's
+// real use of it, readers included. There is no private operator slice. A slice
+// can't see readers, so it protected them less than shedding on the real meter
+// does, and on 10-09 it stopped the Drain at 600k of the account's 5M reads while
+// the account had used about 782k. Readers, votes and caretaker saves are never
+// refused by us; when they fill the day, our batch work stops first by itself.
+//
+// Shed lowest tier first, after Google SRE's "Handling Overload" (CRITICAL /
+// SHEDDABLE_PLUS / SHEDDABLE) and Stripe's reserved share for critical requests:
+// a request is refused once the account's reads or writes reach its tier's share.
 export const D1_CRITICALITY_SHARES = Object.freeze({
   critical: 1,
   sheddable_plus: 0.85,
   sheddable: 0.6,
 })
+
+// The account level at which work of a tier stops on a meter whose daily wall is
+// `limit`.
+export function criticalityShareLimit(limit, criticality) {
+  const share = D1_CRITICALITY_SHARES[criticality] ?? D1_CRITICALITY_SHARES.sheddable_plus
+  return Math.floor(Number(limit) * share)
+}
+
+// B-897: write reservations are shed on the provider's write meter. Background
+// work stops at 70%, a person's own action at 90%, so readers' votes and
+// discoveries always keep the last 10,000 rows.
+export const D1_BACKGROUND_WRITE_CEILING = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.7)
+export const D1_USER_ACTION_DAILY_WRITE_CEILING = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.9)
+
+// The operation-cost ledger (replica pulls, releases, migrations) is batch work:
+// it stops when the whole account reaches these. KV follows the write lanes'
+// 70%, because the free plan's 1,000 KV writes a day are the scarcest meter.
+export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
+  rows_read: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS.rows_read, "sheddable_plus"),
+  rows_written: D1_BACKGROUND_WRITE_CEILING,
+  requests: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS.requests, "sheddable_plus"),
+})
+export const KV_ACCOUNT_CEILINGS = Object.freeze({
+  kv_reads: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_reads * 0.7),
+  kv_writes: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_writes * 0.7),
+  kv_deletes: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_deletes * 0.7),
+  kv_lists: Math.floor(FREE_PLAN_DAILY_LIMITS.kv_lists * 0.7),
+})
+
+// The account's use of a meter today: the latest provider sample plus our own
+// tally since it, never below our own tally. Without a sample, our own tally.
+export function accountUsage(localUsed, providerSampled, localAtSample) {
+  const local = Math.max(0, Number(localUsed) || 0)
+  const sampled = Number(providerSampled)
+  if (!Number.isFinite(sampled) || sampled < 0) return local
+  const since = Math.max(0, local - Math.max(0, Number(localAtSample) || 0))
+  return Math.max(local, sampled + since)
+}
 
 // The tier is decided by who is waiting for the request, not by who sent it.
 // Readers, votes and caretaker saves never enter this ledger. Inside it, only a
@@ -173,13 +144,14 @@ export function d1CriticalityOfRouteFamily(routeFamily, declaredCriticality = nu
 }
 
 // The meter a request of this criticality is refused on, given the day's
-// snapshot, or null while its share has room.
+// snapshot, or null while its share has room. The snapshot carries the
+// account's use of each meter and Cloudflare's daily wall for it.
 export function d1CriticalityShedBy(snapshot, criticality) {
   const share = D1_CRITICALITY_SHARES[criticality] ?? D1_CRITICALITY_SHARES.sheddable_plus
   if (share >= 1) return null
   for (const [meter, used, limit] of [
-    ["rows_read", snapshot?.rows_read, snapshot?.rows_read_daily_smart_limit],
-    ["rows_written", snapshot?.rows_written, snapshot?.rows_written_daily_smart_limit],
+    ["rows_read", snapshot?.account_rows_read, snapshot?.rows_read_daily_limit],
+    ["rows_written", snapshot?.account_rows_written, snapshot?.rows_written_daily_limit],
   ]) {
     const allowance = Number(limit)
     if (!Number.isFinite(allowance) || allowance <= 0) continue

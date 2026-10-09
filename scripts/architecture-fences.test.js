@@ -11,7 +11,7 @@ import {
   portraitSourceFromUrl,
 } from "../shared/iconoplasm-portrait/portrait-delivery-core.js"
 import {
-  D1_OPERATOR_DAILY_LIMITS,
+  D1_BACKGROUND_WRITE_CEILING,
   D1_USER_ACTION_DAILY_WRITE_CEILING,
   FREE_D1_DAILY_LIMITS,
 } from "../shared/iconoplasm-d1-budget-policy.js"
@@ -329,10 +329,11 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   // B-897: admission is measured provider pressure, not fixed lane totals.
   // B-1036: the lanes take their numbers from the one budget policy, and a reader
   // always keeps a band above the point where operator work stops.
-  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = D1_OPERATOR_DAILY_LIMITS.writes/)
+  // B-1026 (10-09): those numbers are shares of Cloudflare's meter, not a private slice.
+  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = D1_BACKGROUND_WRITE_CEILING/)
   assert.match(lanes, /MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING/)
   assert.doesNotMatch(lanes, /_CEILING = d/)
-  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING > D1_OPERATOR_DAILY_LIMITS.writes)
+  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING > D1_BACKGROUND_WRITE_CEILING)
   assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING < FREE_D1_DAILY_LIMITS.writes)
   assert.match(lanes, /MUTATION_ANALYTICS_LAG_MS = 15 \* 60_000/)
   assert.doesNotMatch(lanes, /daily_mutation_lane_usage \(/)
@@ -449,7 +450,7 @@ test("IPD-012 keeps one manifestation command authority", () => {
   // B-1036: the PowerShell budget reads the operator ceilings from the one policy.
   assert.match(requestBudget, /'shared' 'iconoplasm-d1-budget-policy\.js'/)
   assert.match(requestBudget, /OPERATOR_ACCOUNT_CEILINGS/)
-  assert.match(requestBudget, /OPERATOR_DAILY_REQUEST_LIMIT/)
+  assert.match(requestBudget, /FREE_PLAN_DAILY_LIMITS\.requests/)
   assert.doesNotMatch(requestBudget, /\b(2500|75000|3500000|70000)\b/)
   assert.match(requestBudget, /workersInvocationsAdaptive/)
   assert.match(requestBudget, /FileShare\]::None/)

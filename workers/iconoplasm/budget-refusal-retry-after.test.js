@@ -278,7 +278,7 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
     rows_read_daily_smart_limit: 5_000_000,
     rows_written_daily_smart_limit: 100_000,
     exhausted: true,
-    exhausted_by: "rows_read_daily_smart",
+    exhausted_by: "rows_read_daily",
   }
   const answer = await untilTheReset(async () =>
     stated(
@@ -302,7 +302,7 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
   )
   assert.equal(answer.status, 503)
   assert.equal(answer.payload.code, "ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED")
-  assert.equal(answer.payload.budget.exhausted_by, "rows_read_daily_smart")
+  assert.equal(answer.payload.budget.exhausted_by, "rows_read_daily")
   assertStatesTheReset(answer)
 })
 

@@ -94,9 +94,10 @@ import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-g
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import {
   D1_CRITICALITY_SHARES,
+  accountUsage,
   d1CriticalityOfRouteFamily,
   d1CriticalityShedBy,
-  d1OperationalAllowance,
+  FREE_D1_DAILY_LIMITS,
   FREE_PLAN_DAILY_LIMITS,
 } from "../shared/iconoplasm-d1-budget-policy.js"
 
@@ -1900,7 +1901,11 @@ function iconoplasmMutationLimiterBudgetStatus(state, snapshot = null) {
     state?.mutationLimiter?.targetRowsWrittenCeiling === undefined
       ? iconoplasmMutationLimiterTargetRowsWrittenCeiling(currentSnapshot, state?.rawEnv)
       : Math.max(0, Number(state?.mutationLimiter?.targetRowsWrittenCeiling || 0) || 0)
-  const rowsWritten = Math.max(0, Number(currentSnapshot?.rows_written || 0) || 0)
+  // B-1026: the whole account's writes, readers included, not our own tally.
+  const rowsWritten = Math.max(
+    0,
+    Number(currentSnapshot?.account_rows_written ?? currentSnapshot?.rows_written ?? 0) || 0,
+  )
   const rowsWrittenTargetRemaining =
     targetRowsWrittenCeiling === null ? null : Math.max(0, targetRowsWrittenCeiling - rowsWritten)
   return {
@@ -1964,34 +1969,42 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
     Math.max(0, Number(base.cycle_request_count || 0) || 0) + pendingRequestCount
   const rowsReadMonthlyLimit = Number(base.rows_read_monthly_limit || 0) || 0
   const rowsWrittenMonthlyLimit = Number(base.rows_written_monthly_limit || 0) || 0
-  const rowsReadDailySmartLimit =
-    base.rows_read_daily_smart_limit === null || base.rows_read_daily_smart_limit === undefined
-      ? null
-      : Math.max(0, Number(base.rows_read_daily_smart_limit || 0) || 0)
-  const rowsWrittenDailySmartLimit =
-    base.rows_written_daily_smart_limit === null ||
-    base.rows_written_daily_smart_limit === undefined
-      ? null
-      : Math.max(0, Number(base.rows_written_daily_smart_limit || 0) || 0)
+  // B-1026: the wall is the one the budget object reports (Cloudflare's daily
+  // allowance), and the day's use is the whole account's, readers included, plus
+  // what this request has added.
+  const reportedLimit = (value, fallback) => {
+    const number = Number(value)
+    return Number.isFinite(number) && number > 0 ? number : fallback
+  }
+  const rowsReadDailySmartLimit = reportedLimit(
+    base.rows_read_daily_limit ?? base.rows_read_daily_smart_limit,
+    FREE_D1_DAILY_LIMITS.reads,
+  )
+  const rowsWrittenDailySmartLimit = reportedLimit(
+    base.rows_written_daily_limit ?? base.rows_written_daily_smart_limit,
+    FREE_D1_DAILY_LIMITS.writes,
+  )
+  const accountRowsRead =
+    Math.max(Number(base.account_rows_read || 0) || 0, Number(base.rows_read || 0) || 0) +
+    pendingRowsRead
+  const accountRowsWritten =
+    Math.max(Number(base.account_rows_written || 0) || 0, Number(base.rows_written || 0) || 0) +
+    pendingRowsWritten
   const rowsReadMonthlyRemaining =
     rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
   const rowsWrittenMonthlyRemaining =
     rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
-  const rowsReadDailyRemaining =
-    rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null
-  const rowsWrittenDailyRemaining =
-    rowsWrittenDailySmartLimit !== null
-      ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
-      : null
+  const rowsReadDailyRemaining = Math.max(0, rowsReadDailySmartLimit - accountRowsRead)
+  const rowsWrittenDailyRemaining = Math.max(0, rowsWrittenDailySmartLimit - accountRowsWritten)
   const exhaustedBy =
     rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
       ? "rows_read_monthly"
       : rowsWrittenMonthlyLimit > 0 && cycleRowsWritten >= rowsWrittenMonthlyLimit
         ? "rows_written_monthly"
-        : rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
-          ? "rows_read_daily_smart"
-          : rowsWrittenDailySmartLimit !== null && rowsWritten >= rowsWrittenDailySmartLimit
-            ? "rows_written_daily_smart"
+        : accountRowsRead >= rowsReadDailySmartLimit
+          ? "rows_read_daily"
+          : accountRowsWritten >= rowsWrittenDailySmartLimit
+            ? "rows_written_daily"
             : null
   return {
     ...base,
@@ -2007,6 +2020,12 @@ function iconoplasmD1DailyBudgetProjectedSnapshot(state) {
     rows_written_monthly_remaining: rowsWrittenMonthlyRemaining,
     rows_read_daily_remaining: rowsReadDailyRemaining,
     rows_written_daily_remaining: rowsWrittenDailyRemaining,
+    rows_read_daily_limit: rowsReadDailySmartLimit,
+    rows_written_daily_limit: rowsWrittenDailySmartLimit,
+    rows_read_daily_smart_limit: rowsReadDailySmartLimit,
+    rows_written_daily_smart_limit: rowsWrittenDailySmartLimit,
+    account_rows_read: accountRowsRead,
+    account_rows_written: accountRowsWritten,
     exhausted: Boolean(exhaustedBy),
     exhausted_by: exhaustedBy,
   }
@@ -2461,7 +2480,7 @@ async function assertIconoplasmD1DailyBudgetStillAvailable(state, { maxRowsWritt
   if (reservedRowsWritten <= 0) return
 
   const hardRemaining = [
-    ["rows_written_daily_smart", snapshot?.rows_written_daily_remaining],
+    ["rows_written_daily", snapshot?.rows_written_daily_remaining],
     ["rows_written_monthly", snapshot?.rows_written_monthly_remaining],
   ]
   for (const [exhaustedBy, rawRemaining] of hardRemaining) {
@@ -16049,7 +16068,16 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
         this.providerObservationCache.day_key !== dayKey ||
         observedAt > Date.parse(this.providerObservationCache.observed_at)
       ) {
-        this.providerObservationCache = { ok: true, day_key: dayKey, ...sample }
+        // B-1026: our own tally when the sample arrives, so the account's use is
+        // the sample plus what we have added since.
+        const local = this.usageRow(dayKey) || {}
+        this.providerObservationCache = {
+          ok: true,
+          day_key: dayKey,
+          ...sample,
+          local_rows_read: Math.max(0, Number(local.rows_read || 0) || 0),
+          local_rows_written: Math.max(0, Number(local.rows_written || 0) || 0),
+        }
       }
     }
 
@@ -16061,6 +16089,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       const provider = snapshot?.providerAdmission
       if (String(provider?.dayKey || "") === dayKey) {
         newer({
+          rows_read: Number(provider?.rowsRead),
           rows_written: Number(provider?.rowsWritten),
           observed_at: String(snapshot?.generatedAt || ""),
           account_id: String(provider?.accountId || ""),
@@ -16080,6 +16109,7 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       const live = await this.accountUsage.refresh()
       if (String(live?.day || "") === dayKey) {
         newer({
+          rows_read: Number(live?.rows_read),
           rows_written: Number(live?.rows_written),
           observed_at: new Date(Number(live?.measured_at)).toISOString(),
           account_id: String(this.env.CLOUDFLARE_ACCOUNT_ID || "live-provider"),
@@ -16196,20 +16226,8 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
           : 1
       const rowsRead = Math.max(0, Number(row?.rows_read || 0) || 0)
       const rowsWritten = Math.max(0, Number(row?.rows_written || 0) || 0)
-      const rowsReadDailySmartLimit = d1OperationalAllowance({
-        resource: "reads",
-        monthlyLimit: rowsReadMonthlyLimit,
-        usedBeforeDay: cycleRowsReadBeforeDay,
-        daysRemaining: daysRemainingInCycle,
-        burstMultiplier,
-      })
-      const rowsWrittenDailySmartLimit = d1OperationalAllowance({
-        resource: "writes",
-        monthlyLimit: rowsWrittenMonthlyLimit,
-        usedBeforeDay: cycleRowsWrittenBeforeDay,
-        daysRemaining: daysRemainingInCycle,
-        burstMultiplier,
-      })
+      const rowsReadDailySmartLimit = FREE_D1_DAILY_LIMITS.reads
+      const rowsWrittenDailySmartLimit = FREE_D1_DAILY_LIMITS.writes
       const out = {
         ...row,
         days_remaining_in_cycle: daysRemainingInCycle,
@@ -16244,24 +16262,22 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rowsReadMonthlyLimit > 0 ? Math.max(0, rowsReadMonthlyLimit - cycleRowsRead) : null
     const rowsWrittenMonthlyRemaining =
       rowsWrittenMonthlyLimit > 0 ? Math.max(0, rowsWrittenMonthlyLimit - cycleRowsWritten) : null
-    const rowsReadDailySmartLimit = d1OperationalAllowance({
-      resource: "reads",
-      monthlyLimit: rowsReadMonthlyLimit,
-      usedBeforeDay: cycleRowsReadBeforeToday,
-      daysRemaining: daysRemainingInCycle,
-      burstMultiplier,
-    })
-    const rowsWrittenDailySmartLimit = d1OperationalAllowance({
-      resource: "writes",
-      monthlyLimit: rowsWrittenMonthlyLimit,
-      usedBeforeDay: cycleRowsWrittenBeforeToday,
-      daysRemaining: daysRemainingInCycle,
-      burstMultiplier,
-    })
-    const rowsReadDailyExceeded =
-      rowsReadDailySmartLimit !== null && rowsRead >= rowsReadDailySmartLimit
-    const rowsWrittenDailyExceeded =
-      rowsWrittenDailySmartLimit !== null && rowsWritten >= rowsWrittenDailySmartLimit
+    // B-1026: one wall, Cloudflare's daily allowance, against the whole account's
+    // use: the latest provider sample plus our own tally since it.
+    const rowsReadDailySmartLimit = FREE_D1_DAILY_LIMITS.reads
+    const rowsWrittenDailySmartLimit = FREE_D1_DAILY_LIMITS.writes
+    const sample =
+      this.providerObservationCache?.ok && this.providerObservationCache.day_key === dayKey
+        ? this.providerObservationCache
+        : null
+    const accountRowsRead = accountUsage(rowsRead, sample?.rows_read, sample?.local_rows_read)
+    const accountRowsWritten = accountUsage(
+      rowsWritten,
+      sample?.rows_written,
+      sample?.local_rows_written,
+    )
+    const rowsReadDailyExceeded = accountRowsRead >= rowsReadDailySmartLimit
+    const rowsWrittenDailyExceeded = accountRowsWritten >= rowsWrittenDailySmartLimit
     const rowsReadMonthlyExceeded =
       rowsReadMonthlyLimit > 0 && cycleRowsRead >= rowsReadMonthlyLimit
     const rowsWrittenMonthlyExceeded =
@@ -16283,12 +16299,13 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       rows_written_monthly_remaining: rowsWrittenMonthlyRemaining,
       rows_read_daily_smart_limit: rowsReadDailySmartLimit,
       rows_written_daily_smart_limit: rowsWrittenDailySmartLimit,
-      rows_read_daily_remaining:
-        rowsReadDailySmartLimit !== null ? Math.max(0, rowsReadDailySmartLimit - rowsRead) : null,
-      rows_written_daily_remaining:
-        rowsWrittenDailySmartLimit !== null
-          ? Math.max(0, rowsWrittenDailySmartLimit - rowsWritten)
-          : null,
+      rows_read_daily_limit: rowsReadDailySmartLimit,
+      rows_written_daily_limit: rowsWrittenDailySmartLimit,
+      account_rows_read: accountRowsRead,
+      account_rows_written: accountRowsWritten,
+      account_observed_at: sample?.observed_at || null,
+      rows_read_daily_remaining: Math.max(0, rowsReadDailySmartLimit - accountRowsRead),
+      rows_written_daily_remaining: Math.max(0, rowsWrittenDailySmartLimit - accountRowsWritten),
       days_remaining_in_cycle: Math.max(1, Number(daysRemainingInCycle || 1) || 1),
       daily_burst_multiplier: burstMultiplier,
       exhausted:
@@ -16301,9 +16318,9 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
         : rowsWrittenMonthlyExceeded
           ? "rows_written_monthly"
           : rowsReadDailyExceeded
-            ? "rows_read_daily_smart"
+            ? "rows_read_daily"
             : rowsWrittenDailyExceeded
-              ? "rows_written_daily_smart"
+              ? "rows_written_daily"
               : null,
       updated_at: row?.updated_at || null,
       mutation_lanes: this.mutationReservations.snapshot(dayKey, {
@@ -16384,10 +16401,14 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
       // reservations sampled fine. It asks for the same observation they use. The
       // budget wrapper on every mutation doesn't ask, so it never waits on GraphQL.
       if (payload?.observe_provider === true) await this.providerD1Observation(dayKey)
+      else this.state.waitUntil?.(this.providerD1Observation(dayKey).catch(() => null))
       return Response.json(this.snapshot(dayKey, cycleKey, budgets, daysRemainingInCycle))
     }
 
     if (url.pathname === "/record") {
+      // B-1026: shedding reads the account's use, so keep its sample fresh. The
+      // observation refreshes at most once a minute and never delays this reply.
+      this.state.waitUntil?.(this.providerD1Observation(dayKey).catch(() => null))
       const rowsRead = Math.max(0, Number(payload?.rows_read || 0) || 0)
       const rowsWritten = Math.max(0, Number(payload?.rows_written || 0) || 0)
       const queryCount = Math.max(0, Number(payload?.query_count || 0) || 0)
