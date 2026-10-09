@@ -6,8 +6,10 @@ const CATALOG_ROWS_WRITTEN_PER_CHANGE = 5
 // B-1055: a catalogue change is a publication change. Until 2026-10-09 neither
 // catalogue route wrote an event, so the Actions publisher never rebuilt the
 // gene: 600 genes added on 10-07 had no page, and 613 removed on 10-08 kept
-// theirs. The upsert records one only when the row is new or differs, so a
-// resent unchanged row schedules nothing.
+// theirs. The upsert records one when the row is new or differs, or when the
+// gene has no page yet (no route membership: the 600 rows of 10-07 sat in D1
+// unpublished), so sending a row always means "this gene is visible". A resent
+// unchanged row of a gene that has its page schedules nothing.
 const CATALOG_UPSERTED_EVENT_SQL = `INSERT INTO icono_publish_events (
      gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason
    )
@@ -16,7 +18,8 @@ const CATALOG_UPSERTED_EVENT_SQL = `INSERT INTO icono_publish_events (
       SELECT 1 FROM icono_gene_catalog
        WHERE gene_symbol = ? AND full_name IS ? AND uniprot IS ? AND color_hex IS ?
          AND tmh IS ? AND aliases_json IS ?
-    )`
+    )
+       OR NOT EXISTS (SELECT 1 FROM icono_published_gene_routes WHERE gene_symbol = ?)`
 const CATALOG_REMOVED_EVENT_SQL = `INSERT INTO icono_publish_events (
      gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason
    ) VALUES (?, NULL, NULL, 'catalog_removed', ?, 'delete_symbols')`
@@ -153,6 +156,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
           source,
           item.gene_symbol,
           ...row,
+          item.gene_symbol,
         ),
         env.ICONOPLASM_DB.prepare(
           `INSERT INTO icono_gene_catalog (

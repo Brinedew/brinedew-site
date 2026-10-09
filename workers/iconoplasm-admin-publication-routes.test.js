@@ -135,7 +135,7 @@ function catalogEvents(db) {
     .map((row) => [row.gene_symbol, row.action])
 }
 
-test("catalog upsert records a publication event only for a new or changed row", async () => {
+test("catalog upsert records a publication event for a new or changed row, or a gene with no page yet", async () => {
   const db = iconoplasmDatabase()
   let readModelCalls = 0
   const handlers = createIconoplasmAdminPublicationHandlers(
@@ -157,15 +157,22 @@ test("catalog upsert records a publication event only for a new or changed row",
 
   assert.equal((await upsert([catalogItem()])).processed, 1)
   assert.deepEqual(catalogEvents(db), [["TP53", "catalog_upserted"]])
-  // A resent unchanged row schedules nothing.
+  // Until the publisher gives the gene its page, a resend asks again: the 600 rows
+  // of 10-07 sat in D1 with no page, and resending them must make them visible.
   await upsert([catalogItem()])
-  assert.deepEqual(catalogEvents(db), [["TP53", "catalog_upserted"]])
+  assert.deepEqual(catalogEvents(db), [
+    ["TP53", "catalog_upserted"],
+    ["TP53", "catalog_upserted"],
+  ])
+  db.database.prepare("INSERT INTO icono_published_gene_routes (gene_symbol) VALUES ('TP53')").run()
+  // A resent unchanged row of a gene that has its page schedules nothing.
+  await upsert([catalogItem()])
+  assert.equal(catalogEvents(db).length, 2)
   // A changed row does; so does a new gene in the same request, one D1 call for both.
   const calls = db.calls
   await upsert([catalogItem({ color_hex: "#28302D" }), catalogItem({ gene_symbol: "ADISSP" })])
   assert.equal(db.calls - calls, 1)
-  assert.deepEqual(catalogEvents(db), [
-    ["TP53", "catalog_upserted"],
+  assert.deepEqual(catalogEvents(db).slice(2), [
     ["TP53", "catalog_upserted"],
     ["ADISSP", "catalog_upserted"],
   ])
