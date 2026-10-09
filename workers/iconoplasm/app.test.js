@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { publishIconoplasmGeneStableObject } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  publishIconoplasmGeneStableObject,
+  refreshIconoplasmRegisteredGeneSummaries,
+} from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "./app.js"
 
@@ -17,7 +20,10 @@ import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "./app.js"
 // 4. a portrait of a gene the catalogue doesn't carry is stored as an orphan;
 // 5. a malformed body, or more genes than one request can rebuild, writes
 //    anything;
-// 6. one gene's failed card build hides the others' success or loses rows.
+// 6. one gene's failed card build hides the others' success or loses rows;
+// 7. the summaries the admin pages, readers' shelves and the request picker
+//    still read (gene rollup, emulsion examples, vision marks) miss the new
+//    portraits, because only the old ingest refreshed them.
 const TOKEN = "factory-token-0000000000000000000000001"
 const sha = (char) => char.repeat(64)
 
@@ -52,6 +58,7 @@ function harness({ failOn = null } = {}) {
         },
       })
     },
+    refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
   })
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const register = async (body, { token = TOKEN } = {}) => {
@@ -159,6 +166,22 @@ test("new portraits land on the gene's card with one candidate_added event each"
   assert.equal(card.candidate_count, 2)
   assert.equal(card.portrait.status, "published")
   assert.equal(result.body.genes[0].winner_asset_sha256, card.portrait.asset_sha256)
+  assert.deepEqual(
+    h
+      .rows("SELECT current_asset_sha256, total_assets FROM icono_admin_gene_rollup")
+      .map((row) => ({ ...row })),
+    [{ current_asset_sha256: sha("a"), total_assets: 2 }],
+  )
+  assert.deepEqual(
+    h
+      .rows("SELECT emulsion_id FROM icono_user_emulsion_option_rollup")
+      .map((row) => row.emulsion_id),
+    ["C9-23013"],
+  )
+  assert.deepEqual(
+    h.rows("SELECT vision_id FROM icono_vision_rollup_dirty").map((row) => row.vision_id),
+    ["anima-v1-23013"],
+  )
 })
 
 test("re-sending a registration rewrites no row and adds no event", async () => {
