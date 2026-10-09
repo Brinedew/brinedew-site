@@ -16,28 +16,47 @@ Iconoplasm publishes two objects on Bunny:
 - `genes/v3/<SYMBOL>.json` is the whole published card for one gene: the
   projected record, the winning portrait, the complete candidate pool and
   `published_at`. The record carries the shown manifestation prose and never
-  the Tags (the caretaker panel promises they stay private).
-  `publishIconoplasmGeneStableObject` in the stateful runtime
-  rewrites it in place (about three subrequests, no Durable Object). Every vote and supervote calls it after the response; an
-  upload or reconcile that touches at most eight genes, `/admin/publish` and
-  `/admin/reject` call it in process; the rebuild route
-  (`POST /api/iconoplasm/admin/publication/republish`, Hono, `workers/iconoplasm/app.js`)
-  calls it for everything else.
-- `catalog/v3/index.json` is the one catalog object. GitHub Actions
-  (`scripts/publish-iconoplasm-catalog.mjs`) builds it from D1 and uploads it
-  through `admin_publication.catalog_object_put`; the same run republishes the
-  dirty genes through the republish route. The Worker's quarter-hour `gallery`
-  cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
+  the Tags (the caretaker panel promises they stay private). One pure builder
+  (`buildGeneCard`, `workers/lib/iconoplasm-stable-gene-object.js`) makes it,
+  and `publishIconoplasmGeneStableObject` in the stateful runtime writes it.
+  Whoever changes a gene rebuilds its card in the same request:
+  - **the factory** registers portraits it has uploaded to Bunny
+    (`POST /api/iconoplasm/admin/portraits/register`, Hono, `workers/iconoplasm/app.js`),
+    up to 8 genes and 100 portraits a call (the laptop sends 4 and 50);
+  - **a vote or supervote** rebuilds after the response;
+  - **the rebuild route** (`POST /api/iconoplasm/admin/publication/republish`)
+    serves the bulk sweep (`scripts/republish-iconoplasm-gene-objects.mjs`) and
+    the catalogue run's repairs.
+- `catalog/v3/index.json` is the one catalogue object. GitHub Actions
+  (`scripts/publish-iconoplasm-catalog.mjs`) builds it **from the cards** on
+  Bunny Storage's origin, not from D1, and uploads it through
+  `admin_publication.catalog_object_put`. An incremental run reads the cards of
+  the genes with a publication-affecting event since its watermark and
+  republishes only those whose card is older than the gene's latest event: the
+  rebuilds that failed in their own request. The Worker's quarter-hour
+  `gallery` cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
   `repository_dispatch` when the newest publication-affecting event moved.
   `PUBLICATION_AFFECTING_ACTIONS` in that file is the one list of event actions
-  that change what readers see: a winner or candidate change, or a catalogue
-  row added, changed (`catalog_upserted`) or removed (`catalog_removed`, written
-  by `delete_symbols` even when the row is already gone). The publisher
-  republishes every gene with one of them after its watermark.
+  that change what readers see.
 - A gene the catalogue no longer carries has no card. Its republish deletes its
   stable object and its `icono_published_gene_routes` row, after a D1 read
-  proves the gene is absent, and the catalog run drops its row. Its page then
-  reads "Page not found", as for a gene the site never had.
+  proves the gene is absent, and the catalogue run drops its row.
+
+**Batch work stops at 85% of a D1 wall.** The register and rebuild routes read
+the account's real D1 usage from Cloudflare's analytics and answer 503
+`D1_BATCH_SHARE_SPENT` (with `Retry-After` and `reset_at`) once rows read or
+written reach the tier table's batch share (`shared/iconoplasm-d1-budget-policy.js`).
+A registration marked `criticality: "critical"` (a session drawn for a
+reader's own request) runs to Cloudflare's wall. Every caller (the Drain, the
+sweep script, the catalogue run) waits that 503 out. Cloudflare's own walls
+answer the same way (`D1_ACCOUNT_READ_LIMIT`, `D1_ACCOUNT_WRITE_LIMIT`).
+
+**What publishing costs, measured 2026-10-09** (Cloudflare `d1QueriesAdaptiveGroups`,
+rows written per statement; indexes and triggers count): a portrait upsert
+about 9, an election's winner row and event 4 each, a gene rollup rebuild 6.6,
+a publish event 4. A new gene's first portrait is about 28 rows written; the
+free plan's 100,000 a day hold roughly 3,000 of them at the 85% share. Price a
+batch job with these numbers before running it.
 
 ## Stable gene object
 
