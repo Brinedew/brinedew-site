@@ -94,6 +94,7 @@ class SqliteD1 {
   prepare(sql) {
     const db = this
     const statement = {
+      sql,
       args: [],
       bind(...args) {
         statement.args = args
@@ -120,11 +121,17 @@ class SqliteD1 {
     }
     return statement
   }
+  // As D1 does: one transaction, and a SELECT in the batch returns its rows.
   async batch(statements) {
     this.sqlite.exec("BEGIN")
     try {
       const results = []
-      for (const statement of statements) results.push(await statement.run())
+      for (const statement of statements)
+        results.push(
+          /^\s*(SELECT|WITH)\b/i.test(statement.sql)
+            ? await statement.all()
+            : await statement.run(),
+        )
       this.sqlite.exec("COMMIT")
       return results
     } catch (error) {
@@ -388,16 +395,20 @@ test("the tab title never changes while the gene card loads (real browser)", asy
   const browser = await launchChrome(t)
   if (!browser) return
   const { server, origin } = await startSite()
-  mkdirSync(OUT, { recursive: true })
-  const db = seedDatabase()
-  // Card first, then the list: a gene is listed only once its card exists (B-1055).
-  const stable = await publishStableObjects(db)
-  const catalog = buildCatalogObject(db)
   const gene = GENES[0]
-  const object = stable.get(`genes/v3/${gene.symbol}.json`)
-  const expected = iconoplasmGenePageTitle(gene.symbol, object.full_name)
-  const report = { symbol: gene.symbol, expected, runs: {} }
+  const report = { symbol: gene.symbol, runs: {} }
+  // Everything after the browser and the site server opened runs inside the try: a
+  // failing setup must close them, or the test process waits for the job's timeout
+  // instead of failing (2026-10-09: an hour of silence for a one-line failure).
   try {
+    mkdirSync(OUT, { recursive: true })
+    const db = seedDatabase()
+    // Card first, then the list: a gene is listed only once its card exists (B-1055).
+    const stable = await publishStableObjects(db)
+    const catalog = buildCatalogObject(db)
+    const object = stable.get(`genes/v3/${gene.symbol}.json`)
+    const expected = iconoplasmGenePageTitle(gene.symbol, object.full_name)
+    report.expected = expected
     // The pipeline as shipped: the document is built from the catalog row the
     // catalog builder wrote.
     const docs = await staticDocuments(catalog.genes)

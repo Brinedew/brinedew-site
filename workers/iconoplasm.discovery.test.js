@@ -557,41 +557,43 @@ test("guest merge records never-seen catalog genes and reports non-catalog names
   assert.equal(Number(state.member_count), 1)
 })
 
-test("guest merge reports capacity refusal as retryable pending work instead of a crash", async () => {
-  const env = await buildEnv({
-    sessions: sessionFor("reader"),
-    mutationAuthority: {
-      idFromName: () => "global",
-      get: () => ({
-        fetch: async () =>
-          Response.json(
-            { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
-            { status: 429 },
-          ),
-      }),
-    },
-  })
-  const before = secondsUntilCloudflareDailyReset()
-  const response = await invoke(
+// B-1067: a reader's collecting writes straight to D1 and never asks the budget
+// referee. Every reservation rescanned the day's reservations, so on a viral day the
+// collecting alone would have spent Cloudflare's Durable Object reads and taken
+// GeneGuessr down with it (publication did exactly that on 2026-10-09 at 16:00 UTC).
+test("collecting never asks the budget referee", async () => {
+  const refereeCalls = []
+  const referee = {
+    idFromName: () => "global",
+    get: () => ({
+      fetch: async (request) => {
+        refereeCalls.push(new URL(request.url).pathname)
+        return Response.json(
+          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
+          { status: 429 },
+        )
+      },
+    }),
+  }
+  const env = await buildEnv({ sessions: sessionFor("reader"), mutationAuthority: referee })
+  const merged = await invoke(
     post("/api/iconoplasm/discoveries/merge", {
       cookie: "session=abc",
       body: { symbols: ["TP53"] },
     }),
     env,
   )
-  const after = secondsUntilCloudflareDailyReset()
-  const payload = await response.json()
-  assert.equal(response.status, 429)
-  assert.equal(payload.ok, false)
-  assert.equal(payload.pending, true)
-  assert.equal(payload.persisted, false)
-  assert.equal(payload.code, "MUTATION_PROVIDER_HEADROOM_RESERVED")
-  assert.deepEqual(payload.symbols, ["TP53"])
-  assert.equal(await compactRowCount(env), 0)
-  // B-968: a ledger refusal that says nothing more clears only at the UTC reset, and the
-  // header and the body state that one number (no fixed 60 seconds beside it).
-  assert.equal(Number(response.headers.get("Retry-After")), payload.retry_after_seconds)
-  assert.ok(payload.retry_after_seconds <= before && payload.retry_after_seconds >= after)
+  assert.equal(merged.status, 200)
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("EGFR", 1000)],
+  })
+  const state = await env.gatewayDb
+    .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
+    .first()
+  assert.equal(Number(state.member_count), 2)
+  assert.deepEqual(refereeCalls, [])
 })
 
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {

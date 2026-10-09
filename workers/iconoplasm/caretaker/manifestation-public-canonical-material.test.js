@@ -11,7 +11,7 @@ import {
 } from "../../lib/iconoplasm-body-object-test-support.js"
 import { createManifestationBodyObjectKey } from "../../lib/iconoplasm-manifestation-body-storage.js"
 import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
-import { composeStableGeneObject } from "../../lib/iconoplasm-stable-gene-object.js"
+import { buildGeneCard } from "../../lib/iconoplasm-stable-gene-object.js"
 import {
   PublicCanonicalMaterialError,
   readPublicCanonicalMaterial,
@@ -453,10 +453,11 @@ for (const [plain, visible] of [
         },
         [{ symbol: "TP53", full_name: "tumor protein p53" }],
       )
-      const published = composeStableGeneObject(hydrated, {
-        voteVersion: 3,
-        now: () => "2026-10-03T06:00:00.000Z",
-      })
+      const published = buildGeneCard(
+        { symbol: "TP53", catalog: { full_name: "tumor protein p53" } },
+        { manifestation: hydrated.canonical_manifestation, vote_version: 3 },
+        { now: () => "2026-10-03T06:00:00.000Z" },
+      )
       assertNoTagContent(published, value.preparedTags)
       assert.equal(published.canonical_manifestation.public_page_visible, visible)
       assert.equal(

@@ -70,6 +70,16 @@ class Statement {
     return this.execute()
   }
 
+  // Rows as arrays in column order, as D1's raw() returns them (Drizzle reads selects this way).
+  async raw() {
+    this.adapter.calls += 1
+    const statement = this.adapter.database.prepare(this.sql)
+    if (typeof statement.setReturnArrays !== "function")
+      return statement.all(...this.args).map((row) => Object.values(row))
+    statement.setReturnArrays(true)
+    return statement.all(...this.args)
+  }
+
   execute() {
     if (READS.test(this.sql)) {
       const results = this.adapter.database.prepare(this.sql).all(...this.args)

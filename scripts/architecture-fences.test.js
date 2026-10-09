@@ -323,7 +323,8 @@ test("IPD-004 keeps ledger wakeups due-time aware", () => {
   assert.match(runtime, /queueDelaySecondsUntil\(drainResult\?\.next_attempt_at\)/)
   assert.doesNotMatch(runtime, /Math\.min\(300, secondsUntilDue\)/)
   assert.doesNotMatch(runtime, /icono_gene_discoveries/)
-  assert.match(runtime, /lane: "user_action"/)
+  // B-1067: a reader's action never reserves in the referee; only background work does.
+  assert.doesNotMatch(runtime, /lane: "user_action"/)
   assert.match(runtime, /lane: "finalization_recovery"/)
   assert.match(runtime, /lane: "laptop_delivery"/)
   // B-897: admission is measured provider pressure, not fixed lane totals.

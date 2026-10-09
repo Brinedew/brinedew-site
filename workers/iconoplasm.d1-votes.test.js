@@ -257,6 +257,21 @@ function seedAsset(
   )
 }
 
+// A catalogue row: the publisher builds a card only for a gene the catalogue carries.
+function seedGene(db, symbol, { fullName = symbol, color = null } = {}) {
+  db.exec(
+    "INSERT OR IGNORE INTO icono_gene_catalog (gene_symbol, full_name, color_hex) VALUES (?, ?, ?)",
+    symbol,
+    fullName,
+    color,
+  )
+}
+
+// The publisher's canonical text reader, for genes with no text (the manifestation
+// authority has its own tests).
+const noText = async () => null
+const upvotesOf = (card) => card.portrait_candidates[0]?.image_upvotes ?? 0
+
 function seedPublished(db, symbol, asset, { override = 0 } = {}) {
   db.exec(
     `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by, admin_override)
@@ -940,24 +955,9 @@ test("9: summaries move by the exact delta through retries, flips, clears and im
 
 test("11: a vote that lands while its gene's object is written is republished once more", async () => {
   const db = new SqliteD1()
+  seedGene(db, "TP53")
   seedAsset(db, "TP53", sha("a"))
   const env = { ICONOPLASM_DB: db }
-  // The materialization reads the live count, like the real card source.
-  const source = {
-    async materialize(symbols) {
-      const row = db.rows(
-        "SELECT upvotes FROM icono_vote_asset_summary WHERE gene_symbol = 'TP53' AND asset_sha256 = ?",
-        sha("a"),
-      )[0]
-      return symbols.map((symbol) => ({
-        symbol,
-        payload: { symbol, upvotes: Number(row?.upvotes || 0), portrait_candidates: [] },
-      }))
-    },
-    complete: () => true,
-    stable: (card) => card,
-    project: (payload) => payload,
-  }
   const written = []
   let interleave = null
   const objects = {
@@ -974,9 +974,12 @@ test("11: a vote that lands while its gene's object is written is republished on
 
   // Nothing lands in between: one write, stamped with the version it read.
   await vote(db, "TP53", sha("a"), "u1", 1)
-  const quiet = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  const quiet = await publishIconoplasmGeneStableObject(env, "TP53", {
+    objects,
+    readManifestation: noText,
+  })
   assert.deepEqual(
-    written.map((object) => [object.upvotes, object.vote_version]),
+    written.map((object) => [upvotesOf(object), object.vote_version]),
     [[1, 1]],
   )
   assert.equal(quiet.republished_after_vote, undefined)
@@ -988,11 +991,14 @@ test("11: a vote that lands while its gene's object is written is republished on
   await vote(db, "TP53", sha("a"), "u2", 1)
   interleave = async () => {
     await vote(db, "TP53", sha("a"), "u3", 1)
-    await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+    await publishIconoplasmGeneStableObject(env, "TP53", { objects, readManifestation: noText })
   }
-  const result = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  const result = await publishIconoplasmGeneStableObject(env, "TP53", {
+    objects,
+    readManifestation: noText,
+  })
   assert.deepEqual(
-    written.map((object) => [object.upvotes, object.vote_version]),
+    written.map((object) => [upvotesOf(object), object.vote_version]),
     [
       [3, 3],
       [2, 2],
@@ -1006,23 +1012,9 @@ test("11: a vote that lands while its gene's object is written is republished on
 
 test("11: the republish rechecks after every write, at most three passes", async () => {
   const db = new SqliteD1()
+  seedGene(db, "TP53")
   seedAsset(db, "TP53", sha("a"))
   const env = { ICONOPLASM_DB: db }
-  const source = {
-    async materialize(symbols) {
-      const row = db.rows(
-        "SELECT upvotes FROM icono_vote_asset_summary WHERE gene_symbol = 'TP53' AND asset_sha256 = ?",
-        sha("a"),
-      )[0]
-      return symbols.map((symbol) => ({
-        symbol,
-        payload: { symbol, upvotes: Number(row?.upvotes || 0), portrait_candidates: [] },
-      }))
-    },
-    complete: () => true,
-    stable: (card) => card,
-    project: (payload) => payload,
-  }
   // Each queued interleave is one vote that commits while the publisher's PUT
   // is in flight and finishes its own republish first, so the publisher's
   // older object then lands on top of it. Nested publishes never trigger the
@@ -1045,13 +1037,13 @@ test("11: the republish rechecks after every write, at most three passes", async
           }
         }
       }
-      written.push([value.upvotes, value.vote_version])
+      written.push([upvotesOf(value), value.vote_version])
       return { key, hash: "e".repeat(64), size: 1 }
     },
   }
   const landVote = (userId) => async () => {
     await vote(db, "TP53", sha("a"), userId, 1)
-    await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+    await publishIconoplasmGeneStableObject(env, "TP53", { objects, readManifestation: noText })
   }
 
   // Two votes land in two different PUT windows: the second one is only seen
@@ -1060,7 +1052,10 @@ test("11: the republish rechecks after every write, at most three passes", async
   await vote(db, "TP53", sha("a"), "u1", 1)
   await vote(db, "TP53", sha("a"), "u2", 1)
   interleaves.push(landVote("u3"), landVote("u4"))
-  const result = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  const result = await publishIconoplasmGeneStableObject(env, "TP53", {
+    objects,
+    readManifestation: noText,
+  })
   assert.deepEqual(
     written,
     [
@@ -1082,7 +1077,10 @@ test("11: the republish rechecks after every write, at most three passes", async
   written.length = 0
   ownWrites = 0
   for (const userId of ["u5", "u6", "u7", "u8", "u9"]) interleaves.push(landVote(userId))
-  const stormy = await publishIconoplasmGeneStableObject(env, "TP53", { source, objects })
+  const stormy = await publishIconoplasmGeneStableObject(env, "TP53", {
+    objects,
+    readManifestation: noText,
+  })
   assert.equal(ownWrites, 3, "three passes, never a fourth")
   assert.equal(stormy.republished_after_vote, true)
 })
@@ -1529,7 +1527,7 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
 // --- 21 -----------------------------------------------------------------
 
 // An in-memory Bunny Storage zone (the publisher's PUT and read-back, the consumer's
-// read through the card route) and a one-gene card source, on a real SQLite D1.
+// read through the card route) and one gene's rows, on a real SQLite D1.
 // `pngStored: false` leaves the rendered PNG absent, so the consumer needs a browser launch.
 function printCopyHarness(t, { queue = null, pngStored = true } = {}) {
   const db = new SqliteD1()
@@ -1565,44 +1563,25 @@ function printCopyHarness(t, { queue = null, pngStored = true } = {}) {
     },
     ...(queue ? { [ICONOPLASM_GENE_CARD_QUEUE_BINDING]: queue } : {}),
   }
-  let upvotes = 1
-  const source = {
-    async materialize(symbols) {
-      return symbols.map((symbol) => ({
-        symbol,
-        payload: {
-          symbol,
-          full_name: "tumor protein p53",
-          color: "#336699",
-          image_upvotes: upvotes,
-          // The stored JSON holds this key as null; a JSON.stringify round
-          // trip would drop it.
-          note: undefined,
-          portrait: {
-            status: "published",
-            asset_sha256: sha("a"),
-            medium_url: "https://cdn.test/a/medium.webp",
-            hero_url: "https://cdn.test/a/full.webp",
-            thumb_url: "https://cdn.test/a/thumb.webp",
-          },
-          portrait_candidates: [{ asset_sha256: sha("a"), image_upvotes: upvotes }],
-        },
-      }))
-    },
-    complete: () => true,
-    stable: (card) => card,
-    project: (payload) => payload,
-  }
-  db.exec(
-    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
-  )
+  seedGene(db, "TP53", { fullName: "tumor protein p53", color: "#336699" })
+  seedAsset(db, "TP53", sha("a"))
+  seedPublished(db, "TP53", sha("a"))
   return {
     db,
     env,
     stored,
-    source,
     setUpvotes(value) {
-      upvotes = value
+      db.exec(
+        `INSERT INTO icono_vote_asset_summary (gene_symbol, asset_sha256, candidate_ref, upvotes, downvotes, score, vote_count)
+         VALUES ('TP53', ?, ?, ?, 0, ?, ?)
+         ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
+           upvotes = excluded.upvotes, score = excluded.score, vote_count = excluded.vote_count`,
+        sha("a"),
+        `a:TP53|${sha("a")}`,
+        value,
+        value,
+        value,
+      )
     },
   }
 }
@@ -1631,8 +1610,8 @@ async function deliverGeneCardWakeup(env, symbol) {
 // the consumer renders the card as published at render time, so an older fingerprint in the
 // request still ends as a PNG of the current card.
 test("21: publication queues no print copy; a request renders the card as currently published", async (t) => {
-  const { env, stored, source, setUpvotes } = printCopyHarness(t)
-  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  const { env, stored, setUpvotes } = printCopyHarness(t)
+  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
   await enrollIconoplasmGeneCardMaterialization(env, {
     symbol: "TP53",
     cardFingerprint: "0".repeat(32),
@@ -1642,7 +1621,7 @@ test("21: publication queues no print copy; a request renders the card as curren
 
   // Republishing (a vote, the republish route) leaves the reader's request exactly as it was.
   setUpvotes(7)
-  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
   const untouched = await readIconoplasmGeneCardMaterialization(env, "TP53")
   assert.equal(untouched.desired_card_fingerprint, "0".repeat(32))
   assert.equal(untouched.wakeup_generation, enrolled.wakeup_generation)
@@ -2569,11 +2548,11 @@ test("36: enrolling the same card again changes nothing, a changed card is queue
 //     consumer must instead put the wake-up back at the row's due time and change nothing else.
 test("37: a wake-up that arrives before its row is due is re-sent for the due time, not thrown", async (t) => {
   const sent = []
-  const { env, db, stored, source } = printCopyHarness(t, {
+  const { env, db, stored } = printCopyHarness(t, {
     queue: { send: async (message, options) => sent.push({ message, options }) },
     pngStored: false,
   })
-  await publishIconoplasmGeneStableObject(env, "TP53", { source })
+  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
   const published = JSON.parse(
     new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
   )
