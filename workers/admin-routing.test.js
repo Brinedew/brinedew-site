@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import worker from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 test("an unimplemented AI well-known route is a real 404, not the app shell", async () => {
   const response = await worker.fetch(
@@ -188,7 +189,8 @@ test("iconoplasm admin gallery mutation routes reach the admin gate instead of 4
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol: "TP53" }),
       }),
-      {},
+      // Every budgeted request is admitted by the shared budget object (B-1026).
+      { ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace() },
       { waitUntil() {} },
     )
 

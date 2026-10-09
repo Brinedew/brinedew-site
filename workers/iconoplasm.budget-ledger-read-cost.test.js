@@ -36,7 +36,7 @@ test(
           }
           if(body.restart) this.budget=new Budget({storage:this.storage,blockConcurrencyWhile:fn=>fn()},this.env);
           this.reads=0;this.writes=0;
-          const response=await this.budget.fetch(new Request('https://ledger/'+(body.record?'record':'snapshot'),{method:'POST',body:JSON.stringify({day_key:'2026-09-12',cycle_key:'2026-09-07',days_remaining_in_cycle:25,budgets:{rowsReadMonthlyLimit:24000000000,rowsWrittenMonthlyLimit:40000000},...(body.record||{})})}));
+          const response=await this.budget.fetch(new Request('https://ledger/'+(body.record?'record':'snapshot'),{method:'POST',body:JSON.stringify({day_key:'2026-09-12',cycle_key:'2026-09-07',days_remaining_in_cycle:25,...(body.record||{})})}));
           return Response.json({value:await response.json(),reads:this.reads,writes:this.writes});
         }
       }

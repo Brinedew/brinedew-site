@@ -188,9 +188,9 @@ export class OperationCostLedger {
       ...REPLICA_DAILY_ADMISSION,
       requests: REPLICA_DAILY_ADMISSION.requests - CONTROL_REQUEST_HEADROOM,
     }
-    // This is a bounded Durable Object diagnostic: registrations are capped at
-    // 500/day and every plan document is already retained for receipt recovery.
-    // Aggregate day usage remains authoritative. This detail only explains the
+    // A Durable Object diagnostic for the release scripts' /capacity reads: it
+    // reads the day's plan documents, which are retained for receipt recovery
+    // anyway. Aggregate day usage remains authoritative. This detail only explains the
     // part of that aggregate that has a valid settled receipt or an intentionally
     // retained unknown-outcome reservation; it never manufactures a refund.
     const settledActual = emptyMeterVector()
@@ -461,7 +461,6 @@ export class OperationCostLedger {
         day,
       )
       const usage = this.row("SELECT * FROM operation_cost_days WHERE day = ?", day)
-      requireValue(usage.registrations < 500, "COST_REGISTRATION_DAILY_LIMIT")
       const ceiling = predecessor
         ? { ...predecessor.ceiling }
         : Object.fromEntries(Object.keys(prediction).map((meter) => [meter, 2 * prediction[meter]]))
@@ -492,7 +491,8 @@ export class OperationCostLedger {
         "UPDATE operation_cost_days SET registrations = registrations + 1 WHERE day = ?",
         day,
       )
-      // At most 500 plans/day; delete indexed expired-day records once per day's
+      // A plan is admitted by what it spends (reserve), not by how many plans the
+      // day has had (B-1026). Delete indexed expired-day records once per day's
       // first registration. Retain seven days of receipts, never a growing audit.
       if (usage.registrations === 0) {
         const oldest = new Date(now - 7 * 86_400_000).toISOString().slice(0, 10)

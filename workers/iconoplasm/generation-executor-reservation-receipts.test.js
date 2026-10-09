@@ -856,11 +856,6 @@ test("the bound a completion is refused at is the largest real publication", () 
 
 // ---- The gateway: what a request really reserves, in what order ----------
 
-const BUDGET_ENV = {
-  ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-  ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-}
-
 function gatewayFixture(t, providerRowsWritten = 0) {
   const meter = liveD1Meter(database.db)
   const ledger = realBudgetLedger(providerRowsWritten)
@@ -873,7 +868,6 @@ function gatewayFixture(t, providerRowsWritten = 0) {
     ICONOPLASM_AUTHORITY_REPLICA_TOKEN: REPLICA_TOKEN,
     ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: spy.namespace,
-    ...BUDGET_ENV,
   }
   async function call(path, body, token = GENERATION_TOKEN) {
     const response = await gateway(

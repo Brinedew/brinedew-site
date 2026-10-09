@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { FREE_D1_DAILY_LIMITS } from "../../shared/iconoplasm-d1-budget-policy.js"
 import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
 import * as laneModule from "../lib/iconoplasm-mutation-lane-reservations.js"
 import { generationClaimWriteUnits } from "../lib/iconoplasm-mutation-write-bounds.js"
@@ -30,11 +31,6 @@ const GENERATION_TOKEN = "generation-secret"
 const REPLICA_TOKEN = "replica-secret"
 const CLAIM = "/api/iconoplasm/authority/generation-leases/claim"
 const CLAIM_UNITS = generationClaimWriteUnits(50)
-const BUDGET_ENV = {
-  ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-  ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-}
-
 const quiet = (t) => {
   const original = [console.log, console.warn, console.error]
   console.log = console.warn = console.error = () => {}
@@ -93,7 +89,6 @@ function laptopGateway(t, providerRowsWritten) {
     ICONOPLASM_AUTHORITY_GENERATION_TOKEN: GENERATION_TOKEN,
     ICONOPLASM_AUTHORITY_REPLICA_TOKEN: REPLICA_TOKEN,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: spy.namespace,
-    ...BUDGET_ENV,
   }
   const day = new Date().toISOString().slice(0, 10)
   return {
@@ -214,24 +209,28 @@ test("the 15 minute hint is honest: the real ledger admits the request within tw
 })
 
 test("the admin mutation limiter's 503 states the seconds to the UTC reset", async (t) => {
-  // Failure mode 6. Target 90% of a 20-row day is 18, and 18 are written.
+  // Failure mode 6. The limiter's target is 85% of Cloudflare's daily write allowance,
+  // and the account has written one row past it.
   quiet(t)
   const d1 = untouchedD1()
+  const written = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85) + 1
   const snapshot = {
     day_key: new Date().toISOString().slice(0, 10),
     cycle_key: "2026-04-07",
     rows_read: 0,
-    rows_written: 18,
+    rows_written: written,
     cycle_rows_read: 0,
-    cycle_rows_written: 18,
-    rows_read_monthly_limit: 24000000000,
-    rows_written_monthly_limit: 100,
-    rows_read_monthly_remaining: 24000000000,
-    rows_written_monthly_remaining: 82,
-    rows_read_daily_smart_limit: 1000,
-    rows_written_daily_smart_limit: 20,
-    rows_read_daily_remaining: 1000,
-    rows_written_daily_remaining: 2,
+    cycle_rows_written: written,
+    rows_read_monthly_limit: null,
+    rows_written_monthly_limit: null,
+    rows_read_monthly_remaining: null,
+    rows_written_monthly_remaining: null,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
+    rows_read_daily_remaining: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_remaining: FREE_D1_DAILY_LIMITS.writes - written,
+    account_rows_read: 0,
+    account_rows_written: written,
     days_remaining_in_cycle: 20,
     exhausted: false,
     exhausted_by: null,
@@ -260,9 +259,6 @@ test("the admin mutation limiter's 503 states the seconds to the UTC reset", asy
             idFromName: () => "global",
             get: () => ({ fetch: async () => Response.json(snapshot) }),
           },
-          ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-          ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "100",
-          ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY: "7",
         },
         { waitUntil() {} },
       ),
@@ -281,10 +277,10 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
   const snapshot = {
     day_key: new Date().toISOString().slice(0, 10),
     cycle_key: "2026-04-07",
-    rows_read: 5_000_000,
+    rows_read: FREE_D1_DAILY_LIMITS.reads,
     rows_written: 0,
-    rows_read_daily_smart_limit: 5_000_000,
-    rows_written_daily_smart_limit: 100_000,
+    rows_read_daily_smart_limit: FREE_D1_DAILY_LIMITS.reads,
+    rows_written_daily_smart_limit: FREE_D1_DAILY_LIMITS.writes,
     exhausted: true,
     exhausted_by: "rows_read_daily",
   }
@@ -302,7 +298,6 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
             idFromName: () => "global",
             get: () => ({ fetch: async () => Response.json(snapshot) }),
           },
-          ...BUDGET_ENV,
         },
         { waitUntil() {} },
       ),
@@ -324,7 +319,7 @@ test("an unreachable ledger is a misconfiguration, not a refusal that clears at 
       "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/assets/summary",
       { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
     ),
-    { ICONOPLASM_DB: d1.db, ICONOPLASM_ADMIN_TOKEN: "founder-secret", ...BUDGET_ENV },
+    { ICONOPLASM_DB: d1.db, ICONOPLASM_ADMIN_TOKEN: "founder-secret" },
     { waitUntil() {} },
   )
   const answer = await stated(response)

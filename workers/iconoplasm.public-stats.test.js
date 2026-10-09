@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -112,6 +113,11 @@ test("admin asset summary refresh writes public stats projection to KV", async (
           if (text.includes("FROM icono_website_truth_summary")) return null
           throw new Error(`unexpected first SQL: ${text}`)
         },
+        // The budget wrapper reads first() through all(): answer it from first().
+        async all() {
+          const row = await this.first()
+          return { results: row ? [row] : [] }
+        },
         async run() {
           if (text.includes("INSERT INTO icono_website_truth_summary")) return { success: true }
           throw new Error(`unexpected run SQL: ${text}`)
@@ -127,6 +133,7 @@ test("admin asset summary refresh writes public stats projection to KV", async (
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -187,6 +194,11 @@ test("admin asset summary is read-only by default and exposes public versus ledg
           }
           throw new Error(`default summary must not recompute D1 proof: ${text}`)
         },
+        // The budget wrapper reads first() through all(): answer it from first().
+        async all() {
+          const row = await this.first()
+          return { results: row ? [row] : [] }
+        },
         async run() {
           throw new Error(`default summary must not write D1: ${text}`)
         },
@@ -201,6 +213,7 @@ test("admin asset summary is read-only by default and exposes public versus ledg
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -279,6 +292,11 @@ test("admin asset summary refresh skips KV write when public stats did not mater
           if (text.includes("FROM icono_website_truth_summary")) return null
           throw new Error(`unexpected first SQL: ${text}`)
         },
+        // The budget wrapper reads first() through all(): answer it from first().
+        async all() {
+          const row = await this.first()
+          return { results: row ? [row] : [] }
+        },
         async run() {
           if (text.includes("INSERT INTO icono_website_truth_summary")) return { success: true }
           throw new Error(`unexpected run SQL: ${text}`)
@@ -294,6 +312,7 @@ test("admin asset summary refresh skips KV write when public stats did not mater
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -328,6 +347,12 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
           throw new Error(`unexpected first SQL: ${text}`)
         },
         async all() {
+          // The budget wrapper reads first() through all(), and the counts query is a
+          // first() read that also mentions the sample queries' tables.
+          if (text.includes("catalog_gene_rows")) {
+            const row = await this.first()
+            return { results: row ? [row] : [] }
+          }
           if (text.includes("gc.gene_symbol IS NULL")) {
             return {
               results: [
@@ -342,7 +367,9 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
             }
           }
           if (text.includes("GROUP BY upper(gene_symbol)")) return { results: [] }
-          throw new Error(`unexpected all SQL: ${text}`)
+          // The budget wrapper reads first() through all(): answer it from first().
+          const row = await this.first()
+          return { results: row ? [row] : [] }
         },
       }
     },
@@ -355,6 +382,7 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
+        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
       },
       ctx(),

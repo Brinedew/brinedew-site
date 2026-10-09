@@ -286,25 +286,34 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v3"[\s\S]*new_sqlite_classes = \["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"\]/,
     "internal stateful worker should preserve the old durable objects and add the hard daily budget kill switch as its own migration tag",
   )
+  // B-1026 (10-09), replacing the four monthly-budget assertions that stood here: the
+  // account is on the free plan, whose only wall is Cloudflare's daily allowance, so the
+  // paid-plan monthly caps, billing-cycle day and burst factor are retired. What turns
+  // enforcement on now is the budget object being bound. A leftover monthly variable
+  // would look like a cap while nothing reads it, so none may remain in the config or
+  // be read by the runtime.
   assert.match(
     internalWrangler,
-    /ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "24000000000"/,
-    "prod internal worker should define a real hard monthly rows-read cap instead of relying on alerts",
+    /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"\s*\nclass_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
+    "prod internal worker must bind the daily budget object: its binding is what turns D1 enforcement on",
   )
-  assert.match(
+  const retiredMonthlyBudgetNames =
+    /HARD_MONTHLY_BUDGET|BILLING_CYCLE_DAY_OF_MONTH|DAILY_BURST_MULTIPLIER/
+  assert.doesNotMatch(
     internalWrangler,
-    /ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY = "40000000"/,
-    "prod internal worker should define a hard monthly rows-written cap as a second stop",
+    retiredMonthlyBudgetNames,
+    "no monthly budget, billing-cycle day or burst variable may remain in the worker config",
   )
-  assert.match(
-    internalWrangler,
-    /ICONOPLASM_D1_BILLING_CYCLE_DAY_OF_MONTH_DO_NOT_SET_CASUALLY = "7"/,
-    "prod internal worker should pin the billing cycle day so smart daily allowances reset on the real billing boundary",
-  )
-  assert.match(
-    internalWrangler,
-    /ICONOPLASM_D1_DAILY_BURST_MULTIPLIER_DO_NOT_SET_CASUALLY = "3"/,
-    "prod internal worker should explicitly declare how much daily burst room to allow under the monthly cap",
+  assert.doesNotMatch(
+    readFileSync(
+      new URL(
+        "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    retiredMonthlyBudgetNames,
+    "the runtime must not read a monthly budget variable",
   )
 })
 

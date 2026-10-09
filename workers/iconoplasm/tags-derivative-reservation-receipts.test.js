@@ -183,11 +183,6 @@ async function geneRevision(geneId) {
   )
 }
 
-const BUDGET_ENV = {
-  ICONOPLASM_D1_ROWS_READ_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "24000000000",
-  ICONOPLASM_D1_ROWS_WRITTEN_HARD_MONTHLY_BUDGET_DO_NOT_SET_CASUALLY: "40000000",
-}
-
 function fixture(t, providerRowsWritten = 0) {
   const authoringMeter = liveD1Meter(authoring.db)
   const primaryMeter = liveD1Meter(primary.db)
@@ -203,7 +198,6 @@ function fixture(t, providerRowsWritten = 0) {
     ICONOPLASM_AUTHORING_STORAGE_ZONE: "authority-test-zone",
     ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authority-test-password",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: spy.namespace,
-    ...BUDGET_ENV,
   }
   const written = () => authoringMeter.totals.rows_written + primaryMeter.totals.rows_written
   async function post(path, body, token = REPLICA_TOKEN) {
