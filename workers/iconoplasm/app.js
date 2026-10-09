@@ -238,7 +238,7 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, acc
    * card is rebuilt. Two D1 reads (which genes the catalogue carries, which
    * portraits exist), one D1 batch for the rows and a `candidate_added` event
    * per new portrait (the catalogue builder follows those), then one card
-   * build per gene, then the genes' admin and picker summaries. A portrait of
+   * build per gene, then the request picker's vision marks. A portrait of
    * a gene the catalogue doesn't carry is refused, not stored: it would have
    * no card to land on. Re-sending the same body changes no row and rebuilds
    * the cards and summaries again, so the factory retries a failed gene by
@@ -304,7 +304,6 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, acc
         }
       }
       await refreshSummaries(c.env, {
-        symbols,
         visionIds: [...new Set(portraits.map((portrait) => portrait.vision_id).filter(Boolean))],
       })
       return c.json({

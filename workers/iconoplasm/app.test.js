@@ -161,8 +161,9 @@ test("new portraits land on the gene's card with one candidate_added event each"
   assert.deepEqual(
     stored.map((row) => [row.asset_sha256, row.r2_key_full, row.width, row.status]),
     [
-      // Same second, no votes: the tie goes to the lower hash, and its election approves it.
-      [sha("a"), `portraits/v1/aa/${sha("a")}/full.webp`, 768, "approved"],
+      // Same second, no votes: the tie goes to the lower hash. Winning changes no
+      // status: icono_publish_state and the card say which portrait won.
+      [sha("a"), `portraits/v1/aa/${sha("a")}/full.webp`, 768, "draft"],
       [sha("b"), `portraits/v1/bb/${sha("b")}/full.webp`, 768, "draft"],
     ],
   )
