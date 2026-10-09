@@ -109,21 +109,40 @@ async function storage(pathname) {
   return response.json()
 }
 
-// The rows of the named genes whose card exists.
-async function cardRows(symbols) {
-  const rows = []
+// The named genes' cards, null where a gene has none.
+async function readCards(symbols) {
+  const cards = new Map()
   let next = 0
   await Promise.all(
     Array.from({ length: Math.min(CARD_READ_CONCURRENCY, symbols.length) }, async () => {
       while (next < symbols.length) {
         const symbol = symbols[next]
         next += 1
-        const card = await storage(`genes/v3/${encodeURIComponent(symbol)}.json`)
-        if (card) rows.push(rowFromCard(card))
+        cards.set(symbol, await storage(`genes/v3/${encodeURIComponent(symbol)}.json`))
       }
     }),
   )
-  return rows
+  return cards
+}
+
+// The rows of the named genes whose card exists.
+async function cardRows(symbols) {
+  return [...(await readCards(symbols)).values()].filter(Boolean).map(rowFromCard)
+}
+
+// B-1063: whoever writes a publication event (a registration, a vote, an
+// election) rebuilds the gene's card in the same request. A card at least as new
+// as the gene's latest event is current; only an older or missing one means that
+// rebuild failed (a CPU-killed request, a Bunny error), and only those are
+// republished here. Republishing every changed gene redid hundreds of finished
+// rebuilds and ran the job past its 15 minutes twice on 2026-10-09.
+export function staleSymbols(cards, changedAt) {
+  return [...changedAt.keys()].filter((symbol) => {
+    const card = cards.get(symbol)
+    const published = Date.parse(card?.published_at || "")
+    const changed = Date.parse(`${String(changedAt.get(symbol)).replace(" ", "T")}Z`)
+    return !card || !Number.isFinite(published) || !(published >= changed)
+  })
 }
 
 // Every gene with a card: Bunny Storage's own listing of genes/v3/.
@@ -138,10 +157,6 @@ async function readAllRows() {
   return { rows: await cardRows(await allCardSymbols()), reads: 0 }
 }
 
-async function readRowsFor(symbols) {
-  return { rows: await cardRows(symbols), reads: 0 }
-}
-
 async function highWater() {
   const { rows } = await d1(
     `SELECT COALESCE(MAX(id), 0) AS id FROM icono_publish_events WHERE action IN (${PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")})`,
@@ -152,15 +167,16 @@ async function highWater() {
 
 async function dirtySymbolsSince(watermark) {
   const { rows, meta } = await d1(
-    `SELECT DISTINCT gene_symbol FROM icono_publish_events
+    `SELECT gene_symbol, MAX(created_at) AS changed_at FROM icono_publish_events
       WHERE id > ? AND action IN (${PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")})
+      GROUP BY gene_symbol
       LIMIT ${MAX_INCREMENTAL_SYMBOLS + 1}`,
     [watermark, ...PUBLICATION_AFFECTING_ACTIONS],
   )
-  return {
-    symbols: rows.map((row) => String(row.gene_symbol || "").toUpperCase()),
-    reads: Number(meta.rows_read || 0),
-  }
+  const changedAt = new Map(
+    rows.map((row) => [String(row.gene_symbol || "").toUpperCase(), String(row.changed_at || "")]),
+  )
+  return { symbols: [...changedAt.keys()], changedAt, reads: Number(meta.rows_read || 0) }
 }
 
 async function previousObject() {
@@ -315,9 +331,14 @@ async function main() {
       genes = all.rows
       reads += all.reads
     } else {
-      if (!DRY_RUN) receipt.republish = await republishGenes(dirty.symbols)
-      const changed = await readRowsFor(dirty.symbols)
-      reads += changed.reads
+      const cards = await readCards(dirty.symbols)
+      const stale = staleSymbols(cards, dirty.changedAt)
+      receipt.stale_symbols = stale.length
+      if (!DRY_RUN && stale.length) {
+        receipt.republish = await republishGenes(stale)
+        for (const [symbol, card] of await readCards(stale)) cards.set(symbol, card)
+      }
+      const changed = { rows: [...cards.values()].filter(Boolean).map(rowFromCard) }
       const bySymbol = new Map(previous.genes.map((row) => [row[0], row]))
       for (const symbol of dirty.symbols) bySymbol.delete(symbol) // a deleted gene disappears
       for (const row of changed.rows) bySymbol.set(row[0], row)

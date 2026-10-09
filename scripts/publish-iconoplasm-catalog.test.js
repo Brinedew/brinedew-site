@@ -1,7 +1,8 @@
+import fs from "node:fs"
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { republishGenes } from "./publish-iconoplasm-catalog.mjs"
+import { republishGenes, staleSymbols } from "./publish-iconoplasm-catalog.mjs"
 
 // B-1055: a catalogue delivery dirties a thousand genes in one run. Failure modes:
 // 1. a batch killed by the 10 ms CPU cap twice throws the whole run, and the held
@@ -94,4 +95,26 @@ test("a catalogue row is the card's name, winner, colour, score, measures and da
   }
   assert.deepEqual(rowFromCard(bare).slice(2, 5), ["", "#352f35", 0])
   assert.equal(rowFromCard(bare)[9], "")
+})
+
+// B-1063: the writer of a publication event rebuilds the gene's card in the same
+// request, so a run republishes only the changed genes whose card is older than
+// their latest event, or missing. Real cards: WEE1 published 2026-10-01 15:13:03,
+// MFNG 2026-10-09 13:52:14.
+test("only a card older than its gene's latest event, or a missing one, is republished", () => {
+  const card = (name) =>
+    JSON.parse(
+      fs.readFileSync(new URL(`../workers/lib/fixtures/gene-cards/${name}.json`, import.meta.url)),
+    )
+  const cards = new Map([
+    ["WEE1", card("WEE1")],
+    ["MFNG", card("MFNG")],
+    ["GONE1", null],
+  ])
+  const changedAt = new Map([
+    ["WEE1", "2026-10-09 13:00:00"], // a vote after the card: its rebuild failed
+    ["MFNG", "2026-10-09 13:52:14"], // the same second as the card: current
+    ["GONE1", "2026-10-09 10:00:00"], // no card at all
+  ])
+  assert.deepEqual(staleSymbols(cards, changedAt), ["WEE1", "GONE1"])
 })
