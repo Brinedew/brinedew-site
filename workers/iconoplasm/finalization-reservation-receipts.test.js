@@ -594,8 +594,9 @@ test("a vision above the code bound does not hold back the rest of its batch", a
   quiet(t)
   const bad = "anima-v1-29130"
   const good = "anima-v1-29131"
+  // Ten genes of three assets: enough assets to carry every one of the codes.
   await seedVisionWithCodes(bad, emulsionCodes(MAX_EMULSION_CODES_PER_VISION + 1, 29130), {
-    genes: 4,
+    genes: 10,
   })
   await seedVisionWithCodes(good, emulsionCodes(2, 29131), { genes: 4 })
   const run = await rollupRun([bad, good])
