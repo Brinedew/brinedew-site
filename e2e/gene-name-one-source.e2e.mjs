@@ -214,8 +214,9 @@ const htmlUnescape = (value) =>
 
 test("catalog row, stable object and static document name every gene the same way", async () => {
   const db = seedDatabase()
-  const catalog = buildCatalogObject(db)
+  // Card first, then the list: a gene is listed only once its card exists (B-1055).
   const stable = await publishStableObjects(db)
+  const catalog = buildCatalogObject(db)
   const docs = await staticDocuments(catalog.genes)
   const report = []
   for (const gene of GENES) {
@@ -389,8 +390,9 @@ test("the tab title never changes while the gene card loads (real browser)", asy
   const { server, origin } = await startSite()
   mkdirSync(OUT, { recursive: true })
   const db = seedDatabase()
-  const catalog = buildCatalogObject(db)
+  // Card first, then the list: a gene is listed only once its card exists (B-1055).
   const stable = await publishStableObjects(db)
+  const catalog = buildCatalogObject(db)
   const gene = GENES[0]
   const object = stable.get(`genes/v3/${gene.symbol}.json`)
   const expected = iconoplasmGenePageTitle(gene.symbol, object.full_name)
