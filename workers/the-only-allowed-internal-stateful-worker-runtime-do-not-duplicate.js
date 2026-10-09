@@ -422,7 +422,6 @@ import {
   handleRenderPage,
 } from "./discord.js"
 import { handleContactSubmission } from "./contact-form.js"
-import { handlePostDailyFeed, handlePostFeed } from "./discord-feed.js"
 // Import stats handlers
 import {
   handleMigrateStats,
@@ -1565,6 +1564,8 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     }
 
     if (url.pathname === "/api/discord/post-feed" && request.method === "POST") {
+      // B-1070: the feed's HTML parsers (about 630 KiB) load with the feed only.
+      const { handlePostFeed } = await import("./discord-feed.js")
       return handlePostFeed(request, env)
     }
 
@@ -2081,6 +2082,7 @@ export default {
 
     if (cronExpr === "6 12 * * *") {
       try {
+        const { handlePostDailyFeed } = await import("./discord-feed.js")
         const result = await handlePostDailyFeed(env)
         console.log("[CRON] Feed post result:", result)
       } catch (err) {
