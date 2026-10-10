@@ -263,7 +263,7 @@ test("authenticated catalog release shares retry ceilings and rejects unsafe ini
       }
       const send = async (suffix, method, input) => {
         const request = f.request(suffix, input)
-        request.headers.set("x-iconoplasm-admin-token", "test-only")
+        request.headers.set("Authorization", "Bearer test-only")
         const response = await gateway(request, env)
         const body = await response.json()
         if (!response.ok) throw new Error(body.code || body.error)
@@ -377,12 +377,12 @@ test("real Worker gateway authenticates before authority/provider access and for
     assert.equal(unauthed.status, 403)
     assert.equal(forwards, 0)
     const request = f.request("/execute", { operation_id: "missing", adapter_id: "iconoplasm-d1" })
-    request.headers.set("x-iconoplasm-admin-token", "test-only")
+    request.headers.set("Authorization", "Bearer test-only")
     const refused = await gateway(request, env)
     assert.equal(refused.status, 428)
     assert.equal(forwards, 1)
     const capacityRequest = f.request("/capacity")
-    capacityRequest.headers.set("x-iconoplasm-admin-token", "test-only")
+    capacityRequest.headers.set("Authorization", "Bearer test-only")
     const capacity = await gateway(capacityRequest, env)
     assert.equal(capacity.status, 200)
     assert.equal((await capacity.json()).remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read)

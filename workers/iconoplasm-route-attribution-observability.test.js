@@ -188,7 +188,7 @@ test("successful sync-style admin mutations emit one Workers Observability route
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,
@@ -233,7 +233,7 @@ test("fail-closed limiter rejections still emit one Workers Observability route 
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,

@@ -103,7 +103,7 @@ async function adminRequest(db, kv, path, init = {}) {
         ...init,
         headers: {
           "Content-Type": "application/json",
-          "X-Iconoplasm-Admin-Token": "secret",
+          Authorization: "Bearer secret",
           ...(init.headers || {}),
         },
       }),
@@ -429,10 +429,19 @@ test(
       // Failure mode 10: no admin token, no rows.
       const denied = await adminRequest(db, kv, statsUrl({ limit: "12" }), {
         method: "GET",
-        headers: { "X-Iconoplasm-Admin-Token": "wrong" },
+        headers: { Authorization: "Bearer wrong" },
       })
       assert.equal(denied.status, 403, brief(denied.payload))
       assert.equal(denied.cost.rows_read, 0)
+
+      // B-1080: the admin token has one spelling. The retired header carrying the
+      // right secret is refused, the way the factory's bearer routes refused it (B-1079).
+      const oldHeader = await adminRequest(db, kv, statsUrl({ limit: "12" }), {
+        method: "GET",
+        headers: { Authorization: "", "X-Iconoplasm-Admin-Token": "secret" },
+      })
+      assert.equal(oldHeader.status, 403, brief(oldHeader.payload))
+      assert.equal(oldHeader.cost.rows_read, 0)
 
       // Failure mode 8: a rollup that is still being built is refused, not scanned from assets.
       await db

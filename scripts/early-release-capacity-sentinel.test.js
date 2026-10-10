@@ -140,7 +140,7 @@ test("capacity transport makes exactly one fixed-origin GET with no redirect or 
       assert.equal(options.method, "GET")
       assert.equal(options.redirect, "error")
       assert.equal(options.body, undefined)
-      assert.equal(options.headers["x-iconoplasm-admin-token"], "test-only")
+      assert.equal(options.headers.Authorization, "Bearer test-only")
       assert.ok(options.signal instanceof AbortSignal)
       return Response.json(capacity)
     },

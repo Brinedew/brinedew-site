@@ -2926,7 +2926,7 @@ function corsHeaders() {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
-      "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version, Authorization, X-Iconoplasm-Admin-Token",
+      "If-None-Match, Content-Type, X-Iconoplasm-Extension-Version, Authorization",
     Vary: "Origin",
   }
 }
@@ -13057,24 +13057,22 @@ function extractRenditionBytes(payload) {
   return decodeBase64Bytes(b64)
 }
 
-function hasAdminToken(request, env) {
-  const configured = String(env.ICONOPLASM_ADMIN_TOKEN || "").trim()
-  if (!configured) return false
-  const fromHeader = String(request.headers.get("x-iconoplasm-admin-token") || "").trim()
+// The admin token travels only as a standard bearer token (B-1080), the one
+// spelling the factory's Hono routes accept. A second header for the same
+// secret let a caller speak one and a route expect the other (B-1079).
+function bearerTokenFrom(request) {
   const authHeader = String(request.headers.get("Authorization") || "").trim()
-  const fromBearer = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : ""
-  return fromHeader === configured || fromBearer === configured
+  return authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : ""
+}
+
+function hasAdminToken(request, env) {
+  const configured = String(env?.ICONOPLASM_ADMIN_TOKEN || "").trim()
+  if (!configured) return false
+  return bearerTokenFrom(request) === configured
 }
 
 function hasAdminTokenCredentialPresent(request) {
-  const fromHeader = String(request.headers.get("x-iconoplasm-admin-token") || "").trim()
-  const authHeader = String(request.headers.get("Authorization") || "").trim()
-  const fromBearer = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : ""
-  return Boolean(fromHeader || fromBearer)
+  return Boolean(bearerTokenFrom(request))
 }
 
 async function isIconoplasmAdmin(request, env) {
@@ -31562,15 +31560,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
     console.error("[Iconoplasm] Unhandled request error:", e)
-    const adminToken = String(env?.ICONOPLASM_ADMIN_TOKEN || "").trim()
-    const requestAdminToken = String(request.headers.get("X-Iconoplasm-Admin-Token") || "").trim()
-    const adminErrorDetail =
-      adminToken && requestAdminToken && requestAdminToken === adminToken
-        ? {
-            code: "ICONOPLASM_ADMIN_UNHANDLED_ERROR",
-            detail: String(e?.message || e || "Internal server error").slice(0, 2000),
-          }
-        : {}
+    const adminErrorDetail = hasAdminToken(request, env)
+      ? {
+          code: "ICONOPLASM_ADMIN_UNHANDLED_ERROR",
+          detail: String(e?.message || e || "Internal server error").slice(0, 2000),
+        }
+      : {}
     const out = json({ error: "Internal server error", ...adminErrorDetail }, 500)
     await logReq("error", request, 500, started, null)
     return asHead(request, out)

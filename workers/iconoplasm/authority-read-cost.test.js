@@ -123,7 +123,7 @@ test("schema transition refuses application D1, preserves queued work and leaves
   const cost = await gateway(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations/execute", {
       method: "POST",
-      headers: { "x-iconoplasm-admin-token": "test-admin" },
+      headers: { Authorization: "Bearer test-admin" },
       body: "{}",
     }),
     env,

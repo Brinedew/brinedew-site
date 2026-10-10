@@ -68,7 +68,7 @@ Reserve-CloudflareWorkerRequests -Count 1 -Operation "cost-plan:$($plan.id):$Act
 
 $client = [Net.Http.HttpClient]::new()
 $client.Timeout = [TimeSpan]::FromSeconds(20)
-$client.DefaultRequestHeaders.Add('x-iconoplasm-admin-token', $token)
+$client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $token)
 $content = [Net.Http.StringContent]::new(($body | ConvertTo-Json -Depth 20 -Compress), [Text.Encoding]::UTF8, 'application/json')
 try {
     # Fixed origin; never forward an administrative token to a caller's URL.

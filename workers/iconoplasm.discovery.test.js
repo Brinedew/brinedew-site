@@ -638,7 +638,7 @@ test("admins may show the full catalog while non-admins cannot", async () => {
     "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1",
     {
       method: "GET",
-      headers: { Cookie: READER, "x-iconoplasm-admin-token": "admin-token" },
+      headers: { Cookie: READER, Authorization: "Bearer admin-token" },
     },
   )
   const payload = await (await invoke(adminRequest, env)).json()

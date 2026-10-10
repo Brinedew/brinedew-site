@@ -197,7 +197,7 @@ export function createReleaseSender(
       method,
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
-      headers: { "x-iconoplasm-admin-token": token, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     const text = await response.text()

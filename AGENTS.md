@@ -59,9 +59,11 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
   the rest. A reader's own action runs to the wall. On 2026-10-09 step 1's new
   route had no shedding, and a batch spent the whole 100,000-row write wall.
 - **Attach auth to each route**, never to a path prefix. The legacy admin
-  routes behind the fall-through keep their own checks (admin sessions, the
-  `X-Iconoplasm-Admin-Token` header). The factory's routes take the admin
-  token as a standard bearer token (`hono/bearer-auth`).
+  routes behind the fall-through keep their own check: an admin session, or
+  the admin token. The admin token has one spelling everywhere, a standard
+  bearer token (`Authorization: Bearer`); the factory's routes check it with
+  `hono/bearer-auth`. A second header for the same secret is what cost
+  B-1079 a day, so don't add one (B-1080).
 - **When a step touches a legacy route, move it to Hono.** The aim is an
   empty `if` chain.
 
