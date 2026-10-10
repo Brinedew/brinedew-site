@@ -1,8 +1,14 @@
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const D1_UPSERT_TRANSACTION_SIZE = 10
-const MAX_ROWS_WRITTEN_PER_UPSERT = 4
-// A catalogue row and its counter triggers (4), plus its publication event (1).
-const CATALOG_ROWS_WRITTEN_PER_CHANGE = 5
+// A changed Essence row with its index entries, as D1 counts them. Measured on
+// 2026-10-10 (B-1079): 9,670 changed rows wrote exactly 48,350 rows. A row the
+// site already holds writes nothing (B-1064), so this is the worst case.
+const ESSENCE_ROWS_WRITTEN_PER_CHANGE = 5
+// A new catalogue row with its indexes and counter triggers (about 10), plus its
+// publication event (4). Measured (B-1079): 500 events wrote 2,000 rows on
+// 2026-10-08; 725 changed rows wrote 2,175 on 10-09; 1,193 rows, about 600 of
+// them new, wrote 7,887 on 10-07. An update costs 3 + 4; a new gene is the worst case.
+const CATALOG_ROWS_WRITTEN_PER_CHANGE = 14
 // B-1055: a catalogue change is a publication change. Until 2026-10-09 neither
 // catalogue route wrote an event, so the Actions publisher never rebuilt the
 // gene: 600 genes added on 10-07 had no page, and 613 removed on 10-08 kept
@@ -383,7 +389,7 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
       const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
       const outcomes = await env.ICONOPLASM_DB.batch(transaction, {
-        maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
+        maxRowsWritten: transaction.length * ESSENCE_ROWS_WRITTEN_PER_CHANGE,
       })
       transaction.forEach((_statement, index) => {
         upserted[offset + index].changed = Number(outcomes?.[index]?.meta?.changes || 0) > 0

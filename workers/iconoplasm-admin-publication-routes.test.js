@@ -329,9 +329,9 @@ test("essence upsert uses quota-reserved bounded transactions and can defer read
       maxRowsWritten: options.maxRowsWritten,
     })),
     [
-      { size: 10, maxRowsWritten: 40 },
-      { size: 10, maxRowsWritten: 40 },
-      { size: 5, maxRowsWritten: 20 },
+      { size: 10, maxRowsWritten: 50 },
+      { size: 10, maxRowsWritten: 50 },
+      { size: 5, maxRowsWritten: 25 },
     ],
   )
   assert.equal(readModelCalls, 0)
