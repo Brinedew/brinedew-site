@@ -50,6 +50,7 @@ import {
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
 import { catalogueGeneId } from "../gene-text-write.js"
+import { plainBodyObject } from "../../lib/iconoplasm-body-object-test-support.js"
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 
@@ -181,8 +182,10 @@ function installMemoryBodyStorage(t) {
   // Only Bunny's private body host is faked; anything else (Miniflare's own
   // loopback to workerd) goes through the real fetch.
   globalThis.fetch = async (url, init = {}) => {
-    const key = String(url?.url || url)
-    if (!key.includes(`/${STORAGE_ZONE}/`)) return originalFetch(url, init)
+    const address = String(url?.url || url)
+    const prefix = `/${STORAGE_ZONE}/`
+    if (!address.includes(prefix)) return originalFetch(url, init)
+    const key = address.slice(address.indexOf(prefix) + prefix.length)
     const method = String(init.method || "GET").toUpperCase()
     if (method === "PUT") {
       objects.set(key, Uint8Array.from(init.body))
@@ -197,6 +200,15 @@ function installMemoryBodyStorage(t) {
       ? new Response(bytes, { status: 200, headers: { etag: '"test-etag"' } })
       : new Response(null, { status: 404 })
   }
+  return objects
+}
+
+// A system seed whose body really exists in the memory zone: the projection
+// copies every accepted text into the plain tables (B-1065 write-through).
+async function seededBody(objects, sequence, text) {
+  const body = { ...storage(sequence), ...(await plainBodyObject(text)) }
+  objects.set(body.object_key, body.bytes)
+  return body
 }
 
 function base64(bytes) {
@@ -219,7 +231,7 @@ test(
   "one ordinary caretaker save writes no more D1 rows than B-859's measured ceiling",
   { timeout: 240000 },
   async (t) => {
-    installMemoryBodyStorage(t)
+    const bodies = installMemoryBodyStorage(t)
     const require = createRequire(import.meta.url)
     const { Miniflare, convertV4MiniflareOptions } = createRequire(
       require.resolve("wrangler/package.json"),
@@ -269,7 +281,7 @@ test(
         createdByAccountId: ADMIN,
       })
       await registerGeneIdentity(authoring, { geneId: GENE, canonicalSymbol: SYMBOL, now })
-      const seedStorage = storage(1)
+      const seedStorage = await seededBody(bodies, 1, "The factory text for B859COST.")
       await seedSystemManifestation(authoring, {
         geneId: GENE,
         storage: seedStorage,
@@ -289,7 +301,7 @@ test(
       })
       await seedSystemManifestation(authoring, {
         geneId: SYSTEM_GENE,
-        storage: storage(3),
+        storage: await seededBody(bodies, 3, "The factory text for B859SYS."),
         expectedHeadVersion: 0,
         expectedCanonicalRevisionId: null,
         manifestationId: "manifestation_seed_b859sys",
@@ -338,6 +350,8 @@ test(
             ICONOPLASM_DB: primary,
             ICONOPLASM_AUTHORING_DB: authoring,
             ICONOPLASM_CARD_PUBLICATION: coordinator,
+            ICONOPLASM_AUTHORING_STORAGE_ZONE: STORAGE_ZONE,
+            ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "b859-cost-password",
           },
           25,
         )

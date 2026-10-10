@@ -278,7 +278,7 @@ test("tampered hashes, inactive genes and missing Tags fail closed", async (t) =
   assert.equal(proseRead.tags, "")
   assert.equal(proseRead.tags_fields_json, null)
 
-  h.run("UPDATE icono_gene_identities SET status = 'disabled' WHERE canonical_symbol = 'MFNG'")
+  h.run("UPDATE icono_gene_identities SET status = 'retired' WHERE canonical_symbol = 'MFNG'")
   await rejects(validateExactGenerationSource(h.env, source), "GENERATION_SOURCE_GENE_INACTIVE")
   await rejects(
     resolveCanonicalGenerationSource(h.env, { geneSymbol: "MFNG" }),

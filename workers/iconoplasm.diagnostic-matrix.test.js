@@ -9,45 +9,21 @@ class StaticAuthoringStatement {
     return this
   }
 
+  // One gene text from the plain tables of authoring migration 0024 (B-1065).
   async first() {
     return {
       gene_id: "gene_aff2_0001",
+      canonical_symbol: "AFF2",
       gene_status: "active",
-      manifestation_id: "manifestation_aff2_0001",
-      manifestation_status: "active",
-      manifestation_revision_id: "revision_aff2_0001",
-      body_sha256: "a".repeat(64),
-      body_bytes: 32,
-      sample_label: "AFF2-1",
-      sample_number: 1,
-      sample_text_sha256: "c".repeat(64),
-      revision_status: "active",
-      revision_object_key:
-        "private/manifestations/v1/aa/mbody_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin",
-      revision_verified_at: "2026-08-30 00:00:00",
-      canonical_selection_id: "selection_aff2_0001",
-      selected_manifestation_id: "manifestation_aff2_0001",
-      selected_revision_id: "revision_aff2_0001",
-      selection_head_version: 1,
-      selection_gene_revision: 1,
-      manifestation_derivative_id: "derivative_aff2_0001",
-      derivative_status: "complete",
-      derivative_source_body_sha256: "a".repeat(64),
-      derivative_body_sha256: "b".repeat(64),
-      derivative_body_bytes: 48,
-      derivative_tags_sha256: "1".repeat(64),
-      derivative_tags_bytes: 20,
-      derivative_fields_sha256: "2".repeat(64),
-      derivative_fields_bytes: 27,
-      derivative_recipe_id: "taggerizer",
-      derivative_recipe_version: "1",
-      derivative_provider_id: "test-provider",
-      derivative_model_id: "test-tagger",
-      derivative_tagger_config_sha256: "d".repeat(64),
-      derivative_provenance_status: "generated",
-      derivative_object_key:
-        "private/manifestations/v1/bb/mbody_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bin",
-      derivative_verified_at: "2026-08-30 00:00:00",
+      origin: "factory",
+      text_id: "revision_aff2_0001",
+      line_id: null,
+      version: 1,
+      text: "AFF2 keeps a quiet ledger.",
+      text_sha256: "a".repeat(64),
+      tags: "quiet_ledger, ink_cuffs",
+      fields_json: "{}",
+      readers_see: 0,
     }
   }
 }

@@ -4,9 +4,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { plainBodyObject } from "./lib/iconoplasm-body-object-test-support.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
-import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const SOURCE_SHA = "a".repeat(64)
@@ -14,12 +12,6 @@ const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
 
 function base64(bytes) {
   return Buffer.from(bytes).toString("base64")
-}
-
-// Bodies are stored as plain text (B-859), so the Worker under test has no key.
-async function plainStored(text) {
-  const body = await plainBodyObject(text)
-  return { ...body, prose: body.text, ciphertext: body.bytes }
 }
 
 function defaultGeneContext() {
@@ -34,6 +26,8 @@ function defaultGeneContext() {
   }
 }
 
+// The gene-text tables of authoring migration 0024 (B-1065), as one row: every
+// read the image-edit flows make is the plain text of one gene.
 class FakeAuthoringStatement {
   constructor(authority, sql) {
     this.authority = authority
@@ -56,9 +50,8 @@ class FakeAuthoringStatement {
 }
 
 class FakeAuthoringDb {
-  constructor(sourceDb, objects) {
+  constructor(sourceDb) {
     this.sourceDb = sourceDb
-    this.objects = objects
     this.cachedRow = null
   }
 
@@ -70,92 +63,23 @@ class FakeAuthoringDb {
     if (this.cachedRow) return this.cachedRow
     const context = this.sourceDb.geneContext || defaultGeneContext()
     const symbol = String(context.gene_symbol || "A1BG").toUpperCase()
-    const geneId = `gene_${symbol.toLowerCase()}_0001`
-    const manifestationId = `manifestation_${symbol.toLowerCase()}_0001`
-    const revisionId = `revision_${symbol.toLowerCase()}_0001`
-    const derivativeId = `derivative_${symbol.toLowerCase()}_0001`
-    const revision = await plainStored(context.manifestation || "A manifestation body.")
-    const tags = String(context.manifestation_tags || "")
-    const preparedTags = tags
-      ? await prepareManifestationTagsPayload({
-          tagsText: tags,
-          fieldsJson: {},
-          tagsSha256: await sha256Hex(tags),
-          fieldsSha256: await sha256Hex("{}"),
-        })
-      : null
-    const derivative = tags ? await plainStored(preparedTags.output_plain) : null
-    const revisionObjectKey =
-      "private/manifestations/v1/aa/mbody_11111111111111111111111111111111.bin"
-    const derivativeObjectKey =
-      "private/manifestations/v1/bb/mbody_22222222222222222222222222222222.bin"
-    this.objects.set(revisionObjectKey, revision.ciphertext)
-    if (derivative) this.objects.set(derivativeObjectKey, derivative.ciphertext)
+    const text = String(context.manifestation || "A manifestation body.")
     this.cachedRow = {
+      gene_id: `gene_${symbol.toLowerCase()}_0001`,
       canonical_symbol: symbol,
-      gene_id: geneId,
       gene_status: "active",
-      manifestation_id: manifestationId,
-      manifestation_status: "active",
-      manifestation_revision_id: revisionId,
-      body_sha256: revision.body_sha256,
-      body_bytes: revision.body_bytes,
-      sample_label: String(context.sample_label || ""),
-      sample_number:
-        context.sample_number == null ? null : Math.max(0, Number(context.sample_number || 0) || 0),
-      sample_text_sha256: String(context.sample_text_hash || ""),
-      revision_status: "active",
-      revision_object_key: revisionObjectKey,
-      revision_ciphertext_sha256: revision.ciphertext_sha256,
-      revision_ciphertext_bytes: revision.ciphertext_bytes,
-      revision_body_iv_base64: revision.body_iv_base64,
-      revision_wrapped_dek_base64: revision.wrapped_dek_base64,
-      revision_wrap_iv_base64: revision.wrap_iv_base64,
-      revision_key_version: revision.key_version,
-      revision_aad_version: revision.aad_version,
-      revision_verified_at: "2026-08-30 00:00:00",
-      canonical_selection_id: `selection_${symbol.toLowerCase()}_0001`,
-      selected_manifestation_id: manifestationId,
-      selected_revision_id: revisionId,
-      selection_head_version: 1,
-      selection_gene_revision: 1,
-      manifestation_derivative_id: derivative ? derivativeId : null,
-      derivative_status: derivative ? "complete" : null,
-      derivative_source_body_sha256: derivative ? revision.body_sha256 : null,
-      derivative_body_sha256: derivative?.body_sha256 || null,
-      derivative_body_bytes: derivative?.body_bytes || null,
-      derivative_tags_sha256: preparedTags?.tags_sha256 || null,
-      derivative_tags_bytes: preparedTags?.tags_bytes || null,
-      derivative_fields_sha256: preparedTags?.fields_sha256 || null,
-      derivative_fields_bytes: preparedTags?.fields_bytes || null,
-      derivative_recipe_id: derivative ? "taggerizer" : null,
-      derivative_recipe_version: derivative ? "1" : null,
-      derivative_provider_id: derivative ? "test-provider" : null,
-      derivative_model_id: derivative ? "test-tagger" : null,
-      derivative_tagger_config_sha256: derivative ? "e".repeat(64) : null,
-      derivative_provenance_status: derivative ? "generated" : null,
-      derivative_object_key: derivative ? derivativeObjectKey : null,
-      derivative_ciphertext_sha256: derivative?.ciphertext_sha256 || null,
-      derivative_ciphertext_bytes: derivative?.ciphertext_bytes || null,
-      derivative_body_iv_base64: derivative?.body_iv_base64 || null,
-      derivative_wrapped_dek_base64: derivative?.wrapped_dek_base64 || null,
-      derivative_wrap_iv_base64: derivative?.wrap_iv_base64 || null,
-      derivative_key_version: derivative?.key_version || null,
-      derivative_aad_version: derivative?.aad_version || null,
-      derivative_verified_at: derivative ? "2026-08-30 00:00:00" : null,
+      origin: "factory",
+      text_id: `revision_${symbol.toLowerCase()}_0001`,
+      line_id: null,
+      version: 1,
+      text,
+      text_sha256: await sha256Hex(text),
+      tags: String(context.manifestation_tags || "") || null,
+      fields_json: context.manifestation_tags ? "{}" : null,
+      readers_see: 0,
     }
     return this.cachedRow
   }
-}
-
-function authoringStorageResponse(env, input, init = {}) {
-  const url = new URL(String(input))
-  if (url.hostname !== "storage.test.invalid") return null
-  assert.equal(init.method, "GET")
-  const pathParts = url.pathname.split("/").filter(Boolean)
-  assert.equal(pathParts.shift(), "authoring-test-zone")
-  const bytes = env.__authoringObjects.get(pathParts.join("/"))
-  return bytes ? new Response(bytes, { status: 200 }) : new Response(null, { status: 404 })
 }
 
 class FakeStatement {
@@ -488,16 +412,10 @@ function buildPortraitStorage() {
 const SIGNED_IN = await sessionCookieFor({ user_id: "user-1", username: "tester" })
 
 function buildEnv(db = new FakeDb()) {
-  const authoringObjects = new Map()
   const env = {
     DB: db,
     ICONOPLASM_DB: db,
-    ICONOPLASM_AUTHORING_DB: new FakeAuthoringDb(db, authoringObjects),
-    ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
-    ICONOPLASM_AUTHORING_STORAGE_ZONE: "authoring-test-zone",
-    ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authoring-test-password",
-    ICONOPLASM_AUTHORING_STORAGE_TIMEOUT_MS: "500",
-    __authoringObjects: authoringObjects,
+    ICONOPLASM_AUTHORING_DB: new FakeAuthoringDb(db),
     ICONOPLASM_PORTRAITS: buildPortraitStorage(),
     KV: {
       async get() {
@@ -1101,8 +1019,6 @@ async function openAiDefaultModel(env) {
 
 function fakeOpenAiFetch(fetchCalls, env) {
   return async (input, init = {}) => {
-    const authoringBody = authoringStorageResponse(env, input, init)
-    if (authoringBody) return authoringBody
     const url = String(input)
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/edits") {
@@ -1419,8 +1335,6 @@ function recordingProviderFetch(env, recorded) {
       headers: { "Content-Type": "application/json" },
     })
   return async (input, init = {}) => {
-    const authoringBody = authoringStorageResponse(env, input, init)
-    if (authoringBody) return authoringBody
     const url = String(input)
     const method = String(init.method || "GET").toUpperCase()
     const create = (response) => {
