@@ -390,7 +390,10 @@ import {
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
-import { createOperationCostAccountUsageReader } from "./iconoplasm/operation-cost-account-usage.js"
+import {
+  createOperationCostAccountUsageReader,
+  readD1WindowUsage,
+} from "./iconoplasm/operation-cost-account-usage.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -1942,6 +1945,13 @@ const app = createIconoplasmApp({
     })
     return factoryUsageReader.refresh()
   },
+  // The account's D1 rows in one window (B-1059): one analytics request per ask.
+  windowUsage: (env, window) =>
+    readD1WindowUsage({
+      accountId: env.CLOUDFLARE_ACCOUNT_ID,
+      token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+      ...window,
+    }),
 })
 
 export default {
