@@ -40,6 +40,7 @@ import {
   openCatalogDb,
   seedAccounts,
 } from "./daily-selection-pool-test-d1.js"
+import { TEST_SESSION_SECRET, signInRequest } from "./test-helpers/sealed-session-cookie.js"
 
 const ORIGIN = "https://geneguessr.brinedew.bio"
 const OUT = process.env.ROWS_OUT || path.join(import.meta.dirname, "..", "artifacts", "b-959")
@@ -66,24 +67,26 @@ after(() => {
   )
 })
 
-// A Worker env on `db` whose sessions answer for the accounts in `sessions` (cookie value to
+// Who is signed in on each test browser (B-1069: the request carries a real sealed cookie).
+const peopleOf = new WeakMap()
+
+// A Worker env on `db` whose browsers are signed in as the accounts in `sessions` (cookie value to
 // user id), and whose result ledger returns what `results` holds for a user. This is as much of
 // the Durable Object as the stats routes use.
 function accountEnv(db, { sessions = new Map(), results = new Map() } = {}) {
   const harness = geneguessrWorkerEnv(db)
+  harness.env.SESSION_SECRET = TEST_SESSION_SECRET
+  peopleOf.set(
+    harness.env,
+    Object.fromEntries(
+      [...sessions].map(([cookie, userId]) => [
+        cookie,
+        { user_id: userId, username: `name-${userId}`, tier: "registered" },
+      ]),
+    ),
+  )
   const base = harness.env.GAME_SESSIONS.get
   harness.env.GAME_SESSIONS.get = (id) => {
-    if (id.startsWith("session:")) {
-      const userId = sessions.get(id.slice("session:".length))
-      return {
-        async fetch(input) {
-          const url = new URL(typeof input === "string" ? input : input.url)
-          if (url.pathname === "/store") return Response.json({ ok: true })
-          if (!userId) return new Response("none", { status: 404 })
-          return Response.json({ user_id: userId, username: `name-${userId}`, tier: "registered" })
-        },
-      }
-    }
     if (id.startsWith("user_")) {
       const userId = id.slice("user_".length)
       return {
@@ -113,11 +116,14 @@ async function request(env, pathAndQuery, { method = "GET", cookie, body } = {})
   for (const logger of ["log", "warn", "info", "error"]) mock.method(console, logger, () => {})
   try {
     const response = await worker.fetch(
-      new Request(`${ORIGIN}${pathAndQuery}`, {
-        method,
-        headers: { ...(cookie ? { Cookie: cookie } : {}), "Content-Type": "application/json" },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      }),
+      await signInRequest(
+        new Request(`${ORIGIN}${pathAndQuery}`, {
+          method,
+          headers: { ...(cookie ? { Cookie: cookie } : {}), "Content-Type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        }),
+        peopleOf.get(env),
+      ),
       env,
       { waitUntil() {} },
     )

@@ -364,6 +364,14 @@ jobs:
       # `wrangler deploy`. Ask Cloudflare which tag and which triggers are live
       # first, and switch this release to `wrangler deploy` when either differs
       # from the checked-in config (the toml owns the trigger set).
+      # B-1069: sign-in seals its cookies with SESSION_SECRET. A stateful Worker
+      # without it can't sign anyone in, so no release installs one.
+      - name: Require the sign-in secret before deploying the stateful Worker
+        timeout-minutes: 2
+        run: |
+          pnpm exec wrangler secret list --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml > /tmp/stateful-secret-names.json
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; const names=new Set(JSON.parse(readFileSync("/tmp/stateful-secret-names.json","utf8")).map(item=>item.name)); if(!names.has("SESSION_SECRET")) throw new Error("Missing required Worker secret: SESSION_SECRET (B-1069)");'
+
       - name: Detect a pending Durable Object migration or cron trigger drift
         id: deploy_mode
         if: inputs.data_maintenance != true

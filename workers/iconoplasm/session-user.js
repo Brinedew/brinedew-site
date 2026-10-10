@@ -1,8 +1,5 @@
-import { parseCookies } from "../auth.js"
-import {
-  isDurableObjectDailyDurationLimitError,
-  secondsUntilCloudflareDailyReset,
-} from "../lib/cloudflare-availability.js"
+import { secondsUntilCloudflareDailyReset } from "../lib/cloudflare-availability.js"
+import { readSession } from "../lib/sealed-session.js"
 
 export class IconoplasmSessionUnavailableError extends Error {
   constructor({ dailyLimit = false, retryAfter = 60 } = {}) {
@@ -15,43 +12,20 @@ export class IconoplasmSessionUnavailableError extends Error {
   }
 }
 
-// A missing/expired credential is a guest. A failed session service cannot
-// establish that verdict, and must not clear identity or authorize a mutation.
+// A missing, expired or revoked credential is a guest. An account check that
+// D1 could not answer cannot establish that verdict, and must not clear
+// identity or authorize a mutation.
 export async function iconoplasmSessionUser(request, env) {
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  const sessionId = String(cookies.session || "").trim()
-  if (!sessionId) return null
-  if (!env.GAME_SESSIONS) throw new IconoplasmSessionUnavailableError()
-  try {
-    const id = env.GAME_SESSIONS.idFromName(`session:${sessionId}`)
-    const response = await env.GAME_SESSIONS.get(id).fetch("http://internal/get")
-    if ([401, 403, 404].includes(response.status)) return null
-    if (!response.ok) {
-      throw new IconoplasmSessionUnavailableError({
-        retryAfter: response.headers.get("Retry-After"),
-      })
-    }
-    const session = await response.json()
-    // The existing /get contract returns {} after a session was removed.
-    if (
-      session &&
-      typeof session === "object" &&
-      !Array.isArray(session) &&
-      Object.keys(session).length === 0
-    )
-      return null
-    const userId = String(session?.user_id || "").trim()
-    if (!userId) throw new IconoplasmSessionUnavailableError()
-    return {
-      user_id: userId,
-      account_id: String(session?.account_id || "").trim() || null,
-      username: String(session?.username || "").trim() || null,
-      avatar_url: String(session?.avatar_url || "").trim() || null,
-    }
-  } catch (error) {
-    if (error instanceof IconoplasmSessionUnavailableError) throw error
-    throw new IconoplasmSessionUnavailableError({
-      dailyLimit: isDurableObjectDailyDurationLimitError(error),
-    })
+  const read = await readSession(request, env)
+  if (read.status === "unavailable") {
+    throw new IconoplasmSessionUnavailableError({ dailyLimit: read.dailyLimit })
+  }
+  if (read.status !== "signed_in") return null
+  const session = read.session
+  return {
+    user_id: String(session.user_id),
+    account_id: String(session.account_id || "").trim() || null,
+    username: String(session.username || "").trim() || null,
+    avatar_url: String(session.avatar_url || "").trim() || null,
   }
 }

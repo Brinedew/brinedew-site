@@ -8,8 +8,8 @@
 //
 // The Worker runs as it does in production: its `scheduled` cron and its routes, on a real local
 // D1 (Miniflare) with the real GeneGuessr migrations. The only fakes are the two third parties it
-// talks to over the network, Discord and Bunny Storage, and the Discord session that says who the
-// admin is.
+// talks to over the network, Discord and Bunny Storage. The admin is signed in by a real sealed
+// session cookie (B-1069).
 //
 // ARCHITECTURE FENCE [GG-002]: these tests deliberately distinguish an HTTP acknowledgement
 // from exact retrievability of the uploaded image bytes. A storage answer of 200 (Bunny's
@@ -42,6 +42,7 @@ import {
   productionShapedCatalogRows,
   seedCatalog,
 } from "./daily-selection-pool-test-d1.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const ORIGIN = "https://geneguessr.brinedew.bio"
 const CHANNEL = "987654321"
@@ -121,11 +122,7 @@ function newWorld({ discordStatus = 200, bunny = {}, withKv = {} } = {}) {
           list_complete: true,
         }),
       },
-      // The session authority: who the cookie belongs to.
-      GAME_SESSIONS: {
-        idFromName: (name) => name,
-        get: () => ({ fetch: async () => Response.json({ user_id: state.admin }) }),
-      },
+      SESSION_SECRET: TEST_SESSION_SECRET,
     },
   }
   world = state
@@ -211,8 +208,12 @@ async function request(path, { method = "GET", headers = {}, body, cron = false 
 }
 const postRecap = (day) =>
   request(`/api/discord/post-recap?day=${day}`, { method: "POST", cron: true })
-const asAdmin = (path, options = {}) =>
-  request(path, { ...options, headers: { Cookie: "session=admin-session" } })
+// The browser's sealed sign-in cookie names whoever `world.admin` is right now.
+const asAdmin = async (path, options = {}) =>
+  request(path, {
+    ...options,
+    headers: { Cookie: await sessionCookieFor({ user_id: world.admin }) },
+  })
 
 const dayAgo = (days) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
 const recordPuzzle = (day, uniprot = TARGET.uniprot) =>

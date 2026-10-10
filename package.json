@@ -81,6 +81,7 @@
     "hsluv": "^1.0.2",
     "html-to-text": "^10.0.0",
     "isomorphic-git": "^1.41.4",
+    "jose": "^6.2.12",
     "lightningcss": "^1.33.0",
     "linkedom": "^0.18.13",
     "lit": "3.3.3",

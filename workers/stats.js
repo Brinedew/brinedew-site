@@ -4,6 +4,7 @@
  */
 
 import { resolveAuthenticatedSession } from "./auth.js"
+import { sealSession, sessionCookie } from "./lib/sealed-session.js"
 import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import { boardEntry, readLeaderboard } from "./lib/leaderboard-streaks.js"
@@ -56,7 +57,7 @@ function getEffectiveCurrentStreak(currentStreak, lastPlayedDate, today) {
 async function requireAuthenticatedSession(request, env) {
   const resolved = await resolveAuthenticatedSession(request, env)
   if (!resolved.ok) return resolved
-  return { ...resolved, sessionStub: resolved.stub, userId: resolved.session.user_id }
+  return { ...resolved, userId: resolved.session.user_id }
 }
 
 // THE ONLY projection from a player's durable completed rounds to D1 stats.
@@ -346,36 +347,15 @@ export async function handleSetLeaderboardVisibility(request, env) {
       .bind(parsed, Date.now(), auth.userId)
       .run()
 
-    try {
-      const updatedSession = {
-        ...auth.session,
-        leaderboard_opt_in: parsed === 1,
-      }
-      await withObservedGameSessionWrite(
-        env,
-        {
-          operation: "leaderboard_visibility_session_cache",
-          requestPath: "/api/stats/leaderboard-visibility",
-          sessionId: `session:${auth.sessionId}`,
-        },
-        async () => {
-          await auth.sessionStub.fetch(
-            new Request("http://internal/store", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(updatedSession),
-            }),
-          )
-        },
-      )
-    } catch (sessionErr) {
-      console.warn("Failed to update session leaderboard visibility cache:", sessionErr)
-    }
-
-    return Response.json({
-      success: true,
-      leaderboardOptIn: parsed === 1,
-    })
+    // The sealed session carries the choice too, so /api/auth/me shows it at once.
+    const sealed = await sealSession(env, { ...auth.session, leaderboard_opt_in: parsed === 1 })
+    const cookieDomain = new URL(request.url).hostname.endsWith("brinedew.bio")
+      ? ".brinedew.bio"
+      : ""
+    return Response.json(
+      { success: true, leaderboardOptIn: parsed === 1 },
+      { headers: { "Set-Cookie": sessionCookie(sealed, { cookieDomain }) } },
+    )
   } catch (err) {
     console.error("Error in handleSetLeaderboardVisibility:", err)
     return Response.json({ error: "Failed to update leaderboard visibility" }, { status: 500 })

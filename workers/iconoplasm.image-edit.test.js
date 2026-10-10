@@ -7,6 +7,7 @@ import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotD
 import { plainBodyObject } from "./lib/iconoplasm-body-object-test-support.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const SOURCE_SHA = "a".repeat(64)
 const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
@@ -457,24 +458,6 @@ class FakeDb {
   }
 }
 
-function buildSessionBinding(session) {
-  return {
-    idFromName(name) {
-      return name
-    },
-    get() {
-      return {
-        async fetch() {
-          return new Response(JSON.stringify(session), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        },
-      }
-    },
-  }
-}
-
 function buildPortraitStorage() {
   return {
     puts: [],
@@ -501,7 +484,10 @@ function buildPortraitStorage() {
   }
 }
 
-function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "tester" }) {
+// The signed-in browser every request in this file sends (B-1069: a real sealed session cookie).
+const SIGNED_IN = await sessionCookieFor({ user_id: "user-1", username: "tester" })
+
+function buildEnv(db = new FakeDb()) {
   const authoringObjects = new Map()
   const env = {
     DB: db,
@@ -520,7 +506,7 @@ function buildEnv(db = new FakeDb(), session = { user_id: "user-1", username: "t
       async put() {},
       async delete() {},
     },
-    GAME_SESSIONS: buildSessionBinding(session),
+    SESSION_SECRET: TEST_SESSION_SECRET,
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
     // Provider polling defaults to 10s initial wait + 10s interval.
     // Tests override to 0 so polling doesn't block the test suite.
@@ -558,7 +544,7 @@ function capturingContext() {
 // the POST returns 200 with the job (or 502 with an error). For tests
 // that want to assert the failure path, the helper returns the failure
 // response as-is.
-async function createKreaImageEditJobAndAwait({ env, ctx, body, cookie = "session=abc123" }) {
+async function createKreaImageEditJobAndAwait({ env, ctx, body, cookie = SIGNED_IN }) {
   const create =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
@@ -654,7 +640,7 @@ test("last-used model is remembered without reordering the providers list, but o
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
@@ -671,7 +657,7 @@ test("last-used model is remembered without reordering the providers list, but o
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
           "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers?op=image_edit",
-          { headers: { Cookie: "session=abc123" } },
+          { headers: { Cookie: SIGNED_IN } },
         ),
         env,
         { waitUntil() {} },
@@ -707,7 +693,7 @@ test("last-used model is remembered without reordering the providers list, but o
           "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
           {
             method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
             body: JSON.stringify({
               provider_id: "krea",
               model: "google/nano-banana-pro",
@@ -747,7 +733,7 @@ test("last-used model is remembered without reordering the providers list, but o
           "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/jobs",
           {
             method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+            headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
             body: JSON.stringify({
               provider_id: "krea",
               model: "google/nano-banana-2",
@@ -870,7 +856,7 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
@@ -1019,7 +1005,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/image-edit/providers",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+          headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
           body: JSON.stringify({
             provider_id: "krea",
             api_key: "krea-test-secret",
@@ -1098,7 +1084,7 @@ async function workerRequest(env, path, { method = "GET", body } = {}) {
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(`${WORKER_ORIGIN}${path}`, {
         method,
-        headers: { "Content-Type": "application/json", Cookie: "session=abc123" },
+        headers: { "Content-Type": "application/json", Cookie: SIGNED_IN },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
       env,
