@@ -13,6 +13,7 @@ import {
   MUTATION_MAX_TRACKED_IDENTITIES_AT_70K_PER_DAY,
   MUTATION_USER_ACTION_CEILING,
 } from "../lib/iconoplasm-mutation-lane-reservations.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "../test-helpers/sealed-session-cookie.js"
 
 class BoundStatement {
   constructor(raw, sql, args = []) {
@@ -882,18 +883,16 @@ test("a cold ten-symbol collecting batch writes at most 17 rows and its warm ret
         },
       }),
     },
-    GAME_SESSIONS: {
-      idFromName: () => "session",
-      get: () => ({ fetch: async () => Response.json({ user_id: "reader-cold" }) }),
-    },
+    SESSION_SECRET: TEST_SESSION_SECRET,
   }
+  const cookie = await sessionCookieFor({ user_id: "reader-cold" })
   const send = (batchId) =>
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/discoveries/batch",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: "session=test" },
+          headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({
             batch_id: batchId,
             encounters: symbols.map((symbol, index) => ({

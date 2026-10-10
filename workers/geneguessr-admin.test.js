@@ -4,7 +4,7 @@
 // day, and the one-off replacement of a pick whose structure is unreachable. A request goes
 // through `worker.fetch` and the real routes, on a real local D1 built from the real GeneGuessr
 // migrations and seeded with the production shape (19,110 proteins, 3,900 surname families).
-// Only the Discord session authority (who the cookie belongs to) is stood in for.
+// The admin is signed in by a real sealed session cookie (B-1069).
 //
 // Failure modes this file proves, each written before the code that fixes it:
 //   A1  the year schedule is a partial 200, repeats a protein or a surname, or costs a statement
@@ -27,6 +27,7 @@ import {
   productionShapedCatalogRows,
   seedCatalog,
 } from "./daily-selection-pool-test-d1.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const ORIGIN = "https://geneguessr.brinedew.bio"
 const SALT = "admin-test-salt"
@@ -70,7 +71,7 @@ const quiet = () => {
 }
 
 // A world for one request: the real D1 (metered, optionally wrapped to fail), a KV that lists
-// and remembers every write, and a session authority that says the cookie is `admin`.
+// and remembers every write, and the account (`admin`) that the sign-in cookie names.
 function newWorld({ wrap, kvEntries = {}, admin = "admin-user" } = {}) {
   const metered = meteredDb(db)
   const harness = geneguessrWorkerEnv(wrap ? wrap(metered) : metered, { kvEntries })
@@ -91,25 +92,23 @@ function newWorld({ wrap, kvEntries = {}, admin = "admin-user" } = {}) {
           list_complete: true,
         }),
       },
-      GAME_SESSIONS: {
-        idFromName: (name) => name,
-        get: () => ({ fetch: async () => Response.json({ user_id: admin }) }),
-      },
+      SESSION_SECRET: TEST_SESSION_SECRET,
     },
+    admin,
   }
 }
 
-async function call(
-  path,
-  { world = newWorld(), method = "GET", cookie = "session=admin-session", body } = {},
-) {
+// The request carries the sealed sign-in cookie of the world's `admin` account, unless a test
+// passes its own cookie, or `null` for a browser that is not signed in.
+async function call(path, { world = newWorld(), method = "GET", cookie, body } = {}) {
+  const signedIn = cookie === undefined ? await sessionCookieFor({ user_id: world.admin }) : cookie
   quiet()
   try {
     const response = await worker.fetch(
       new Request(`${ORIGIN}${path}`, {
         method,
         headers: {
-          ...(cookie ? { Cookie: cookie } : {}),
+          ...(signedIn ? { Cookie: signedIn } : {}),
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,

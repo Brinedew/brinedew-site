@@ -15,6 +15,7 @@ import {
   stableGeneObjectPath,
   stableGeneStorageEnv,
 } from "./test-helpers/stable-gene-objects.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 // Real SQLite under the route handlers. Discovery fixtures are seeded into the
 // compact representation (membership bitmap, chronology events, shared arrays)
@@ -308,24 +309,6 @@ class FakeDb {
   }
 }
 
-class FakeGameSessions {
-  constructor(sessions = {}) {
-    this.sessions = sessions
-  }
-
-  idFromName(name) {
-    return String(name || "")
-  }
-
-  get(id) {
-    const session = this.sessions[String(id || "")]
-    return {
-      fetch: async () =>
-        session ? Response.json(session) : new Response("missing", { status: 404 }),
-    }
-  }
-}
-
 function completeMobileCardVM(symbol, version = "test-vm-version") {
   const normalized = String(symbol || "").toUpperCase()
   return {
@@ -430,9 +413,7 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
     ...stableGeneStorageEnv(),
     ICONOPLASM_DB: db,
     ADMIN_DISCORD_USER_ID: "founder-admin",
-    GAME_SESSIONS: new FakeGameSessions({
-      "session:abc": { user_id: "user-123", username: "alex" },
-    }),
+    SESSION_SECRET: TEST_SESSION_SECRET,
     KV: {
       async get(key) {
         return kvStore.get(key) || null
@@ -444,6 +425,10 @@ function buildEnv({ db = new FakeDb(), version = "test-vm-version" } = {}) {
   }
 }
 
+// Signed-in browsers (B-1069: sealed cookies). The founder is the site admin.
+const ALEX = await sessionCookieFor({ user_id: "user-123", username: "alex" })
+const FOUNDER = await sessionCookieFor({ user_id: "founder-admin", username: "founder" })
+
 test("account gallery window returns strict rich cards from one stable object per row without full shelf sort", async () => {
   const db = new FakeDb()
   const response =
@@ -451,7 +436,7 @@ test("account gallery window returns strict rich cards from one stable object pe
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       buildEnv({ db }),
@@ -519,7 +504,7 @@ test("account gallery newest window orders by first discovery, not repeat encoun
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       env,
@@ -556,7 +541,7 @@ test("account gallery newest window puts the newly discovered 101st gene first",
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       env,
@@ -587,7 +572,7 @@ test("shared account gallery window pages non-admin discoveries from the shared 
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2&scope=shared",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       env,
@@ -653,9 +638,6 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
   const env = buildEnv({ db })
   // The admin rebuild is a budgeted mutation, so the budget object is bound (idle day).
   env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE = new FakeDailyBudgetNamespace()
-  env.GAME_SESSIONS = new FakeGameSessions({
-    "session:abc": { user_id: "founder-admin", username: "founder" },
-  })
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
@@ -663,7 +645,7 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
         "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/read-models/shared-discoveries",
         {
           method: "POST",
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: FOUNDER },
         },
       ),
       env,
@@ -689,7 +671,7 @@ test("image-only account gallery window projects compact cards from the stable g
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2&view=image-only",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       buildEnv({ db }),
@@ -748,7 +730,7 @@ test("image-only account gallery ignores a stale legacy portrait-ref snapshot", 
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2&view=image-only",
-        { headers: { Cookie: "session=abc" } },
+        { headers: { Cookie: ALEX } },
       ),
       env,
     )
@@ -767,7 +749,7 @@ test("account gallery window paginates symbol order with a stable cursor", async
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       env,
@@ -777,7 +759,7 @@ test("account gallery window paginates symbol order with a stable cursor", async
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&after=${encodeURIComponent(firstPayload.next_cursor)}`,
-        { headers: { Cookie: "session=abc" } },
+        { headers: { Cookie: ALEX } },
       ),
       env,
     )
@@ -798,7 +780,7 @@ test("account gallery window paginates symbol order with a stable cursor", async
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2&before=${encodeURIComponent(secondPayload.previous_cursor)}`,
-        { headers: { Cookie: "session=abc" } },
+        { headers: { Cookie: ALEX } },
       ),
       env,
     )
@@ -818,7 +800,7 @@ test("account gallery window traverses newest order forward and backward", async
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
           `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2${query}`,
-          { headers: { Cookie: "session=abc" } },
+          { headers: { Cookie: ALEX } },
         ),
         env,
       )
@@ -885,7 +867,7 @@ test("account gallery window rejects malformed, mismatched, and legacy cursors e
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=symbol&limit=2",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       env,
@@ -901,7 +883,7 @@ test("account gallery window rejects malformed, mismatched, and legacy cursors e
   for (const url of urls) {
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-        new Request(url, { headers: { Cookie: "session=abc" } }),
+        new Request(url, { headers: { Cookie: ALEX } }),
         env,
       )
     const payload = await response.json()
@@ -916,7 +898,7 @@ test("account gallery window rejects metric orders until a real order index exis
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=votes&limit=2",
         {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         },
       ),
       buildEnv(),
@@ -936,7 +918,7 @@ test("account gallery window lists a missing stable object and fails loud on sto
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
-        { headers: { Cookie: "session=abc" } },
+        { headers: { Cookie: ALEX } },
       ),
       env,
     )
@@ -959,7 +941,7 @@ test("account gallery window lists a missing stable object and fails loud on sto
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=2",
-        { headers: { Cookie: "session=abc" } },
+        { headers: { Cookie: ALEX } },
       ),
       buildEnv({ db: new FakeDb() }),
     )
@@ -1010,7 +992,7 @@ for (const scope of ["personal", "shared"]) {
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
           `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}`,
-          { headers: { Cookie: "session=abc" } },
+          { headers: { Cookie: ALEX } },
         ),
         env,
       )
@@ -1033,7 +1015,7 @@ for (const scope of ["personal", "shared"]) {
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(
           `https://iconoplasm.brinedew.bio/api/iconoplasm/account-gallery-window?order=newest&limit=3${query}&after=${encodeURIComponent(payload.next_cursor)}`,
-          { headers: { Cookie: "session=abc" } },
+          { headers: { Cookie: ALEX } },
         ),
         env,
       )
@@ -1139,7 +1121,7 @@ test("discoveries/me shape=compact returns the bare shelf without enriching it (
   const call = (query) =>
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?${query}`, {
-        headers: { Cookie: "session=abc" },
+        headers: { Cookie: ALEX },
       }),
       env,
     )
@@ -1199,7 +1181,7 @@ test("home reads use a current shelf and ignore a stale one (B-887)", async () =
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request(`https://iconoplasm.brinedew.bio${path}`, {
-          headers: { Cookie: "session=abc" },
+          headers: { Cookie: ALEX },
         }),
         env,
       )

@@ -2,65 +2,58 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { handleGetStats, handleMigrateStats } from "./stats.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
-test("stats preserves canonical session-authority unavailability instead of inventing logout", async () => {
-  const sessionCalls = []
+test("stats preserves session unavailability instead of inventing logout", async () => {
+  // The cookie's account check is due, and D1 cannot answer it.
+  const cookie = await sessionCookieFor({
+    user_id: "player-1",
+    sid: "session-1",
+    account_checked_at: 0,
+  })
+  const statements = []
   const response = await handleGetStats(
-    new Request("https://geneguessr.brinedew.bio/api/stats", {
-      headers: { Cookie: "session=still-present" },
-    }),
+    new Request("https://geneguessr.brinedew.bio/api/stats", { headers: { Cookie: cookie } }),
     {
-      GAME_SESSIONS: {
-        idFromName(name) {
-          assert.equal(name, "session:still-present")
-          return name
-        },
-        get() {
-          return {
-            async fetch(request) {
-              const url = new URL(typeof request === "string" ? request : request.url)
-              sessionCalls.push({ path: url.pathname, method: request.method || "GET" })
-              if (url.pathname === "/auth/resolve") {
-                return Response.json(
-                  { error: "Account status unavailable" },
-                  { status: 503, headers: { "Retry-After": "3600" } },
-                )
-              }
-              return Response.json({})
-            },
-          }
-        },
-      },
+      SESSION_SECRET: TEST_SESSION_SECRET,
+      // The sign-out list answers: this session was not signed out.
+      ICONOPLASM_DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) },
       DB: {
-        prepare() {
-          throw new Error("stats D1 must not run while session authority is unavailable")
+        prepare(sql) {
+          statements.push(sql)
+          throw new Error("D1_ERROR: storage is temporarily unavailable")
+        },
+        batch: async () => {
+          throw new Error("D1_ERROR: storage is temporarily unavailable")
         },
       },
     },
   )
 
   assert.equal(response.status, 503)
-  assert.equal(response.headers.get("Retry-After"), "3600")
+  assert.equal(response.headers.get("Retry-After"), "60")
   assert.deepEqual(await response.json(), {
     error: "Session verification is temporarily unavailable. Try again later.",
     code: "SESSION_AUTHORITY_UNAVAILABLE",
-    retry_after_seconds: 3600,
+    retry_after_seconds: 60,
   })
-  assert.deepEqual(sessionCalls, [{ path: "/auth/resolve", method: "POST" }])
+  // Only the account check reached D1; no stats statement ran.
+  assert.equal(statements.length, 1)
+  assert.doesNotMatch(statements[0], /stats|games/i)
 })
 
 test("legacy import never overwrites games already saved on the account", async () => {
   const response = await handleMigrateStats(
     new Request("https://geneguessr.brinedew.bio/api/migrate-stats", {
       method: "POST",
-      headers: { Cookie: "session=existing", "Content-Type": "application/json" },
+      headers: {
+        Cookie: await sessionCookieFor({ user_id: "player-1" }),
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ played: 2, won: 2, currentStreak: 2, maxStreak: 2 }),
     }),
     {
-      GAME_SESSIONS: {
-        idFromName: (name) => name,
-        get: () => ({ fetch: async () => Response.json({ user_id: "player-1" }) }),
-      },
+      SESSION_SECRET: TEST_SESSION_SECRET,
       DB: {
         prepare: () => ({
           bind: () => ({

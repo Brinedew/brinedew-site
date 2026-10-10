@@ -122,6 +122,7 @@ import {
 } from "./iconoplasm-catalog-dispatch.js"
 import { isAdmin } from "./admin.js"
 import { parseCookies } from "./auth.js"
+import { readSession } from "./lib/sealed-session.js"
 import {
   iconoplasmSessionUser,
   IconoplasmSessionUnavailableError,
@@ -15561,16 +15562,10 @@ async function etagFor(obj) {
 }
 
 async function actor(request, env) {
-  if (!env.GAME_SESSIONS) return "unknown"
   try {
-    const cookies = parseCookies(request.headers.get("Cookie") || "")
-    if (!cookies.session) return "unknown"
-    const id = env.GAME_SESSIONS.idFromName(`session:${cookies.session}`)
-    const stub = env.GAME_SESSIONS.get(id)
-    const resp = await stub.fetch("http://internal/get")
-    if (!resp.ok) return "unknown"
-    const s = await resp.json()
-    return s?.username || s?.user_id || "unknown"
+    const read = await readSession(request, env)
+    if (read.status !== "signed_in") return "unknown"
+    return read.session.username || read.session.user_id || "unknown"
   } catch {
     return "unknown"
   }

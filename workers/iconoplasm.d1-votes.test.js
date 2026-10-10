@@ -107,6 +107,7 @@ import {
   STORAGE_PASSWORD,
   STORAGE_ZONE,
 } from "./test-helpers/fake-discord-and-bunny.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const VOTE_TABLES = [
@@ -316,11 +317,10 @@ async function vote(db, symbol, asset, userId, voteValue) {
   return setGeneVote(db, { symbol, assetSha256: asset, userId, voteValue })
 }
 
-function sessions(user) {
-  return {
-    idFromName: (name) => name,
-    get: () => ({ fetch: async () => Response.json(user) }),
-  }
+// A browser signed in as `user` (B-1069: a real sealed session cookie); an empty
+// `user` is a guest, whose request carries no session cookie at all.
+async function signedInHeaders(user, headers = {}) {
+  return user?.user_id ? { ...headers, Cookie: await sessionCookieFor(user) } : headers
 }
 
 function waitUntilRecorder() {
@@ -339,7 +339,7 @@ async function callApi(
   body,
   { user = { user_id: "reader-1" }, ctx = waitUntilRecorder(), env = {} } = {},
 ) {
-  const headers = { "Content-Type": "application/json", Cookie: "session=s1" }
+  const headers = await signedInHeaders(user, { "Content-Type": "application/json" })
   if (env.admin) headers.Authorization = `Bearer ${ADMIN_TOKEN}`
   const response = await handleApi(
     new Request(`https://iconoplasm.brinedew.bio${path}`, {
@@ -349,7 +349,7 @@ async function callApi(
     }),
     withTestMutationAuthority({
       ICONOPLASM_DB: db,
-      GAME_SESSIONS: sessions(user),
+      SESSION_SECRET: TEST_SESSION_SECRET,
       ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
       ...env.bindings,
     }),
@@ -674,7 +674,7 @@ test("4: the supervote route answers with the supervote and re-elects the gene",
   const response = await handleApi(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/caretaker/genes/BRCA1/supervote", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", Cookie: "session=s1" },
+      headers: await signedInHeaders(user, { "Content-Type": "application/json" }),
       body: JSON.stringify({
         asset_sha256: sha("b"),
         direction: 1,
@@ -683,7 +683,7 @@ test("4: the supervote route answers with the supervote and re-elects the gene",
         expected_supervote_version: 0,
       }),
     }),
-    withTestMutationAuthority({ ICONOPLASM_DB: db, GAME_SESSIONS: sessions(user) }),
+    withTestMutationAuthority({ ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET }),
     ctx,
   )
   const payload = await response.json()
@@ -1181,7 +1181,10 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
   const supervote = await handleApi(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/caretaker/genes/BRCA1/supervote", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", Cookie: "session=s1" },
+      headers: await signedInHeaders(
+        { user_id: "reader-1", account_id: "acct_owner" },
+        { "Content-Type": "application/json" },
+      ),
       body: JSON.stringify({
         asset_sha256: sha("b"),
         direction: 1,
@@ -1192,7 +1195,7 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
     }),
     withTestMutationAuthority({
       ICONOPLASM_DB: db2,
-      GAME_SESSIONS: sessions({ user_id: "reader-1", account_id: "acct_owner" }),
+      SESSION_SECRET: TEST_SESSION_SECRET,
     }),
     ctx,
   )
@@ -1450,11 +1453,11 @@ async function publishImageEdit(db, id, { user = "reader-1" } = {}) {
   const response = await handleApi(
     new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${id}/publish`, {
       method: "POST",
-      headers: { Cookie: "session=s1" },
+      headers: await signedInHeaders({ user_id: user }),
     }),
     withTestMutationAuthority({
       ICONOPLASM_DB: db,
-      GAME_SESSIONS: sessions({ user_id: user }),
+      SESSION_SECRET: TEST_SESSION_SECRET,
     }),
     ctx,
   )
@@ -1862,12 +1865,12 @@ async function routeRequest(
   const response = await handleApi(
     new Request(`https://iconoplasm.brinedew.bio${path}`, {
       method,
-      headers: { "Content-Type": "application/json", Cookie: "session=s1" },
+      headers: await signedInHeaders(user, { "Content-Type": "application/json" }),
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
     withTestMutationAuthority({
       ICONOPLASM_DB: db,
-      GAME_SESSIONS: sessions(user),
+      SESSION_SECRET: TEST_SESSION_SECRET,
       ...bindings,
     }),
     ctx,

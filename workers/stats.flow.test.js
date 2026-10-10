@@ -3,6 +3,10 @@ import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 
 import { handleGetStats, handleUpdateStats } from "./stats.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
+
+// Player 1's browser, signed in (B-1069: a sealed cookie).
+const PLAYER = await sessionCookieFor({ user_id: "player-1" })
 
 function createFixture({ completedDates, failWrites = false, failAck = false }) {
   const sql = new DatabaseSync(":memory:")
@@ -19,15 +23,13 @@ function createFixture({ completedDates, failWrites = false, failAck = false }) 
   let ackUnavailable = failAck
   let pending = completedDates.map(([date, won]) => ({ date, won }))
   const env = {
+    SESSION_SECRET: TEST_SESSION_SECRET,
     GAME_SESSIONS: {
       idFromName: (name) => name,
       get: (name) => ({
         fetch: async (input, init = {}) => {
           const request = input instanceof Request ? input : new Request(input, init)
           const path = new URL(request.url).pathname
-          if (name === "session:player-cookie" && path === "/auth/resolve") {
-            return Response.json({ user_id: "player-1" })
-          }
           assert.equal(name, "user_player-1")
           if (path === "/game/results" && request.method === "GET") {
             return Response.json(pending)
@@ -57,7 +59,7 @@ function createFixture({ completedDates, failWrites = false, failAck = false }) 
   const request = (method, path) =>
     new Request(`https://geneguessr.brinedew.bio${path}`, {
       method,
-      headers: { Cookie: "session=player-cookie" },
+      headers: { Cookie: PLAYER },
       ...(method === "POST" ? { body: "{}" } : {}),
     })
   return {

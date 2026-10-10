@@ -27,6 +27,7 @@ import test, { after, before, mock } from "node:test"
 
 import { handleAdminStatus } from "./admin.js"
 import { openVisitHarness } from "./geneguessr-visit-test-harness.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const WRITE_CAP = "Exceeded allowed rows written in Durable Objects free tier."
 const RESET = "Durable Object reset because its code was updated."
@@ -210,13 +211,13 @@ test("F4: a message with a unique reference in it is one row, not one a failure"
 
   // The combinations are bounded by the closed sets, not by the traffic.
   setClock(start + 100 * WINDOW_MS)
-  for (const sessionId of ["guest_a", "user_b", "practice_guest_c", "oauth:d", "session:e"]) {
+  for (const sessionId of ["guest_a", "user_b", "practice_guest_c"]) {
     for (const message of [WRITE_CAP, RESET, "x".repeat(900), "Network connection lost."]) {
       await fail(mod, { sessionId }, message)
     }
   }
   const all = await stored()
-  assert.equal(all.length, 1 + 5 * 3, "5 kinds x the 3 classes these texts fall in")
+  assert.equal(all.length, 1 + 3 * 3, "3 kinds x the 3 classes these texts fall in")
   assert.ok(
     all.every((row) => row.error_message.length <= 220),
     "an example is cut at 220",
@@ -408,23 +409,11 @@ test("F9: through the real Worker, a failed write is recorded once, the visitor 
         return { keys: [] }
       },
     },
-    GAME_SESSIONS: {
-      idFromName: (name) => name,
-      get: () => ({
-        async fetch() {
-          return {
-            ok: true,
-            status: 200,
-            headers: new Headers(),
-            json: async () => ({ user_id: "12345" }),
-          }
-        },
-      }),
-    },
+    SESSION_SECRET: TEST_SESSION_SECRET,
   }
   const status = await handleAdminStatus(
     new Request("https://geneguessr.brinedew.bio/api/admin/status", {
-      headers: { Cookie: "session=abc123" },
+      headers: { Cookie: await sessionCookieFor({ user_id: "12345" }) },
     }),
     adminEnv,
   )

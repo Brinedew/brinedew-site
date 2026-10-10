@@ -14,6 +14,7 @@ import {
 import { iconoplasmPublicationAliasManifestFromPolicy } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
 import { iconoplasmRecognitionPairKvKey } from "./iconoplasm-recognition-policy-reconciliation.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 class FakeKV {
   constructor(entries = {}) {
@@ -522,28 +523,6 @@ class FakeSearchDb {
   }
 }
 
-class FakeGameSessions {
-  constructor(sessions = {}) {
-    this.sessions = sessions
-  }
-
-  idFromName(name) {
-    return String(name || "")
-  }
-
-  get(id) {
-    const session = this.sessions[String(id || "")]
-    return {
-      fetch: async () => {
-        if (!session) {
-          return new Response("missing", { status: 404 })
-        }
-        return Response.json(session)
-      },
-    }
-  }
-}
-
 class FakeOnlyAllowedGateway {
   constructor(responseFactory) {
     this.responseFactory = responseFactory
@@ -635,7 +614,6 @@ function publishPortraitFixture(kv, rows = []) {
 }
 
 function buildEnv({
-  sessions = {},
   publishedPortraits = [],
   artifact = null,
   kvEntries = {},
@@ -661,7 +639,7 @@ function buildEnv({
       ...kvEntries,
     }),
     ICONOPLASM_DB: gatewayDb,
-    GAME_SESSIONS: new FakeGameSessions(sessions),
+    SESSION_SECRET: TEST_SESSION_SECRET,
     ...overrides,
   }
   publishPortraitFixture(gatewayEnv.KV, publishedPortraits)
@@ -679,6 +657,9 @@ function buildRequest(path, { cookie = "" } = {}) {
     headers: cookie ? { Cookie: cookie } : undefined,
   })
 }
+
+// Alex's browser, signed in (B-1069: a sealed cookie).
+const ALEX = await sessionCookieFor({ user_id: "user-123", username: "alex" })
 
 test.beforeEach(() => {
   resetIconoplasmRuntimeCachesForTest()
@@ -910,15 +891,11 @@ test("guest discovery search falls back to the starter trio instead of the full 
 })
 
 test("signed-in discovery search uses virtual starters without mutating an empty account", async () => {
-  const env = buildEnv({
-    sessions: {
-      "session:abc": { user_id: "user-123", username: "alex" },
-    },
-  })
+  const env = buildEnv()
 
   const starterResponse = await viaStatefulWorker(
     buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
-      cookie: "session=abc",
+      cookie: ALEX,
     }),
     env,
     {},
@@ -940,7 +917,7 @@ test("signed-in discovery search uses virtual starters without mutating an empty
 
   const discoveredResponse = await viaStatefulWorker(
     buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
-      cookie: "session=abc",
+      cookie: ALEX,
     }),
     env,
     {},
@@ -955,7 +932,7 @@ test("signed-in discovery search uses virtual starters without mutating an empty
 
   const hiddenResponse = await viaStatefulWorker(
     buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
-      cookie: "session=abc",
+      cookie: ALEX,
     }),
     env,
     {},
