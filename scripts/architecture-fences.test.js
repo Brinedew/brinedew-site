@@ -356,7 +356,7 @@ test("B-1037 every daily limit is a number only in the one budget policy", () =>
   // Product rules priced in their own units, not copies of a provider meter: each
   // states its cost against the policy's free-plan numbers in its own comment.
   const productRules = new Map([
-    ["workers/iconoplasm/votes/vote-guards.js", "VOTE_DAILY_LIMIT"],
+    ["workers/iconoplasm/votes/vote-guards.js", "VOTE_PERSON_DAILY_LIMIT"],
     ["workers/iconoplasm/caretaker/taggerizer.js", "TAGGERIZER_DAILY_LIMIT"],
   ])
   const named =

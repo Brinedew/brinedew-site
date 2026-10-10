@@ -431,10 +431,18 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
     "icono_vote_asset_summary",
     "icono_gene_vote_version",
     "icono_publish_state",
-    "icono_vote_daily_budget",
   ]) {
     assert.deepEqual(dumpDatabase(world.iconoplasm)[table], before.iconoplasm[table], table)
   }
+  // The person's vote allowance counter (B-1065) goes; the other person's stays.
+  assert.equal(
+    row(
+      world.iconoplasm,
+      "SELECT count(*) AS n FROM icono_vote_person_day WHERE user_id = ?",
+      ERASED_USER,
+    ).n,
+    0,
+  )
 
   // 5. GeneGuessr and the settings: the person's rows are gone, the board follows the stats row.
   assert.equal(row(world.accounts, "SELECT 1 FROM stats WHERE user_id = ?", ERASED_USER), null)
