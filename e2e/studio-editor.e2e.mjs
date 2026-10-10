@@ -502,13 +502,13 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     report.tourFirstStep = await popover.textContent()
     assert.match(report.tourFirstStep, /1 of \d/)
     await touring.page.screenshot({ path: path.join(OUT, "studio-tour.png") })
+    // Escape right after Next, while driver.js changes steps. Its onDestroyed hook
+    // skips a close with no active step, so this close used to forget the tour
+    // had been seen, and the next visit showed it again (this test's flake on
+    // PR #594). The studio now remembers it on every close.
     await touring.page.locator(".driver-popover-next-btn").click()
-    // driver.js swaps the popover between steps, so a "detached" wait can end on
-    // the swap: Escape goes to step 2 once it is on screen, and the remembered
-    // step is read when the tour has really closed.
-    await popover.filter({ hasText: /2 of \d/ }).waitFor({ state: "visible" })
     await touring.page.keyboard.press("Escape")
-    await popover.waitFor({ state: "detached" })
+    await touring.page.locator(".driver-overlay").waitFor({ state: "detached" })
     await touring.page.waitForFunction(
       () => window.localStorage.getItem("iconoplasm.diagramStudio.tour.v1") === "done",
       null,
