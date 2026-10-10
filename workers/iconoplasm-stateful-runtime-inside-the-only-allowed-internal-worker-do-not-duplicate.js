@@ -8699,6 +8699,7 @@ async function applyImageEditInheritedVotes(env, ctx, job, userId) {
   if (!items.length) return { ok: true, inherited_upvotes: 0, projected: 0 }
   const imported = await importIconoplasmVotes(env, ctx, items, {
     reason: "image_edit_publish_inherited_votes",
+    chargeTo: normalizeUserId(userId),
   })
   if (imported.refusal) return imported.refusal
   if (imported.invalid) return { ok: false, error: "Inherited votes were refused" }
@@ -9551,6 +9552,7 @@ async function applyCandidateGenerationUserVote(env, ctx, job, userId) {
   ]
   const imported = await importIconoplasmVotes(env, ctx, items, {
     reason: "candidate_generation_publish_user_vote",
+    chargeTo: normalizeUserId(userId),
   })
   if (imported.refusal) return imported.refusal
   if (imported.invalid) return { ok: false, error: "The publisher's upvote was refused" }
@@ -16694,8 +16696,8 @@ async function settleGeneAfterVote(env, ctx, symbol, { reason } = {}) {
 }
 
 // `admit: false` only for the administrator's vote route; every vote a
-// reader causes spends the daily vote budget and is refused (429) once it is
-// spent.
+// reader causes spends their daily vote allowance and is refused (429) once it
+// is spent.
 async function setIconoplasmVote(
   env,
   ctx,
@@ -16737,17 +16739,18 @@ async function setIconoplasmVote(
 // bounds the genes and votes of one request (voteImportBoundsError); the
 // reader callers import one gene. `republish` also rewrites, after the
 // response, the stable object of every gene whose votes or winner changed;
-// callers enable it only for one gene. `admit: false` only for the
-// administrator's import route.
+// callers enable it only for one gene. `chargeTo` is the reader whose action
+// brought the votes, whose allowance they spend; the administrator's import
+// route charges nobody.
 async function importIconoplasmVotes(
   env,
   ctx,
   items,
-  { reason, republish = true, admit = true } = {},
+  { reason, republish = true, chargeTo = "" } = {},
 ) {
   const imported = await importGeneVotes(env.ICONOPLASM_DB, items, {
     sanitizeVisionId: sanitizeVoteVisionId,
-    admit,
+    chargeTo,
   })
   const changed = new Set(imported.changed_symbols)
   let promoted = 0
@@ -28802,7 +28805,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const imported = await importIconoplasmVotes(env, ctx, valid, {
         reason: "vote_import_auto_promote",
         republish: false,
-        admit: false,
       })
       const summary = {
         total: items.length,

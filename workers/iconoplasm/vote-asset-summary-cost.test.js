@@ -14,7 +14,7 @@ import {
   projectCaretakerAssignmentInD1,
   setCaretakerSupervoteInD1,
 } from "./caretaker/caretaker-supervote.js"
-import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, VOTE_DAILY_LIMIT } from "./votes/vote-guards.js"
+import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, VOTE_PERSON_DAILY_LIMIT } from "./votes/vote-guards.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
 // The most rows one admitted vote-budget unit writes, measured below.
@@ -212,23 +212,25 @@ test(
           vote_value: 1,
         }),
       )
-      const budgetBefore = (
-        await db
-          .prepare("SELECT votes FROM icono_vote_daily_budget WHERE day = date('now')")
-          .first()
-      ).votes
+      const publisherChanges = async () =>
+        Number(
+          (
+            await db
+              .prepare(
+                "SELECT changes FROM icono_vote_person_day WHERE user_id = 'publisher' AND day = date('now')",
+              )
+              .first()
+          )?.changes || 0,
+        )
+      const budgetBefore = await publisherChanges()
       const editPublish = await measure("image edit publish, 26 votes", (metered) =>
-        importGeneVotes(metered, editVotes),
+        importGeneVotes(metered, editVotes, { chargeTo: "publisher" }),
       )
       assert.equal(editPublish.result.results.filter((row) => row.changed).length, 26)
       assert.equal(
-        (
-          await db
-            .prepare("SELECT votes FROM icono_vote_daily_budget WHERE day = date('now')")
-            .first()
-        ).votes - budgetBefore,
+        (await publisherChanges()) - budgetBefore,
         26,
-        "26 votes spend exactly 26 budget units",
+        "26 votes spend exactly 26 of the publisher's allowance",
       )
       // 396 rows measured: one budget row and one version row for the whole
       // import, then about 15 rows per vote, inside the 21 per unit the daily
@@ -253,14 +255,14 @@ test(
       // 2026-10-09, leaving about 4 + 4 by Cloudflare's per-statement analytics).
       assert.ok(election.actual.rows_read <= 48, JSON.stringify(election.actual))
       assert.ok(election.actual.rows_written <= 10, JSON.stringify(election.actual))
-      // The daily vote budget (vote-guards.js) holds a full day of admitted
-      // votes at the worst case measured above, plus a winner change for one
-      // vote in ten, to 40% of D1's free 100,000 rows written.
+      // One person's daily allowance (vote-guards.js) at the worst-case bound
+      // above, plus a winner change for one vote in ten, stays within 5% of D1's
+      // free 100,000 rows written: a scripted account can't spend the day.
       assert.ok(
-        VOTE_DAILY_LIMIT * VOTE_WORST_CASE_ROWS_WRITTEN +
-          Math.ceil(VOTE_DAILY_LIMIT / 10) * election.actual.rows_written <=
-          40_000,
-        `${VOTE_DAILY_LIMIT} votes`,
+        VOTE_PERSON_DAILY_LIMIT * VOTE_WORST_CASE_ROWS_WRITTEN +
+          Math.ceil(VOTE_PERSON_DAILY_LIMIT / 10) * election.actual.rows_written <=
+          5_000,
+        `${VOTE_PERSON_DAILY_LIMIT} votes`,
       )
 
       const steady = await measure("election without a winner change", (metered) =>
