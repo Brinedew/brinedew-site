@@ -143,8 +143,7 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
    (`workers/iconoplasm/votes/vote-guards.js`), then upserts the user's row in
    `icono_image_votes`, moves that asset's `icono_vote_asset_summary` row by
    the exact delta between the old and the new vote (read inside the same
-   transaction), writes one `icono_vote_events` row for the workstation's
-   incremental vote mirror, and bumps the gene's version in
+   transaction), and bumps the gene's version in
    `icono_gene_vote_version`. An identical retry writes nothing and spends no
    budget.
 2. One read batch takes the gene's eligible candidates with their summaries
