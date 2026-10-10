@@ -1,10 +1,11 @@
 import {
   VOTE_DAILY_BUDGET_EXHAUSTED,
-  VOTE_DAILY_BUDGET_MESSAGE,
-  VOTE_DAILY_LIMIT,
+  VOTE_PERSON_DAILY_LIMIT,
   geneVoteVersionBumpStatement,
   isVoteDailyBudgetRefusal,
-  voteDailyBudgetStatement,
+  voteAllowanceCleanupStatement,
+  voteAllowanceStatement,
+  voteDailyBudgetMessage,
 } from "../votes/vote-guards.js"
 
 export const CARETAKER_SUPERVOTE_WEIGHT = 10
@@ -378,7 +379,7 @@ export async function setCaretakerSupervoteInD1(
     expectedAssignmentVersion,
     expectedSupervoteVersion,
   } = {},
-  { attempt = 1, dailyVoteLimit = VOTE_DAILY_LIMIT } = {},
+  { attempt = 1, dailyVoteLimit = VOTE_PERSON_DAILY_LIMIT } = {},
 ) {
   const geneSymbol = normalizeSymbol(symbol)
   const account = normalizeId(accountId, "caretaker_account_id")
@@ -475,7 +476,8 @@ export async function setCaretakerSupervoteInD1(
   let results
   try {
     results = await db.batch([
-      voteDailyBudgetStatement(db, 1, dailyVoteLimit),
+      // The caretaker's own allowance (B-1065), counted apart from their reader votes.
+      voteAllowanceStatement(db, `caretaker:${account}`, 1, dailyVoteLimit),
       supervoteProjectionUpsert(db, {
         symbol: geneSymbol,
         geneId: assignment.gene_id,
@@ -531,10 +533,12 @@ export async function setCaretakerSupervoteInD1(
           geneSymbol,
         ),
       appliedMutationGuard(db, geneSymbol, mutationId),
+      // Last, so the results above keep their positions.
+      voteAllowanceCleanupStatement(db, `caretaker:${account}`),
     ])
   } catch (error) {
     if (isVoteDailyBudgetRefusal(error))
-      fail(VOTE_DAILY_BUDGET_EXHAUSTED, VOTE_DAILY_BUDGET_MESSAGE, 429)
+      fail(VOTE_DAILY_BUDGET_EXHAUSTED, voteDailyBudgetMessage(), 429)
     throw error
   }
   if (Number(results?.[1]?.meta?.changes || 0) > 0) return response

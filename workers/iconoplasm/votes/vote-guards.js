@@ -35,39 +35,36 @@ export async function readGeneVoteVersion(db, symbol) {
   return Math.max(0, Number(row?.version || 0) || 0)
 }
 
-// The daily vote budget. Reader votes, the votes a reader's image edit or
-// generated candidate brings with it, and caretaker supervotes share one
-// allowance of admitted vote changes per UTC day, sized so they spend at most
-// about 40% of D1's free 100,000 rows written a day.
+// The daily vote allowance (B-1065): each person may change 200 votes per UTC day.
+// A vote, the votes an image edit or generated candidate brings with it (charged to
+// the reader who published it) and a caretaker supervote all count. Sized from real
+// behaviour on the 2026-10-06 nightly copy: 24 people over 197 person-days, the
+// busiest day 140 changes, none over 200. Stack Overflow's 40 would have stopped
+// real people on 6 of those days; 200 stopped nobody and bounds a scripted account.
+// It replaced one global allowance of 1,750 a day, which let one script spend
+// everyone's votes.
 //
 // Measured on the complete migrated schema with Miniflare's D1 receipts
-// (workers/iconoplasm/vote-asset-summary-cost.test.js, 2026-10-09, B-1065:
-// migration 0119 dropped six indexes nothing read, and a vote no longer writes
-// a row for the workstation's vote mirror, which nothing read), one admitted
-// unit writes:
-//   - 9 rows for a user's first vote on an asset nobody has voted on (the
-//     vote row and its three index entries, a new summary row and its key,
-//     the gene's version row, this budget row);
+// (workers/iconoplasm/vote-asset-summary-cost.test.js), one admitted vote writes:
+//   - 9 rows for a user's first vote on an asset nobody has voted on (the vote row
+//     and its three index entries, a new summary row and its key, the gene's version
+//     row, the person's allowance row);
 //   - 7 rows for a first vote on an asset that already has votes;
 //   - 6 rows to flip a vote;
 //   - 13 rows for a caretaker supervote.
-// (Before: 21, 17 and 15.) A vote that moves its gene's winner adds the
-// projection, 7 rows. At 100x today's traffic about one vote in ten moves a
-// winner. So a full day at the cap costs at most 1,750 x 9 + 175 x 7 = 16,975
-// rows, 17% of the 100,000. Even if every admitted vote moved a winner the day
-// would cost 1,750 x 16 = 28,000 rows.
+// One person at the allowance spends at most 200 x 9 = 1,800 rows, 1.8% of the
+// 100,000-row write wall, plus the projection (7 rows) when a vote moves a winner.
+// It takes about 55 scripted accounts, each with its own Discord sign-in and held to
+// the rate limiter's per-minute window, to spend the wall.
 //
-// One reader action can bring many votes: publishing an image edit imports
-// the edit's inherited upvotes (at most IMAGE_EDIT_INHERITED_UPVOTE_LIMIT) and
-// the publisher's own vote in one import. That is at most 26 units and 134
-// rows written in one click (measured, vote-asset-summary-cost.test.js: one
-// budget row and one version row for the import, about 5 rows per vote), 1.5%
-// of the day's 1,750 units and 0.13% of the 100,000 rows. The daily cap still
-// holds the whole day to 1,750 units however the clicks are spread.
-export const VOTE_DAILY_LIMIT = 1_750
+// One reader action can bring many votes: publishing an image edit imports the
+// edit's inherited upvotes (at most IMAGE_EDIT_INHERITED_UPVOTE_LIMIT) and the
+// publisher's own vote in one import, at most 26 of the publisher's allowance and
+// 134 rows written in one click (measured, vote-asset-summary-cost.test.js).
+export const VOTE_PERSON_DAILY_LIMIT = 200
+// The refusal's code is a wire contract: the page's vote box, the shared card
+// controller and the published extension all read it.
 export const VOTE_DAILY_BUDGET_EXHAUSTED = "VOTE_DAILY_BUDGET_EXHAUSTED"
-export const VOTE_DAILY_BUDGET_MESSAGE =
-  "Voting is paused until 00:00 UTC to protect the site's daily database allowance."
 
 // Publishing an image edit brings the edit's source's votes along: 90% of the
 // source's upvotes, as synthetic voters, on the new candidate. Each one is a
@@ -132,22 +129,30 @@ export function voteImportBoundsError({ items = 0, genes = 0 } = {}) {
   )
 }
 
-// The first statement of every admitted vote write batch. It adds `units` to
-// today's row (day = D1's UTC date) while the total stays within the limit.
-// Past the limit it raises instead (json() of a non-JSON string, the same
-// refusal idiom the migration adapters use), so D1 rolls the whole batch back
-// and nothing else in it is written. One row written per admitted batch.
-export function voteDailyBudgetStatement(db, units = 1, limit = VOTE_DAILY_LIMIT) {
+// The first statement of every admitted vote write batch. It adds `units` to the
+// person's row for today (day = D1's UTC date) while the total stays within the
+// allowance. Past it, it raises instead (json() of a non-JSON string, the same
+// refusal idiom the migration adapters use), so D1 rolls the whole batch back and
+// nothing else in it is written. One row written per admitted batch.
+export function voteAllowanceStatement(db, userId, units = 1, limit = VOTE_PERSON_DAILY_LIMIT) {
   return db
     .prepare(
-      `INSERT INTO icono_vote_daily_budget (day, votes)
-       VALUES (date('now'), CASE WHEN ?1 <= ?2 THEN ?1 ELSE json('${VOTE_DAILY_BUDGET_EXHAUSTED}') END)
-       ON CONFLICT(day) DO UPDATE SET votes = CASE
-         WHEN icono_vote_daily_budget.votes + ?1 <= ?2 THEN icono_vote_daily_budget.votes + ?1
+      `INSERT INTO icono_vote_person_day (user_id, day, changes)
+       VALUES (?1, date('now'), CASE WHEN ?2 <= ?3 THEN ?2 ELSE json('${VOTE_DAILY_BUDGET_EXHAUSTED}') END)
+       ON CONFLICT(user_id, day) DO UPDATE SET changes = CASE
+         WHEN icono_vote_person_day.changes + ?2 <= ?3 THEN icono_vote_person_day.changes + ?2
          ELSE json('${VOTE_DAILY_BUDGET_EXHAUSTED}')
        END`,
     )
-    .bind(Math.max(1, Math.trunc(Number(units) || 1)), limit)
+    .bind(String(userId || ""), Math.max(1, Math.trunc(Number(units) || 1)), limit)
+}
+
+// The person's earlier days, deleted by their own next admitted vote through the
+// primary key: no row to delete after the first vote of a day, one before it.
+export function voteAllowanceCleanupStatement(db, userId) {
+  return db
+    .prepare("DELETE FROM icono_vote_person_day WHERE user_id = ?1 AND day < date('now')")
+    .bind(String(userId || ""))
 }
 
 // D1 reports the refusal as "D1_ERROR: malformed JSON" from the statement
@@ -156,11 +161,20 @@ export function isVoteDailyBudgetRefusal(error) {
   return /malformed JSON|VOTE_DAILY_BUDGET_EXHAUSTED/i.test(String(error?.message || error || ""))
 }
 
-export function voteDailyBudgetRefusal() {
+// Stack Overflow's sentence at its daily vote limit, by substitution: "Daily vote
+// limit reached; vote again in N hours." The reset is 00:00 UTC.
+export function voteDailyBudgetMessage(now = Date.now()) {
+  const next = new Date(now)
+  next.setUTCHours(24, 0, 0, 0)
+  const hours = Math.max(1, Math.ceil((next.getTime() - now) / 3_600_000))
+  return `Daily vote limit reached; vote again in ${hours} ${hours === 1 ? "hour" : "hours"}.`
+}
+
+export function voteDailyBudgetRefusal(now = Date.now()) {
   return {
     ok: false,
     status: 429,
     code: VOTE_DAILY_BUDGET_EXHAUSTED,
-    error: VOTE_DAILY_BUDGET_MESSAGE,
+    error: voteDailyBudgetMessage(now),
   }
 }

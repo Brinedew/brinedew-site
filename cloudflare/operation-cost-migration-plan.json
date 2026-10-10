@@ -23,6 +23,10 @@
       "online": true,
       "prediction": { "rows_read": 100, "rows_written": 100, "requests": 1 }
     },
+    "iconoplasm/0123_vote_person_day.sql": {
+      "online": true,
+      "prediction": { "rows_read": 100, "rows_written": 10, "requests": 1 }
+    },
     "iconoplasm-authoring/0023_saves_without_upload_reservations.sql": {
       "online": true,
       "prediction": {

@@ -465,7 +465,6 @@ export async function seedWorld() {
       assetSha256: asset,
       userId: user,
       voteValue: value,
-      admit: false,
     })
     if (!vote.ok) throw new Error(`seed vote failed: ${vote.code}`)
   }

@@ -420,7 +420,7 @@ export async function runTaggerizer(env, input, nowMs = Date.now()) {
 
 // One caretaker-day counter, one D1 upsert per admitted call. Over the limit, the
 // upsert evaluates json() on a bad value, which makes D1 refuse the statement
-// (the idiom icono_vote_daily_budget uses in votes/vote-guards.js).
+// (the idiom icono_vote_person_day uses in votes/vote-guards.js).
 const DAILY_REFUSAL = "TAGGERIZER_DAILY_LIMIT_REACHED"
 
 export async function admitTaggerizerCall(

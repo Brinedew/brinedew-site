@@ -83,8 +83,7 @@ import {
 import {
   IMAGE_EDIT_INHERITED_UPVOTE_LIMIT,
   VOTE_DAILY_BUDGET_EXHAUSTED,
-  VOTE_DAILY_BUDGET_MESSAGE,
-  VOTE_DAILY_LIMIT,
+  VOTE_PERSON_DAILY_LIMIT,
   VOTE_IMPORT_MAX_GENES,
   VOTE_IMPORT_MAX_ITEMS,
 } from "./iconoplasm/votes/vote-guards.js"
@@ -119,7 +118,7 @@ const VOTE_TABLES = [
   "icono_caretaker_vote_assignment_projection",
   "icono_caretaker_candidate_eligibility_projection",
   "icono_gene_vote_version",
-  "icono_vote_daily_budget",
+  "icono_vote_person_day",
 ]
 const sha = (char) => char.repeat(64)
 // One asset's vote totals as readers see them (the summary the cards read).
@@ -1099,7 +1098,7 @@ const BUDGETED_TABLES = [
   "icono_image_votes",
   "icono_vote_asset_summary",
   "icono_gene_vote_version",
-  "icono_vote_daily_budget",
+  "icono_vote_person_day",
   "icono_caretaker_supervote_projection",
   "icono_caretaker_supervote_events",
   "icono_caretaker_supervote_command_receipts",
@@ -1113,7 +1112,11 @@ function budgetedRows(db) {
   )
 }
 
-test("12: past the daily vote budget a vote, a reader import or a supervote writes nothing and answers 429", async () => {
+// B-1065: the allowance is per person. Failure modes: one person's votes spend
+// another's; a refused batch writes anything; the sentence or the reset is lost.
+const LIMIT_SENTENCE = /^Daily vote limit reached; vote again in \d+ hours?\.$/
+
+test("12: past a person's daily vote allowance their vote, import or supervote writes nothing and answers 429", async () => {
   const db = new SqliteD1()
   seedAsset(db, "TP53", sha("a"))
   seedAsset(db, "TP53", sha("b"))
@@ -1129,29 +1132,25 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
     })
   assert.equal((await voteWith("u1", 1)).ok, true)
   assert.equal((await voteWith("u1", 1)).changed, false, "an unchanged vote")
-  assert.equal((await voteWith("u2", 1)).ok, true)
-  assert.equal(
-    db.rows("SELECT votes FROM icono_vote_daily_budget")[0].votes,
-    2,
-    "two changed votes spent two units; the unchanged one spent none",
+  assert.equal((await voteWith("u1", -1)).ok, true)
+  assert.deepEqual(
+    db.rows("SELECT user_id, changes FROM icono_vote_person_day").map((row) => ({ ...row })),
+    [{ user_id: "u1", changes: 2 }],
+    "two changed votes spent two of u1's; the unchanged one spent none",
   )
 
   const before = budgetedRows(db)
-  const refused = await voteWith("u3", 1)
-  assert.deepEqual(refused, {
-    ok: false,
-    status: 429,
-    code: VOTE_DAILY_BUDGET_EXHAUSTED,
-    error: VOTE_DAILY_BUDGET_MESSAGE,
-  })
-  assert.equal((await voteWith("u1", -1)).code, VOTE_DAILY_BUDGET_EXHAUSTED, "a flip too")
+  const refused = await voteWith("u1", 1)
+  assert.equal(refused.status, 429)
+  assert.equal(refused.code, VOTE_DAILY_BUDGET_EXHAUSTED)
+  assert.match(refused.error, LIMIT_SENTENCE)
   const imported = await importGeneVotes(
     db,
     [
       { symbol: "TP53", asset_sha256: sha("b"), user_id: "i1", vote_value: 1 },
       { symbol: "TP53", asset_sha256: sha("b"), user_id: "i2", vote_value: 1 },
     ],
-    { dailyVoteLimit: 2 },
+    { chargeTo: "u1", dailyVoteLimit: 2 },
   )
   assert.equal(imported.refused, true)
   assert.deepEqual(
@@ -1161,7 +1160,9 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
   assert.deepEqual(imported.changed_symbols, [])
   assert.equal(budgetedRows(db), before, "the refusals wrote nothing")
 
-  // The administrator's vote is not admitted, so it is never refused.
+  // Another person still votes: u1's spent allowance is u1's alone.
+  assert.equal((await voteWith("u2", 1)).ok, true)
+  // The administrator's vote and import are charged to nobody, so never refused.
   assert.equal((await voteWith("curator", 1, { admit: false })).ok, true)
 
   // Through the routes, at the real limit.
@@ -1171,8 +1172,9 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
   seedPublished(db2, "BRCA1", sha("a"))
   await seedCaretaker(db2, "BRCA1")
   db2.exec(
-    "INSERT INTO icono_vote_daily_budget (day, votes) VALUES (date('now'), ?)",
-    VOTE_DAILY_LIMIT,
+    "INSERT INTO icono_vote_person_day (user_id, day, changes) VALUES ('reader-1', date('now'), ?), ('caretaker:acct_owner', date('now'), ?)",
+    VOTE_PERSON_DAILY_LIMIT,
+    VOTE_PERSON_DAILY_LIMIT,
   )
   const before2 = budgetedRows(db2)
   const route = await callApi(db2, "/api/iconoplasm/votes/set", {
@@ -1182,7 +1184,7 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
   })
   assert.equal(route.status, 429)
   assert.equal(route.payload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
-  assert.equal(route.payload.error, VOTE_DAILY_BUDGET_MESSAGE)
+  assert.match(route.payload.error, LIMIT_SENTENCE)
   assert.equal(route.ctx.promises.length, 0, "a refused vote republishes nothing")
   const ctx = waitUntilRecorder()
   const supervote = await handleApi(
@@ -1209,7 +1211,7 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
   const supervotePayload = await supervote.json()
   assert.equal(supervote.status, 429)
   assert.equal(supervotePayload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
-  assert.equal(supervotePayload.error, VOTE_DAILY_BUDGET_MESSAGE)
+  assert.match(supervotePayload.error, LIMIT_SENTENCE)
   assert.equal(budgetedRows(db2), before2, "the refused routes wrote nothing")
   const admin = await callApi(
     db2,
@@ -1490,7 +1492,11 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
     )[0].n,
     1,
   )
-  assert.equal(db.rows("SELECT votes FROM icono_vote_daily_budget")[0].votes, 26)
+  assert.equal(
+    db.rows("SELECT changes FROM icono_vote_person_day WHERE user_id = 'reader-1'")[0].changes,
+    26,
+    "the publisher's allowance pays for the votes the edit brings",
+  )
   assert.equal(summary(db, "A1BG", sha("c")).upvotes, 26)
 
   // A smaller source inherits its 90% in full: 10 upvotes, 9 inherited votes.
@@ -1507,7 +1513,10 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
   assert.equal(small.status, 200, JSON.stringify(small.payload))
   assert.equal(small.payload.vote_inheritance.inherited_upvotes, 9)
   assert.equal(small.payload.vote_inheritance.imported_votes, 10)
-  assert.equal(db.rows("SELECT votes FROM icono_vote_daily_budget")[0].votes, 36)
+  assert.equal(
+    db.rows("SELECT changes FROM icono_vote_person_day WHERE user_id = 'reader-1'")[0].changes,
+    36,
+  )
 })
 
 // --- 21 -----------------------------------------------------------------
@@ -1758,8 +1767,8 @@ test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header a
     await seedCaretaker(db, "BRCA1")
     if (spent) {
       db.exec(
-        "INSERT INTO icono_vote_daily_budget (day, votes) VALUES (date('now'), ?)",
-        VOTE_DAILY_LIMIT,
+        "INSERT INTO icono_vote_person_day (user_id, day, changes) VALUES ('reader-1', date('now'), ?)",
+        VOTE_PERSON_DAILY_LIMIT,
       )
     }
     return db
@@ -1779,7 +1788,7 @@ test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header a
   const after = secondsUntilCloudflareDailyReset(Date.now(), 0)
   assert.equal(refused.status, 429)
   assert.equal(refused.payload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
-  assert.equal(refused.payload.error, VOTE_DAILY_BUDGET_MESSAGE, "the sentence is unchanged")
+  assert.match(refused.payload.error, LIMIT_SENTENCE)
   const header = refused.headers.get("Retry-After")
   assert.match(String(header), /^[1-9][0-9]*$/, "a whole number of seconds")
   assert.equal(
