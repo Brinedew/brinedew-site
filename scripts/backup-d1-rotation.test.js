@@ -7,6 +7,7 @@ import test from "node:test"
 
 import {
   BACKUP_ROTATION,
+  BACKUP_READ_SHED_LINE,
   exportD1Database,
   dueDatabase,
   pruneBackups,
@@ -14,7 +15,8 @@ import {
 } from "./backup-d1-rotation.mjs"
 
 // B-830 failure list, written before the exporter:
-// 1. The budget gate must skip (and fail closed) when readers could be starved.
+// 1. The budget gate must skip (and fail closed) when the account's reads plus
+//    this database's last measured dump would reach the 85% shedding line.
 // 2. A day's backup already on disk means no second export.
 // 3. Paging must survive rowid gaps and WITHOUT ROWID composite keys.
 // 4. BLOBs arrive from D1 as byte arrays and must land as bytes.
@@ -103,9 +105,10 @@ test("1,2,6: the budget gate fails closed and a finished day is not exported twi
     queryFor: () => remote.query,
     pageSize: 50,
   }
-  const busy = await runRotation({ ...base, readUsage: async () => ({ rows_read: 2600000 }) })
+  assert.equal(BACKUP_READ_SHED_LINE, 4250000)
+  const busy = await runRotation({ ...base, readUsage: async () => ({ rows_read: 4300000 }) })
   assert.equal(busy.status, "skipped_budget")
-  // A normal evening (1.6M reads, 32%) no longer blocks the backup.
+  // A normal day (1.6M reads, 32%) never blocks the backup.
   const normal = await runRotation({
     ...base,
     now: Date.parse("2026-09-26T13:00:00Z"),
@@ -128,28 +131,31 @@ test("1,2,6: the budget gate fails closed and a finished day is not exported twi
   assert.ok(files.every((f) => !f.includes(".partial")))
 })
 
-// Owner, 2026-09-25: a backup right after the 00:00 UTC reset makes the whole
-// day run on what is left. It must spend the tail of the budget day instead,
-// including when a laptop wakes after midnight and the task catches up.
-test("10: the backup never runs in the first half of a UTC budget day", async () => {
+// 10. B-1067: the backup is sheddable_plus work, not clock work. It runs at
+//     any hour while there is room, and yields when the account's reads so far
+//     plus this database's last dump would cross the 85% line.
+test("10: the backup runs at any hour with room and counts its own last dump", async () => {
+  const remote = fakeRemote(SCHEMA)
+  seed(remote)
   const dir = mkdtempSync(path.join(tmpdir(), "d1bk-"))
-  let budgetReads = 0
-  for (const at of ["2026-09-25T00:30:00Z", "2026-09-25T06:00:00Z", "2026-09-25T11:59:00Z"]) {
-    const early = await runRotation({
-      root: dir,
-      now: Date.parse(at),
-      queryFor: () => {
-        throw new Error("must not query D1")
-      },
-      readUsage: async () => {
-        budgetReads++
-        return { rows_read: 0 }
-      },
-    })
-    assert.equal(early.status, "too_early_in_budget_day", at)
-  }
-  assert.equal(budgetReads, 0)
-  assert.deepEqual(readdirSync(dir), [])
+  const at = (iso, rows_read) => ({
+    root: dir,
+    now: Date.parse(iso),
+    queryFor: () => remote.query,
+    readUsage: async () => ({ rows_read }),
+    pageSize: 50,
+  })
+  const first = await runRotation(at("2026-09-25T00:30:00Z", 0))
+  assert.equal(first.status, "exported")
+  // Pretend the last dump of the database due next read 600k, like iconoplasm.
+  const next = dueDatabase(dir, Date.parse("2026-09-26T00:30:00Z"))
+  mkdirSync(path.join(dir, next.name), { recursive: true })
+  writeFileSync(path.join(dir, next.name, "2026-09-01.json"), JSON.stringify({ reads: 600000 }))
+  const tight = await runRotation(at("2026-09-26T00:30:00Z", 3700000))
+  assert.equal(tight.status, "skipped_budget")
+  assert.equal(tight.expected_reads, 600000)
+  const roomy = await runRotation(at("2026-09-26T18:00:00Z", 3600000))
+  assert.equal(roomy.status, "exported")
 })
 
 // 11. B-1002: a day the budget gate skips is retried the next day, not a cycle
