@@ -431,20 +431,6 @@ exempt. Add the step, with a weight that covers the rows one changed row writes 
 checks it against the schema), and seed the person in the fixture
 (`workers/test-helpers/account-erasure-fixture.js`).
 
-## authoring D1 residue cleanup
-
-`scripts/reap-authoring-residue.mjs --target receipts|backup-entries` deletes the authoring D1's
-two one-time leftovers: command receipts older than 30 days that no event references (the 38,338
-whose events were archived), and the index rows of the abandoned cutover backup (B-859). It runs
-from the `Reap authoring residue` workflow (`workflow_dispatch`, inputs `target`, `execute`,
-`from_rowid`, `max_writes`, `allow_early_reason`), because only the CI token has production D1
-permission (B-1002). It sends only SELECTs unless `--execute` is given. `--execute` refuses before 20:00 UTC without
-`--allow-early "<incident reason>"`, stops at `--max-writes` (default 15,000 rows written) and
-prints the `--from-rowid` to resume from. A dry run reads about 2 rows per receipt (116,564 for
-all 58,461 on 2026-10-03) and 1 per backup entry (23,906); D1 bills a delete as one write for the
-row plus one per index entry, so 2 per receipt and 3 per backup entry. The script is
-idempotent: a rerun recomputes eligibility and deletes only what is left.
-
 ## observability snapshot publication and freshness
 
 The admin Observability tab is fed by Cloudflare GraphQL data collected out of band. The live admin request path must never query GraphQL, D1, or a Durable Object to explain its own telemetry.

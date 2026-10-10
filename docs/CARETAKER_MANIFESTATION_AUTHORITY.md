@@ -50,10 +50,8 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
   text, sees the current head and rebases by hand; nothing merges silently. Two accounts claiming
   one gene, or one account claiming two, commit one and conflict the other.
 - A command ID is an idempotency key: the same ID and bytes return the original response, and the
-  same ID with different bytes is refused (`409 IDEMPOTENCY_KEY_REUSED`). A receipt older than 30
-  days that no event references may be deleted (`scripts/reap-authoring-residue.mjs`); one an
-  event references lives as long as the event. A retry after that runs as a new command and its
-  expected versions make it an ordinary conflict.
+  same ID with different bytes is refused (`409 IDEMPOTENCY_KEY_REUSED`). A receipt lives as long as
+  the authoring database.
 - A user command takes its actor from the authenticated session; an actor ID in a body is ignored
   or refused, and a cross-origin or ambiguous browser mutation is refused before parsing. A
   disabled or erased account is refused on every mutation, even with an old session.
