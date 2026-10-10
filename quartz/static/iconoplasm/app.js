@@ -906,6 +906,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // this page loads for search and the gallery anyway. It was a typed constant
   // (19,023) that stayed behind when the catalogue grew to 19,381 on 2026-10-09,
   // so the header and "found out of" undercounted. 0 until the catalogue loads.
+  var catalogueGeneCount = 0
   var catalogueGeneCountPromise = null
 
   function loadCatalogueGeneCount() {
@@ -917,6 +918,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     catalogueGeneCountPromise = publicationReader
       .geneMetrics()
       .then(function (metrics) {
+        catalogueGeneCount = metrics.size
         return metrics.size
       })
       .catch(function () {
@@ -2608,7 +2610,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
       Number(collectionState && collectionState.discoveryEntries.length) ||
       0
-    var totalCount = Math.max(0, Number(collectionState && collectionState.total) || 0)
+    // The catalogue's own size, whichever path built the shelf (a restored shelf
+    // never fetches counts, so the gallery's total can stay 0).
+    var totalCount = catalogueGeneCount
     var progressPct =
       totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = progressPct
@@ -8995,6 +8999,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     syncOrderOptions()
     syncCollectionChrome()
+    // "N genes found out of M" needs the catalogue's size; draw again once it is known.
+    loadCatalogueGeneCount().then(function () {
+      if (!disposed) syncCollectionChrome()
+    })
     activeHomeHistorySnapshot = snapshotHomeState
     activeHomeRenderCleanup = function () {
       disposed = true
