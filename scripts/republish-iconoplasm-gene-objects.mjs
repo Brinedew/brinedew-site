@@ -87,8 +87,18 @@ const VERIFY_RETRY_DELAY_MS = 65_000
 // (vote version, the joined gene row, projection authority, the authoring
 // record, the prose secret, route and enrollment checks) plus 3.65 rows for each
 // candidate in its pool; the pool averages 2.97 candidates over a systematic
-// sample of 90 genes. The rewrite writes no D1 rows for an unchanged gene.
+// sample of 90 genes.
 export const D1_ROWS_READ_PER_GENE = 31
+
+// Writes are not zero: a gene whose stored winner differs from its election
+// gets the winner row (4 rows) and its gene summary rebuilt (13 to 35 rows).
+// Measured 2026-10-10, Cloudflare per-statement analytics over the 3,129-gene
+// sweep from SYK (03:03-03:28 UTC): 447 rows written, 24 winner changes. The
+// estimate prices a typical sweep; the worst case prices one where every
+// winner moves (a first sweep after an election-rule change). On 2026-10-09 a
+// receipt that said 0 here let a sweep help spend the whole write wall.
+export const D1_ROWS_WRITTEN_PER_GENE = 0.15
+export const D1_ROWS_WRITTEN_PER_WINNER_CHANGE = 39
 
 function fail(code, message) {
   return Object.assign(new Error(`${code}: ${message}`), { code })
@@ -168,7 +178,8 @@ function sweepCost(count, batchSize) {
     bunny_storage_reads: count * 2,
     d1_rows_read_estimate: count * D1_ROWS_READ_PER_GENE,
     d1_rows_read_with_retries: Math.ceil(count * D1_ROWS_READ_PER_GENE * RETRY_ALLOWANCE),
-    d1_rows_written_estimate: 0,
+    d1_rows_written_estimate: Math.ceil(count * D1_ROWS_WRITTEN_PER_GENE),
+    d1_rows_written_if_every_winner_moves: count * D1_ROWS_WRITTEN_PER_WINNER_CHANGE,
   }
 }
 
