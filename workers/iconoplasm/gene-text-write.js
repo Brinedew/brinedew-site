@@ -145,3 +145,48 @@ export async function writeFactoryGeneText(env, { symbol, text, tags, fields }) 
     ...(registered ? { registered: true } : {}),
   }
 }
+
+export const GENE_TEXT_PAGE_SIZE = 200
+
+// B-1065: the workstation reads the site's texts back in pages ordered by gene ID.
+// `chosen: "factory"` lists every gene's factory text (the workstation's first
+// run fills prompts.db from it); `chosen: "caretaker"` lists only the genes whose
+// caretaker choice replaces it, with the chosen version's text, so the
+// workstation draws those portraits from what the caretaker picked.
+export async function listGeneTexts(env, { chosen = "factory", after = null } = {}) {
+  const db = env?.ICONOPLASM_AUTHORING_DB
+  if (!db)
+    throw new GeneTextError("AUTHORING_DB_MISSING", "ICONOPLASM_AUTHORING_DB is not bound", 503)
+  const sql =
+    chosen === "caretaker"
+      ? `SELECT g.gene_id, i.canonical_symbol AS symbol, v.version_id, v.version,
+                v.text, v.text_sha256, v.tags, v.fields_json, v.created_at AS updated_at
+           FROM icono_gene_texts g
+           JOIN icono_gene_identities i ON i.gene_id = g.gene_id
+           JOIN icono_caretaker_text_versions v
+             ON v.version_id = g.chosen_caretaker_version_id AND v.withdrawn_at IS NULL
+          WHERE g.chosen_caretaker_version_id IS NOT NULL AND g.gene_id > ?
+          ORDER BY g.gene_id LIMIT ?`
+      : `SELECT g.gene_id, i.canonical_symbol AS symbol, g.text_id, g.version,
+                g.text, g.text_sha256, g.tags, g.fields_json, g.updated_at
+           FROM icono_gene_texts g
+           JOIN icono_gene_identities i ON i.gene_id = g.gene_id
+          WHERE g.gene_id > ?
+          ORDER BY g.gene_id LIMIT ?`
+  const { results = [] } = await db
+    .prepare(sql)
+    .bind(after || "", GENE_TEXT_PAGE_SIZE + 1)
+    .all()
+  const page = results.slice(0, GENE_TEXT_PAGE_SIZE).map((row) => ({
+    ...row,
+    version: Number(row.version),
+    fields: row.fields_json ? JSON.parse(row.fields_json) : null,
+    fields_json: undefined,
+  }))
+  return {
+    ok: true,
+    chosen,
+    texts: page,
+    next_after: results.length > GENE_TEXT_PAGE_SIZE ? page.at(-1).gene_id : null,
+  }
+}

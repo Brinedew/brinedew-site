@@ -22,7 +22,7 @@ import {
   secondsUntilCloudflareDailyReset,
 } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
-import { GeneTextError, writeFactoryGeneText } from "./gene-text-write.js"
+import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
 import { backfillGeneTexts } from "./text-backfill.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
@@ -440,6 +440,33 @@ export function createIconoplasmApp({
           ...c.req.valid("json"),
         })
         return c.json({ ok: true, ...saved })
+      } catch (error) {
+        if (!(error instanceof GeneTextError)) throw error
+        return c.json({ ok: false, code: error.code, error: error.message }, error.status)
+      }
+    },
+  )
+
+  /**
+   * B-1065: the workstation reads the site's texts back, a page at a time
+   * (listGeneTexts in workers/iconoplasm/gene-text-write.js): every factory text
+   * on its first run, then the genes whose caretaker choice replaces it.
+   */
+  app.get(
+    "/api/iconoplasm/admin/texts",
+    factoryAuth,
+    zValidator(
+      "query",
+      z.object({
+        chosen: z.optional(z.enum(["factory", "caretaker"])),
+        after: z.optional(z.string().check(z.maxLength(128))),
+      }),
+    ),
+    shedBatchWork(() => "sheddable_plus"),
+    async (c) => {
+      c.header("Cache-Control", "no-store")
+      try {
+        return c.json(await listGeneTexts(c.env, c.req.valid("query")))
       } catch (error) {
         if (!(error instanceof GeneTextError)) throw error
         return c.json({ ok: false, code: error.code, error: error.message }, error.status)
