@@ -87,7 +87,7 @@ export async function readEarlyReleaseCapacity({ token, fetcher = fetch }) {
       method: "GET",
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
-      headers: { "x-iconoplasm-admin-token": token, Accept: "application/json" },
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     })
   } catch {
     throw new Error("COST_SHARED_USAGE_UNAVAILABLE")

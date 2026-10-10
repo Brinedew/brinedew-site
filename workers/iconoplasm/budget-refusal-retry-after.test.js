@@ -244,7 +244,7 @@ test("the admin mutation limiter's 503 states the seconds to the UTC reset", asy
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-iconoplasm-admin-token": "founder-secret",
+              Authorization: "Bearer founder-secret",
             },
             body: JSON.stringify({
               defer_read_models: true,
@@ -289,7 +289,7 @@ test("a day the shared ledger itself reports spent is told the seconds to the UT
       await gateway(
         new Request(
           "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/assets/summary",
-          { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+          { headers: { Authorization: "Bearer founder-secret" } },
         ),
         {
           ICONOPLASM_DB: d1.db,
@@ -317,7 +317,7 @@ test("an unreachable ledger is a misconfiguration, not a refusal that clears at 
   const response = await gateway(
     new Request(
       "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/assets/summary",
-      { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+      { headers: { Authorization: "Bearer founder-secret" } },
     ),
     { ICONOPLASM_DB: d1.db, ICONOPLASM_ADMIN_TOKEN: "founder-secret" },
     { waitUntil() {} },
