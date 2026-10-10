@@ -301,6 +301,19 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_user_emulsion_option_rollup.emulsion_id"],
     },
     {
+      // The person's vote allowance counters (B-1065): their reader votes by user id, their
+      // caretaker supervotes by account id.
+      id: "vote_allowance",
+      database: "iconoplasm",
+      table: "icono_vote_person_day",
+      action: "delete",
+      key: ["user_id", "day"],
+      where: "user_id IN (?, 'caretaker:' || ?)",
+      whereBinds: [U, A],
+      weight: 1,
+      covers: ["icono_vote_person_day.user_id"],
+    },
+    {
       id: "votes",
       database: "iconoplasm",
       table: "icono_image_votes",

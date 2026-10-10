@@ -14,19 +14,20 @@
 // the user's old and new vote, read inside the same transaction, so a vote on
 // a gene with ten thousand votes costs what a vote on an empty gene costs.
 //
-// Admission: every write batch a reader causes starts with the daily vote
-// budget statement (vote-guards.js), which refuses the whole batch once the
-// UTC day's vote allowance is spent, so a refusal writes nothing. The
-// administrator's vote and import routes pass `admit: false`.
+// Admission: every write batch a reader causes starts with that person's daily
+// vote allowance statement (vote-guards.js), which refuses the whole batch once
+// their allowance for the UTC day is spent, so a refusal writes nothing. The
+// administrator's vote and import routes charge nobody.
 import { electGeneAuthorityWinner } from "../vote-authority/gene-authority-election.js"
 import { CARETAKER_SUPERVOTE_WEIGHT } from "../caretaker/caretaker-supervote.js"
 import {
   GENE_VOTE_VERSION_SQL,
-  VOTE_DAILY_LIMIT,
+  VOTE_PERSON_DAILY_LIMIT,
   geneVoteVersionBumpStatement,
   isVoteDailyBudgetRefusal,
+  voteAllowanceCleanupStatement,
+  voteAllowanceStatement,
   voteDailyBudgetRefusal,
-  voteDailyBudgetStatement,
 } from "./vote-guards.js"
 
 // The election reads every eligible candidate of one gene and nothing else.
@@ -411,17 +412,22 @@ function geneVoteWriteStatements(db, request, plan) {
   return statements
 }
 
-// Runs one vote write batch, with the daily budget statement first when the
-// write is admitted. A spent budget rolls the batch back whole and returns the
-// refusal; any other failure is thrown.
-async function runVoteWriteBatch(db, statements, { admit, units, dailyVoteLimit }) {
+// Runs one vote write batch, with the allowance of the person it is charged to
+// first. A spent allowance rolls the batch back whole and returns the refusal;
+// any other failure is thrown. `chargeTo` empty: an administrator's write.
+async function runVoteWriteBatch(db, statements, { chargeTo, units, dailyVoteLimit }) {
+  const admitted = chargeTo
+    ? [
+        voteAllowanceStatement(db, chargeTo, units, dailyVoteLimit),
+        voteAllowanceCleanupStatement(db, chargeTo),
+        ...statements,
+      ]
+    : statements
   try {
-    await db.batch(
-      admit ? [voteDailyBudgetStatement(db, units, dailyVoteLimit), ...statements] : statements,
-    )
+    await db.batch(admitted)
     return null
   } catch (error) {
-    if (admit && isVoteDailyBudgetRefusal(error)) return voteDailyBudgetRefusal()
+    if (chargeTo && isVoteDailyBudgetRefusal(error)) return voteDailyBudgetRefusal()
     throw error
   }
 }
@@ -487,9 +493,9 @@ export async function setGeneVote(db, raw = {}) {
       geneVoteVersionBumpStatement(db, request.symbol),
     ],
     {
-      admit: raw.admit !== false,
+      chargeTo: raw.admit === false ? "" : request.userId,
       units: 1,
-      dailyVoteLimit: raw.dailyVoteLimit ?? VOTE_DAILY_LIMIT,
+      dailyVoteLimit: raw.dailyVoteLimit ?? VOTE_PERSON_DAILY_LIMIT,
     },
   )
   return refused || plan
@@ -506,7 +512,8 @@ export const GENE_VOTE_IMPORT_CHUNK = 50
  * statements as setGeneVote; a later item for the same user and asset wins,
  * like replaying the commands in order.
  *
- * An admitted import spends one budget unit per changed vote, chunk by chunk.
+ * An import charged to a reader (`chargeTo`, the person whose action brought
+ * the votes) spends one unit of their allowance per changed vote, chunk by chunk.
  * The first refused chunk writes nothing, and it and every later item are
  * reported refused (429), so a caller can retry the same import after the
  * reset: items that already landed are unchanged and cost nothing.
@@ -517,7 +524,7 @@ export const GENE_VOTE_IMPORT_CHUNK = 50
 export async function importGeneVotes(
   db,
   items = [],
-  { sanitizeVisionId, admit = true, dailyVoteLimit = VOTE_DAILY_LIMIT } = {},
+  { sanitizeVisionId, chargeTo = "", dailyVoteLimit = VOTE_PERSON_DAILY_LIMIT } = {},
 ) {
   const sanitize = sanitizeVisionId || ((value) => String(value || ""))
   const byIdentity = new Map()
@@ -593,7 +600,7 @@ export async function importGeneVotes(
     for (const symbol of chunkSymbols) statements.push(geneVoteVersionBumpStatement(db, symbol))
     const units = chunkResults.filter((row) => row.ok && row.changed).length
     refused = units
-      ? await runVoteWriteBatch(db, statements, { admit, units, dailyVoteLimit })
+      ? await runVoteWriteBatch(db, statements, { chargeTo, units, dailyVoteLimit })
       : null
     if (refused) {
       for (const row of chunkResults)
