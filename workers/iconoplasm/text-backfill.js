@@ -45,7 +45,7 @@ const TAGS_JOINS = `LEFT JOIN icono_manifestation_derivative_heads dh
 // uses instead, when its canonical line is a caretaker's.
 const FACTORY_SQL = (where) => `
 SELECT s.gene_id, r.manifestation_revision_id AS revision_id, r.revision_number,
-       r.body_sha256, r.body_bytes, s.public_page_visible AS readers_see,
+       r.body_sha256, r.body_bytes, r.created_at, s.public_page_visible AS readers_see,
        ${STORAGE_COLUMNS("rs", "")},
        ${TAGS_COLUMNS},
        CASE WHEN c.origin IN ('caretaker', 'fork') THEN h.canonical_revision_id END AS chosen,
@@ -104,17 +104,19 @@ const CARETAKER_PAGE_SQL = CARETAKER_SQL("r.manifestation_revision_id > ?", TEXT
 // One gene's versions; a caretaker line holds a few dozen at most.
 const CARETAKER_GENE_SQL = CARETAKER_SQL("m.gene_id = ?", 500)
 
+// updated_at is the date the text was written, not the date it was copied: the
+// workstation compares it with its own texts to decide which side is newer.
 const FACTORY_UPSERT_SQL = `
 INSERT INTO icono_gene_texts
   (gene_id, text_id, version, text, text_sha256, tags, fields_json, readers_see,
    chosen_caretaker_version_id, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (gene_id) DO UPDATE SET
   text_id = excluded.text_id, version = excluded.version, text = excluded.text,
   text_sha256 = excluded.text_sha256, tags = excluded.tags,
   fields_json = excluded.fields_json, readers_see = excluded.readers_see,
   chosen_caretaker_version_id = excluded.chosen_caretaker_version_id,
-  updated_at = CURRENT_TIMESTAMP`
+  updated_at = excluded.updated_at`
 
 const CARETAKER_UPSERT_SQL = `
 INSERT INTO icono_caretaker_text_versions
@@ -128,8 +130,7 @@ ON CONFLICT (version_id) DO UPDATE SET
 // The factory saved a newer text through PUT /admin/genes/:symbol/text: the old
 // authority's text is behind, so only the gene's flags come across.
 const FACTORY_FLAGS_SQL = `
-UPDATE icono_gene_texts SET readers_see = ?, chosen_caretaker_version_id = ?,
-       updated_at = CURRENT_TIMESTAMP
+UPDATE icono_gene_texts SET readers_see = ?, chosen_caretaker_version_id = ?
  WHERE gene_id = ?`
 
 const CARETAKER_FLAGS_SQL = `
@@ -244,6 +245,7 @@ async function factoryPage(env, db, after, force, sql = FACTORY_PAGE_SQL) {
               fields_json,
               Number(row.readers_see) ? 1 : 0,
               row.chosen ?? null,
+              row.created_at,
             ),
         )
       } catch (error) {

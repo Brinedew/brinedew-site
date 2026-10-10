@@ -37,7 +37,9 @@ import { copyGeneTextFromAuthority } from "./text-backfill.js"
 // 4. a rerun reads Bunny again or rewrites rows it already copied (it runs
 //    about 1,000 pages over the free plan's write wall);
 // 5. a missing object stops the page, or is copied as an empty text;
-// 6. a caller without the factory's token runs it.
+// 6. a caller without the factory's token runs it;
+// 7. a copied text is dated the day it was copied, so it looks newer than the
+//    workstation's own text and wins over it.
 const TOKEN = "factory-token-0000000000000000000000001"
 
 async function harness(t, suffix) {
@@ -134,6 +136,13 @@ test("a factory text and its Tags copy byte for byte, and a rerun reads nothing"
   assert.deepEqual(JSON.parse(copied.fields_json), FIELDS)
   assert.equal(copied.readers_see, 0)
   assert.equal(copied.chosen_caretaker_version_id, null)
+  // The text keeps the date it was written; the workstation compares it with
+  // its own texts' dates.
+  const written = h.rows(
+    "SELECT created_at FROM icono_manifestation_revisions WHERE manifestation_revision_id = ?",
+    context.seedRevisionId,
+  )[0].created_at
+  assert.equal(copied.updated_at, written)
 
   h.bunny.clearLog()
   const rerun = await h.backfill({ kind: "factory" })
