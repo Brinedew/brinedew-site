@@ -7,6 +7,7 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } from "./app.js"
+import { readD1WindowUsage } from "./operation-cost-account-usage.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
 // Drizzle, the D1 schema of every production migration and the real card
@@ -27,7 +28,11 @@ import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } fr
 const TOKEN = "factory-token-0000000000000000000000001"
 const sha = (char) => char.repeat(64)
 
-function harness({ failOn = null, usage = async () => ({ rows_read: 0, rows_written: 0 }) } = {}) {
+function harness({
+  failOn = null,
+  usage = async () => ({ rows_read: 0, rows_written: 0 }),
+  analytics = async () => new Response("{}", { status: 500 }),
+} = {}) {
   const db = iconoplasmDatabase()
   for (const [symbol, name] of [
     ["TP53", "tumor protein p53"],
@@ -60,6 +65,8 @@ function harness({ failOn = null, usage = async () => ({ rows_read: 0, rows_writ
     },
     refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
     accountUsage: usage,
+    windowUsage: (env, window) =>
+      readD1WindowUsage({ accountId: "a".repeat(32), token: "t", ...window, fetcher: analytics }),
   })
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const register = async (body, { token = TOKEN } = {}) => {
@@ -366,6 +373,64 @@ test("the usage route reports what the shedding sees, and an unread meter as nul
   )
   assert.equal(blind.body.ok, false)
   assert.equal(blind.body.meters.rows_written.used, null)
+})
+
+// B-1059: the Drain learns a publication's cost from the account's D1 rows in its
+// window. Golden: Cloudflare's answer for 2026-10-10 00:00-00:10 UTC. Failure
+// modes: a bad or future window reaches the analytics API; an unreadable answer
+// reads as zero rows, which would teach the forecast that portraits are free.
+test("the usage route answers a window's D1 rows from Cloudflare's analytics", async () => {
+  const asked = []
+  const h = harness({
+    analytics: async (url, init) => {
+      asked.push(JSON.parse(init.body).variables)
+      return Response.json({
+        data: {
+          viewer: {
+            accounts: [
+              { d1QueriesAdaptiveGroups: [{ sum: { rowsRead: 47760, rowsWritten: 9460 } }] },
+            ],
+          },
+        },
+        errors: null,
+      })
+    },
+  })
+  const read = async (query, app = h) => {
+    const response = await app.app.request(
+      `/api/iconoplasm/admin/d1-usage?${query}`,
+      { headers: { Authorization: `Bearer ${TOKEN}` } },
+      app.env,
+    )
+    return { status: response.status, body: await response.json() }
+  }
+
+  const { status, body } = await read("from=2026-10-10T00:00:00Z&to=2026-10-10T00:10:00Z")
+  assert.equal(status, 200)
+  assert.deepEqual(body, {
+    ok: true,
+    window: {
+      from: "2026-10-10T00:00:00.000Z",
+      to: "2026-10-10T00:10:00.000Z",
+      rows_read: 47760,
+      rows_written: 9460,
+    },
+  })
+  assert.equal(asked[0].from, "2026-10-10T00:00:00.000Z")
+
+  for (const bad of [
+    "from=2026-10-10T00:10:00Z&to=2026-10-10T00:00:00Z",
+    "from=2026-10-08T00:00:00Z&to=2026-10-10T00:00:00Z",
+    `from=2026-10-10T00:00:00Z&to=${new Date(Date.now() + 3_600_000).toISOString()}`,
+    "from=yesterday&to=2026-10-10T00:00:00Z",
+    "to=2026-10-10T00:00:00Z",
+  ])
+    assert.equal((await read(bad)).status, 400, bad)
+  assert.equal(asked.length, 1, "a refused window never reaches the analytics API")
+
+  const blind = await read("from=2026-10-10T00:00:00Z&to=2026-10-10T00:10:00Z", harness())
+  assert.equal(blind.body.ok, false)
+  assert.equal(blind.body.window.rows_written, null, "unreadable is null, never zero")
 })
 
 test("a usage meter that can't be read stops no registration", async () => {

@@ -178,7 +178,13 @@ async function outsideMaintenance(c, next) {
   return next()
 }
 
-export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, accountUsage }) {
+export function createIconoplasmApp({
+  legacy,
+  publishGene,
+  refreshSummaries,
+  accountUsage,
+  windowUsage,
+}) {
   const app = new Hono()
 
   // B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
@@ -236,10 +242,37 @@ export function createIconoplasmApp({ legacy, publishGene, refreshSummaries, acc
   // own meter, each wall, and where batch work stops. The Drain's forecast plans
   // from this answer instead of keeping copies of the numbers (its copy of the
   // write share stayed at 70% after the tier table moved to 85%). No D1 read.
+  // With ?from=&to= (ISO instants, at most a day apart) it answers the account's
+  // D1 rows in that window instead: what a publication cost (B-1059).
   app.get("/api/iconoplasm/admin/d1-usage", factoryAuth, async (c) => {
+    c.header("Cache-Control", "no-store")
+    const from = c.req.query("from")
+    const to = c.req.query("to")
+    if (from !== undefined || to !== undefined) {
+      const start = Date.parse(from ?? "")
+      const end = Date.parse(to ?? "")
+      if (!(start < end && end <= Date.now() && end - start <= 86_400_000))
+        return c.json(
+          {
+            ok: false,
+            error:
+              "from and to must be ISO instants, from before to, at most a day apart, not in the future",
+          },
+          400,
+        )
+      const window = { from: new Date(start).toISOString(), to: new Date(end).toISOString() }
+      const usage = await windowUsage(c.env, window).catch(() => null)
+      return c.json({
+        ok: usage !== null,
+        window: {
+          ...window,
+          rows_read: usage?.rows_read ?? null,
+          rows_written: usage?.rows_written ?? null,
+        },
+      })
+    }
     const usage = await accountUsage(c.env).catch(() => null)
     const retryAfter = secondsUntilCloudflareDailyReset()
-    c.header("Cache-Control", "no-store")
     return c.json({
       ok: usage !== null,
       reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
