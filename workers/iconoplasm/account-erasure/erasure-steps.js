@@ -314,19 +314,6 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_image_votes.user_id"],
     },
     {
-      id: "vote_events",
-      database: "iconoplasm",
-      table: "icono_vote_events",
-      action: "update",
-      key: "rowid",
-      set: "user_id = ?",
-      setBinds: [A],
-      where: "user_id = ?",
-      whereBinds: [U],
-      weight: 3,
-      covers: ["icono_vote_events.user_id"],
-    },
-    {
       // Public comments stay under the anonymous label; a comment its author had already removed
       // is hidden, not gone (the body is still in the row), so it is deleted. A custom step
       // (runCommentsStep): each slice first drops the gene's cached comment list from KV, which

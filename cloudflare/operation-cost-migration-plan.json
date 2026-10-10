@@ -15,15 +15,11 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0120_portrait_indexes_without_readers.sql": {
+    "iconoplasm/0121_vote_mirror_table_dropped.sql": {
       "online": true,
-      "prediction": { "rows_read": 100, "rows_written": 100, "requests": 1 }
+      "prediction": { "rows_read": 100, "rows_written": 2000, "requests": 1 }
     },
-    "iconoplasm/0118_auth_session_revocations.sql": {
-      "online": true,
-      "prediction": { "rows_read": 100, "rows_written": 10, "requests": 1 }
-    },
-    "iconoplasm/0119_vote_indexes_without_readers.sql": {
+    "iconoplasm/0122_essence_leakage_index_dropped.sql": {
       "online": true,
       "prediction": { "rows_read": 100, "rows_written": 100, "requests": 1 }
     },

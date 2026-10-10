@@ -469,23 +469,6 @@ export async function seedWorld() {
     })
     if (!vote.ok) throw new Error(`seed vote failed: ${vote.code}`)
   }
-  // Votes no longer feed the workstation's mirror (B-1065), but production keeps the rows
-  // it wrote until the table goes, and erasure clears them: one per person, as history.
-  for (const [user, gene, asset, value] of [
-    [ERASED_USER, "TP53", ASSET.alice, 1],
-    [OTHER_USER, "TP53", ASSET.bob, 1],
-  ])
-    run(
-      iconoplasm,
-      `INSERT INTO icono_vote_events (gene_symbol, asset_sha256, candidate_ref, user_id, vote_value)
-       VALUES (?, ?, ?, ?, ?)`,
-      gene,
-      asset,
-      `a:${gene}|${asset}`,
-      user,
-      value,
-    )
-
   // Comments: two visible and one the author removed, and the other person's.
   // Each comment has the time it was written, so the Discord channel (seedDiscordMirror) can hold
   // the posts the way the poster left them: a few seconds after the row. Alice's second TP53
