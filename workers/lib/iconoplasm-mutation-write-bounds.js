@@ -70,11 +70,13 @@ export const VISION_ROLLUP_DIRTY_MARK_ROWS = 2
 // RECONCILE_RESTORES_PER_INVOCATION assets. Measured on 2026-10-09 (CI receipts,
 // finalization-reservation-receipts.test.js) once reconcile stopped writing the
 // unread emulsion option rollup and elections stopped marking winners
-// "approved": 21 rows with nothing to restore, about 16 more per restore, and
-// at most 375 with the marking of stale assets past the cap. A fixed row and 21
-// per restore fits every measured count within the guard's 35%.
+// "approved", and remeasured on 2026-10-10 after migration 0120 dropped the
+// portrait indexes nothing read (status, legacy, artist tag, source revision;
+// B-1072): 21 rows with nothing to restore, about 13 more per restore, and at
+// most 306 at the 17-restore cap with the marking of stale assets. A fixed row
+// and 18 per restore fits all 22 measured runs within the guard's 35%.
 export const RECONCILE_FIXED_ROWS = 1
-export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 21
+export const RECONCILE_RESTORE_EXTRA_ROWS_PER_ASSET = 18
 export const RECONCILE_RESTORES_PER_INVOCATION = 17
 // The after-response republish of a touched gene (route row and card
 // materialization wake-up).
