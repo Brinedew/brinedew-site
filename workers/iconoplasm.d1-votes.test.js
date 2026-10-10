@@ -26,8 +26,8 @@
 //     anything at all (vote row, summary, event, version, budget), or the
 //     refusal is not a 429 with words a reader can act on; an unchanged vote
 //     spends budget; an administrator's vote is refused.
-// 13. A changed vote leaves no icono_vote_events row for the workstation's
-//     incremental mirror, or an unchanged one leaves one.
+// 13. A vote still writes a row for the workstation's vote mirror, which
+//     nothing reads (B-1065: about 6 of a vote's 15-21 rows).
 // 14. A gene's rejected or stale history counts toward the 256-candidate
 //     election bound, so a gene with a long history stops electing.
 // 15. A vote import elects only the genes whose votes changed, so re-running
@@ -123,6 +123,15 @@ const VOTE_TABLES = [
   "icono_vote_daily_budget",
 ]
 const sha = (char) => char.repeat(64)
+// One asset's vote totals as readers see them (the summary the cards read).
+const summaryOf = (db, symbol, asset) => {
+  const row = db.rows(
+    "SELECT score, vote_count FROM icono_vote_asset_summary WHERE gene_symbol = ? AND asset_sha256 = ?",
+    symbol,
+    asset,
+  )[0]
+  return row ? { score: row.score, vote_count: row.vote_count } : null
+}
 const ADMIN_TOKEN = "test-admin-token-000000000000000000001"
 
 class SqliteD1 {
@@ -1215,7 +1224,7 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
 
 // --- 13 -----------------------------------------------------------------
 
-test("13: every changed vote leaves one icono_vote_events row for the workstation's mirror", async () => {
+test("13: votes and vote imports write no row for the workstation's old vote mirror", async () => {
   const db = new SqliteD1()
   seedAsset(db, "KRAS", sha("a"))
   for (const value of [1, 1, -1, 0, 0]) await vote(db, "KRAS", sha("a"), "u1", value)
@@ -1223,19 +1232,8 @@ test("13: every changed vote leaves one icono_vote_events row for the workstatio
     { symbol: "KRAS", asset_sha256: sha("a"), user_id: "i1", vote_value: 1 },
     { symbol: "KRAS", asset_sha256: sha("a"), user_id: "i2", vote_value: -1 },
   ])
-  assert.deepEqual(
-    db
-      .rows("SELECT user_id, vote_value, candidate_ref FROM icono_vote_events ORDER BY id")
-      .map((row) => [row.user_id, row.vote_value, row.candidate_ref]),
-    [
-      ["u1", 1, `a:KRAS|${sha("a")}`],
-      ["u1", -1, `a:KRAS|${sha("a")}`],
-      ["u1", 0, `a:KRAS|${sha("a")}`],
-      ["i1", 1, `a:KRAS|${sha("a")}`],
-      ["i2", -1, `a:KRAS|${sha("a")}`],
-    ],
-    "one row per change, clears included, none for the two unchanged repeats",
-  )
+  assert.equal(db.rows("SELECT COUNT(*) AS n FROM icono_vote_events")[0].n, 0)
+  assert.deepEqual(summaryOf(db, "KRAS", sha("a")), { score: 0, vote_count: 2 })
 })
 
 // --- 14 -----------------------------------------------------------------
@@ -1291,10 +1289,10 @@ test("15: a vote import elects every gene it names, so re-running it repairs a s
   assert.equal(result.payload.elected, 1)
   assert.equal(result.payload.auto_promoted, 1)
   assert.equal(current(db, "KRAS"), sha("a"))
-  assert.equal(
-    db.rows("SELECT COUNT(*) AS n FROM icono_vote_events WHERE user_id = 'u1'")[0].n,
-    1,
-    "the identical re-import wrote no vote",
+  assert.deepEqual(
+    summaryOf(db, "KRAS", sha("a")),
+    { score: 1, vote_count: 1 },
+    "the identical re-import counted the vote once",
   )
 })
 
@@ -1424,11 +1422,12 @@ test("19: an import whose election fails answers non-2xx with the failed symbols
   assert.equal(retry.payload.elections_failed, 0)
   assert.equal(retry.payload.elected, 2)
   assert.equal(current(db, "KRAS"), sha("b"), "re-running the same import repaired it")
-  assert.equal(
-    db.rows("SELECT COUNT(*) AS n FROM icono_vote_events WHERE user_id = 'u1'")[0].n,
-    2,
-    "the identical re-import wrote no vote",
-  )
+  for (const symbol of ["TP53", "KRAS"])
+    assert.deepEqual(
+      summaryOf(db, symbol, sha("b")),
+      { score: 1, vote_count: 1 },
+      `the identical re-import counted ${symbol}'s vote once`,
+    )
 })
 
 // --- 20 -----------------------------------------------------------------

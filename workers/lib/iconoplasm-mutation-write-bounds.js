@@ -31,9 +31,9 @@ export const FINALIZATION_JOB_TRANSITION_ROWS = 7
 // One job completed by the page statement (COMPLETE_READY_FINALIZATION_SQL).
 export const FINALIZATION_COMPLETION_ROW_ROWS = 4
 
-// One vote-summary row and the three index entries behind it, per asset the
-// rebuild has to create or change.
-export const VOTE_SUMMARY_ROWS_PER_ASSET = 4
+// One vote-summary row and its primary key, per asset the rebuild has to
+// create or change (migration 0119 dropped its two unread indexes, B-1065).
+export const VOTE_SUMMARY_ROWS_PER_ASSET = 2
 
 export const GENE_ROLLUP_ROWS = 8
 
