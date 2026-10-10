@@ -1,9 +1,13 @@
-import {
-  readManifestationProse,
-  readManifestationTags,
-} from "./iconoplasm-manifestation-body-reader.js"
+// B-1065: a generation request is bound to the exact text and Tags it was made
+// from. Both come from the plain text tables of authoring migration 0024: the
+// gene's current text, and later the same text by its ID, checked against the
+// hashes the request carries. One D1 read each, no Bunny.
+//
+// The wire format is the one the old manifestation authority produced, so
+// requests made before the switch still validate: their revision ID is the
+// text's ID, and the backfill kept the text and Tags byte for byte.
+import { readGeneText, readGeneTextVersion } from "./iconoplasm-gene-text.js"
 import { sha256Hex } from "./iconoplasm-sha256.js"
-import { splitManifestationTagsPayload } from "../iconoplasm/caretaker/manifestation-tags-payload.js"
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
 const SHA256 = /^[a-f0-9]{64}$/
@@ -82,180 +86,7 @@ export async function iconoplasmGenerationFingerprint(kind, fields) {
   return sha256Hex(`${namespace}\n${JSON.stringify(canonicalize(fields || {}))}`)
 }
 
-function validateAuthorityRow(row, { promptBodyMode, requireStorageSecrets }) {
-  if (!row) {
-    throw sourceError(
-      "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
-      "This gene has no canonical manifestation available for generation.",
-      404,
-    )
-  }
-  if (stringValue(row.gene_status) !== "active") {
-    throw sourceError(
-      "GENERATION_SOURCE_GENE_INACTIVE",
-      "This gene is not active in the manifestation authority.",
-    )
-  }
-  if (stringValue(row.manifestation_status) !== "active") {
-    throw sourceError(
-      "GENERATION_SOURCE_MANIFESTATION_INACTIVE",
-      "The selected manifestation is no longer active.",
-    )
-  }
-  if (stringValue(row.revision_status) !== "active") {
-    throw sourceError(
-      "GENERATION_SOURCE_REVISION_INACTIVE",
-      "The selected manifestation revision is no longer active.",
-    )
-  }
-  if (requireStorageSecrets && !stringValue(row.revision_object_key)) {
-    throw sourceError(
-      "GENERATION_SOURCE_BODY_UNAVAILABLE",
-      "The selected manifestation body is unavailable.",
-      503,
-    )
-  }
-  if (!stringValue(row.revision_verified_at)) {
-    throw sourceError(
-      "GENERATION_SOURCE_BODY_UNVERIFIED",
-      "The selected manifestation body has not passed storage verification.",
-      503,
-    )
-  }
-
-  const mode = normalizePromptBodyMode(promptBodyMode)
-  if (mode === "taggerizer_prompt") {
-    if (stringValue(row.derivative_status) !== "complete") {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_UNAVAILABLE",
-        "The selected manifestation revision has no accepted Tags derivative.",
-      )
-    }
-    if (
-      stringValue(row.derivative_source_body_sha256).toLowerCase() !==
-      stringValue(row.body_sha256).toLowerCase()
-    ) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_STALE",
-        "The accepted Tags derivative does not belong to the selected manifestation body.",
-      )
-    }
-    if (requireStorageSecrets && !stringValue(row.derivative_object_key)) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_UNAVAILABLE",
-        "The accepted Tags derivative body is unavailable.",
-        503,
-      )
-    }
-    if (!stringValue(row.derivative_verified_at)) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_UNVERIFIED",
-        "The accepted Tags derivative has not passed storage verification.",
-        503,
-      )
-    }
-    // Imported Tags retain unknown authoring history. Their immutable revision,
-    // verified bytes and compound hashes still bind every new image exactly.
-    const imported = stringValue(row.derivative_provenance_status) === "legacy_unknown"
-    const historyFields = [
-      "recipe_id",
-      "recipe_version",
-      "provider_id",
-      "model_id",
-      "tagger_config_sha256",
-    ]
-    if (imported && historyFields.some((field) => stringValue(row[`derivative_${field}`]))) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_PROVENANCE_INCOMPLETE",
-        "Imported Tags must retain unknown authoring history without guessed metadata.",
-      )
-    }
-    if (
-      !imported &&
-      (stringValue(row.derivative_provenance_status) !== "generated" ||
-        !stringValue(row.derivative_recipe_id) ||
-        !stringValue(row.derivative_recipe_version) ||
-        !stringValue(row.derivative_provider_id) ||
-        !stringValue(row.derivative_model_id) ||
-        !SHA256.test(stringValue(row.derivative_tagger_config_sha256).toLowerCase()))
-    ) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_PROVENANCE_INCOMPLETE",
-        "The accepted Tags derivative has no exact recipe, provider, model, or tagger configuration identity.",
-      )
-    }
-    const derivativeBodyBytes = positiveInteger(row.derivative_body_bytes, "derivative_body_bytes")
-    const derivativeTagsBytes = positiveInteger(row.derivative_tags_bytes, "derivative_tags_bytes")
-    const derivativeFieldsBytes = positiveInteger(
-      row.derivative_fields_bytes,
-      "derivative_fields_bytes",
-    )
-    sha256(row.derivative_body_sha256, "derivative_body_sha256")
-    sha256(row.derivative_tags_sha256, "derivative_tags_sha256")
-    sha256(row.derivative_fields_sha256, "derivative_fields_sha256")
-    if (derivativeBodyBytes !== derivativeTagsBytes + 1 + derivativeFieldsBytes) {
-      throw sourceError(
-        "GENERATION_SOURCE_DERIVATIVE_FRAMING_INVALID",
-        "The accepted Tags derivative component lengths do not match its compound body.",
-      )
-    }
-  }
-  return mode
-}
-
-async function provenanceFromAuthorityRow(row, promptBodyMode) {
-  const mode = validateAuthorityRow(row, { promptBodyMode, requireStorageSecrets: false })
-  const manifestationId = opaqueId(row.manifestation_id, "source_manifestation_id")
-  const revisionId = opaqueId(row.manifestation_revision_id, "source_manifestation_revision_id")
-  const selectedManifestationId = opaqueId(
-    row.selected_manifestation_id,
-    "selected_manifestation_id",
-  )
-  const selectedRevisionId = opaqueId(row.selected_revision_id, "selected_revision_id")
-  if (manifestationId !== selectedManifestationId || revisionId !== selectedRevisionId) {
-    throw sourceError(
-      "GENERATION_SOURCE_SELECTION_MISMATCH",
-      "The canonical selection does not identify the selected manifestation revision.",
-    )
-  }
-  const source = normalizeGenerationSource({
-    generation_provenance_status: "bound",
-    source_gene_id: row.gene_id,
-    source_manifestation_id: manifestationId,
-    source_manifestation_revision_id: revisionId,
-    source_manifestation_body_sha256: row.body_sha256,
-    source_manifestation_derivative_id: row.manifestation_derivative_id,
-    ...Object.fromEntries(
-      [
-        "sha256",
-        "tags_sha256",
-        "tags_bytes",
-        "fields_sha256",
-        "fields_bytes",
-        "recipe_id",
-        "recipe_version",
-        "provider_id",
-        "model_id",
-        "tagger_config_sha256",
-      ].map((field) => [
-        `source_manifestation_derivative_${field}`,
-        row[field === "sha256" ? "derivative_body_sha256" : `derivative_${field}`],
-      ]),
-    ),
-    source_canonical_selection_id: row.canonical_selection_id,
-    source_canonical_head_version: row.selection_head_version,
-    source_gene_revision: row.selection_gene_revision,
-    source_sample_label: row.sample_label,
-    source_sample_number: row.sample_number,
-    source_sample_text_sha256: row.sample_text_sha256,
-    prompt_body_mode: mode,
-  })
-  source.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
-    "iconoplasm.generation-source.v1",
-    source,
-  )
-  return Object.freeze(source)
-}
+const ENCODER = new TextEncoder()
 
 function authoringDatabase(env) {
   if (!env?.ICONOPLASM_AUTHORING_DB) {
@@ -268,56 +99,36 @@ function authoringDatabase(env) {
   return env.ICONOPLASM_AUTHORING_DB
 }
 
-const SOURCE_ROW_SELECT = `SELECT
-  g.gene_id,
-  g.status AS gene_status,
-  m.manifestation_id,
-  m.status AS manifestation_status,
-  r.manifestation_revision_id,
-  r.body_sha256,
-  r.body_bytes,
-  r.sample_label,
-  r.sample_number,
-  r.sample_text_sha256,
-  lifecycle.status AS revision_status,
-  revision_storage.object_key AS revision_object_key,
-  revision_storage.ciphertext_sha256 AS revision_ciphertext_sha256,
-  revision_storage.ciphertext_bytes AS revision_ciphertext_bytes,
-  revision_storage.body_iv_base64 AS revision_body_iv_base64,
-  revision_storage.wrapped_dek_base64 AS revision_wrapped_dek_base64,
-  revision_storage.wrap_iv_base64 AS revision_wrap_iv_base64,
-  revision_storage.key_version AS revision_key_version,
-  revision_storage.aad_version AS revision_aad_version,
-  revision_storage.verified_at AS revision_verified_at,
-  selection.canonical_selection_id,
-  selection.selected_manifestation_id,
-  selection.selected_revision_id,
-  selection.head_version AS selection_head_version,
-  selection.gene_revision AS selection_gene_revision,
-  derivative.manifestation_derivative_id,
-  derivative.status AS derivative_status,
-  derivative.source_body_sha256 AS derivative_source_body_sha256,
-  derivative.body_sha256 AS derivative_body_sha256,
-  derivative.body_bytes AS derivative_body_bytes,
-  derivative.tags_sha256 AS derivative_tags_sha256,
-  derivative.tags_bytes AS derivative_tags_bytes,
-  derivative.fields_sha256 AS derivative_fields_sha256,
-  derivative.fields_bytes AS derivative_fields_bytes,
-  derivative.recipe_id AS derivative_recipe_id,
-  derivative.recipe_version AS derivative_recipe_version,
-  derivative.provider_id AS derivative_provider_id,
-  derivative.model_id AS derivative_model_id,
-  derivative.tagger_config_sha256 AS derivative_tagger_config_sha256,
-  derivative.provenance_status AS derivative_provenance_status,
-  derivative_storage.object_key AS derivative_object_key,
-  derivative_storage.ciphertext_sha256 AS derivative_ciphertext_sha256,
-  derivative_storage.ciphertext_bytes AS derivative_ciphertext_bytes,
-  derivative_storage.body_iv_base64 AS derivative_body_iv_base64,
-  derivative_storage.wrapped_dek_base64 AS derivative_wrapped_dek_base64,
-  derivative_storage.wrap_iv_base64 AS derivative_wrap_iv_base64,
-  derivative_storage.key_version AS derivative_key_version,
-  derivative_storage.aad_version AS derivative_aad_version,
-  derivative_storage.verified_at AS derivative_verified_at`
+function requireActiveGene(geneText) {
+  if (stringValue(geneText.gene_status) !== "active") {
+    throw sourceError(
+      "GENERATION_SOURCE_GENE_INACTIVE",
+      "This gene is not active in the manifestation authority.",
+    )
+  }
+}
+
+// The text's Tags as the generator reads them: the Tags line, then the
+// structured fields as canonical JSON. A text saved without fields has none.
+async function tagsOf(geneText) {
+  if (!geneText.tags) {
+    throw sourceError(
+      "GENERATION_SOURCE_DERIVATIVE_UNAVAILABLE",
+      "The selected manifestation revision has no accepted Tags derivative.",
+    )
+  }
+  const tags = ENCODER.encode(geneText.tags)
+  const fieldsJson = geneText.fields_json ?? "{}"
+  const fields = ENCODER.encode(fieldsJson)
+  return {
+    fieldsJson,
+    sha256: await sha256Hex(`${geneText.tags}\n${fieldsJson}`),
+    tags_sha256: await sha256Hex(tags),
+    tags_bytes: tags.byteLength,
+    fields_sha256: await sha256Hex(fields),
+    fields_bytes: fields.byteLength,
+  }
+}
 
 export async function resolveCanonicalGenerationSource(
   env,
@@ -327,38 +138,43 @@ export async function resolveCanonicalGenerationSource(
   if (!symbol) {
     throw sourceError("GENERATION_SOURCE_GENE_INVALID", "A gene symbol is required.", 400)
   }
-  const row = await authoringDatabase(env)
-    .prepare(
-      `${SOURCE_ROW_SELECT}
-       FROM icono_gene_identities g
-       JOIN icono_manifestation_heads head
-         ON head.gene_id = g.gene_id
-       JOIN icono_manifestations m
-         ON m.manifestation_id = head.canonical_manifestation_id
-        AND m.gene_id = g.gene_id
-       JOIN icono_manifestation_revisions r
-         ON r.manifestation_revision_id = head.canonical_revision_id
-        AND r.manifestation_id = m.manifestation_id
-       JOIN icono_manifestation_revision_lifecycle lifecycle
-         ON lifecycle.manifestation_revision_id = r.manifestation_revision_id
-       JOIN icono_manifestation_revision_storage_secrets revision_storage
-         ON revision_storage.manifestation_revision_id = r.manifestation_revision_id
-       JOIN icono_manifestation_canonical_selections selection
-         ON selection.canonical_selection_id = head.canonical_selection_id
-        AND selection.gene_id = g.gene_id
-       LEFT JOIN icono_manifestation_derivative_heads derivative_head
-         ON derivative_head.manifestation_revision_id = r.manifestation_revision_id
-       LEFT JOIN icono_manifestation_derivatives derivative
-         ON derivative.manifestation_derivative_id = derivative_head.accepted_derivative_id
-        AND derivative.manifestation_revision_id = r.manifestation_revision_id
-       LEFT JOIN icono_manifestation_derivative_storage_secrets derivative_storage
-         ON derivative_storage.manifestation_derivative_id = derivative.manifestation_derivative_id
-       WHERE g.canonical_symbol = ? COLLATE NOCASE
-       LIMIT 1`,
+  const geneText = await readGeneText(authoringDatabase(env), symbol)
+  if (!geneText) {
+    throw sourceError(
+      "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
+      "This gene has no canonical manifestation available for generation.",
+      404,
     )
-    .bind(symbol)
-    .first()
-  return provenanceFromAuthorityRow(row, promptBodyMode)
+  }
+  requireActiveGene(geneText)
+  const mode = normalizePromptBodyMode(promptBodyMode)
+  const tags = mode === "taggerizer_prompt" ? await tagsOf(geneText) : null
+  const source = normalizeGenerationSource({
+    generation_provenance_status: "bound",
+    source_gene_id: geneText.gene_id,
+    source_manifestation_id: geneText.line_id || geneText.gene_id,
+    source_manifestation_revision_id: geneText.text_id,
+    source_manifestation_body_sha256: geneText.text_sha256,
+    ...(tags
+      ? {
+          source_manifestation_derivative_id: geneText.text_id,
+          source_manifestation_derivative_sha256: tags.sha256,
+          source_manifestation_derivative_tags_sha256: tags.tags_sha256,
+          source_manifestation_derivative_tags_bytes: tags.tags_bytes,
+          source_manifestation_derivative_fields_sha256: tags.fields_sha256,
+          source_manifestation_derivative_fields_bytes: tags.fields_bytes,
+        }
+      : {}),
+    source_canonical_selection_id: geneText.text_id,
+    source_canonical_head_version: geneText.version,
+    source_gene_revision: geneText.version,
+    prompt_body_mode: mode,
+  })
+  source.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
+    "iconoplasm.generation-source.v1",
+    source,
+  )
+  return Object.freeze(source)
 }
 
 function normalizeGenerationSource(raw, { promptBodyMode } = {}) {
@@ -479,158 +295,57 @@ export function exactGenerationProvenanceValidationKey(raw, options) {
   return JSON.stringify(requireExactGenerationProvenance(raw, options))
 }
 
-async function readVerifiedBody(read, env, storage, ids) {
-  let text
-  try {
-    text = await read(env, storage, ids)
-  } catch (error) {
-    throw Object.assign(
-      sourceError(
-        "GENERATION_SOURCE_BODY_CORRUPT",
-        "The exact manifestation source body failed integrity verification.",
-        503,
-      ),
-      { cause: error },
-    )
-  }
-  if (text === null) {
+// The text a request names, checked against every hash the request carries.
+// The request's own provenance is the answer, so the keys callers compare stay
+// the ones they stored.
+async function exactGeneText(env, provenance) {
+  const geneText = await readGeneTextVersion(
+    authoringDatabase(env),
+    provenance.source_gene_id,
+    provenance.source_manifestation_revision_id,
+  )
+  if (!geneText) {
     throw sourceError(
-      "GENERATION_SOURCE_BODY_MISSING",
-      "The exact manifestation source body is missing from private storage.",
-      503,
+      "GENERATION_SOURCE_REVISION_INACTIVE",
+      "The selected manifestation revision is no longer active.",
     )
   }
-  return text
-}
-
-async function readExactAuthorityRow(env, provenance) {
-  return authoringDatabase(env)
-    .prepare(
-      `${SOURCE_ROW_SELECT}
-       FROM icono_gene_identities g
-       JOIN icono_manifestations m
-         ON m.gene_id = g.gene_id
-        AND m.manifestation_id = ?
-       JOIN icono_manifestation_revisions r
-         ON r.manifestation_id = m.manifestation_id
-        AND r.manifestation_revision_id = ?
-       JOIN icono_manifestation_revision_lifecycle lifecycle
-         ON lifecycle.manifestation_revision_id = r.manifestation_revision_id
-       LEFT JOIN icono_manifestation_revision_storage_secrets revision_storage
-         ON revision_storage.manifestation_revision_id = r.manifestation_revision_id
-       JOIN icono_manifestation_canonical_selections selection
-         ON selection.gene_id = g.gene_id
-        AND selection.canonical_selection_id = ?
-        AND selection.selected_manifestation_id = m.manifestation_id
-        AND selection.selected_revision_id = r.manifestation_revision_id
-       LEFT JOIN icono_manifestation_derivatives derivative
-         ON derivative.manifestation_revision_id = r.manifestation_revision_id
-        AND derivative.manifestation_derivative_id = ?
-       LEFT JOIN icono_manifestation_derivative_storage_secrets derivative_storage
-         ON derivative_storage.manifestation_derivative_id = derivative.manifestation_derivative_id
-       WHERE g.gene_id = ?
-       LIMIT 1`,
+  requireActiveGene(geneText)
+  const mismatch = () =>
+    sourceError(
+      "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
+      "The stored generation source no longer matches its immutable authority record.",
     )
-    .bind(
-      provenance.source_manifestation_id,
-      provenance.source_manifestation_revision_id,
-      provenance.source_canonical_selection_id,
-      provenance.source_manifestation_derivative_id,
-      provenance.source_gene_id,
-    )
-    .first()
+  if (geneText.text_sha256 !== provenance.source_manifestation_body_sha256) throw mismatch()
+  if (provenance.prompt_body_mode !== "taggerizer_prompt") return { geneText, tags: null }
+  const tags = await tagsOf(geneText)
+  if (
+    tags.sha256 !== provenance.source_manifestation_derivative_sha256 ||
+    tags.tags_sha256 !== provenance.source_manifestation_derivative_tags_sha256 ||
+    tags.tags_bytes !== provenance.source_manifestation_derivative_tags_bytes ||
+    tags.fields_sha256 !== provenance.source_manifestation_derivative_fields_sha256 ||
+    tags.fields_bytes !== provenance.source_manifestation_derivative_fields_bytes
+  ) {
+    throw mismatch()
+  }
+  return { geneText, tags }
 }
 
 export async function validateExactGenerationSource(env, rawProvenance) {
   const provenance = requireExactGenerationProvenance(rawProvenance)
-  const row = await readExactAuthorityRow(env, provenance)
-  validateAuthorityRow(row, {
-    promptBodyMode: provenance.prompt_body_mode,
-    requireStorageSecrets: true,
-  })
-  const exact = await provenanceFromAuthorityRow(row, provenance.prompt_body_mode)
-  if (exact.source_snapshot_sha256 !== provenance.source_snapshot_sha256) {
-    throw sourceError(
-      "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
-      "The stored generation source no longer matches its immutable authority record.",
-    )
-  }
-  return exact
+  await exactGeneText(env, provenance)
+  return Object.freeze(provenance)
 }
 
 export async function readExactGenerationSource(env, rawProvenance) {
   const provenance = requireExactGenerationProvenance(rawProvenance)
-  const row = await readExactAuthorityRow(env, provenance)
-
-  validateAuthorityRow(row, {
-    promptBodyMode: provenance.prompt_body_mode,
-    requireStorageSecrets: true,
+  const { geneText, tags } = await exactGeneText(env, provenance)
+  return Object.freeze({
+    ...provenance,
+    prose: geneText.text,
+    tags: tags ? geneText.tags : "",
+    tags_fields_json: tags ? JSON.parse(tags.fieldsJson) : null,
   })
-  const exact = await provenanceFromAuthorityRow(row, provenance.prompt_body_mode)
-  if (exact.source_snapshot_sha256 !== provenance.source_snapshot_sha256) {
-    throw sourceError(
-      "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
-      "The stored generation source no longer matches its immutable authority record.",
-    )
-  }
-
-  const prose = await readVerifiedBody(
-    readManifestationProse,
-    env,
-    {
-      object_key: row.revision_object_key,
-      ciphertext_sha256: sha256(row.revision_ciphertext_sha256, "revision_ciphertext_sha256"),
-      ciphertext_bytes: positiveInteger(row.revision_ciphertext_bytes, "revision_ciphertext_bytes"),
-      body_iv_base64: row.revision_body_iv_base64,
-      wrapped_dek_base64: row.revision_wrapped_dek_base64,
-      wrap_iv_base64: row.revision_wrap_iv_base64,
-      key_version: positiveInteger(row.revision_key_version, "revision_key_version"),
-      aad_version: positiveInteger(row.revision_aad_version, "revision_aad_version"),
-    },
-    {
-      revisionId: provenance.source_manifestation_revision_id,
-      geneId: row.gene_id,
-      bodySha256: provenance.source_manifestation_body_sha256,
-      bodyBytes: positiveInteger(row.body_bytes, "body_bytes"),
-    },
-  )
-  let tags = ""
-  let tagsFieldsJson = null
-  if (provenance.prompt_body_mode === "taggerizer_prompt") {
-    const compoundTags = await readVerifiedBody(
-      readManifestationTags,
-      env,
-      {
-        object_key: row.derivative_object_key,
-        ciphertext_sha256: sha256(row.derivative_ciphertext_sha256, "derivative_ciphertext_sha256"),
-        ciphertext_bytes: positiveInteger(
-          row.derivative_ciphertext_bytes,
-          "derivative_ciphertext_bytes",
-        ),
-        body_iv_base64: row.derivative_body_iv_base64,
-        wrapped_dek_base64: row.derivative_wrapped_dek_base64,
-        wrap_iv_base64: row.derivative_wrap_iv_base64,
-        key_version: positiveInteger(row.derivative_key_version, "derivative_key_version"),
-        aad_version: positiveInteger(row.derivative_aad_version, "derivative_aad_version"),
-      },
-      {
-        derivativeId: provenance.source_manifestation_derivative_id,
-        revisionId: provenance.source_manifestation_revision_id,
-        sourceBodySha256: provenance.source_manifestation_body_sha256,
-        bodySha256: provenance.source_manifestation_derivative_sha256,
-        bodyBytes: positiveInteger(row.derivative_body_bytes, "derivative_body_bytes"),
-      },
-    )
-    const split = await splitManifestationTagsPayload(compoundTags, {
-      tagsSha256: provenance.source_manifestation_derivative_tags_sha256,
-      tagsBytes: provenance.source_manifestation_derivative_tags_bytes,
-      fieldsSha256: provenance.source_manifestation_derivative_fields_sha256,
-      fieldsBytes: provenance.source_manifestation_derivative_fields_bytes,
-    })
-    tags = split.tags_text
-    tagsFieldsJson = split.fields_json
-  }
-  return Object.freeze({ ...provenance, prose, tags, tags_fields_json: tagsFieldsJson })
 }
 
 export async function generationRequestContractSha256(fields) {

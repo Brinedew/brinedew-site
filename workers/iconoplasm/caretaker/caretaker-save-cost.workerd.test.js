@@ -49,7 +49,7 @@ import {
   seedSystemManifestation,
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
-import { catalogueGeneId } from "./manifestation-authority-service-handlers.js"
+import { catalogueGeneId } from "../gene-text-write.js"
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 

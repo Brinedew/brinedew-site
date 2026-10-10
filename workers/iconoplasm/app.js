@@ -7,6 +7,7 @@ import { inArray } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
+import { bodyLimit } from "hono/body-limit"
 import { HTTPException } from "hono/http-exception"
 // Zod's slim build (B-1070): the full one was 772 KiB of the Worker's 6.5 MB,
 // evaluated by every cold isolate to check two routes' bodies.
@@ -21,6 +22,7 @@ import {
   secondsUntilCloudflareDailyReset,
 } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
+import { GeneTextError, writeFactoryGeneText } from "./gene-text-write.js"
 import { backfillGeneTexts } from "./text-backfill.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
@@ -404,6 +406,44 @@ export function createIconoplasmApp({
       const failed = results.filter((result) => !result.ok).length
       c.header("Cache-Control", "no-store")
       return c.json({ ok: true, published: results.length - failed, failed, results })
+    },
+  )
+
+  /**
+   * B-1065: the factory saves a gene's text and Tags (workers/iconoplasm/gene-text-write.js).
+   * One row overwritten in place; the same text again is a no-op. A text is at
+   * most 16 KiB and its Tags 32 KiB, so 64 KiB covers any valid body.
+   */
+  app.put(
+    "/api/iconoplasm/admin/genes/:symbol/text",
+    factoryAuth,
+    outsideMaintenance,
+    bodyLimit({
+      maxSize: 64 * 1024,
+      onError: (c) => c.json({ ok: false, code: "BODY_TOO_LARGE" }, 413),
+    }),
+    zValidator("param", z.object({ symbol: symbolSchema })),
+    zValidator(
+      "json",
+      z.object({
+        text: z.string(),
+        tags: z.nullish(z.string()),
+        fields: z.nullish(z.record(z.string(), z.unknown())),
+      }),
+    ),
+    shedBatchWork(() => "sheddable_plus"),
+    async (c) => {
+      c.header("Cache-Control", "no-store")
+      try {
+        const saved = await writeFactoryGeneText(c.env, {
+          symbol: c.req.valid("param").symbol,
+          ...c.req.valid("json"),
+        })
+        return c.json({ ok: true, ...saved })
+      } catch (error) {
+        if (!(error instanceof GeneTextError)) throw error
+        return c.json({ ok: false, code: error.code, error: error.message }, error.status)
+      }
     },
   )
 

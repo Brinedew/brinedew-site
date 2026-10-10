@@ -12,14 +12,14 @@ import {
   resolveCanonicalGenerationSource,
   validateExactGenerationSource,
 } from "./lib/iconoplasm-generation-provenance.js"
-import {
-  encryptLegacyProse,
-  encryptLegacyTags,
-  plainBodyObject,
-} from "./lib/iconoplasm-body-object-test-support.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
-import { createManifestationBodyObjectKey } from "./lib/iconoplasm-manifestation-body-storage.js"
-import { prepareManifestationTagsPayload } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { registerGeneIdentity } from "./iconoplasm/caretaker/caretaker-assignment-commands.js"
+import {
+  canonicalManifestationFieldsJson,
+  prepareManifestationTagsPayload,
+} from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
 
 test("generation source fingerprint matches the frozen Website/workstation vector", async () => {
   const source = {
@@ -65,604 +65,225 @@ test("generation source fingerprint matches the frozen Website/workstation vecto
   )
 })
 
-const AUTHORING_ENV = Object.freeze({
-  ICONOPLASM_AUTHORING_BODY_KEK_V1: Buffer.from(new Uint8Array(32).fill(7)).toString("base64"),
-  ICONOPLASM_AUTHORING_STORAGE_HOST: "storage.test.invalid",
-  ICONOPLASM_AUTHORING_STORAGE_ZONE: "authoring-test-zone",
-  ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "authoring-test-password",
-  ICONOPLASM_AUTHORING_STORAGE_TIMEOUT_MS: "500",
-})
-
-class D1Statement {
-  constructor(statement) {
-    this.statement = statement
-    this.args = []
-  }
-
-  bind(...args) {
-    this.args = args
-    return this
-  }
-
-  async first() {
-    return this.statement.get(...this.args) || null
-  }
+// B-1065: a generation request names the text it was drawn from, and the
+// generator reads that exact text back from the plain tables of authoring
+// migration 0024 (every migration loaded). Failure modes written before the code:
+// 1. a request queued before the move to plain tables, whose IDs and hashes came
+//    from the old authority, stops validating after the backfill;
+// 2. a newer factory text silently replaces the one a queued request named;
+// 3. a caretaker version that was withdrawn, or a gene that was disabled, still
+//    feeds the generator;
+// 4. a request whose hashes don't match the stored bytes is accepted;
+// 5. a Tags request is made for a text without Tags, or a prose request needs
+//    Tags it doesn't use.
+function harness(t) {
+  const db = new TestD1()
+  t.after(() => db.close())
+  const env = { ICONOPLASM_AUTHORING_DB: db }
+  const run = (sql, ...args) => db.raw.prepare(sql).run(...args)
+  return { db, env, run }
 }
 
-class D1Database {
-  constructor(database) {
-    this.database = database
-  }
-
-  prepare(sql) {
-    return new D1Statement(this.database.prepare(sql))
-  }
+async function rejects(promise, code) {
+  await assert.rejects(promise, (error) => {
+    assert.ok(error instanceof IconoplasmGenerationSourceError, String(error))
+    assert.equal(error.code, code)
+    return true
+  })
 }
 
-async function insertRevision(
-  database,
-  env,
-  objects,
-  {
-    revisionId,
-    revisionNumber,
+const ENCODER = new TextEncoder()
+const FIELDS = { protein_class: "kinase", locations: ["nucleus"], note: "café" }
+
+test("a request queued under the old authority validates against its backfilled text", async (t) => {
+  const h = harness(t)
+  await registerGeneIdentity(h.db, { geneId: "gene_tp53", canonicalSymbol: "TP53" })
+  // What the old authority hashed when it accepted these Tags.
+  const tagsText = "guardian, watchful"
+  const canonicalFields = canonicalManifestationFieldsJson(FIELDS)
+  assert.notEqual(canonicalFields, JSON.stringify(FIELDS), "the fixture must exercise escaping")
+  const old = await prepareManifestationTagsPayload({
+    tagsText,
+    fieldsJson: FIELDS,
+    tagsSha256: await sha256Hex(ENCODER.encode(tagsText)),
+    fieldsSha256: await sha256Hex(ENCODER.encode(canonicalFields)),
+  })
+  const prose = "A guardian of the genome.\nIt stands watch."
+  const bodySha = await sha256Hex(ENCODER.encode(prose))
+  // The backfill keeps the old revision ID as the text ID and the canonical bytes.
+  h.run(
+    `INSERT INTO icono_gene_texts (gene_id, text_id, version, text, text_sha256, tags, fields_json)
+     VALUES ('gene_tp53', 'revision_old_0001', 3, ?, ?, ?, ?)`,
     prose,
-    parentRevisionId = null,
-    sampleLabel = `TP53-${revisionNumber}`,
-    sampleNumber = revisionNumber,
-    sampleTextSha256 = "c".repeat(64),
-    plain = false,
-  },
-) {
-  const encrypted = plain
-    ? await plainStoredBody(prose)
-    : await encryptLegacyProse(env, { revisionId, geneId: "gene_tp53", prose })
-  const objectKey = await createManifestationBodyObjectKey()
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_revisions (
-         manifestation_revision_id, manifestation_id, revision_number,
-         parent_revision_id, body_sha256, body_bytes, sample_label, sample_number,
-         sample_text_sha256
-       ) VALUES (?, 'manifestation_0001', ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      revisionId,
-      revisionNumber,
-      parentRevisionId,
-      encrypted.body_sha256,
-      encrypted.body_bytes,
-      sampleLabel,
-      sampleNumber,
-      sampleTextSha256,
-    )
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_revision_storage_secrets (
-         manifestation_revision_id, object_key, ciphertext_sha256, ciphertext_bytes,
-         body_iv_base64, wrapped_dek_base64, wrap_iv_base64, key_version,
-         aad_version, verified_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    )
-    .run(
-      revisionId,
-      objectKey,
-      encrypted.ciphertext_sha256,
-      encrypted.ciphertext_bytes,
-      encrypted.body_iv_base64,
-      encrypted.wrapped_dek_base64,
-      encrypted.wrap_iv_base64,
-      encrypted.key_version,
-      encrypted.aad_version,
-    )
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_revision_lifecycle (
-         manifestation_revision_id, status
-       ) VALUES (?, 'active')`,
-    )
-    .run(revisionId)
-  database
-    .prepare(
-      `UPDATE icono_manifestations
-       SET manifestation_head_revision_id = ?
-       WHERE manifestation_id = 'manifestation_0001'`,
-    )
-    .run(revisionId)
-  objects.set(objectKey, encrypted.ciphertext)
-  return {
-    revisionId,
-    prose: encrypted.prose,
-    hash: encrypted.body_sha256,
-    objectKey,
-    ciphertext: encrypted.ciphertext,
-    sampleTextSha256,
-  }
-}
-
-// The stored shape of a plain body, in the field names the encryptor returns.
-async function plainStoredBody(prose) {
-  const body = await plainBodyObject(prose)
-  return { ...body, prose: body.text, ciphertext: body.bytes }
-}
-
-async function insertAcceptedTags(
-  database,
-  env,
-  objects,
-  { revision, tags, imported = false, plain = false },
-) {
-  const derivativeId = "derivative_0001"
-  const recipeId = imported ? null : "tagger-v1"
-  const recipeVersion = imported ? null : "1"
-  const providerId = imported ? null : "tagger-provider"
-  const modelId = imported ? null : "tagger-model"
-  const taggerConfigSha256 = imported ? null : "d".repeat(64)
-  const fieldsJson = { posture: "guarded", texture: ["dense", "quiet"] }
-  const tagsSha256 = await sha256Hex(tags)
-  const fieldsCanonicalJson = JSON.stringify(fieldsJson)
-  const fieldsSha256 = await sha256Hex(fieldsCanonicalJson)
-  const prepared = await prepareManifestationTagsPayload({
-    tagsText: tags,
-    fieldsJson,
-    tagsSha256,
-    fieldsSha256,
-  })
-  const encrypted = plain
-    ? await plainStoredBody(prepared.output_plain)
-    : await encryptLegacyTags(env, {
-        derivativeId,
-        revisionId: revision.revisionId,
-        sourceBodySha256: revision.hash,
-        tags: prepared.output_plain,
-      })
-  const objectKey = await createManifestationBodyObjectKey()
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_derivatives (
-         manifestation_derivative_id, manifestation_revision_id, derivative_kind,
-         status, source_body_sha256, body_sha256, body_bytes,
-         tags_sha256, tags_bytes, fields_sha256, fields_bytes,
-         recipe_id, recipe_version, provider_id, model_id, tagger_config_sha256,
-         provenance_status, completed_at
-       ) VALUES (?, ?, 'tags', 'complete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    )
-    .run(
-      derivativeId,
-      revision.revisionId,
-      revision.hash,
-      encrypted.body_sha256,
-      encrypted.body_bytes,
-      prepared.tags_sha256,
-      prepared.tags_bytes,
-      prepared.fields_sha256,
-      prepared.fields_bytes,
-      recipeId,
-      recipeVersion,
-      providerId,
-      modelId,
-      taggerConfigSha256,
-      imported ? "legacy_unknown" : "generated",
-    )
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_derivative_storage_secrets (
-         manifestation_derivative_id, object_key, ciphertext_sha256, ciphertext_bytes,
-         body_iv_base64, wrapped_dek_base64, wrap_iv_base64, key_version,
-         aad_version, verified_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-    )
-    .run(
-      derivativeId,
-      objectKey,
-      encrypted.ciphertext_sha256,
-      encrypted.ciphertext_bytes,
-      encrypted.body_iv_base64,
-      encrypted.wrapped_dek_base64,
-      encrypted.wrap_iv_base64,
-      encrypted.key_version,
-      encrypted.aad_version,
-    )
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_derivative_heads (
-         manifestation_revision_id, accepted_derivative_id, derivative_head_version
-       ) VALUES (?, ?, 1)`,
-    )
-    .run(revision.revisionId, derivativeId)
-  objects.set(objectKey, encrypted.ciphertext)
-  return {
-    derivativeId,
-    tags: prepared.tags_text,
-    fieldsJson: prepared.fields_json,
-    recipeId,
-    recipeVersion,
-    providerId,
-    modelId,
-    taggerConfigSha256,
-  }
-}
-
-function selectCanonical(
-  database,
-  { selectionId, revisionId, headVersion, previousSelectionId = null },
-) {
-  database
-    .prepare(
-      `INSERT INTO icono_manifestation_canonical_selections (
-         canonical_selection_id, gene_id, previous_selection_id, previous_revision_id,
-         selected_manifestation_id, selected_revision_id, reason, command_id,
-         head_version, gene_revision
-       ) VALUES (?, 'gene_tp53', ?, NULL, 'manifestation_0001', ?, 'select', ?, ?, ?)`,
-    )
-    .run(
-      selectionId,
-      previousSelectionId,
-      revisionId,
-      `command_${selectionId}`,
-      headVersion,
-      headVersion,
-    )
-}
-
-async function authorityFixture({
-  sampleNumber = 1,
-  sampleTextSha256 = "c".repeat(64),
-  plain = false,
-} = {}) {
-  const database = new DatabaseSync(":memory:")
-  database.exec(
-    readFileSync(
-      new URL(
-        "../migrations-iconoplasm-authoring/0001_caretaker_manifestation_authority.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
+    bodySha,
+    old.tags_text,
+    old.fields_canonical_json,
   )
-  database
-    .prepare(
-      "INSERT INTO icono_gene_identities (gene_id, canonical_symbol) VALUES ('gene_tp53', 'TP53')",
-    )
-    .run()
-  database
-    .prepare(
-      `INSERT INTO icono_manifestations (
-         manifestation_id, gene_id, origin, status, non_withdrawable
-       ) VALUES ('manifestation_0001', 'gene_tp53', 'system_seed', 'active', 1)`,
-    )
-    .run()
-  const objects = new Map()
-  const env = {
-    ...AUTHORING_ENV,
-    ICONOPLASM_AUTHORING_DB: new D1Database(database),
+  const queued = {
+    generation_provenance_status: "bound",
+    source_gene_id: "gene_tp53",
+    source_manifestation_id: "manifestation_old_0001",
+    source_manifestation_revision_id: "revision_old_0001",
+    source_manifestation_body_sha256: bodySha,
+    source_manifestation_derivative_id: "derivative_old_0001",
+    source_manifestation_derivative_sha256: old.output_plain_sha256,
+    source_manifestation_derivative_tags_sha256: old.tags_sha256,
+    source_manifestation_derivative_tags_bytes: old.tags_bytes,
+    source_manifestation_derivative_fields_sha256: old.fields_sha256,
+    source_manifestation_derivative_fields_bytes: old.fields_bytes,
+    source_manifestation_derivative_recipe_id: "tagger-recipe",
+    source_manifestation_derivative_recipe_version: "7",
+    source_canonical_selection_id: "selection_old_0001",
+    source_canonical_head_version: 2,
+    source_gene_revision: 5,
+    source_sample_label: "TP53-2",
+    source_sample_number: 2,
+    prompt_body_mode: "taggerizer_prompt",
   }
-  const first = await insertRevision(database, env, objects, {
-    revisionId: "revision_0001",
-    revisionNumber: 1,
-    prose: "The first immutable manifestation.",
-    sampleNumber,
-    sampleTextSha256,
-    plain,
-  })
-  selectCanonical(database, {
-    selectionId: "selection_0001",
-    revisionId: first.revisionId,
-    headVersion: 1,
-  })
-  return { database, env, objects, first }
-}
+  queued.source_snapshot_sha256 = await iconoplasmGenerationFingerprint(
+    "iconoplasm.generation-source.v1",
+    queued,
+  )
 
-// B-859: bodies written since the vault was removed are plain text. The image
-// generator must read the exact prose and Tags the row hashes, and refuse bytes
-// that miss the hash.
-test("plain prose and Tags are read exactly, and bytes that miss the hash are refused", async () => {
-  const fixture = await authorityFixture({ plain: true })
-  const derivative = await insertAcceptedTags(fixture.database, fixture.env, fixture.objects, {
-    revision: fixture.first,
-    tags: "dense chromatin, guarded checkpoint, quiet nuclear tension",
-    plain: true,
-  })
-  const keyless = { ...fixture.env }
-  delete keyless.ICONOPLASM_AUTHORING_BODY_KEK_V1
-  const restoreFetch = installStorageFetch(fixture.objects)
-  try {
-    const queued = await resolveCanonicalGenerationSource(keyless, {
-      geneSymbol: "TP53",
-      promptBodyMode: "taggerizer_prompt",
-    })
-    const exact = await readExactGenerationSource(keyless, queued)
-    assert.equal(queued.source_manifestation_derivative_id, derivative.derivativeId)
-    assert.equal(queued.source_manifestation_derivative_recipe_id, derivative.recipeId)
-    assert.equal(queued.source_manifestation_derivative_recipe_version, derivative.recipeVersion)
-    assert.equal(queued.source_manifestation_derivative_provider_id, derivative.providerId)
-    assert.equal(queued.source_manifestation_derivative_model_id, derivative.modelId)
-    assert.equal(
-      queued.source_manifestation_derivative_tagger_config_sha256,
-      derivative.taggerConfigSha256,
-    )
-    assert.equal(exact.prose, fixture.first.prose)
-    assert.equal(exact.tags, derivative.tags)
-    assert.deepEqual(exact.tags_fields_json, derivative.fieldsJson)
-    assert.equal(
-      new TextDecoder().decode(fixture.objects.get(fixture.first.objectKey)),
-      fixture.first.prose,
-      "the stored object is the prose itself",
-    )
+  const validated = await validateExactGenerationSource(h.env, queued)
+  assert.equal(
+    exactGenerationProvenanceValidationKey(validated),
+    exactGenerationProvenanceValidationKey(queued),
+    "callers compare the key they stored, so validation hands back the request's own fields",
+  )
+  const read = await readExactGenerationSource(h.env, queued)
+  assert.equal(read.prose, prose)
+  assert.equal(read.tags, tagsText)
+  assert.deepEqual(read.tags_fields_json, FIELDS)
+  assert.equal(read.source_sample_label, "TP53-2")
 
-    fixture.objects.set(fixture.first.objectKey, new TextEncoder().encode("Another sentence."))
-    await assert.rejects(
-      readExactGenerationSource(keyless, queued),
-      (error) =>
-        error instanceof IconoplasmGenerationSourceError &&
-        error.code === "GENERATION_SOURCE_BODY_CORRUPT",
-    )
-  } finally {
-    restoreFetch()
-    fixture.database.close()
-  }
+  // A source resolved today from the same row carries the same hashes.
+  const fresh = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "tp53" })
+  assert.equal(fresh.source_manifestation_revision_id, "revision_old_0001")
+  assert.equal(fresh.source_manifestation_derivative_sha256, old.output_plain_sha256)
+  assert.equal(fresh.source_manifestation_derivative_fields_sha256, old.fields_sha256)
+  assert.equal(fresh.source_manifestation_derivative_fields_bytes, old.fields_bytes)
+  assert.equal(
+    fresh.source_snapshot_sha256,
+    requireExactGenerationProvenance(fresh).source_snapshot_sha256,
+  )
+  await validateExactGenerationSource(h.env, fresh)
 })
 
-test("imported Tags bind new generation to verified bytes without inventing authoring history", async () => {
-  const fixture = await authorityFixture()
-  const derivative = await insertAcceptedTags(fixture.database, fixture.env, fixture.objects, {
-    revision: fixture.first,
-    tags: "guarded checkpoint, quiet nuclear tension",
-    imported: true,
+test("a newer factory text retires queued requests, while a caretaker version stays pinned", async (t) => {
+  const h = harness(t)
+  const first = await writeFactoryGeneText(h.env, {
+    symbol: "WEE1",
+    text: "A gatekeeper at G2.",
+    tags: "gatekeeper",
+    fields: { phase: "G2" },
   })
-  const restoreFetch = installStorageFetch(fixture.objects)
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "taggerizer_prompt",
-    })
-    assert.equal(queued.source_manifestation_derivative_recipe_id, "")
-    assert.equal(queued.source_manifestation_derivative_tagger_config_sha256, "")
-    assert.equal(
-      requireExactGenerationProvenance(queued).source_snapshot_sha256,
-      queued.source_snapshot_sha256,
-    )
-    assert.equal((await readExactGenerationSource(fixture.env, queued)).tags, derivative.tags)
-    assert.equal(
-      (await validateExactGenerationSource(fixture.env, queued)).source_snapshot_sha256,
-      queued.source_snapshot_sha256,
-    )
-    await assert.rejects(
-      readExactGenerationSource(fixture.env, {
-        ...queued,
-        source_snapshot_sha256: "0".repeat(64),
-      }),
-      (error) => error.code === "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
-    )
-    assert.throws(
-      () =>
-        requireExactGenerationProvenance({
-          ...queued,
-          source_manifestation_derivative_tags_sha256: "",
-        }),
-      (error) => error.code === "GENERATION_SOURCE_INVALID",
-    )
-  } finally {
-    restoreFetch()
-    fixture.database.close()
-  }
-})
+  const factorySource = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "WEE1" })
+  assert.equal(factorySource.source_manifestation_revision_id, first.text_id)
+  assert.equal(factorySource.source_manifestation_id, first.gene_id)
+  assert.equal((await readExactGenerationSource(h.env, factorySource)).prose, "A gatekeeper at G2.")
 
-test("exact source identity distinguishes nullable sample number and sample text hash", async () => {
-  const initialSampleTextSha256 = await sha256Hex("initial sample source")
-  const fixture = await authorityFixture({
-    sampleNumber: null,
-    sampleTextSha256: initialSampleTextSha256,
+  const caretakerText = "A caretaker's gatekeeper."
+  h.run(
+    `INSERT INTO icono_caretaker_text_versions
+       (version_id, gene_id, line_id, version, account_id, caretaker_assignment_id,
+        text, text_sha256, tags, fields_json)
+     VALUES ('ct_version_0001', ?, 'line_0001', 1, 'account_1', 'assignment_1', ?, ?, 'sentinel', '{}')`,
+    first.gene_id,
+    caretakerText,
+    await sha256Hex(ENCODER.encode(caretakerText)),
+  )
+  h.run(
+    "UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'ct_version_0001' WHERE gene_id = ?",
+    first.gene_id,
+  )
+  const caretakerSource = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "WEE1" })
+  assert.equal(caretakerSource.source_manifestation_revision_id, "ct_version_0001")
+  assert.equal(caretakerSource.source_manifestation_id, "line_0001")
+  const caretakerRead = await readExactGenerationSource(h.env, caretakerSource)
+  assert.equal(caretakerRead.prose, caretakerText)
+  assert.equal(caretakerRead.tags, "sentinel")
+  assert.deepEqual(caretakerRead.tags_fields_json, {})
+
+  // The factory overwrites its own row; the caretaker version is untouched.
+  await writeFactoryGeneText(h.env, {
+    symbol: "WEE1",
+    text: "A stricter gatekeeper.",
+    tags: "strict",
   })
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    assert.equal(queued.source_sample_number, null)
-    assert.equal(queued.source_sample_text_sha256, initialSampleTextSha256)
-    assert.equal(requireExactGenerationProvenance(queued).source_sample_number, null)
+  await rejects(
+    validateExactGenerationSource(h.env, factorySource),
+    "GENERATION_SOURCE_REVISION_INACTIVE",
+  )
+  assert.equal((await readExactGenerationSource(h.env, caretakerSource)).prose, caretakerText)
 
-    assert.throws(
-      () =>
-        fixture.database
-          .prepare(
-            `UPDATE icono_manifestation_revisions
-             SET sample_number = 0
-             WHERE manifestation_revision_id = ?`,
-          )
-          .run(fixture.first.revisionId),
-      /manifestation_revisions_are_immutable/,
-    )
-    // Model authority-file corruption after proving the normal SQL boundary rejects it.
-    // The generation boundary must still refuse the now-mismatched snapshot.
-    fixture.database.exec("DROP TRIGGER icono_manifestation_revisions_immutable_update")
-    fixture.database
-      .prepare(
-        `UPDATE icono_manifestation_revisions
-         SET sample_number = 0
-         WHERE manifestation_revision_id = ?`,
-      )
-      .run(fixture.first.revisionId)
-    const zeroSample = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    assert.equal(zeroSample.source_sample_number, 0)
-    assert.notEqual(zeroSample.source_snapshot_sha256, queued.source_snapshot_sha256)
-    await assert.rejects(
-      validateExactGenerationSource(fixture.env, queued),
-      (error) =>
-        error instanceof IconoplasmGenerationSourceError &&
-        error.code === "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
-    )
-
-    const changedSampleTextSha256 = await sha256Hex("changed sample source")
-    fixture.database
-      .prepare(
-        `UPDATE icono_manifestation_revisions
-         SET sample_number = NULL, sample_text_sha256 = ?
-         WHERE manifestation_revision_id = ?`,
-      )
-      .run(changedSampleTextSha256, fixture.first.revisionId)
-    const changedSample = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    assert.equal(changedSample.source_sample_number, null)
-    assert.equal(changedSample.source_sample_text_sha256, changedSampleTextSha256)
-    assert.notEqual(changedSample.source_snapshot_sha256, queued.source_snapshot_sha256)
-  } finally {
-    fixture.database.close()
-  }
+  h.run("UPDATE icono_caretaker_text_versions SET withdrawn_at = CURRENT_TIMESTAMP")
+  await rejects(
+    validateExactGenerationSource(h.env, caretakerSource),
+    "GENERATION_SOURCE_REVISION_INACTIVE",
+  )
+  // With its choice withdrawn the gene falls back to the factory's newest text.
+  const fallback = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "WEE1" })
+  assert.equal((await readExactGenerationSource(h.env, fallback)).prose, "A stricter gatekeeper.")
 })
 
-function installStorageFetch(objects) {
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async (url, init = {}) => {
-    assert.equal(init.method, "GET")
-    assert.equal(init.headers.AccessKey, AUTHORING_ENV.ICONOPLASM_AUTHORING_STORAGE_PASSWORD)
-    const pathParts = new URL(String(url)).pathname.split("/").filter(Boolean)
-    assert.equal(pathParts.shift(), AUTHORING_ENV.ICONOPLASM_AUTHORING_STORAGE_ZONE)
-    const objectKey = pathParts.join("/")
-    const bytes = objects.get(objectKey)
-    return bytes
-      ? new Response(bytes, { status: 200, headers: { etag: '"test-etag"' } })
-      : new Response(null, { status: 404 })
-  }
-  return () => {
-    globalThis.fetch = originalFetch
-  }
-}
+test("tampered hashes, inactive genes and missing Tags fail closed", async (t) => {
+  const h = harness(t)
+  await writeFactoryGeneText(h.env, { symbol: "MFNG", text: "A fringe modifier.", tags: "fringe" })
+  const source = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "MFNG" })
+  assert.equal(source.source_manifestation_derivative_fields_bytes, 2, "no fields read as {}")
 
-test("a queued source remains pinned after the canonical head changes", async () => {
-  const fixture = await authorityFixture()
-  const restoreFetch = installStorageFetch(fixture.objects)
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    const second = await insertRevision(fixture.database, fixture.env, fixture.objects, {
-      revisionId: "revision_0002",
-      revisionNumber: 2,
-      prose: "The later canonical manifestation.",
-      parentRevisionId: fixture.first.revisionId,
-    })
-    selectCanonical(fixture.database, {
-      selectionId: "selection_0002",
-      revisionId: second.revisionId,
-      headVersion: 2,
-      previousSelectionId: "selection_0001",
-    })
-
-    const current = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    const validatedQueued = await validateExactGenerationSource(fixture.env, queued)
-    const materializedQueued = await readExactGenerationSource(fixture.env, queued)
-
-    assert.equal(current.source_manifestation_revision_id, "revision_0002")
-    assert.equal(validatedQueued.source_manifestation_revision_id, "revision_0001")
-    assert.equal(materializedQueued.prose, fixture.first.prose)
-    assert.equal(materializedQueued.source_snapshot_sha256, queued.source_snapshot_sha256)
-  } finally {
-    restoreFetch()
-    fixture.database.close()
-  }
-})
-
-test("withdrawn and tampered exact sources fail closed", async () => {
-  const fixture = await authorityFixture()
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    const second = await insertRevision(fixture.database, fixture.env, fixture.objects, {
-      revisionId: "revision_0002",
-      revisionNumber: 2,
-      prose: "A replacement canonical manifestation.",
-      parentRevisionId: fixture.first.revisionId,
-    })
-    selectCanonical(fixture.database, {
-      selectionId: "selection_0002",
-      revisionId: second.revisionId,
-      headVersion: 2,
-      previousSelectionId: "selection_0001",
-    })
-    fixture.database
-      .prepare(
-        `UPDATE icono_manifestation_revision_lifecycle
-         SET status = 'withdrawn', lifecycle_version = lifecycle_version + 1
-         WHERE manifestation_revision_id = 'revision_0001'`,
-      )
-      .run()
-
-    await assert.rejects(
-      validateExactGenerationSource(fixture.env, queued),
-      (error) =>
-        error instanceof IconoplasmGenerationSourceError &&
-        error.code === "GENERATION_SOURCE_REVISION_INACTIVE",
+  for (const field of [
+    "source_manifestation_body_sha256",
+    "source_manifestation_derivative_sha256",
+    "source_manifestation_derivative_tags_sha256",
+    "source_manifestation_derivative_fields_sha256",
+  ]) {
+    await rejects(
+      validateExactGenerationSource(h.env, { ...source, [field]: "0".repeat(64) }),
+      "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
     )
-    await assert.rejects(
-      validateExactGenerationSource(fixture.env, {
-        ...queued,
-        source_manifestation_revision_id: "revision_fake1",
-      }),
-      (error) => error instanceof IconoplasmGenerationSourceError,
-    )
-  } finally {
-    fixture.database.close()
   }
-})
+  await rejects(
+    validateExactGenerationSource(h.env, {
+      ...source,
+      source_manifestation_derivative_tags_bytes:
+        source.source_manifestation_derivative_tags_bytes + 1,
+    }),
+    "GENERATION_SOURCE_SNAPSHOT_MISMATCH",
+  )
+  await rejects(
+    validateExactGenerationSource(h.env, { ...source, source_gene_id: "gene_nobody" }),
+    "GENERATION_SOURCE_REVISION_INACTIVE",
+  )
+  await rejects(
+    resolveCanonicalGenerationSource(h.env, { geneSymbol: "NOTAGENE" }),
+    "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
+  )
+  await rejects(validateExactGenerationSource({}, source), "AUTHORING_DATABASE_UNAVAILABLE")
 
-test("missing ciphertext and purged storage secrets cannot use cached plaintext", async () => {
-  const fixture = await authorityFixture()
-  const restoreFetch = installStorageFetch(fixture.objects)
-  try {
-    const queued = await resolveCanonicalGenerationSource(fixture.env, {
-      geneSymbol: "TP53",
-      promptBodyMode: "prose_prompt",
-    })
-    fixture.objects.delete(fixture.first.objectKey)
-    await assert.rejects(
-      readExactGenerationSource(fixture.env, queued),
-      (error) =>
-        error instanceof IconoplasmGenerationSourceError &&
-        error.code === "GENERATION_SOURCE_BODY_MISSING",
-    )
+  // A text saved without Tags serves prose prompts and refuses Tags prompts.
+  await writeFactoryGeneText(h.env, { symbol: "WDR87", text: "A quiet repeat protein." })
+  await rejects(
+    resolveCanonicalGenerationSource(h.env, { geneSymbol: "WDR87" }),
+    "GENERATION_SOURCE_DERIVATIVE_UNAVAILABLE",
+  )
+  const prose = await resolveCanonicalGenerationSource(h.env, {
+    geneSymbol: "WDR87",
+    promptBodyMode: "prose_prompt",
+  })
+  assert.equal(prose.source_manifestation_derivative_sha256, "")
+  const proseRead = await readExactGenerationSource(h.env, prose)
+  assert.equal(proseRead.prose, "A quiet repeat protein.")
+  assert.equal(proseRead.tags, "")
+  assert.equal(proseRead.tags_fields_json, null)
 
-    fixture.objects.set(fixture.first.objectKey, fixture.first.ciphertext)
-    const second = await insertRevision(fixture.database, fixture.env, fixture.objects, {
-      revisionId: "revision_0002",
-      revisionNumber: 2,
-      prose: "A replacement canonical manifestation.",
-      parentRevisionId: fixture.first.revisionId,
-    })
-    selectCanonical(fixture.database, {
-      selectionId: "selection_0002",
-      revisionId: second.revisionId,
-      headVersion: 2,
-      previousSelectionId: "selection_0001",
-    })
-    fixture.database
-      .prepare(
-        `DELETE FROM icono_manifestation_revision_storage_secrets
-         WHERE manifestation_revision_id = ?`,
-      )
-      .run(fixture.first.revisionId)
-    await assert.rejects(
-      validateExactGenerationSource(fixture.env, queued),
-      (error) =>
-        error instanceof IconoplasmGenerationSourceError &&
-        error.code === "GENERATION_SOURCE_BODY_UNAVAILABLE",
-    )
-  } finally {
-    restoreFetch()
-    fixture.database.close()
-  }
+  h.run("UPDATE icono_gene_identities SET status = 'disabled' WHERE canonical_symbol = 'MFNG'")
+  await rejects(validateExactGenerationSource(h.env, source), "GENERATION_SOURCE_GENE_INACTIVE")
+  await rejects(
+    resolveCanonicalGenerationSource(h.env, { geneSymbol: "MFNG" }),
+    "GENERATION_SOURCE_GENE_INACTIVE",
+  )
 })
 
 test("the primary migration leaves history unbound and accepts an exact receipt", async () => {

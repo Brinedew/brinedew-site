@@ -43,13 +43,14 @@ const TAGS_JOINS = `LEFT JOIN icono_manifestation_derivative_heads dh
 // Walks the active factory texts in gene order through the partial unique
 // index uq_icono_active_system_seed. `chosen` is the caretaker version a gene
 // uses instead, when its canonical line is a caretaker's.
-const FACTORY_PAGE_SQL = `
+const FACTORY_SQL = (where) => `
 SELECT s.gene_id, r.manifestation_revision_id AS revision_id, r.revision_number,
        r.body_sha256, r.body_bytes, s.public_page_visible AS readers_see,
        ${STORAGE_COLUMNS("rs", "")},
        ${TAGS_COLUMNS},
        CASE WHEN c.origin IN ('caretaker', 'fork') THEN h.canonical_revision_id END AS chosen,
-       g.text_id AS have_text_id, g.chosen_caretaker_version_id AS have_chosen,
+       g.text_id AS have_text_id, g.version AS have_version,
+       g.chosen_caretaker_version_id AS have_chosen,
        g.readers_see AS have_readers_see,
        length(CAST(g.tags AS BLOB)) AS have_tags_bytes
   FROM icono_manifestations s
@@ -61,14 +62,16 @@ SELECT s.gene_id, r.manifestation_revision_id AS revision_id, r.revision_number,
   LEFT JOIN icono_manifestation_heads h ON h.gene_id = s.gene_id
   LEFT JOIN icono_manifestations c ON c.manifestation_id = h.canonical_manifestation_id
   LEFT JOIN icono_gene_texts g ON g.gene_id = s.gene_id
- WHERE s.origin = 'system_seed' AND s.status = 'active' AND s.gene_id > ?
+ WHERE s.origin = 'system_seed' AND s.status = 'active' AND ${where}
  ORDER BY s.gene_id
  LIMIT ${TEXTS_PER_REQUEST}`
+const FACTORY_PAGE_SQL = FACTORY_SQL("s.gene_id > ?")
+const FACTORY_GENE_SQL = FACTORY_SQL("s.gene_id = ?")
 
 // Every caretaker version that was not purged. Readers see a version only when
 // its line is shown and it is the line's head, which is what the old per-line
 // flag showed them. A withdrawn version keeps its text and gets its date.
-const CARETAKER_PAGE_SQL = `
+const CARETAKER_SQL = (where, limit) => `
 SELECT r.manifestation_revision_id AS version_id, m.gene_id,
        m.manifestation_id AS line_id, r.revision_number,
        COALESCE(r.author_account_id, m.author_account_id) AS account_id,
@@ -94,9 +97,12 @@ SELECT r.manifestation_revision_id AS version_id, m.gene_id,
   LEFT JOIN icono_caretaker_text_versions v ON v.version_id = r.manifestation_revision_id
  WHERE m.origin IN ('caretaker', 'fork') AND m.status <> 'purged'
    AND COALESCE(l.status, 'active') <> 'purged'
-   AND r.manifestation_revision_id > ?
+   AND ${where}
  ORDER BY r.manifestation_revision_id
- LIMIT ${TEXTS_PER_REQUEST}`
+ LIMIT ${limit}`
+const CARETAKER_PAGE_SQL = CARETAKER_SQL("r.manifestation_revision_id > ?", TEXTS_PER_REQUEST)
+// One gene's versions; a caretaker line holds a few dozen at most.
+const CARETAKER_GENE_SQL = CARETAKER_SQL("m.gene_id = ?", 500)
 
 const FACTORY_UPSERT_SQL = `
 INSERT INTO icono_gene_texts
@@ -118,6 +124,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (version_id) DO UPDATE SET
   tags = excluded.tags, fields_json = excluded.fields_json,
   readers_see = excluded.readers_see, withdrawn_at = excluded.withdrawn_at`
+
+// The factory saved a newer text through PUT /admin/genes/:symbol/text: the old
+// authority's text is behind, so only the gene's flags come across.
+const FACTORY_FLAGS_SQL = `
+UPDATE icono_gene_texts SET readers_see = ?, chosen_caretaker_version_id = ?,
+       updated_at = CURRENT_TIMESTAMP
+ WHERE gene_id = ?`
 
 const CARETAKER_FLAGS_SQL = `
 UPDATE icono_caretaker_text_versions SET readers_see = ?, withdrawn_at = ?
@@ -183,17 +196,22 @@ function tagsUnchanged(row) {
     : row.have_tags_bytes == null
 }
 
+// The plain row is ahead when the factory saved a newer text through the PUT
+// route; then the old authority's text and Tags no longer count.
+function factoryRowAhead(row) {
+  return Boolean(row.have_text_id) && Number(row.have_version) > Number(row.revision_number)
+}
+
 function factoryRowCurrent(row) {
   return (
-    row.have_text_id === row.revision_id &&
+    (factoryRowAhead(row) || (row.have_text_id === row.revision_id && tagsUnchanged(row))) &&
     (row.have_chosen ?? null) === (row.chosen ?? null) &&
-    Number(row.have_readers_see) === Number(row.readers_see) &&
-    tagsUnchanged(row)
+    Number(row.have_readers_see) === Number(row.readers_see)
   )
 }
 
-async function factoryPage(env, db, after, force) {
-  const { results: rows = [] } = await db.prepare(FACTORY_PAGE_SQL).bind(after).all()
+async function factoryPage(env, db, after, force, sql = FACTORY_PAGE_SQL) {
+  const { results: rows = [] } = await db.prepare(sql).bind(after).all()
   const writes = []
   const errors = []
   let skipped = 0
@@ -201,6 +219,14 @@ async function factoryPage(env, db, after, force) {
     rows.map(async (row) => {
       if (!force && factoryRowCurrent(row)) {
         skipped += 1
+        return
+      }
+      if (factoryRowAhead(row)) {
+        writes.push(
+          db
+            .prepare(FACTORY_FLAGS_SQL)
+            .bind(Number(row.readers_see) ? 1 : 0, row.chosen ?? null, row.gene_id),
+        )
         return
       }
       try {
@@ -228,8 +254,8 @@ async function factoryPage(env, db, after, force) {
   return { rows, writes, errors, skipped, cursor: rows.at(-1)?.gene_id }
 }
 
-async function caretakerPage(env, db, after, force) {
-  const { results: rows = [] } = await db.prepare(CARETAKER_PAGE_SQL).bind(after).all()
+async function caretakerPage(env, db, after, force, sql = CARETAKER_PAGE_SQL) {
+  const { results: rows = [] } = await db.prepare(sql).bind(after).all()
   const writes = []
   const errors = []
   let skipped = 0
@@ -294,4 +320,23 @@ export async function backfillGeneTexts(env, { kind, after = null, force = false
     errors,
     next_after: rows.length < TEXTS_PER_REQUEST ? null : cursor,
   }
+}
+
+// Until the factory and the caretaker pages write the plain tables themselves,
+// every text the old authority accepts is copied here as part of its event, so
+// cards and portraits never wait for the next backfill. The event's delivery
+// retries a failed copy a minute later.
+export async function copyGeneTextFromAuthority(env, geneId) {
+  const db = env.ICONOPLASM_AUTHORING_DB
+  const id = String(geneId || "")
+  if (!db || !id) return { written: 0 }
+  const factory = await factoryPage(env, db, id, false, FACTORY_GENE_SQL)
+  const caretaker = await caretakerPage(env, db, id, false, CARETAKER_GENE_SQL)
+  const writes = [...factory.writes, ...caretaker.writes]
+  if (writes.length) await db.batch(writes)
+  const errors = [...factory.errors, ...caretaker.errors]
+  if (errors.length) {
+    throw new Error(`Gene text copy failed: ${errors.map((e) => `${e.id} ${e.error}`).join("; ")}`)
+  }
+  return { written: writes.length }
 }
