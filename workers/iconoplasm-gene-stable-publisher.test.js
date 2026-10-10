@@ -97,7 +97,10 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
   )
   assert.equal(card.full_name, "tumor protein p53")
   assert.equal(card.essence.sex, "Female", "tmh 0 reads as soluble")
-  assert.equal(card.uniqueness_rank, 12.5, "the catalogue's sort key travels on the card")
+  // Production Essence rows still hold March 2026 leakage values. The rank is a
+  // whole-catalogue number from the workstation's uniqueness file (B-1064), so a
+  // card never carries one.
+  assert.equal(card.uniqueness_rank, undefined, "a card carries no uniqueness rank")
   assert.equal(card.weight_kg, 43.7)
   assert.equal(result.winner_asset_sha256, A)
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 0 })

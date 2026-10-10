@@ -15,7 +15,16 @@
 // genes with a publication-affecting event since its watermark, republish
 // those, then read their cards.
 //
-// Object shape (schema 3): { schema, generated_at, watermark_event_id, genes }
+// Column 5, the Uniqueness order's rank, is not on any card. It compares a
+// gene's description with every other gene's, so the workstation, which holds
+// the descriptions' tags, computes it for the whole catalogue at once and
+// uploads one file, catalog/v3/uniqueness.json; every run applies that file to
+// every row. Stored per gene, one recompute rewrote ~19k cards and Essence rows,
+// so nobody ran it, and from March to October 2026 the order sorted by a
+// number for texts that had all been rewritten (B-1064).
+//
+// Object shape (schema 3):
+//   { schema, generated_at, watermark_event_id, uniqueness_generated_at, genes }
 // where each gene row is
 //   [symbol, full_name (the gene's HGNC name, iconoplasmGeneName), portrait_sha256 | "", color_hex | "", image_score,
 //    uniqueness_rank | null, weight_kg | null, age_years | null,
@@ -31,6 +40,7 @@ import { iconoplasmGeneName } from "../workers/lib/iconoplasm-gene-name.js"
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const KEY = "catalog/v3/index.json"
+const UNIQUENESS_KEY = "catalog/v3/uniqueness.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
 const MAX_INCREMENTAL_SYMBOLS = 2000
 const STORAGE = "https://storage.bunnycdn.com/iconoplasm-portraits"
@@ -75,7 +85,8 @@ function nullableNumber(value) {
 }
 
 // The catalogue row of one card (schema 3). The winner's score and date come from
-// the candidate the card marks current.
+// the candidate the card marks current. The rank (column 5) is applied from the
+// uniqueness file afterwards, by withRanks.
 export function rowFromCard(card) {
   const symbol = String(card?.symbol || "").toUpperCase()
   const portrait =
@@ -89,7 +100,7 @@ export function rowFromCard(card) {
     /^[a-f0-9]{64}$/i.test(portrait) ? portrait.toLowerCase() : "",
     String(card?.color || ""),
     Number(winner?.image_score || 0),
-    nullableNumber(card?.uniqueness_rank),
+    null,
     nullableNumber(card?.weight_kg),
     nullableNumber(card?.essence?.age_years),
     nullableNumber(card?.first_publication_year),
@@ -123,6 +134,27 @@ async function readCards(symbols) {
     }),
   )
   return cards
+}
+
+// The workstation's uniqueness file: { schema: 1, generated_at, ranks: { SYMBOL: rank } }.
+// No file yet reads as no ranks, so the catalogue still lists every gene.
+async function readUniqueness() {
+  const file = await storage(UNIQUENESS_KEY)
+  if (file?.schema !== 1 || !file.ranks || typeof file.ranks !== "object") {
+    return { generatedAt: "", ranks: new Map() }
+  }
+  return {
+    generatedAt: String(file.generated_at || ""),
+    ranks: new Map(
+      Object.entries(file.ranks).map(([symbol, rank]) => [symbol.toUpperCase(), rank]),
+    ),
+  }
+}
+
+// Every row ranked from the file; a gene the file doesn't name has no rank.
+export function withRanks(rows, ranks) {
+  for (const row of rows) row[5] = nullableNumber(ranks.get(row[0]))
+  return rows
 }
 
 // The rows of the named genes whose card exists.
@@ -306,6 +338,9 @@ async function main() {
   const receipt = { started_at: startedAt.toISOString(), mode: FULL ? "full" : "incremental" }
   const watermark = await highWater()
   receipt.watermark_event_id = watermark
+  const uniqueness = await readUniqueness()
+  receipt.uniqueness_generated_at = uniqueness.generatedAt
+  receipt.ranked_genes = uniqueness.ranks.size
   const previous = FULL ? null : await previousObject()
   let genes
   let reads = 0
@@ -319,7 +354,11 @@ async function main() {
     reads += dirty.reads
     receipt.previous_watermark_event_id = Number(previous.watermark_event_id || 0)
     receipt.dirty_symbols = dirty.symbols.length
-    if (!dirty.symbols.length && Number(previous.watermark_event_id || 0) === watermark) {
+    if (
+      !dirty.symbols.length &&
+      Number(previous.watermark_event_id || 0) === watermark &&
+      String(previous.uniqueness_generated_at || "") === uniqueness.generatedAt
+    ) {
       receipt.result = "unchanged"
       receipt.d1_rows_read = reads
       finish(receipt)
@@ -345,11 +384,13 @@ async function main() {
       genes = [...bySymbol.values()]
     }
   }
+  withRanks(genes, uniqueness.ranks)
   genes.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   const object = {
     schema: 3,
     generated_at: new Date().toISOString(),
     watermark_event_id: watermark,
+    uniqueness_generated_at: uniqueness.generatedAt,
     genes,
   }
   const bytes = canonicalBytes(object)
@@ -358,6 +399,7 @@ async function main() {
     d1_rows_read: reads,
     gene_count: genes.length,
     with_portrait: genes.filter((row) => row[2]).length,
+    with_rank: genes.filter((row) => row[5] !== null).length,
     bytes: bytes.byteLength,
     sha256: hash,
   })
