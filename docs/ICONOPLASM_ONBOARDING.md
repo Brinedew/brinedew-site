@@ -270,7 +270,6 @@ In `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-
   never a public portrait source)
 - `publishedPortraitFingerprint(...)`
 - `galleryPublishedRows(...)`
-- `galleryUniquenessRows(...)`
 - `warmCatalogCache(...)`
 - `gallerySnapshot(...)`
 

@@ -97,6 +97,33 @@ test("a catalogue row is the card's name, winner, colour, score, measures and da
   assert.equal(rowFromCard(bare)[9], "")
 })
 
+// B-1064: the rank compares a gene with the whole catalogue, so it comes from the
+// workstation's one uniqueness file, never from a card. Failure modes: an
+// unchanged row from the previous object keeps a stale rank; a gene the file
+// doesn't name keeps one; a bad value reaches the sort.
+test("every row takes its rank from the uniqueness file, the previous object's rows too", async () => {
+  const { rowFromCard, withRanks } = await import("./publish-iconoplasm-catalog.mjs")
+  const wee1 = JSON.parse(
+    fs.readFileSync(new URL("../workers/lib/fixtures/gene-cards/WEE1.json", import.meta.url)),
+  )
+  const fresh = rowFromCard(wee1)
+  const previous = ["TLX3", "T cell leukemia homeobox 3", "", "#7074a3", 0, 8.0, 31.9, 27, 1993, ""]
+  const dropped = ["ACTL10", "actin like 10", "", "", 0, 4.2, 26.8, 30, 2001, ""]
+  const odd = ["UBE2W", "ubiquitin conjugating enzyme E2 W", "", "", 0, null, 17.3, 26, 1994, ""]
+  const ranks = new Map([
+    ["WEE1", 3.25],
+    ["TLX3", 11.5],
+    ["UBE2W", "not a number"],
+  ])
+
+  withRanks([fresh, previous, dropped, odd], ranks)
+
+  assert.equal(fresh[5], 3.25)
+  assert.equal(previous[5], 11.5, "a row carried over from the previous object is re-ranked")
+  assert.equal(dropped[5], null, "a gene the file doesn't name has no rank")
+  assert.equal(odd[5], null)
+})
+
 // B-1063: the writer of a publication event rebuilds the gene's card in the same
 // request, so a run republishes only the changed genes whose card is older than
 // their latest event, or missing. Real cards: WEE1 published 2026-10-01 15:13:03,

@@ -392,9 +392,6 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
     ["tissue_tau", number(essence.tissue_tau)],
     ["loeuf", number(essence.loeuf)],
     ["constraint_percentile", number(essence.constraint_percentile)],
-    // How unusual the gene is in the catalogue (the essence row's leakage percent):
-    // the catalogue list sorts by it, and the CI builder reads it from the card.
-    ["uniqueness_rank", number(essence.leakage_percent)],
   ]) {
     if (value !== null) card[key] = value
   }

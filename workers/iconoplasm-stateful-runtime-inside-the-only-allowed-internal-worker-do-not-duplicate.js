@@ -1285,10 +1285,6 @@ const galleryPublishedRowsCache = {
   version: null,
   value: null,
 }
-const galleryUniquenessRowsCache = {
-  version: null,
-  value: null,
-}
 const hydratedCatalogArtifactCache = {
   key: null,
   value: null,
@@ -4339,7 +4335,6 @@ function discoveryFacts(row) {
 function mapGeneDiscoveryRow(row) {
   const weightKg = Number(row?.weight_kg)
   const ageYears = Number(row?.age_years)
-  const uniquenessRank = Number(row?.uniqueness_rank)
   return {
     gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
     full_name: sanitizeText(row?.full_name || "", 255) || "",
@@ -4354,7 +4349,6 @@ function mapGeneDiscoveryRow(row) {
     last_dwell_ms: optionalInt(row?.last_dwell_ms),
     weight_kg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
     age_years: Number.isFinite(ageYears) && ageYears >= 0 ? ageYears : null,
-    uniqueness_rank: Number.isFinite(uniquenessRank) && uniquenessRank >= 0 ? uniquenessRank : null,
     popularity_score: wikiPageviewsForSymbol(row?.gene_symbol || ""),
     image_upvotes: Math.max(0, Number(row?.image_upvotes || 0) || 0),
     image_downvotes: Math.max(0, Number(row?.image_downvotes || 0) || 0),
@@ -11929,7 +11923,6 @@ async function enrichGeneDiscoveryRows(env, rows) {
          gc.full_name AS catalog_full_name,
          ge.weight_kg,
          ge.age_years,
-         ge.leakage_percent AS uniqueness_rank,
          COALESCE(gr.live_upvotes, 0) AS image_upvotes,
          COALESCE(gr.live_downvotes, 0) AS image_downvotes,
          COALESCE(gr.live_score, 0) AS image_score,
@@ -12334,7 +12327,6 @@ async function listAllCatalogGeneDiscoveriesForAdmin(
        gc.full_name AS catalog_full_name,
        ge.weight_kg,
        ge.age_years,
-       ge.leakage_percent AS uniqueness_rank,
        COALESCE(gr.live_upvotes, 0) AS image_upvotes,
        COALESCE(gr.live_downvotes, 0) AS image_downvotes,
        COALESCE(gr.live_score, 0) AS image_score,
@@ -12932,9 +12924,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const primaryTissue = normalizeEssencePrimaryTissue(payload, tissueTau)
   const loeuf = optionalFloat(payload.loeuf, { min: 0 })
   const constraintPercentile = optionalFloat(payload.constraint_percentile, { min: 0 })
-  const leakagePercent = optionalFloat(payload.leakage_percent, { min: 0 })
-  const leakageHits = optionalInt(payload.leakage_hits)
-  const leakageTotal = optionalInt(payload.leakage_total)
   const aesthetics = normalizeAestheticsList(payload.aesthetics)
   const aestheticsOrigin = normalizeTextList(payload.aesthetics_origin)
   const politicsOrigin = normalizeTextList(payload.politics_origin)
@@ -12976,9 +12965,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     primary_tissue: primaryTissue,
     loeuf,
     constraint_percentile: constraintPercentile,
-    leakage_percent: leakagePercent,
-    leakage_hits: leakageHits,
-    leakage_total: leakageTotal,
     aesthetics_json: JSON.stringify(aesthetics),
     aesthetics_origin_json: JSON.stringify(aestheticsOrigin),
     politics_origin_json: JSON.stringify(politicsOrigin),
@@ -21319,12 +21305,6 @@ function sortDiscoveryRowsForOrder(rows, order, seed = null) {
         compareDiscoveryPopularityFallback(left, right)
       )
     }
-    if (order === "uniqueness") {
-      return (
-        compareNullableNumberAscWithNullBottom(left.uniqueness_rank, right.uniqueness_rank) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
     if (order === "popularity") {
       return compareDiscoveryPopularityFallback(left, right)
     }
@@ -21383,8 +21363,6 @@ function clearSharedD1CostCaches() {
   sharedPublishedPortraitFingerprintCache.value = null
   galleryPublishedRowsCache.version = null
   galleryPublishedRowsCache.value = null
-  galleryUniquenessRowsCache.version = null
-  galleryUniquenessRowsCache.value = null
   hydratedCatalogArtifactCache.key = null
   hydratedCatalogArtifactCache.value = null
 }
@@ -21478,7 +21456,6 @@ const GENE_CARD_ESSENCE_COLUMNS = [
   "family_surname",
   "family_members",
   "family_feature",
-  "leakage_percent",
 ]
 
 async function readPublicManifestationFact(env, symbol) {
