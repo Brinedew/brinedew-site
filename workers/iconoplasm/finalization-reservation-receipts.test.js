@@ -274,7 +274,7 @@ function assertCovered(label, { entry }, { tightness = 1.3 } = {}) {
     )
 }
 
-test("vote summaries reserve four rows for each new asset in the job's keep list", async (t) => {
+test("vote summaries reserve two rows for each new asset in the job's keep list", async (t) => {
   quiet(t)
   for (const assets of [1, 12, 13, 50, 200]) {
     const symbol = fresh("VOTE")
