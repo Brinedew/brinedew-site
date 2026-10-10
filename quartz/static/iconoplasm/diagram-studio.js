@@ -3660,7 +3660,7 @@ async function startTour({ force = false } = {}) {
   closePopover({ restoreFocus: false })
   ensureTourStylesheet()
   const { driver } = await import(TOUR_RUNTIME_URL)
-  driver({
+  const tour = driver({
     steps,
     showProgress: true,
     progressText: "{{current}} of {{total}}",
@@ -3674,8 +3674,16 @@ async function startTour({ force = false } = {}) {
     allowClose: true,
     smoothScroll: true,
     popoverClass: "ics-tour",
-    onDestroyed: markTourSeen,
-  }).drive()
+    // driver.js 1.8 calls onDestroyed only while a step is active, so a tour
+    // closed during a step change (Escape right after Next) came back on the next
+    // visit. onDestroyStarted runs on every close (Escape, the overlay, ×, Done);
+    // it has to finish the close itself, and destroy() doesn't call it again.
+    onDestroyStarted: () => {
+      markTourSeen()
+      tour.destroy()
+    },
+  })
+  tour.drive()
 }
 
 /* ───────── mount ───────── */
