@@ -60,11 +60,13 @@ import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.j
 // 2026-10-08: 43 + 18 without the upload reservation and its adoption (B-859).
 // 2026-10-10: +5 authoring rows while B-1065's write-through copies each save
 // into the plain text tables (the new version, the old head's flag and the
-// gene's row). PR C deletes the write-through: put 43 and 48 back then.
-const MAX_SAVE_ROWS_AUTHORING = 48
+// gene's row), and +1 for the caretaker-choice index entry (0025, measured
+// in CI 2026-10-10: 49 and 54). PR C deletes the write-through but keeps the
+// index: put 44 and 49 back then.
+const MAX_SAVE_ROWS_AUTHORING = 49
 const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 53
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 54
 const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
