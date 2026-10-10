@@ -194,7 +194,7 @@ test("release authentication is checked without D1 work, redirects or credential
     assert.equal(url, "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations")
     assert.equal(options.method, "HEAD")
     assert.equal(options.redirect, "error")
-    assert.equal(options.headers["x-iconoplasm-admin-token"], "test-secret")
+    assert.equal(options.headers.Authorization, "Bearer test-secret")
     return new Response(null)
   }
   await assert.rejects(verifyReleaseAuthentication({ fetcher }), /TOKEN_REQUIRED/)

@@ -135,7 +135,7 @@ async function fetchJson(url, options = {}) {
     ...options,
     headers: {
       accept: "application/json",
-      "x-iconoplasm-admin-token": token,
+      Authorization: `Bearer ${token}`,
       ...(options.headers || {}),
     },
     signal: AbortSignal.timeout(30_000),

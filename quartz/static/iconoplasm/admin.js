@@ -631,7 +631,7 @@
   function authHeaders() {
     var out = {}
     var token = String((els.token && els.token.value) || "").trim()
-    if (token) out["X-Iconoplasm-Admin-Token"] = token
+    if (token) out.Authorization = "Bearer " + token
     return out
   }
 

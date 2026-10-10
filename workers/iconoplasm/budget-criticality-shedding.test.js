@@ -135,13 +135,13 @@ function fixture(
     // Admin diagnostics: SHEDDABLE.
     diagnostic: (query = "") =>
       send(`/api/iconoplasm/admin/assets/summary${query}`, {
-        headers: { "x-iconoplasm-admin-token": ADMIN_TOKEN },
+        headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
       }),
     // Batch: SHEDDABLE_PLUS.
     batch: () =>
       send("/api/iconoplasm/admin/read-models/bootstrap", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-iconoplasm-admin-token": ADMIN_TOKEN },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN}` },
         body: "{}",
       }),
     // Publishing a generated portrait: batch unless the drain declares a delivery.
@@ -150,7 +150,7 @@ function fixture(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-iconoplasm-admin-token": ADMIN_TOKEN,
+          Authorization: `Bearer ${ADMIN_TOKEN}`,
           ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
         },
         body: JSON.stringify({ rows: [], reason: "criticality-test" }),
@@ -158,7 +158,7 @@ function fixture(
     diagnosticDeclaringCritical: () =>
       send("/api/iconoplasm/admin/assets/summary", {
         headers: {
-          "x-iconoplasm-admin-token": ADMIN_TOKEN,
+          Authorization: `Bearer ${ADMIN_TOKEN}`,
           "x-iconoplasm-criticality": "critical",
         },
       }),
@@ -166,7 +166,7 @@ function fixture(
     moderation: () =>
       send("/api/iconoplasm/admin/reject", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-iconoplasm-admin-token": ADMIN_TOKEN },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN}` },
         body: JSON.stringify({ gene_symbol: "C10ORF62", asset_sha256: "0".repeat(64) }),
       }),
     // A player's portrait: CRITICAL.
@@ -254,7 +254,7 @@ test("at 86% of the day's writes a delivery's finalization phases run; a bulk sy
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-iconoplasm-admin-token": ADMIN_TOKEN,
+        Authorization: `Bearer ${ADMIN_TOKEN}`,
         ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
       },
       body: JSON.stringify(payload),
@@ -385,7 +385,7 @@ test("publishing's asset-state read is batch, and runs when a delivery declares 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-iconoplasm-admin-token": ADMIN_TOKEN,
+        Authorization: `Bearer ${ADMIN_TOKEN}`,
         ...(declared ? { "x-iconoplasm-criticality": "critical" } : {}),
       },
       body: JSON.stringify({ symbols: ["C10ORF62"] }),

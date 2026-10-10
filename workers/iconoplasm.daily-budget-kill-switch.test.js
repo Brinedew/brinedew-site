@@ -127,7 +127,7 @@ function adminSummaryRequest() {
     "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/assets/summary",
     {
       headers: {
-        "x-iconoplasm-admin-token": "founder-secret",
+        Authorization: "Bearer founder-secret",
       },
     },
   )
@@ -201,7 +201,7 @@ test("admin cost usage now points operators at Cloudflare observability instead 
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/usage",
         {
           headers: {
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
         },
       ),
@@ -227,7 +227,7 @@ test("admin cost snapshot serves the baked observability payload without touchin
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
         {
           headers: {
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
         },
       ),
@@ -262,7 +262,7 @@ test("admin cost snapshot prefers the atomically published KV artifact", async (
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
-        { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+        { headers: { Authorization: "Bearer founder-secret" } },
       ),
       {
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
@@ -298,7 +298,7 @@ test("B-1037: a deploy-baked snapshot newer than the KV artifact wins until the 
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request(
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/snapshot",
-        { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+        { headers: { Authorization: "Bearer founder-secret" } },
       ),
       {
         ICONOPLASM_ADMIN_TOKEN: "founder-secret",
@@ -363,7 +363,7 @@ test("signed-in admin sees current account meters beside an old baked snapshot",
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request("https://internal/api/iconoplasm/admin/cost/snapshot", {
-          headers: { "x-iconoplasm-admin-token": "founder-secret" },
+          headers: { Authorization: "Bearer founder-secret" },
         }),
         {
           ICONOPLASM_ADMIN_TOKEN: "founder-secret",
@@ -402,7 +402,7 @@ test("admin capacity shows provider failure instead of treating baked counts as 
     const response =
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request("https://internal/api/iconoplasm/admin/cost/snapshot", {
-          headers: { "x-iconoplasm-admin-token": "founder-secret" },
+          headers: { Authorization: "Bearer founder-secret" },
         }),
         {
           ICONOPLASM_ADMIN_TOKEN: "founder-secret",
@@ -442,7 +442,7 @@ test("admin mutation limiter policy reports the live limiter basis so Website Op
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/mutation-limiter/policy",
         {
           headers: {
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
         },
       ),
@@ -713,7 +713,7 @@ test("admin cost usage no longer queries the DO ledger even when that report pat
         "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/admin/cost/usage",
         {
           headers: {
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
         },
       ),
@@ -844,7 +844,7 @@ test("write-heavy admin mutations fail before starting once the configured targe
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,
@@ -988,7 +988,7 @@ test("write-heavy admin mutations reserve atomic batch headroom before writing",
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,
@@ -1110,7 +1110,7 @@ test("write-heavy admin mutations still fail closed when snapshot telemetry is l
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,
@@ -1182,7 +1182,7 @@ test("all sync-owned admin mutation routes still hit the limiter preflight befor
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({}),
         }),
@@ -1315,7 +1315,7 @@ test("write-heavy admin mutations flush the shared budget ledger once even when 
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-iconoplasm-admin-token": "founder-secret",
+            Authorization: "Bearer founder-secret",
           },
           body: JSON.stringify({
             defer_read_models: true,
@@ -1561,7 +1561,7 @@ test("authority workstation lane records its D1 usage into the shared ledger att
   await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
     new Request(
       "https://the-only-allowed-internal-stateful-worker-do-not-duplicate/api/iconoplasm/authority/events",
-      { headers: { "x-iconoplasm-admin-token": "founder-secret" } },
+      { headers: { Authorization: "Bearer founder-secret" } },
     ),
     env,
     { waitUntil() {} },

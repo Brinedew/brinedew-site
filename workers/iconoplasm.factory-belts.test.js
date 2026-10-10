@@ -143,7 +143,7 @@ test("authorized factory belt requests execute through the gateway and real SQLi
       await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
         new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/factory-belts", {
           headers: {
-            "x-iconoplasm-admin-token": "test-only-secret",
+            Authorization: "Bearer test-only-secret",
             "x-iconoplasm-only-allowed-stateful-worker-internal": "1",
           },
         }),
