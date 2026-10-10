@@ -17,7 +17,43 @@ const KV_QUERY = QUERY.replace(
     d1AnalyticsAdaptiveGroups`,
 )
 
+const WINDOW_QUERY = `query D1Window($accountTag: string, $from: Time, $to: Time) {
+  viewer { accounts(filter: { accountTag: $accountTag }) {
+    d1QueriesAdaptiveGroups(limit: 1, filter: { datetime_geq: $from, datetime_leq: $to }) {
+      sum { rowsRead rowsWritten }
+    }
+  } }
+}`
+
 const unavailable = () => new OperationCostError("COST_ACCOUNT_USAGE_UNAVAILABLE")
+
+// B-1059: the whole account's D1 rows between two instants, from Cloudflare's own
+// analytics. The Drain asks for a publication's window once the analytics have
+// caught up (about 20 minutes) and learns what a portrait costs from it, instead
+// of a seed someone measured once. Readers active in the window count too: it is
+// what the account spent while the publication ran. Checked live on 2026-10-10:
+// 00:00-00:10 UTC answered 47,760 rows read and 9,460 written.
+export async function readD1WindowUsage({ accountId, token, from, to, fetcher = fetch }) {
+  if (!/^[a-f0-9]{32}$/.test(accountId || "") || !token) throw unavailable()
+  const response = await fetcher("https://api.cloudflare.com/client/v4/graphql", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: WINDOW_QUERY, variables: { accountTag: accountId, from, to } }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) throw unavailable()
+  const payload = await response.json()
+  const accounts = payload?.data?.viewer?.accounts
+  if (payload?.errors?.length || !Array.isArray(accounts) || accounts.length !== 1)
+    throw unavailable()
+  const groups = accounts[0]?.d1QueriesAdaptiveGroups
+  if (!Array.isArray(groups) || groups.length > 1) throw unavailable()
+  const sum = groups[0]?.sum ?? { rowsRead: 0, rowsWritten: 0 }
+  const usage = { from, to, rows_read: sum.rowsRead, rows_written: sum.rowsWritten }
+  if (![usage.rows_read, usage.rows_written].every((n) => Number.isSafeInteger(n) && n >= 0))
+    throw unavailable()
+  return usage
+}
 
 export function parseOperationCostAccountUsage(
   payload,
