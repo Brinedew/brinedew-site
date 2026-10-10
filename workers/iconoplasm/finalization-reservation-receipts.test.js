@@ -15,6 +15,7 @@ import {
   GENE_ROLLUP_ROWS,
   MAX_EMULSION_CODES_PER_VISION,
   MUTATION_WRITE_FLOOR_UNITS,
+  RECONCILE_RESTORES_PER_INVOCATION,
   VISION_ROLLUP_DIRTY_MARK_ROWS,
   VISION_ROLLUP_ROWS,
   finalizationCompletionPageWriteUnits,
@@ -728,17 +729,27 @@ test("a reconcile reserves what its gene's assets cost, including the restores t
     )
     assertCovered(`reconcile ${run.label} ${run.assets}`, run, { tightness: 100 })
   }
-  // The reservation follows the job's asset count: for each count it is no
-  // more than a third above the worst run measured at that count.
+  // The reservation follows the job's asset count: it covers the worst run
+  // measured at that count and is no more than a third above it. Past
+  // RECONCILE_RESTORES_PER_INVOCATION assets the reservation stops growing (the
+  // restores are capped), so every count past the cap is held to the worst run
+  // at any of them: a 100-asset job can restore as many as a 40-asset one, even
+  // if the scenario run at 100 marked only a dozen. The floor every reservation
+  // gets (MUTATION_WRITE_FLOOR_UNITS) is not over-reserving, as in assertCovered.
+  const capped = (assets) => Math.min(assets, RECONCILE_RESTORES_PER_INVOCATION)
   const worstByAssets = new Map()
   for (const run of runs)
-    worstByAssets.set(run.assets, Math.max(worstByAssets.get(run.assets) || 0, run.entry.wrote))
-  for (const [assets, worst] of worstByAssets) {
-    const units = finalizationPhaseWriteUnits({ phase: "reconcile", keepCount: assets })
-    assert.ok(units >= worst, `reconcile ${assets} assets under-reserved: ${units} < ${worst}`)
+    worstByAssets.set(
+      capped(run.assets),
+      Math.max(worstByAssets.get(capped(run.assets)) || 0, run.entry.wrote),
+    )
+  for (const run of runs) {
+    const worst = worstByAssets.get(capped(run.assets))
+    const units = finalizationPhaseWriteUnits({ phase: "reconcile", keepCount: run.assets })
+    assert.ok(units >= worst, `reconcile ${run.assets} assets under-reserved: ${units} < ${worst}`)
     assert.ok(
-      units <= Math.ceil(worst * 1.35),
-      `reconcile ${assets} assets over-reserved: ${units} vs worst measured ${worst}`,
+      units <= Math.max(MUTATION_WRITE_FLOOR_UNITS, Math.ceil(worst * 1.35)),
+      `reconcile ${run.assets} assets over-reserved: ${units} vs worst measured ${worst}`,
     )
   }
 })

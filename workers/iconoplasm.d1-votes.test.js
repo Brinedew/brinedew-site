@@ -119,7 +119,6 @@ const VOTE_TABLES = [
   "icono_caretaker_vote_assignment_projection",
   "icono_caretaker_candidate_eligibility_projection",
   "icono_gene_vote_version",
-  "icono_vote_events",
   "icono_vote_daily_budget",
 ]
 const sha = (char) => char.repeat(64)
@@ -1099,7 +1098,6 @@ test("11: the republish rechecks after every write, at most three passes", async
 const BUDGETED_TABLES = [
   "icono_image_votes",
   "icono_vote_asset_summary",
-  "icono_vote_events",
   "icono_gene_vote_version",
   "icono_vote_daily_budget",
   "icono_caretaker_supervote_projection",
@@ -1220,20 +1218,6 @@ test("12: past the daily vote budget a vote, a reader import or a supervote writ
     { env: { admin: true } },
   )
   assert.equal(admin.status, 200, JSON.stringify(admin.payload))
-})
-
-// --- 13 -----------------------------------------------------------------
-
-test("13: votes and vote imports write no row for the workstation's old vote mirror", async () => {
-  const db = new SqliteD1()
-  seedAsset(db, "KRAS", sha("a"))
-  for (const value of [1, 1, -1, 0, 0]) await vote(db, "KRAS", sha("a"), "u1", value)
-  await importGeneVotes(db, [
-    { symbol: "KRAS", asset_sha256: sha("a"), user_id: "i1", vote_value: 1 },
-    { symbol: "KRAS", asset_sha256: sha("a"), user_id: "i2", vote_value: -1 },
-  ])
-  assert.equal(db.rows("SELECT COUNT(*) AS n FROM icono_vote_events")[0].n, 0)
-  assert.deepEqual(summaryOf(db, "KRAS", sha("a")), { score: 0, vote_count: 2 })
 })
 
 // --- 14 -----------------------------------------------------------------
