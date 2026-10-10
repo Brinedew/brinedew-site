@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
+import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 function json(data, status = 200, headers = {}) {
@@ -155,7 +156,9 @@ test("catalog upsert records a publication event for a new or changed row, or a 
     return response.json()
   }
 
-  assert.equal((await upsert([catalogItem()])).processed, 1)
+  const first = await upsert([catalogItem()])
+  assert.equal(first.processed, 1)
+  assert.equal(first.results[0].changed, true, "a new row changed")
   assert.deepEqual(catalogEvents(db), [["TP53", "catalog_upserted"]])
   // Until the publisher gives the gene its page, a resend asks again: the 600 rows
   // of 10-07 sat in D1 with no page, and resending them must make them visible.
@@ -165,12 +168,26 @@ test("catalog upsert records a publication event for a new or changed row, or a 
     ["TP53", "catalog_upserted"],
   ])
   db.database.prepare("INSERT INTO icono_published_gene_routes (gene_symbol) VALUES ('TP53')").run()
-  // A resent unchanged row of a gene that has its page schedules nothing.
-  await upsert([catalogItem()])
+  // A resent unchanged row of a gene that has its page schedules nothing, and
+  // writes nothing (B-1064: a whole-catalogue resend costs reads, not writes).
+  const changesBefore = db.changes
+  const resent = await upsert([catalogItem()])
+  assert.equal(resent.results[0].changed, false)
+  assert.equal(db.changes, changesBefore, "an unchanged row writes nothing")
   assert.equal(catalogEvents(db).length, 2)
   // A changed row does; so does a new gene in the same request, one D1 call for both.
   const calls = db.calls
-  await upsert([catalogItem({ color_hex: "#28302D" }), catalogItem({ gene_symbol: "ADISSP" })])
+  const both = await upsert([
+    catalogItem({ color_hex: "#28302D" }),
+    catalogItem({ gene_symbol: "ADISSP" }),
+  ])
+  assert.deepEqual(
+    both.results.map((row) => [row.symbol, row.changed]),
+    [
+      ["TP53", true],
+      ["ADISSP", true],
+    ],
+  )
   assert.equal(db.calls - calls, 1)
   assert.deepEqual(catalogEvents(db).slice(2), [
     ["TP53", "catalog_upserted"],
@@ -221,6 +238,53 @@ test("catalog upsert rejects request shapes that are too heavy for one Worker re
   assert.equal(response.status, 400)
   assert.match((await response.json()).error, /max 100/)
   assert.equal(writes, 0)
+})
+
+// B-1064: "Sync website now" re-sends Essence for every gene it has no receipt
+// for (17,689 of 19,381 on 2026-10-10). Failure modes: an unchanged row still
+// rewrites itself and its updated_at index, so the resend spends days of the
+// write wall; or a real change is reported unchanged, so its card is never
+// rebuilt.
+test("an Essence row the site already holds writes nothing and says so", async () => {
+  const db = iconoplasmDatabase()
+  const handlers = createIconoplasmAdminPublicationHandlers(
+    publicationServices({ prepareGeneEssenceUpsertStatement }),
+  )
+  const send = async (items) => {
+    const response = await responseFrom(handlers["admin_publication.essence_upsert"], {
+      body: { defer_read_models: true, items },
+      env: { ICONOPLASM_DB: db },
+    })
+    assert.equal(response.status, 200)
+    return (await response.json()).results.map((row) => [row.symbol, row.changed])
+  }
+  const tp53 = {
+    gene_symbol: "TP53",
+    full_name: "tumor protein p53",
+    weight_kg: 43.7,
+    age_years: 44,
+  }
+  const wee1 = { gene_symbol: "WEE1", full_name: "WEE1 G2 checkpoint kinase", weight_kg: 71.6 }
+
+  assert.deepEqual(await send([tp53, wee1]), [
+    ["TP53", true],
+    ["WEE1", true],
+  ])
+  const before = db.changes
+  assert.deepEqual(await send([tp53, wee1]), [
+    ["TP53", false],
+    ["WEE1", false],
+  ])
+  assert.equal(db.changes, before, "a resend of unchanged rows writes nothing")
+  assert.deepEqual(await send([{ ...tp53, weight_kg: 43.6 }, wee1]), [
+    ["TP53", true],
+    ["WEE1", false],
+  ])
+  assert.equal(
+    db.database.prepare("SELECT weight_kg FROM icono_gene_essence WHERE gene_symbol = 'TP53'").get()
+      .weight_kg,
+    43.6,
+  )
 })
 
 test("essence upsert uses quota-reserved bounded transactions and can defer read models", async () => {
