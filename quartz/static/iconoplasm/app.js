@@ -102,7 +102,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var HOME_COLLECTION_MOBILE_PAGE_SIZE = 8
   var HOME_COLLECTION_INITIAL_PAGE_SIZE = 4
   var HOME_COLLECTION_DEFAULT_ORDER = ICONOPLASM_DISCOVERY_DEFAULT_ORDER
-  var ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT = 19023
   var GUEST_STARTER_GENES = [
     {
       gene_symbol: "INS",
@@ -903,18 +902,44 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
+  // How many genes the catalogue lists: the length of catalog/v3/index.json, which
+  // this page loads for search and the gallery anyway. It was a typed constant
+  // (19,023) that stayed behind when the catalogue grew to 19,381 on 2026-10-09,
+  // so the header and "found out of" undercounted. 0 until the catalogue loads.
+  var catalogueGeneCountPromise = null
+
+  function loadCatalogueGeneCount() {
+    if (catalogueGeneCountPromise) return catalogueGeneCountPromise
+    var publicationReader = window.IconoplasmPublicationReader
+    if (!publicationReader || typeof publicationReader.geneMetrics !== "function") {
+      return Promise.resolve(0)
+    }
+    catalogueGeneCountPromise = publicationReader
+      .geneMetrics()
+      .then(function (metrics) {
+        return metrics.size
+      })
+      .catch(function () {
+        catalogueGeneCountPromise = null
+        return 0
+      })
+    return catalogueGeneCountPromise
+  }
+
   function fetchHomeCollectionCounts() {
-    return Promise.resolve({
-      total: ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT,
-      publishedTotal: 0,
+    return loadCatalogueGeneCount().then(function (total) {
+      return { total: total, publishedTotal: 0 }
     })
   }
 
   function syncPublicInventoryStat() {
     var statEl = document.getElementById("icono-public-inventory-stat")
     if (!statEl) return
-    statEl.textContent = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT.toLocaleString() + " genes"
-    statEl.hidden = false
+    loadCatalogueGeneCount().then(function (total) {
+      if (!total) return
+      statEl.textContent = total.toLocaleString() + " genes"
+      statEl.hidden = false
+    })
   }
 
   function accountGalleryWindowOrderSupported(order) {
@@ -2583,7 +2608,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
       Number(collectionState && collectionState.discoveryEntries.length) ||
       0
-    var totalCount = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT
+    var totalCount = Math.max(0, Number(collectionState && collectionState.total) || 0)
     var progressPct =
       totalCount > 0 ? Math.max(0, Math.min(100, (discoveredCount / totalCount) * 100)) : 0
     var progressWidth = progressPct
@@ -2600,8 +2625,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-collection-summary-row">' +
       '<div class="icono-collection-copy">' +
       esc(discoveredCount.toLocaleString()) +
-      " genes found out of " +
-      esc(totalCopy) +
+      (totalCount > 0 ? " genes found out of " + esc(totalCopy) : " genes found") +
       esc(guestStorageCopy) +
       "</div>" +
       '<label class="icono-collection-shared-toggle">' +
@@ -8620,7 +8644,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         localReadyPromise = initialSharedSettingsPromise
           .then(function () {
             if (disposed) return
-            galleryState.total = ICONOPLASM_ENDGAME_LIBRARY_CARD_COUNT
+            fetchHomeCollectionCounts().then(function (countData) {
+              if (disposed) return
+              galleryState.total = countData.total
+              syncCollectionChrome()
+            })
             galleryState.publishedTotal = 0
             galleryState.authenticated = false
             galleryState.discoveryEntries = guestDiscoveryEntries()
