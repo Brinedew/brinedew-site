@@ -269,7 +269,10 @@ export const TAGS_DERIVATIVE_SUBMIT_ROWS = 46
 // 56 + 15 for a gene new to the catalogue (B-1031), which the route also
 // registers and seeds; the constant is that worst case. It was 96 until then,
 // derived from the caretaker save and never measured here.
-export const SYSTEM_REVISION_APPEND_ROWS = 71
+// 2026-10-10: 73, two more while B-1065's write-through copies the new text
+// into the plain text tables. The route itself goes when the workstation PUTs
+// its texts (B-1065), so nothing restores this number.
+export const SYSTEM_REVISION_APPEND_ROWS = 73
 
 // Per route: the rows one admitted request may write, from its parsed body.
 //   units 0     no reservation: the route writes no row (material is reads only)
