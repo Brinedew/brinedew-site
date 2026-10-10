@@ -1,11 +1,10 @@
 # B-830: registers the one Windows scheduled task that runs
 # scripts/backup-d1-rotation.mjs. Re-running replaces the task in place.
 #
-# First attempt 12:00 UTC (19:00 in UTC+7), in the second half of the D1
-# budget day, so the dump spends reads that would otherwise expire instead of
-# the fresh day's. It retries every 2 hours until 22:00 UTC. The script is a
-# no-op once the day's dump exists, before 12:00 UTC (a laptop catching up
-# after midnight), and when readers already used 50% of the reads.
+# First attempt 00:15 UTC, then every 2 hours through the UTC day. The script
+# is a no-op once the day's dump exists, and it sheds like any batch work
+# (sheddable_plus, B-1026): it skips while the account's reads plus the
+# database's last measured dump would reach 85% of the daily wall.
 # The D1 read token is the backup's own (B-1002): backup-token.txt next to the dumps, or the
 # file named by D1_BACKUP_TOKEN_FILE. CLOUDFLARE_ACCOUNT_ID comes from the user's environment,
 # so the task runs as the signed-in user. CLOUDFLARE_API_TOKEN is only a fallback for a machine
@@ -20,14 +19,14 @@ $node = (Get-Command node -ErrorAction Stop).Source
 $script = Join-Path $Checkout "scripts\backup-d1-rotation.mjs"
 if (-not (Test-Path $script)) { throw "Missing $script; pull main in $Checkout first." }
 
-$firstRunUtc = [DateTime]::UtcNow.Date.AddHours(12)
+$firstRunUtc = [DateTime]::UtcNow.Date.AddMinutes(15)
 if ($firstRunUtc -lt [DateTime]::UtcNow) { $firstRunUtc = $firstRunUtc.AddDays(1) }
 $firstRunLocal = $firstRunUtc.ToLocalTime()
 
 $action = New-ScheduledTaskAction -Execute $node -Argument "`"$script`"" -WorkingDirectory $Checkout
 $trigger = New-ScheduledTaskTrigger -Daily -At $firstRunLocal
 $repeat = New-ScheduledTaskTrigger -Once -At $firstRunLocal `
-  -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Hours 10)
+  -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Hours 22)
 $trigger.Repetition = $repeat.Repetition
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) `
   -StartWhenAvailable -MultipleInstances IgnoreNew -DontStopOnIdleEnd
