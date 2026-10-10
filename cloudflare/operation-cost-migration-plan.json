@@ -17,12 +17,16 @@
   "migrations": {
     "iconoplasm/0124_global_vote_budget_dropped.sql": {
       "online": true,
-      "prediction": { "rows_read": 100, "rows_written": 100, "requests": 1 }
+      "prediction": {
+        "rows_read": 100,
+        "rows_written": 100,
+        "requests": 1
+      }
     },
-    "iconoplasm-authoring/0023_saves_without_upload_reservations.sql": {
+    "iconoplasm-authoring/0024_plain_gene_texts.sql": {
       "online": true,
       "prediction": {
-        "rows_read": 1000,
+        "rows_read": 100,
         "rows_written": 100,
         "requests": 1
       }

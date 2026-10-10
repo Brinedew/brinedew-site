@@ -1,6 +1,12 @@
 # B-830: registers the one Windows scheduled task that runs
 # scripts/backup-d1-rotation.mjs. Re-running replaces the task in place.
 #
+# Each run first fast-forwards the checkout (`git pull --ff-only`, the merge
+# Obsidian Git does), because only Obsidian Git updated it before: with
+# Obsidian closed from 10-07 to 10-10 the checkout fell 51 commits behind and
+# every backup ran three-day-old code. A failed pull (a local commit, Obsidian
+# holding the lock) never skips the backup; it runs the code it has.
+#
 # First attempt 00:15 UTC, then every 2 hours through the UTC day. The script
 # is a no-op once the day's dump exists, and it sheds like any batch work
 # (sheddable_plus, B-1026): it skips while the account's reads plus the
@@ -23,7 +29,10 @@ $firstRunUtc = [DateTime]::UtcNow.Date.AddMinutes(15)
 if ($firstRunUtc -lt [DateTime]::UtcNow) { $firstRunUtc = $firstRunUtc.AddDays(1) }
 $firstRunLocal = $firstRunUtc.ToLocalTime()
 
-$action = New-ScheduledTaskAction -Execute $node -Argument "`"$script`"" -WorkingDirectory $Checkout
+$pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+$run = "git -C '$Checkout' pull --ff-only --quiet; & '$node' '$script'; exit `$LASTEXITCODE"
+$action = New-ScheduledTaskAction -Execute $pwsh `
+  -Argument "-NoProfile -NonInteractive -Command `"$run`"" -WorkingDirectory $Checkout
 $trigger = New-ScheduledTaskTrigger -Daily -At $firstRunLocal
 $repeat = New-ScheduledTaskTrigger -Once -At $firstRunLocal `
   -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Hours 22)
