@@ -1607,9 +1607,6 @@ export function iconoplasmBudgetClassFromRouteFamily(routeFamily) {
     family === "admin_catalog_reconcile" ||
     family === "admin_catalog_publish" ||
     family === "admin_blots_upload" ||
-    // B-859: a call that writes converts one body (one D1 query, at most 41 storage
-    // requests); a call that only reads scans at most ten.
-    family === "admin_plaintext_bodies" ||
     family === "admin_essence" ||
     family === "admin_essence_upsert"
   ) {
