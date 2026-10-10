@@ -38,7 +38,15 @@ ON CONFLICT(gene_symbol) DO UPDATE SET
   ${FIELDS.slice(1)
     .map((field) => `${field}=excluded.${field}`)
     .join(", ")},
-  source=excluded.source, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP`
+  source=excluded.source, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP
+WHERE ${FIELDS.slice(1)
+  .map((field) => `icono_gene_essence.${field} IS NOT excluded.${field}`)
+  .join(" OR ")}`
+
+// B-1064: an Essence row the site already holds writes nothing (its D1 result
+// says changes: 0), so re-sending every gene costs reads, not the write wall,
+// and the caller rebuilds cards only for rows that changed. Before this, each
+// upsert rewrote the row and its updated_at index even when nothing differed.
 
 export function prepareGeneEssenceUpsertStatement(
   env,
