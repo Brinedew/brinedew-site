@@ -1466,7 +1466,7 @@ test("admin finalization kick only enqueues the canonical Queue drain message", 
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
         method: "POST",
         headers: {
-          "x-iconoplasm-admin-token": "secret-admin-token",
+          Authorization: "Bearer secret-admin-token",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -1506,7 +1506,7 @@ test("admin finalization kick fails loud with the Cloudflare Queue send error", 
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
         method: "POST",
         headers: {
-          "x-iconoplasm-admin-token": "secret-admin-token",
+          Authorization: "Bearer secret-admin-token",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -1534,7 +1534,7 @@ test("admin finalization kick refuses before Queue dispatch when the governor ca
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/finalization/kick", {
         method: "POST",
         headers: {
-          "x-iconoplasm-admin-token": "secret-admin-token",
+          Authorization: "Bearer secret-admin-token",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ run_id: "pytest-run", symbols: ["TP53"] }),

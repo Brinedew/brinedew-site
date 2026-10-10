@@ -42,7 +42,7 @@ export async function verifyReleaseAuthentication({ token, fetcher = fetch }) {
       method: "HEAD",
       redirect: "error",
       signal: AbortSignal.timeout(20_000),
-      headers: { "x-iconoplasm-admin-token": token },
+      headers: { Authorization: `Bearer ${token}` },
     },
   )
   if (response.status === 401 || response.status === 403)

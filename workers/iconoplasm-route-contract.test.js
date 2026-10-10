@@ -283,7 +283,7 @@ test("catalog state rejects HEAD because state comparison requires an explicit P
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/catalog/state", {
       method: "HEAD",
       headers: {
-        "x-iconoplasm-admin-token": "founder-secret",
+        Authorization: "Bearer founder-secret",
         "x-iconoplasm-only-allowed-stateful-worker-internal": "1",
       },
     }),
