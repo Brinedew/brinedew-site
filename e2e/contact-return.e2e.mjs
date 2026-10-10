@@ -121,6 +121,44 @@ test("the footer About link reaches /about in one request", async (t) => {
   }
 })
 
+// B-1069: the page router fetched every same-site link as a page, /api/ ones
+// included. Sign-in (/api/auth/login) redirects to discord.com, which the site's
+// connect-src blocks, so each sign-in cost a wasted Worker request and a console
+// error before the router fell back to navigating. API links are the browser's.
+test("an /api/ link is one browser navigation, never a router fetch first", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startMainSite()
+  mkdirSync(OUT, { recursive: true })
+  try {
+    const context = await browser.newContext({ viewport: { width: 1100, height: 900 } })
+    const page = await context.newPage()
+    await page.route("**/api/router-check", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<p id=api-landed>ok</p>" }),
+    )
+    await page.goto(`${origin}/`, { waitUntil: "load" })
+    const requests = []
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === "/api/router-check")
+        requests.push(request.resourceType())
+    })
+    await page.evaluate(() => {
+      const link = document.createElement("a")
+      link.href = "/api/router-check"
+      link.id = "api-link"
+      link.textContent = "API"
+      document.body.append(link)
+    })
+    await page.click("#api-link")
+    await page.waitForSelector("#api-landed", { timeout: 15_000 })
+    assert.deepEqual(requests, ["document"], "the browser navigates; the router fetches nothing")
+    writeFileSync(path.join(OUT, "router-api-link.json"), JSON.stringify({ requests }, null, 2))
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
+
 test("the no-JavaScript contact form returns to /about with its notice showing", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
