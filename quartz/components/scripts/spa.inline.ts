@@ -36,6 +36,10 @@ const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined 
   if ("routerIgnore" in a.dataset) return
   const { href } = a
   if (!isLocalUrl(href)) return
+  // API endpoints are never pages. Fetching one as a page follows its redirect
+  // (sign-in goes to discord.com), which the site's connect-src blocks, so the
+  // browser should navigate to it directly.
+  if (new URL(href).pathname.startsWith("/api/")) return
   return { url: new URL(href), scroll: "routerNoscroll" in a.dataset ? false : undefined }
 }
 
