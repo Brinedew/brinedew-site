@@ -129,6 +129,9 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     let invalid = 0
     const results = []
     const itemStatements = []
+    // B-1064: each accepted item's result, in statement order, so the batch can
+    // say which rows changed. A row the site already holds writes nothing.
+    const upserted = []
     for (const rawItem of items) {
       const item = normalizeCatalogPayloadItem(rawItem)
       if (!item || item.validation_error) {
@@ -170,11 +173,18 @@ export function createIconoplasmAdminPublicationHandlers(services) {
            aliases_json=excluded.aliases_json,
            source=excluded.source,
            updated_by=excluded.updated_by,
-           updated_at=CURRENT_TIMESTAMP`,
+           updated_at=CURRENT_TIMESTAMP
+         WHERE icono_gene_catalog.full_name IS NOT excluded.full_name
+            OR icono_gene_catalog.uniprot IS NOT excluded.uniprot
+            OR icono_gene_catalog.color_hex IS NOT excluded.color_hex
+            OR icono_gene_catalog.tmh IS NOT excluded.tmh
+            OR icono_gene_catalog.aliases_json IS NOT excluded.aliases_json`,
         ).bind(item.gene_symbol, ...row, source, actorId),
       ])
       processed += 1
-      results.push({ ok: true, symbol: item.gene_symbol })
+      const result = { ok: true, symbol: item.gene_symbol, changed: false }
+      upserted.push(result)
+      results.push(result)
     }
     // Reserve more write headroom than this table normally consumes before
     // each atomic D1 transaction. The metered database wrapper rejects the
@@ -184,15 +194,16 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     // trip for every catalog row.
     for (let offset = 0; offset < itemStatements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
       const transaction = itemStatements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
-      await env.ICONOPLASM_DB.batch(transaction.flat(), {
+      const outcomes = await env.ICONOPLASM_DB.batch(transaction.flat(), {
         maxRowsWritten: transaction.length * CATALOG_ROWS_WRITTEN_PER_CHANGE,
       })
-    }
-    if (processed > 0 && !deferReadModels) {
-      await syncAdminReadModels(env, {
-        symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
+      // Two statements per item (event, then upsert): the upsert's result says.
+      transaction.forEach((_pair, index) => {
+        upserted[offset + index].changed = Number(outcomes?.[index * 2 + 1]?.meta?.changes || 0) > 0
       })
     }
+    const changed = upserted.filter((row) => row.changed).map((row) => row.symbol)
+    if (changed.length && !deferReadModels) await syncAdminReadModels(env, { symbols: changed })
     return done(
       "admin_catalog_upsert",
       json(
@@ -331,6 +342,9 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     let invalid = 0
     const results = []
     const statements = []
+    // B-1064: each accepted row's result, in statement order; an unchanged row
+    // writes nothing and says so.
+    const upserted = []
     for (const rawItem of items) {
       const rawEssence =
         rawItem &&
@@ -359,22 +373,24 @@ export function createIconoplasmAdminPublicationHandlers(services) {
       }
       statements.push(prepareGeneEssenceUpsertStatement(env, essence, actorId, source))
       processed += 1
-      results.push({ ok: true, symbol: essence.gene_symbol })
+      const result = { ok: true, symbol: essence.gene_symbol, changed: false }
+      upserted.push(result)
+      results.push(result)
     }
     // Essence is a roster-wide bulk write. Execute the already validated rows
     // as small atomic D1 transactions, reserving conservative quota headroom
     // before each transaction through the metered database wrapper.
     for (let offset = 0; offset < statements.length; offset += D1_UPSERT_TRANSACTION_SIZE) {
       const transaction = statements.slice(offset, offset + D1_UPSERT_TRANSACTION_SIZE)
-      await env.ICONOPLASM_DB.batch(transaction, {
+      const outcomes = await env.ICONOPLASM_DB.batch(transaction, {
         maxRowsWritten: transaction.length * MAX_ROWS_WRITTEN_PER_UPSERT,
       })
-    }
-    if (processed > 0 && !deferReadModels) {
-      await syncAdminReadModels(env, {
-        symbols: results.filter((row) => row?.ok && row?.symbol).map((row) => row.symbol),
+      transaction.forEach((_statement, index) => {
+        upserted[offset + index].changed = Number(outcomes?.[index]?.meta?.changes || 0) > 0
       })
     }
+    const changed = upserted.filter((row) => row.changed).map((row) => row.symbol)
+    if (changed.length && !deferReadModels) await syncAdminReadModels(env, { symbols: changed })
     return done(
       "admin_essence_upsert",
       json(
