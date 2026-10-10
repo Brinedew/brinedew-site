@@ -15,17 +15,9 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0121_vote_mirror_table_dropped.sql": {
-      "online": true,
-      "prediction": { "rows_read": 100, "rows_written": 2000, "requests": 1 }
-    },
-    "iconoplasm/0122_essence_leakage_index_dropped.sql": {
+    "iconoplasm/0124_global_vote_budget_dropped.sql": {
       "online": true,
       "prediction": { "rows_read": 100, "rows_written": 100, "requests": 1 }
-    },
-    "iconoplasm/0123_vote_person_day.sql": {
-      "online": true,
-      "prediction": { "rows_read": 100, "rows_written": 10, "requests": 1 }
     },
     "iconoplasm-authoring/0023_saves_without_upload_reservations.sql": {
       "online": true,
