@@ -12,6 +12,7 @@ import {
 } from "./iconoplasm-request-notifications.js"
 import { iconoplasmGenerationFingerprint } from "./lib/iconoplasm-generation-provenance.js"
 import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
+import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
 const FULFILLMENT_CONFIG_SHA256 = "f".repeat(64)
@@ -585,19 +586,9 @@ function fulfillmentEnv(db) {
   }
 }
 
-function buildSessionBinding(userId = BRINEDEW_USER_ID) {
-  return {
-    idFromName(name) {
-      return name
-    },
-    get() {
-      return {
-        async fetch() {
-          return Response.json({ user_id: userId, username: "brinedew" })
-        },
-      }
-    },
-  }
+// A browser signed in as `userId` (B-1069: a real sealed session cookie).
+function signedInAs(userId = BRINEDEW_USER_ID) {
+  return sessionCookieFor({ user_id: userId, username: "brinedew" })
 }
 
 function notificationRow(overrides = {}) {
@@ -758,9 +749,9 @@ test("authenticated inbox returns exact fulfillment context and durable unread c
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
-        headers: { Cookie: "session=test" },
+        headers: { Cookie: await signedInAs() },
       }),
-      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   const payload = await response.json()
@@ -828,17 +819,17 @@ test("each user sees only their own inbox and waiting requests", async () => {
   const brinedewResponse =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
-        headers: { Cookie: "session=test" },
+        headers: { Cookie: await signedInAs() },
       }),
-      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding(BRINEDEW_USER_ID) },
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   const otherResponse =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
-        headers: { Cookie: "session=test" },
+        headers: { Cookie: await signedInAs(otherUserId) },
       }),
-      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding(otherUserId) },
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   const brinedewInbox = await brinedewResponse.json()
@@ -880,10 +871,10 @@ test("read state is written only inside the authenticated requester's inbox", as
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications/read", {
         method: "POST",
-        headers: { Cookie: "session=test", "Content-Type": "application/json" },
+        headers: { Cookie: await signedInAs(), "Content-Type": "application/json" },
         body: JSON.stringify({ notification_ids: [7, 8] }),
       }),
-      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   const payload = await response.json()
@@ -917,13 +908,13 @@ test("one inbox receipt marks the complete publication and gene group read", asy
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications/read", {
         method: "POST",
-        headers: { Cookie: "session=test", "Content-Type": "application/json" },
+        headers: { Cookie: await signedInAs(), "Content-Type": "application/json" },
         body: JSON.stringify({
           fulfillment_publication_id: "pub-hpn-three",
           gene_symbol: "HPN",
         }),
       }),
-      { ICONOPLASM_DB: db, GAME_SESSIONS: buildSessionBinding() },
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
       { waitUntil() {} },
     )
   const payload = await response.json()

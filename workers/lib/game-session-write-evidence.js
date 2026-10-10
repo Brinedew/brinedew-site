@@ -132,8 +132,6 @@ export function classifyGameSessionWriteError(message) {
 function classifySessionKind(sessionId) {
   const raw = String(sessionId || "")
   if (!raw) return "unknown"
-  if (raw.startsWith("oauth:")) return "oauth"
-  if (raw.startsWith("session:")) return "auth_session"
 
   const practiceMode = raw.startsWith("practice_")
   const base = practiceMode ? raw.slice("practice_".length) : raw
