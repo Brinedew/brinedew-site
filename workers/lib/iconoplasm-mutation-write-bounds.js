@@ -258,7 +258,9 @@ export function generationCompletionWriteUnits(requestCount) {
 // until B-859 retired the upload reservation, 2026-10-08). The
 // head selection is not here: the gateway hands it to the operation-cost
 // authority (isReplicaCostRoute), which admits it against its own declared bound.
-export const TAGS_DERIVATIVE_SUBMIT_ROWS = 44
+// 2026-10-10: 46, two more authoring rows while B-1065's write-through copies
+// the new Tags into the plain text tables; PR C deletes it and this returns to 44.
+export const TAGS_DERIVATIVE_SUBMIT_ROWS = 46
 
 // A workstation regeneration (B-1011): one system revision with its Tags, the
 // Tags head and, while the system text is canonical, the selection, as one

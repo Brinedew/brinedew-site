@@ -58,10 +58,13 @@ import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.j
 // already exists, summed over the POST and the projection it wakes. Measured
 // 2026-10-05: 117 + 34 as four commands (#508), 66 + 18 as one (B-859 step 3).
 // 2026-10-08: 43 + 18 without the upload reservation and its adoption (B-859).
-const MAX_SAVE_ROWS_AUTHORING = 43
+// 2026-10-10: +5 authoring rows while B-1065's write-through copies each save
+// into the plain text tables (the new version, the old head's flag and the
+// gene's row). PR C deletes the write-through: put 43 and 48 back then.
+const MAX_SAVE_ROWS_AUTHORING = 48
 const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 48
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 53
 const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
@@ -599,21 +602,23 @@ test(
       for (const receipt of receipts.filter((item) => item.phase.endsWith("(reload)")))
         assert.equal(receipt.rows_written, 0, `a dossier read wrote: ${receipt.sql}`)
 
+      const measured = `first save ${first.byDatabase.authoring} + ${first.byDatabase.primary}, ordinary save ${second.byDatabase.authoring} + ${second.byDatabase.primary} (authoring + primary rows)`
+      t.diagnostic(`B859_SAVE_COST measured ${measured}`)
       assert.ok(
         first.byDatabase.authoring <= MAX_FIRST_SAVE_ROWS_AUTHORING,
-        `first save wrote ${first.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_AUTHORING}`,
+        `first save wrote ${first.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_AUTHORING}; ${measured}`,
       )
       assert.ok(
         first.byDatabase.primary <= MAX_FIRST_SAVE_ROWS_PRIMARY,
-        `first save wrote ${first.byDatabase.primary} primary rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_PRIMARY}`,
+        `first save wrote ${first.byDatabase.primary} primary rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_PRIMARY}; ${measured}`,
       )
       assert.ok(
         second.byDatabase.authoring <= MAX_SAVE_ROWS_AUTHORING,
-        `a save wrote ${second.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_SAVE_ROWS_AUTHORING}`,
+        `a save wrote ${second.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_SAVE_ROWS_AUTHORING}; ${measured}`,
       )
       assert.ok(
         second.byDatabase.primary <= MAX_SAVE_ROWS_PRIMARY,
-        `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}`,
+        `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}; ${measured}`,
       )
       // The regeneration route reserves SYSTEM_REVISION_APPEND_ROWS per call on the
       // laptop lane. The constant is the worst call measured here, in both
