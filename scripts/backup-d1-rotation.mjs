@@ -14,9 +14,11 @@
 // (scripts/check-iconoplasm-d1-statement-burns.mjs) recognises the paging
 // statements below by their exact text and fails when they read more than
 // that; change the SQL and its matcher together, and its test runs this
-// exporter to prove they agree. The export runs only in the second half of
-// the UTC budget day (from 12:00 UTC), spending reads that would otherwise
-// expire, and refuses to start when readers already used 50% of the day.
+// exporter to prove they agree. Nobody waits for a backup, so it is
+// sheddable_plus work (B-1026): it starts only while the account's reads so far
+// plus this database's last measured dump stay under 85% of the daily wall, and
+// it aborts itself if it would cross that line. It runs at any hour; the tier,
+// not the clock, decides when it yields to readers.
 // D1 Time Travel (7 days on Free) covers point-in-time recovery between dumps.
 //
 // Not a point-in-time snapshot: tables are copied one after another over a few
@@ -51,7 +53,10 @@ import { createGzip } from "node:zlib"
 import { DatabaseSync } from "node:sqlite"
 
 import { readAccountBudget } from "./lib/cloudflare-account-budget.mjs"
-import { FREE_PLAN_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
+import {
+  FREE_PLAN_DAILY_LIMITS,
+  criticalityShareLimit,
+} from "../shared/iconoplasm-d1-budget-policy.js"
 
 export const BACKUP_ROTATION = Object.freeze([
   { name: "iconoplasm", id: "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" },
@@ -64,7 +69,11 @@ export const BACKUP_ROTATION = Object.freeze([
   },
 ])
 
-const DAILY_READ_CAP = FREE_PLAN_DAILY_LIMITS.rows_read
+// Where sheddable_plus work stops on the account's D1 reads: 4.25M of 5M.
+export const BACKUP_READ_SHED_LINE = criticalityShareLimit(
+  FREE_PLAN_DAILY_LIMITS.rows_read,
+  "sheddable_plus",
+)
 const DAY_MS = 86_400_000
 const quote = (name) => `"${String(name).replaceAll('"', '""')}"`
 
@@ -112,7 +121,7 @@ export async function exportD1Database({
   query,
   outFile,
   pageSize = 2000,
-  readCeiling = 2_000_000,
+  readCeiling = BACKUP_READ_SHED_LINE,
 }) {
   const started = Date.now()
   const partial = `${outFile}.partial`
@@ -231,6 +240,21 @@ async function sha256File(file) {
   return hash.digest("hex")
 }
 
+// What this database's newest dump read, from its manifest; 0 before the first.
+export function lastDumpReads(dir) {
+  if (!existsSync(dir)) return 0
+  const newest = readdirSync(dir)
+    .filter((file) => /^\d{4}-\d{2}-\d{2}\.json$/.test(file))
+    .sort()
+    .at(-1)
+  if (!newest) return 0
+  try {
+    return Math.max(0, Number(JSON.parse(readFileSync(path.join(dir, newest), "utf8")).reads) || 0)
+  } catch {
+    return 0
+  }
+}
+
 export async function runRotation({
   root,
   now = Date.now(),
@@ -238,15 +262,7 @@ export async function runRotation({
   queryFor,
   readUsage,
   pageSize,
-  readShareLimit = 0.5,
-  earliestUtcHour = 12,
 }) {
-  // Spend the tail of the budget day, never its start: a dump at 00:30 UTC
-  // took ~400k of the 5M reads before anyone used the site, and the rest of
-  // the day ran on what was left (owner, 2026-09-25). A laptop that wakes
-  // after midnight and catches the task up also lands here and does nothing.
-  if (new Date(now).getUTCHours() < earliestUtcHour)
-    return { status: "too_early_in_budget_day", database: database.name }
   const dir = path.join(root, database.name)
   const date = new Date(now).toISOString().slice(0, 10)
   const final = path.join(dir, `${date}.sqlite.gz`)
@@ -258,12 +274,23 @@ export async function runRotation({
     return { status: "skipped_budget_unknown", database: database.name, error: error.message }
   }
   const used = Number(usage?.rows_read)
-  if (!Number.isFinite(used) || used >= readShareLimit * DAILY_READ_CAP)
-    return { status: "skipped_budget", database: database.name, rows_read: used }
+  const expected = lastDumpReads(dir)
+  if (!Number.isFinite(used) || used + expected >= BACKUP_READ_SHED_LINE)
+    return {
+      status: "skipped_budget",
+      database: database.name,
+      rows_read: used,
+      expected_reads: expected,
+    }
 
   mkdirSync(dir, { recursive: true })
   const raw = path.join(dir, `${date}.sqlite`)
-  const report = await exportD1Database({ query: queryFor(database), outFile: raw, pageSize })
+  const report = await exportD1Database({
+    query: queryFor(database),
+    outFile: raw,
+    pageSize,
+    readCeiling: BACKUP_READ_SHED_LINE - used,
+  })
   const gzPartial = `${final}.partial`
   await pipeline(createReadStream(raw), createGzip({ level: 6 }), createWriteStream(gzPartial))
   renameSync(gzPartial, final)
