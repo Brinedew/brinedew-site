@@ -41,28 +41,28 @@ export async function readGeneVoteVersion(db, symbol) {
 // about 40% of D1's free 100,000 rows written a day.
 //
 // Measured on the complete migrated schema with Miniflare's D1 receipts
-// (workers/iconoplasm/vote-asset-summary-cost.test.js, 2026-10-03), one
-// admitted unit writes:
-//   - 21 rows for a user's first vote on an asset nobody has voted on (the
-//     vote row and its index entries, a new summary row and its index
-//     entries, the workstation's icono_vote_events row with its index entries
-//     and AUTOINCREMENT counter, the gene's version row, this budget row);
-//   - 17 rows for a first vote on an asset that already has votes;
-//   - 15 rows to flip a vote;
+// (workers/iconoplasm/vote-asset-summary-cost.test.js, 2026-10-09, B-1065:
+// migration 0119 dropped six indexes nothing read, and a vote no longer writes
+// a row for the workstation's vote mirror, which nothing read), one admitted
+// unit writes:
+//   - 9 rows for a user's first vote on an asset nobody has voted on (the
+//     vote row and its three index entries, a new summary row and its key,
+//     the gene's version row, this budget row);
+//   - 7 rows for a first vote on an asset that already has votes;
+//   - 6 rows to flip a vote;
 //   - 13 rows for a caretaker supervote.
-// A vote that moves its gene's winner adds the projection, 18 rows measured.
-// At 100x today's traffic about one vote in ten moves a winner. So a full day
-// at the cap costs at most 1,750 x 21 + 175 x 18 = 39,900 rows, 40% of the
-// 100,000, and leaves 60% to uploads, background jobs and the rest of the
-// site. Even if every admitted vote moved a winner the day would cost
-// 1,750 x 39 = 68,250 rows, still inside the free allowance.
+// (Before: 21, 17 and 15.) A vote that moves its gene's winner adds the
+// projection, 7 rows. At 100x today's traffic about one vote in ten moves a
+// winner. So a full day at the cap costs at most 1,750 x 9 + 175 x 7 = 16,975
+// rows, 17% of the 100,000. Even if every admitted vote moved a winner the day
+// would cost 1,750 x 16 = 28,000 rows.
 //
 // One reader action can bring many votes: publishing an image edit imports
 // the edit's inherited upvotes (at most IMAGE_EDIT_INHERITED_UPVOTE_LIMIT) and
-// the publisher's own vote in one import. That is at most 26 units and 396
+// the publisher's own vote in one import. That is at most 26 units and 134
 // rows written in one click (measured, vote-asset-summary-cost.test.js: one
-// budget row and one version row for the import, about 15 rows per vote), 1.5%
-// of the day's 1,750 units and 0.4% of the 100,000 rows. The daily cap still
+// budget row and one version row for the import, about 5 rows per vote), 1.5%
+// of the day's 1,750 units and 0.13% of the 100,000 rows. The daily cap still
 // holds the whole day to 1,750 units however the clicks are spread.
 export const VOTE_DAILY_LIMIT = 1_750
 export const VOTE_DAILY_BUDGET_EXHAUSTED = "VOTE_DAILY_BUDGET_EXHAUSTED"

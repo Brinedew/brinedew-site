@@ -946,20 +946,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     budgetFamily: "admin_votes",
   }),
   iconoplasmApiContract({
-    id: "admin_votes_ledger",
-    match: exact("/api/iconoplasm/admin/votes/ledger"),
-    methods: GET,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_events",
-    match: exact("/api/iconoplasm/admin/votes/events"),
-    methods: GET,
-    auth: "administrator",
-    budgetFamily: "admin_votes",
-  }),
-  iconoplasmApiContract({
     id: "admin_votes_vision_stats",
     match: exact("/api/iconoplasm/admin/votes/vision-stats"),
     methods: GET,
