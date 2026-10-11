@@ -1,11 +1,9 @@
 import assert from "node:assert/strict"
-import { readdirSync, readFileSync } from "node:fs"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { TestD1 } from "./caretaker/manifestation-authority-test-support.js"
+import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
-import { writeFactoryGeneText } from "./gene-text-write.js"
 
 // B-1065 B2b: caretaking leaves the authoring database for the main one, through
 // the real Hono route, the real authoring schema and every main migration.
@@ -19,35 +17,23 @@ import { writeFactoryGeneText } from "./gene-text-write.js"
 //    on "one open role per gene";
 // 5. a caretaker's unread comment count resets;
 // 6. a page grows past what one D1 value holds, or the walk skips rows;
-// 7. a caller without the factory's token runs it.
+// 7. a caller without the factory's token runs it;
+// 8. a supervote the old code wrote after migration 0126 stays behind on the
+//    old per-gene head, or an older head overwrites the role's newer one.
 const TOKEN = "factory-token-0000000000000000000000001"
-const MAIN_MIGRATIONS = new URL("../../migrations-iconoplasm/", import.meta.url)
 
-class MainD1 {
-  constructor() {
-    this.raw = new DatabaseSync(":memory:")
-    for (const name of readdirSync(MAIN_MIGRATIONS)
-      .filter((file) => file.endsWith(".sql"))
-      .sort())
-      this.raw.exec(readFileSync(new URL(name, MAIN_MIGRATIONS), "utf8"))
-  }
-  prepare(sql) {
-    const raw = this.raw
-    let args = []
-    return {
-      bind(...values) {
-        args = values
-        return this
-      },
-      async run() {
-        const result = raw.prepare(sql).run(...args)
-        return { meta: { changes: Number(result.changes) } }
-      },
-    }
-  }
-  close() {
-    this.raw.close()
-  }
+// The authoring side as the old factory path left it: an identity and a text.
+function authoringText(db, { symbol, text, tags = null, fields = null }) {
+  const geneId = `gene_${symbol.toLowerCase()}`
+  db.raw
+    .prepare(`INSERT INTO icono_gene_identities (gene_id, canonical_symbol) VALUES (?, ?)`)
+    .run(geneId, symbol)
+  db.raw
+    .prepare(
+      `INSERT INTO icono_gene_texts (gene_id, text_id, version, text, text_sha256, tags, fields_json)
+       VALUES (?, ?, 1, ?, ?, ?, ?)`,
+    )
+    .run(geneId, `text_${symbol}`, text, "f".repeat(64), tags, fields ? JSON.stringify(fields) : null)
 }
 
 function role(db, { id, geneId, accountId, status, updatedAt = "2026-10-10T10:00:00.000Z" }) {
@@ -86,10 +72,11 @@ function version(db, { id, geneId, lineId, number, tags = "t", withdrawnAt = nul
 
 async function harness(t) {
   const authoring = new TestD1()
-  const main = new MainD1()
+  const main = iconoplasmDatabase()
+  main.raw = main.database
   t.after(() => {
     authoring.close()
-    main.close()
+    main.database.close()
   })
   const env = {
     ICONOPLASM_AUTHORING_DB: authoring,
@@ -133,6 +120,7 @@ async function harness(t) {
     }
     return totals
   }
+  // The authoring triggers admit a role only for an active account.
   for (const account of ["account_a", "account_b"])
     authoring.raw
       .prepare(
@@ -151,7 +139,7 @@ test("1, 2, 5, 6: every text, version and role arrives under its symbol, once", 
   // 120 genes, some with 40 KiB of Tags, so the walk needs several pages and
   // the byte limit, not the row limit, ends some of them.
   for (let index = 0; index < 120; index += 1) {
-    await writeFactoryGeneText(h.env, {
+    authoringText(h.authoring, {
       symbol: `GENE${String(index).padStart(3, "0")}`,
       text: `Text of gene ${index}.`,
       tags: index % 3 === 0 ? `tag ${index}, ${"x".repeat(30_000)}` : `tag ${index}`,
@@ -262,7 +250,7 @@ test("1, 2, 5, 6: every text, version and role arrives under its symbol, once", 
 test("3, 4: the second pass takes the side that changed last", async (t) => {
   const h = await harness(t)
   for (const symbol of ["ALPHA", "BETA"])
-    await writeFactoryGeneText(h.env, { symbol, text: `${symbol} v1.`, tags: "t" })
+    authoringText(h.authoring, { symbol, text: `${symbol} v1.`, tags: "t" })
   const alpha = h.geneId("ALPHA")
   version(h.authoring, { id: "revision_a1", geneId: alpha, lineId: "line_a", number: 1 })
   role(h.authoring, {
@@ -347,4 +335,59 @@ test("7: only the factory's token runs the copy", async (t) => {
   assert.equal((await h.copy("texts", null, { token: null })).status, 401)
   assert.equal((await h.copy("texts", null, { token: "wrong-token" })).status, 401)
   assert.equal((await h.copy("everything", null)).status, 400)
+})
+
+test("8: the supervote moves onto the role once, and only from a newer head", async (t) => {
+  const h = await harness(t)
+  const insertRole = h.main.raw.prepare(
+    `INSERT INTO icono_caretaker_assignments
+       (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+        relinquish_policy, invited_by_account_id, started_at, supervote_asset_sha256,
+        supervote_direction, supervote_version)
+     VALUES (?, ?, ?, 'active', '2026-10-01', 'retain', ?, '2026-10-01', ?, ?, ?)`,
+  )
+  // The old head's guards check it against the old assignment copy, which the
+  // old code kept in step; they go with that copy in PR C.
+  for (const { name } of h.main.raw
+    .prepare(
+      `SELECT name FROM sqlite_master
+        WHERE type = 'trigger' AND tbl_name = 'icono_caretaker_supervote_projection'`,
+    )
+    .all())
+    h.main.raw.exec(`DROP TRIGGER "${name}"`)
+  insertRole.run("role_behind", "ALPHA", "account_a", "account_a", null, null, 2)
+  insertRole.run("role_ahead", "BETA", "account_b", "account_b", "b".repeat(64), -1, 5)
+  const head = h.main.raw.prepare(
+    `INSERT INTO icono_caretaker_supervote_projection
+       (gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id, asset_sha256,
+        active, direction, supervote_version, last_mutation_id)
+     VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+  )
+  head.run("ALPHA", "gene_alpha", "role_behind", "account_a", "a".repeat(64), 3, "mutation_a")
+  head.run("BETA", "gene_beta", "role_ahead", "account_b", "c".repeat(64), 4, "mutation_b")
+
+  const moved = await h.copy("supervotes", null)
+  assert.equal(moved.status, 200, JSON.stringify(moved.body))
+  assert.equal(moved.body.written, 1)
+  assert.equal(moved.body.next_after, null)
+  const roles = Object.fromEntries(
+    h.main.raw
+      .prepare(
+        `SELECT caretaker_assignment_id, supervote_asset_sha256, supervote_direction,
+                supervote_version FROM icono_caretaker_assignments`,
+      )
+      .all()
+      .map(({ caretaker_assignment_id, ...row }) => [caretaker_assignment_id, { ...row }]),
+  )
+  assert.deepEqual(roles.role_behind, {
+    supervote_asset_sha256: "a".repeat(64),
+    supervote_direction: 1,
+    supervote_version: 3,
+  })
+  assert.deepEqual(roles.role_ahead, {
+    supervote_asset_sha256: "b".repeat(64),
+    supervote_direction: -1,
+    supervote_version: 5,
+  })
+  assert.equal((await h.copy("supervotes", null)).body.written, 0, "a rerun writes nothing")
 })
