@@ -30,7 +30,7 @@ import test from "node:test"
 import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 const SYMBOL = "KDM6B"
-const CDN = "https://iconoplasmportraits.b-cdn.net"
+const CDN = "https://img.brinedew.bio"
 
 // The image-only card on its borderless 384x512 artboard, as the print
 // copy and the blot lay it out.
