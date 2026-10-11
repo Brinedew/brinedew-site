@@ -12,6 +12,7 @@ import {
   transitionCaretakerAssignment,
 } from "./caretaker/manifestation-authority.js"
 import { command, sha, storage } from "./caretaker/manifestation-authority-test-support.js"
+import { plainBodyObject } from "../lib/iconoplasm-body-object-test-support.js"
 import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import { drainManifestationPublicCardPublicationWakes } from "../iconoplasm-manifestation-publication-wake.js"
 import { drainManifestationAuthorityProjectionOutbox } from "../lib/iconoplasm-manifestation-authority-projection.js"
@@ -74,6 +75,12 @@ const quiet = (t) => {
   })
 }
 
+// Every seed's body, by object key. The projection copies each accepted text
+// into the plain tables (B-1065 write-through), so it reads the seed back.
+const STORAGE_PREFIX = "/authority-test-zone/"
+const SEED_TEXT = "R keeps a careful ledger of every gene it has met."
+const SEED_BODIES = new Map()
+
 function installMemoryBodyStorage(t) {
   const original = globalThis.fetch
   t.after(() => {
@@ -91,7 +98,9 @@ function installMemoryBodyStorage(t) {
       objects.delete(key)
       return new Response(null, { status: 200 })
     }
-    const bytes = objects.get(key)
+    const bytes =
+      objects.get(key) ??
+      SEED_BODIES.get(key.slice(key.indexOf(STORAGE_PREFIX) + STORAGE_PREFIX.length))
     return bytes
       ? new Response(bytes, { status: 200, headers: { etag: '"test-etag"' } })
       : new Response(null, { status: 404 })
@@ -133,9 +142,10 @@ async function bootstrapCaretaker() {
   })
   const geneId = `gene_receipts_${suffix}`
   const assignmentId = `assignment_receipts_${suffix}`
-  // Every revision needs its own encrypted object: odd sequences keep the
-  // plaintext hash storage(1) uses, so the body hash is one constant.
-  const envelope = storage(1000 + 2 * counter + 1)
+  // Every revision needs its own object; they all hold one text, so the body
+  // hash is one constant.
+  const envelope = { ...storage(1000 + 2 * counter + 1), ...(await plainBodyObject(SEED_TEXT)) }
+  SEED_BODIES.set(envelope.object_key, envelope.bytes)
   await registerGeneIdentity(db, { geneId, canonicalSymbol: `R${suffix}`, now: NOW })
 
   await seedSystemManifestation(db, {
@@ -256,7 +266,7 @@ function failedSubmission(geneRevision, revisionBodySha, commandId) {
   }
 }
 
-const SEED_BODY_SHA = storage(1).body_sha256
+const SEED_BODY_SHA = sha256(SEED_TEXT)
 
 // Failure modes 1, 2 and 3: the sequence a revision really sees, each command
 // run through the real gateway on both databases.

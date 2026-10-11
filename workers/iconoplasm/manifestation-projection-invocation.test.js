@@ -16,6 +16,28 @@ import {
   projectAuthorityAccountStatus,
 } from "./caretaker/manifestation-authority.js"
 import { command, storage, sha } from "./caretaker/manifestation-authority-test-support.js"
+import { plainBodyObject } from "../lib/iconoplasm-body-object-test-support.js"
+
+// The projection copies each gene's text into the plain tables (B-1065
+// write-through), so every seed has a real body in a fake Bunny zone.
+const BODY_ENV = {
+  ICONOPLASM_AUTHORING_STORAGE_ZONE: "projection-cost",
+  ICONOPLASM_AUTHORING_STORAGE_HOST: "projection-storage.invalid",
+  ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "local-test",
+}
+
+function serveBodies(t, bodies) {
+  const nativeFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input.url)
+    if (url.hostname !== BODY_ENV.ICONOPLASM_AUTHORING_STORAGE_HOST) return nativeFetch(input, init)
+    const item = bodies.find((body) => url.pathname === `/projection-cost/${body.object_key}`)
+    return item ? new Response(item.bytes) : new Response(null, { status: 404 })
+  }
+  t.after(() => {
+    globalThis.fetch = nativeFetch
+  })
+}
 
 async function installSchema(db, directory) {
   const schema = new DatabaseSync(":memory:")
@@ -94,7 +116,11 @@ test(
         effectiveAt: now,
         createdByAccountId: admin,
       })
+      const bodies = []
+      serveBodies(t, bodies)
       for (let i = 1; i <= 10; i++) {
+        const body = { ...storage(i), ...(await plainBodyObject(`P${i} keeps the ledger.`)) }
+        bodies.push(body)
         const geneId = `gene_projection_cost_${i}`,
           accountId = `account_projection_cost_${i}`,
           assignmentId = `assignment_projection_cost_${i}`
@@ -106,7 +132,7 @@ test(
         await registerGeneIdentity(authoring, { geneId, canonicalSymbol: `P${i}`, now })
         await seedSystemManifestation(authoring, {
           geneId,
-          storage: storage(i),
+          storage: body,
           expectedHeadVersion: 0,
           expectedCanonicalRevisionId: null,
           manifestationId: `manifestation_seed_cost_${i}`,
@@ -160,6 +186,7 @@ test(
             ICONOPLASM_DB: observed.binding(primaryMeter.db),
             ICONOPLASM_AUTHORING_DB: observed.binding(authoringMeter.db),
             ICONOPLASM_CARD_PUBLICATION: coordinator,
+            ...BODY_ENV,
           },
           25,
         )
@@ -242,6 +269,7 @@ test(
             ICONOPLASM_DB: observed.binding(primary),
             ICONOPLASM_AUTHORING_DB: observed.binding(authoring),
             ICONOPLASM_CARD_PUBLICATION: coordinator,
+            ...BODY_ENV,
           },
           1,
           { priorityEventId: changed.event_id },

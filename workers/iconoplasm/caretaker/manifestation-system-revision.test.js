@@ -14,7 +14,7 @@ import {
   sha256,
   workstationHandler,
 } from "./manifestation-plaintext-test-support.js"
-import { catalogueGeneId } from "./manifestation-authority-service-handlers.js"
+import { catalogueGeneId } from "../gene-text-write.js"
 
 // B-1011: the workstation's regenerated text reaches the site through one
 // service command, the standing form of B-994's one-off migration. Ways it can

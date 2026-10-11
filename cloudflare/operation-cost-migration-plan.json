@@ -30,6 +30,14 @@
         "rows_written": 100,
         "requests": 1
       }
+    },
+    "iconoplasm-authoring/0025_caretaker_chosen_text_index.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 25000,
+        "rows_written": 100,
+        "requests": 1
+      }
     }
   }
 }

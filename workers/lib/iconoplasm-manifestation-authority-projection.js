@@ -657,6 +657,7 @@ export async function drainManifestationAuthorityProjectionOutbox(
     authoringDb,
     projectAssignmentEvent,
     projectPublicMaterialEvent,
+    projectGeneText = null,
     limit = 10,
     now = new Date(),
     priorityEventId = null,
@@ -689,6 +690,9 @@ export async function drainManifestationAuthorityProjectionOutbox(
         { primaryDb, authoringDb, event: envelope },
         { readCanonical },
       )
+      // B-1065 write-through: the plain text tables take the gene's text before
+      // the card wake reads it; a failed copy fails the event, which retries.
+      if (typeof projectGeneText === "function") await projectGeneText(envelope)
       const assignment = envelope.payload?.assignment
       if (assignment) {
         if (typeof projectAssignmentEvent !== "function") {

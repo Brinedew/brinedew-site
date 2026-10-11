@@ -1084,11 +1084,11 @@ test("reading a lease's material is metered but reserves no write capacity, even
     `/api/iconoplasm/authority/generation-leases/${target.lease.generation_lease_token}/material`,
     { lease_owner_id: OWNER, expected_lease_version: target.lease.generation_lease_version },
   )
-  // The exact source is not seeded, so the handler answers with its own error;
+  // The request's text is not seeded, so the handler answers with its own error;
   // what matters is that admission did not refuse a read and did not reserve.
   assert.equal(
     response.payload?.error?.code,
-    "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
+    "GENERATION_SOURCE_REVISION_INACTIVE",
     `the request reached its handler, not an admission refusal: ${JSON.stringify(response.payload)}`,
   )
   assert.equal(fixture.spy.reservations().length, 0)

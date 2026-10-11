@@ -543,6 +543,7 @@ class FulfillmentDb {
   }
 }
 
+// The request's text, as the plain tables of authoring migration 0024 hold it (B-1065).
 class FulfillmentAuthoringStatement {
   bind() {
     return this
@@ -551,24 +552,17 @@ class FulfillmentAuthoringStatement {
   async first() {
     return {
       gene_id: FULFILLMENT_SOURCE.source_gene_id,
+      canonical_symbol: "INS",
       gene_status: "active",
-      manifestation_id: FULFILLMENT_SOURCE.source_manifestation_id,
-      manifestation_status: "active",
-      manifestation_revision_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
-      body_sha256: FULFILLMENT_SOURCE.source_manifestation_body_sha256,
-      body_bytes: 32,
-      sample_label: FULFILLMENT_SOURCE.source_sample_label,
-      sample_number: FULFILLMENT_SOURCE.source_sample_number,
-      sample_text_sha256: FULFILLMENT_SOURCE.source_sample_text_sha256,
-      revision_status: "active",
-      revision_object_key:
-        "private/manifestations/v1/aa/mbody_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bin",
-      revision_verified_at: "2026-08-30 00:00:00",
-      canonical_selection_id: FULFILLMENT_SOURCE.source_canonical_selection_id,
-      selected_manifestation_id: FULFILLMENT_SOURCE.source_manifestation_id,
-      selected_revision_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
-      selection_head_version: FULFILLMENT_SOURCE.source_canonical_head_version,
-      selection_gene_revision: FULFILLMENT_SOURCE.source_gene_revision,
+      origin: "factory",
+      text_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
+      line_id: null,
+      version: FULFILLMENT_SOURCE.source_gene_revision,
+      text: "INS keeps the pantry keys.",
+      text_sha256: FULFILLMENT_SOURCE.source_manifestation_body_sha256,
+      tags: null,
+      fields_json: null,
+      readers_see: 0,
     }
   }
 }

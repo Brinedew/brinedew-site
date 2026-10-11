@@ -28,7 +28,7 @@ test("metadata publication succeeds after source cutover without reopening the r
       ),
     )
     db.exec(
-      "INSERT INTO icono_gene_essence (gene_symbol, manifestation) VALUES ('INS', 'frozen source')",
+      "INSERT INTO icono_gene_essence (gene_symbol, manifestation, sample_label, sample_text_hash) VALUES ('INS', 'frozen source', 'Sample 3', 'a')",
     )
     db.exec(
       "UPDATE icono_manifestation_projection_authority SET mode='authoritative', authority_epoch=2 WHERE singleton=1",
@@ -54,6 +54,8 @@ test("metadata publication succeeds after source cutover without reopening the r
           manifestation: "stale workstation prose",
           manifestation_tags: "stale tags",
           manifestation_fields_json: "{}",
+          sample_label: "Sample 9",
+          sample_text_hash: "b",
         },
         "operator",
       ).run()
@@ -63,6 +65,9 @@ test("metadata publication succeeds after source cutover without reopening the r
     assert.equal(existing.weight_kg, 3)
     assert.equal(existing.manifestation, "frozen source")
     assert.equal(existing.manifestation_tags, null)
+    // B-1065: nothing reads the essence sample columns, so publication leaves them alone.
+    assert.equal(existing.sample_label, "Sample 3")
+    assert.equal(existing.sample_text_hash, "a")
     assert.equal(
       db.prepare("SELECT manifestation FROM icono_gene_essence WHERE gene_symbol='TP53'").get()
         .manifestation,
