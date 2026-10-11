@@ -21458,7 +21458,7 @@ const GENE_CARD_ESSENCE_COLUMNS = [
 
 // B-1065: the gene's text from the plain table, one D1 read and no Bunny.
 async function readPublicManifestationFact(env, symbol) {
-  return publicGeneText(await readGeneText(env.ICONOPLASM_AUTHORING_DB, symbol))
+  return publicGeneText(await readGeneText(env.ICONOPLASM_DB, symbol))
 }
 
 function geneCardPortraitContent(row) {
