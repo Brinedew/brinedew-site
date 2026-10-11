@@ -38,34 +38,53 @@ const REFERENCE_PAGE = `<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="/static/iconoplasm/generated/shared-card-label.css">
 <script src="/static/iconoplasm/generated/shared-card-runtime.js"></script>
 <style>html,body{margin:0;width:384px;height:512px;overflow:hidden;color-scheme:light;
---light:oklch(96% 0.015 75);--dark:oklch(20% 0.035 50)}
+--light:oklch(96% 0.015 75);--dark:oklch(20% 0.035 50);
+--icono-label-type:"IBM Plex Mono";--icono-label-hand:"Caveat"}
 #artboard>.icono-card{width:384px;height:512px;max-width:none;box-sizing:border-box;border:0}</style>
 </head><body><main id="artboard"></main></body></html>`
 
+// The site loads the card fonts through the FontFace API from this contract
+// (quartz/components/Head.tsx), not from a stylesheet, so the reference page
+// must do the same or Chrome draws its fallbacks.
+const CARD_FONTS = JSON.parse(
+  readFileSync(new URL("../shared/iconoplasm-card/font-contract.json", import.meta.url), "utf8"),
+).fonts
+
 async function renderReference(page, card) {
-  return page.evaluate(async (card) => {
-    const shared = globalThis.IconoplasmCardShared
-    const body = shared.renderLabLabelCardHtml(card, {
-      layoutVariant: "image-only",
-      mode: "brick",
-      portraitAlt: `${card.symbol} blot`,
-      portraitSrc: card.portrait.hero_url,
-      titleHref: "",
-      voteHtml: "",
-    })
-    document.getElementById("artboard").innerHTML =
-      `<article class="icono-card icono-card--brick icono-card--variant-image-only" data-icono-card-variant="image-only" style="--width:384;--height:512;--icono-card-accent:${card.color || "#888888"}">${body}</article>`
-    const img = document.querySelector(".icono-image-only-photo")
-    if (!img.complete)
-      await new Promise((resolve) => img.addEventListener("load", resolve, { once: true }))
-    await img.decode()
-    img.classList.add("icono-image-only-photo--loaded")
-    document
-      .querySelector(".icono-image-only-media-stage")
-      ?.classList.add("icono-image-only-media-stage--loaded")
-    document.querySelector(".icono-image-only-link")?.classList.add("icono-image-only-link--loaded")
-    await document.fonts.ready
-  }, card)
+  return page.evaluate(
+    async ({ card, fonts }) => {
+      for (const font of fonts) {
+        const face = new FontFace(font.family, `url("${font.url}") format("woff2")`, {
+          weight: String(font.weight),
+        })
+        document.fonts.add(await face.load())
+      }
+      const shared = globalThis.IconoplasmCardShared
+      const body = shared.renderLabLabelCardHtml(card, {
+        layoutVariant: "image-only",
+        mode: "brick",
+        portraitAlt: `${card.symbol} blot`,
+        portraitSrc: card.portrait.hero_url,
+        titleHref: "",
+        voteHtml: "",
+      })
+      document.getElementById("artboard").innerHTML =
+        `<article class="icono-card icono-card--brick icono-card--variant-image-only" data-icono-card-variant="image-only" style="--width:384;--height:512;--icono-card-accent:${card.color || "#888888"}">${body}</article>`
+      const img = document.querySelector(".icono-image-only-photo")
+      if (!img.complete)
+        await new Promise((resolve) => img.addEventListener("load", resolve, { once: true }))
+      await img.decode()
+      img.classList.add("icono-image-only-photo--loaded")
+      document
+        .querySelector(".icono-image-only-media-stage")
+        ?.classList.add("icono-image-only-media-stage--loaded")
+      document
+        .querySelector(".icono-image-only-link")
+        ?.classList.add("icono-image-only-link--loaded")
+      await document.fonts.ready
+    },
+    { card, fonts: CARD_FONTS },
+  )
 }
 
 // Runs in the page: decodes the three images the way the painter decodes the
