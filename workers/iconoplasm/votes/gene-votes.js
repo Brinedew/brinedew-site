@@ -109,11 +109,7 @@ export async function readGeneElection(db, symbol) {
           LIMIT ?2`,
       )
       .bind(symbol, GENE_ELECTION_CANDIDATE_LIMIT + 1),
-    db
-      .prepare(
-        `${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`,
-      )
-      .bind(symbol),
+    db.prepare(`${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`).bind(symbol),
     db
       .prepare(
         `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override

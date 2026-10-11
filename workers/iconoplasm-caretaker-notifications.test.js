@@ -84,9 +84,17 @@ test("3, 4: the read mark only moves forward, stops at the newest visible commen
     (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker.unread_comment_count
   assert.equal(await unread(), 2, "the hidden comment does not count")
   comment(db)
-  await markCaretakerCommentsRead(db, { accountId: ACCOUNT, assignmentId: ROLE, throughCommentId: 2 })
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 2,
+  })
   assert.equal(await unread(), 1, "the later comment stays unread")
-  await markCaretakerCommentsRead(db, { accountId: ACCOUNT, assignmentId: ROLE, throughCommentId: 1 })
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 1,
+  })
   assert.equal(await unread(), 1, "the mark never goes back")
   await markCaretakerCommentsRead(db, {
     accountId: ACCOUNT,

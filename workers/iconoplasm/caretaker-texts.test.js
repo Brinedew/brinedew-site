@@ -45,17 +45,7 @@ function assignment(db, { id, accountId, status = "active" }) {
           relinquish_policy, invited_by_account_id, started_at, ended_at, end_reason, created_at)
        VALUES (?, 'MFNG', ?, ?, ?, 'retain', ?, ?, ?, ?, ?)`,
     )
-    .run(
-      id,
-      accountId,
-      status,
-      NOW,
-      accountId,
-      NOW,
-      ended ? NOW : null,
-      ended ? "test" : null,
-      NOW,
-    )
+    .run(id, accountId, status, NOW, accountId, NOW, ended ? NOW : null, ended ? "test" : null, NOW)
 }
 
 async function harness(t, { accounts = null } = {}) {

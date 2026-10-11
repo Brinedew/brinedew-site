@@ -54,7 +54,8 @@ const LATEST_COMMENT_SQL = (symbolSql) =>
 
 export function rolesDb(env) {
   const db = env?.ICONOPLASM_DB
-  if (!db?.prepare) throw authorityError("CARETAKING_UNAVAILABLE", "Caretaker tools are unavailable", 503)
+  if (!db?.prepare)
+    throw authorityError("CARETAKING_UNAVAILABLE", "Caretaker tools are unavailable", 503)
   return db
 }
 
@@ -189,7 +190,10 @@ async function switchCooldown(db, switchPolicy, session, accountId, nowIso) {
 
 // What the gene page's "Become caretaker" button needs. The wire keeps the old
 // fields the browser echoes back (gene_revision, entitlement_policy_version).
-export async function readClaimAvailability(db, { geneLocator, accountId, now, switchPolicy, session }) {
+export async function readClaimAvailability(
+  db,
+  { geneLocator, accountId, now, switchPolicy, session },
+) {
   const gene = await resolveGene(db, geneLocator)
   const [geneRole, accountRole] = await Promise.all([
     openRoleOfGene(db, gene.canonical_symbol),
@@ -264,7 +268,11 @@ function requireCurrentTerms(body) {
       400,
     )
   if (String(body.terms_version_id || "") !== caretakerTerms().terms_version_id)
-    throw authorityError("TERMS_VERSION_MISMATCH", "The caretaker terms changed; refresh the gene page", 409)
+    throw authorityError(
+      "TERMS_VERSION_MISMATCH",
+      "The caretaker terms changed; refresh the gene page",
+      409,
+    )
 }
 
 // Claiming a free gene, or switching to it from the gene the account looks after
@@ -337,14 +345,7 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
             WHERE caretaker_assignment_id = ? AND account_id = ? AND status = 'active'
               AND assignment_version = ?`,
         )
-        .bind(
-          accountId,
-          now,
-          now,
-          previous.caretaker_assignment_id,
-          accountId,
-          previousVersion,
-        ),
+        .bind(accountId, now, now, previous.caretaker_assignment_id, accountId, previousVersion),
       endedSupervoteBump(
         db,
         previous.canonical_symbol,
@@ -452,10 +453,15 @@ export function changeRoleStatement(
   { roleId, action, expectedVersion, actorAccountId, ownerAccountId = null, now, reason, policy },
 ) {
   const transition = TRANSITIONS[action]
-  if (!transition) throw authorityError("INVALID_ASSIGNMENT_ACTION", "Assignment action is invalid", 400)
+  if (!transition)
+    throw authorityError("INVALID_ASSIGNMENT_ACTION", "Assignment action is invalid", 400)
   const version = Number(expectedVersion)
   if (!Number.isSafeInteger(version) || version < 1)
-    throw authorityError("EXPECTED_ASSIGNMENT_VERSION_REQUIRED", "expected_assignment_version is required", 400)
+    throw authorityError(
+      "EXPECTED_ASSIGNMENT_VERSION_REQUIRED",
+      "expected_assignment_version is required",
+      400,
+    )
   return db
     .prepare(
       `UPDATE icono_caretaker_assignments
@@ -489,7 +495,14 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
   const results = await db.batch([
     changeRoleStatement(db, input),
     ...(before
-      ? [endedSupervoteBump(db, before.gene_symbol, input.roleId, Number(input.expectedVersion) + 1)]
+      ? [
+          endedSupervoteBump(
+            db,
+            before.gene_symbol,
+            input.roleId,
+            Number(input.expectedVersion) + 1,
+          ),
+        ]
       : []),
     ...extraStatements(db),
   ])
@@ -502,7 +515,11 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
     throw authorityError("ASSIGNMENT_NOT_FOUND", "Caretaker assignment was not found", 404)
   const changed = Number(results?.[0]?.meta?.changes || 0) === 1
   if (!changed && role.status !== transition?.to)
-    throw authorityError("ASSIGNMENT_VERSION_CONFLICT", "The caretaker role changed; reload and try again", 409)
+    throw authorityError(
+      "ASSIGNMENT_VERSION_CONFLICT",
+      "The caretaker role changed; reload and try again",
+      409,
+    )
   return {
     changed,
     role,

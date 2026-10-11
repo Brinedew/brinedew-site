@@ -172,15 +172,7 @@ test("the workstation reads every text back in pages, and the caretaker choices 
     "kept",
     null,
   )
-  insert.run(
-    "ver_tp53",
-    "TP53",
-    "line_tp53",
-    "Withdrawn.",
-    "b".repeat(64),
-    null,
-    "2026-10-10",
-  )
+  insert.run("ver_tp53", "TP53", "line_tp53", "Withdrawn.", "b".repeat(64), null, "2026-10-10")
   const choose = h.db.raw.prepare(
     "UPDATE icono_gene_texts SET chosen_caretaker_version_id = ? WHERE gene_symbol = ?",
   )
@@ -218,7 +210,12 @@ test("the workstation reads every text back in pages, and the caretaker choices 
      VALUES (?, ?, ?, 1, 'A filler gene.', ?)`,
   )
   for (let i = 0; i < 200; i++)
-    text.run(`FILL${i}`, `gene_filler_${String(i).padStart(3, "0")}`, `text_filler_${i}`, "c".repeat(64))
+    text.run(
+      `FILL${i}`,
+      `gene_filler_${String(i).padStart(3, "0")}`,
+      `text_filler_${i}`,
+      "c".repeat(64),
+    )
   const seen = []
   let after = null
   for (let pages = 0; pages < 5; pages++) {

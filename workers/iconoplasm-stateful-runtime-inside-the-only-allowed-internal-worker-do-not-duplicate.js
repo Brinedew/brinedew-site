@@ -21516,11 +21516,7 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
            FROM icono_vote_asset_summary WHERE gene_symbol = ?1`,
       )
       .bind(symbol),
-    db
-      .prepare(
-        `${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`,
-      )
-      .bind(symbol),
+    db.prepare(`${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`).bind(symbol),
     db
       .prepare(
         `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
@@ -25078,10 +25074,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     if (!env.DB || !env.ICONOPLASM_DB || !env.GAME_SESSIONS)
       return done(
         "admin_account_erase_503",
-        json(
-          { error: "Account, Iconoplasm or game session storage unavailable" },
-          503,
-        ),
+        json({ error: "Account, Iconoplasm or game session storage unavailable" }, 503),
       )
     const payload = await request.json().catch(() => ({}))
     try {

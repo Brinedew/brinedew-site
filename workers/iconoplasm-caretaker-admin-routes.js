@@ -191,7 +191,8 @@ export async function readCaretakerAdminRegistry(env, raw = {}) {
 export async function searchCaretakerAdminAccounts(env, raw = {}) {
   const limit = boundedLimit(raw.limit, 20)
   const query = optionalSearch(raw.query)
-  if (!env?.DB?.prepare) throw authorityError("ACCOUNTS_UNAVAILABLE", "Accounts are unavailable", 503)
+  if (!env?.DB?.prepare)
+    throw authorityError("ACCOUNTS_UNAVAILABLE", "Accounts are unavailable", 503)
   const rows = await all(
     env.DB,
     `SELECT account_id, status FROM brinedew_accounts
@@ -275,7 +276,10 @@ function bodyRouteId(body, key, routeId) {
 // One admin change of one role. Ending with "withdraw" takes the role's texts
 // out of use after the role ends; it runs again on a retry of the same end, so
 // a lost answer between the two leaves nothing half done.
-export async function changeCaretakerRoleAsAdmin(env, { assignmentId, action, actorAccountId, body }) {
+export async function changeCaretakerRoleAsAdmin(
+  env,
+  { assignmentId, action, actorAccountId, body },
+) {
   const db = rolesDb(env)
   if (!ASSIGNMENT_ACTIONS.has(action))
     throw authorityError("INVALID_ASSIGNMENT_ACTION", "Assignment action is invalid", 400)
@@ -285,7 +289,10 @@ export async function changeCaretakerRoleAsAdmin(env, { assignmentId, action, ac
     reason = requiredReason(body.reason, "reason")
     policy = String(body.relinquish_policy || "")
     if (!RELINQUISH_POLICIES.has(policy))
-      throw authorityError("INVALID_RELINQUISH_POLICY", "relinquish_policy must be retain or withdraw")
+      throw authorityError(
+        "INVALID_RELINQUISH_POLICY",
+        "relinquish_policy must be retain or withdraw",
+      )
   } else if (action === "suspend") {
     reason = requiredReason(body.suspension_reason, "suspension_reason")
   } else if (action === "cancel") {

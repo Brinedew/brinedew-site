@@ -33,7 +33,14 @@ function authoringText(db, { symbol, text, tags = null, fields = null }) {
       `INSERT INTO icono_gene_texts (gene_id, text_id, version, text, text_sha256, tags, fields_json)
        VALUES (?, ?, 1, ?, ?, ?, ?)`,
     )
-    .run(geneId, `text_${symbol}`, text, "f".repeat(64), tags, fields ? JSON.stringify(fields) : null)
+    .run(
+      geneId,
+      `text_${symbol}`,
+      text,
+      "f".repeat(64),
+      tags,
+      fields ? JSON.stringify(fields) : null,
+    )
 }
 
 function role(db, { id, geneId, accountId, status, updatedAt = "2026-10-10T10:00:00.000Z" }) {
