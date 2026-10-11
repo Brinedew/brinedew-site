@@ -95,7 +95,7 @@ next Actions run repairs it; a count-only lag lasts until the gene's next vote.
 
 - **Portrait** is the generated character image selected by `asset_sha256`. It is source material.
 - **Gene blot** is the exact shared `image-only` card composition: portrait cover crop, protection gradient, full gene name at bottom left, and symbol at bottom right. Its verified 768x1024 WebP is the canonical public/search image.
-- **High-resolution print copy** is the separate requested 1536x2048 PNG workflow. It is not the canonical search image.
+- **Print copy** is the PNG a reader's browser paints from the published portrait and card when they press "download print copy". It needs no server, no D1 row and no stored object, and it is not the canonical search image.
 
 Only the Iconoplasm workstation renders canonical blots. Cloudflare accepts authenticated verified WebP uploads, records the one-row-per-gene materialization ledger, carries the blot key in the stable gene object, and serves bytes. Public GET/HEAD requests never render or enroll blots.
 
@@ -122,11 +122,9 @@ asks `/api/iconoplasm/mobile-card-manifest` for the current snapshot label
 before painting cached cards, because browsers keep IndexedDB rows for weeks.
 
 `/gene/:symbol` reads its card from the stable object on the CDN
-(`genes/v3/<SYMBOL>.json`). Print-copy generation accepts only the portrait of the
-published card: an `asset=` parameter is an assertion, so a malformed value
-fails with `400` and a valid SHA that differs from the published portrait fails
-with `409`. Print-copy enrollment, status, rendering and download never fall
-back to D1.
+(`genes/v3/<SYMBOL>.json`). The print copy is painted in the reader's browser from
+that card's published portrait, so it can never show a D1 leader that has not
+been published.
 
 Budget: publication writes go to Bunny Storage (one PUT and one verified GET
 per gene), never to KV, and the catalog object is built outside
@@ -224,11 +222,8 @@ bounds.
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
 
-A print copy is rendered only when a reader requests it (B-997); publication
-never queues a browser render. Its fingerprint leaves out vote counts and the
-stable object's envelope (candidate pool, `published_at`, `vote_version`), and
-the status and PNG routes serve only a PNG whose fingerprint matches the current
-card, so a reader never gets a stale copy: their click enrols the current card.
+A print copy is painted in the reader's browser when they press its button;
+publication renders nothing for it and no server stores one.
 
 The workstation drain polls the authenticated `blots/backlog` route, which
 answers from D1 and the stable objects, renders the missing blots for the

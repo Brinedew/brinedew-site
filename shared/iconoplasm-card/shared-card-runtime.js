@@ -1253,9 +1253,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     return (
       '<div class="icono-label-footer-copy">' +
       '<div class="icono-label-footer-copy-main">' +
-      '<a class="icono-label-footer-line icono-label-footer-line--caption icono-label-print-copy-request" data-icono-print-copy data-icono-print-copy-symbol="' +
+      '<button type="button" class="icono-label-footer-line icono-label-footer-line--caption icono-label-print-copy-request" data-icono-print-copy data-icono-print-copy-symbol="' +
       escapeHtml(model.symbol || "") +
-      '" role="button" aria-disabled="true">request print copy</a>' +
+      '" aria-disabled="true">download print copy</button>' +
       '<div class="icono-label-footer-line icono-label-footer-line--caption">seal after review / do not expose to open air</div>' +
       "</div>" +
       '<div class="icono-label-footer-copy-side">' +

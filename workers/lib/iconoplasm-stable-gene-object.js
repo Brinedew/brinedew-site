@@ -258,7 +258,7 @@ function winnerPortrait(candidate) {
   }
 }
 
-// The print-copy blot the factory rendered for this winner, if it matches the
+// The canonical blot the factory rendered for this winner, if it matches the
 // card exactly (renderer, symbol, name and winning portrait). A blot made for
 // another portrait waits until that portrait wins again.
 function readyBlot(card, blots) {
