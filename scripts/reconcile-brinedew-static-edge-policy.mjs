@@ -105,7 +105,10 @@ export function desiredCacheRule(rule) {
     description: rule.description,
     expression: rule.expression,
     action: "set_cache_settings",
-    action_parameters: { cache: rule.cache === true },
+    action_parameters: {
+      cache: rule.cache === true,
+      ...(rule.browserTtl ? { browser_ttl: { mode: rule.browserTtl } } : {}),
+    },
     enabled: true,
   }
 }
