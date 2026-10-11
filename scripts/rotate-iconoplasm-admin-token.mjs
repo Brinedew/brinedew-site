@@ -58,7 +58,10 @@ function run(command, commandArgs, { input = "", timeoutMs = 120_000 } = {}) {
     let settled = false
     const child = spawn(command, commandArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
+      // Node refuses to spawn a Windows .cmd (pnpm.cmd) without a shell
+      // (EINVAL since the 2024 batch-file fix). Every argument here is a
+      // fixed literal; the token goes through stdin, never the command line.
+      shell: process.platform === "win32",
       windowsHide: true,
     })
     const timer = setTimeout(() => {
