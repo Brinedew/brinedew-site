@@ -103,6 +103,7 @@ function routePoster({
   // The batch gate records each admitted request in the real schema (B-1085).
   const db = iconoplasmDatabase()
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 404 }),
     publishGene: async (_env, symbol) => {
       if (fail(symbol)) throw new Error(`Canonical manifestation body failed for ${symbol}`)

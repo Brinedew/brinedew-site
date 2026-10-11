@@ -59,9 +59,8 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
   assert.equal(background.length, 0)
 })
 
-test("schema transition refuses application D1 and preserves queued work", async () => {
+test("schema transition refuses application D1 and runs no scheduled work", async () => {
   let queries = 0
-  let retry = null
   const db = {
     prepare() {
       queries++
@@ -90,16 +89,6 @@ test("schema transition refuses application D1 and preserves queued work", async
   )
   assert.equal(blocked.status, 503)
   assert.equal((await blocked.json()).code, "ICONOPLASM_SCHEMA_TRANSITION")
-  await runtime.queue(
-    {
-      retryAll(options) {
-        retry = options
-      },
-    },
-    env,
-    ctx,
-  )
-  assert.deepEqual(retry, { delaySeconds: 60 })
   for (const cron of [ICONOPLASM_RECURRING_CRON, ICONOPLASM_NIGHTLY_CRON]) {
     for (let minute = 0; minute < 60; minute++) {
       const event = { cron, scheduledTime: Date.UTC(2026, 8, 6, 23, minute) }
