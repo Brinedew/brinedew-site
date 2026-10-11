@@ -23,7 +23,7 @@ import {
 } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
-import { backfillGeneTexts } from "./text-backfill.js"
+import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
 // allows one request (the canonical text's body, the card's PUT and its
@@ -187,6 +187,7 @@ export function createIconoplasmApp({
   refreshSummaries,
   accountUsage,
   windowUsage,
+  caretakerSession,
 }) {
   const app = new Hono()
 
@@ -474,30 +475,8 @@ export function createIconoplasmApp({
     },
   )
 
-  /**
-   * B-1065: copies one page of texts out of the old authority into the plain
-   * tables (workers/iconoplasm/text-backfill.js). The caller walks with
-   * `next_after` until it is null, factory texts first, then caretaker versions.
-   * Goes once every reader and writer reads the plain tables.
-   */
-  app.post(
-    "/api/iconoplasm/admin/texts/backfill",
-    factoryAuth,
-    outsideMaintenance,
-    zValidator(
-      "json",
-      z.object({
-        kind: z.enum(["factory", "caretaker"]),
-        after: z.nullish(z.string().check(z.maxLength(128))),
-        force: z.optional(z.boolean()),
-      }),
-    ),
-    shedBatchWork(() => "sheddable_plus"),
-    async (c) => {
-      c.header("Cache-Control", "no-store")
-      return c.json(await backfillGeneTexts(c.env, c.req.valid("json")))
-    },
-  )
+  // B-1065 B2a: the caretaker panel's text routes, on the plain text tables.
+  registerCaretakerTextRoutes(app, { caretakerSession, publishGene })
 
   app.all("*", (c) => legacy(c.req.raw, c.env, executionContext(c)))
   return app

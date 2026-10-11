@@ -29,7 +29,9 @@ import {
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
 import { TestD1, command, row, sha, storage } from "./manifestation-authority-test-support.js"
+import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 import { TAGGERIZER_DAILY_LIMIT, TAGGERIZER_MESSAGES, TAGGERIZER_MODEL } from "./taggerizer.js"
+import { normalizeManifestationTags } from "../../lib/iconoplasm-manifestation-tags.js"
 
 const NOW = "2026-10-04T12:00:00.000Z"
 const ADMIN = "account_admin_tagger"
@@ -203,7 +205,7 @@ test("a person who is not the gene's caretaker is refused and the AI is never ca
 })
 
 test("Tags from prose returns exactly the shape the Tags save accepts, and Prose from Tags returns prose", async (t) => {
-  const { handler, calls, db } = await bootstrap(t, {
+  const { handler, calls } = await bootstrap(t, {
     aiReply: modelReply({
       archetype: ["Archivist"],
       outfit: ["red coat", "ink-stained gloves", "a", "b", "c", "d", "e"],
@@ -224,40 +226,13 @@ test("Tags from prose returns exactly the shape the Tags save accepts, and Prose
   assert.equal("colors" in suggestion.fields_json, false, "retired category is dropped")
   assert.ok(suggestion.tags_text.startsWith("archivist, careful_gaze, red_coat"))
 
-  // The suggestion goes through the caretaker's real save path unchanged.
-  const saved = await (
-    await handler(
-      post(`${BASE}/revisions`, {
-        command_id: "tagger_revision_0001",
-        prose: PROSE,
-        expected_assignment_version: 2,
-        expected_manifestation_version: 0,
-      }),
-    )
-  ).json()
-  const submitted = await handler(
-    post(`${BASE}/revisions/${saved.manifestation_revision_id}/tags-derivatives`, {
-      command_id: "tagger_tags_0001",
-      tags_text: suggestion.tags_text,
-      fields_json: suggestion.fields_json,
-      expected_gene_revision: row(
-        db,
-        "SELECT gene_revision FROM icono_manifestation_heads WHERE gene_id = ?",
-        GENE,
-      ).gene_revision,
-    }),
+  // The suggestion passes the caretaker save's own Tags checks unchanged
+  // (saveCaretakerText runs exactly these two).
+  assert.equal(normalizeManifestationTags(suggestion.tags_text).tags, suggestion.tags_text)
+  assert.deepEqual(
+    JSON.parse(canonicalManifestationFieldsJson(suggestion.fields_json)),
+    suggestion.fields_json,
   )
-  assert.ok(new Set([200, 202]).has(submitted.status), `Tags save answered ${submitted.status}`)
-  const derivative = await submitted.json()
-  const body = await (
-    await handler(
-      new Request(
-        `https://iconoplasm.test${BASE}/derivatives/${derivative.manifestation_derivative_id}/body`,
-      ),
-    )
-  ).json()
-  assert.equal(body.tags.tags_text, suggestion.tags_text)
-  assert.deepEqual(body.tags.fields_json, suggestion.fields_json)
 
   // Prose from Tags: the model returns edits, and only what they touch changes.
   // The caretaker swapped red_coat for blue_coat, so the model is told just that.
