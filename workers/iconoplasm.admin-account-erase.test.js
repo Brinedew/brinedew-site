@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test, { afterEach } from "node:test"
-import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 import {
   ADMIN_TOKEN,
@@ -86,7 +85,6 @@ function route(env, body, token = ADMIN_TOKEN) {
 function routeEnv(worldEnv) {
   const gatewayEnv = {
     ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
     ...worldEnv,
   }
   return {

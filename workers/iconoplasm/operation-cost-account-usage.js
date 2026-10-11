@@ -1,5 +1,14 @@
-import { OperationCostError } from "../lib/operation-cost-ledger.js"
-import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
+// Cloudflare's own daily usage for the account, read from its GraphQL analytics.
+// It is the meter B-1085's batch admission prices against (batch-admission.js).
+const KV_COST_METERS = Object.freeze(["kv_reads", "kv_writes", "kv_deletes", "kv_lists"])
+
+class AccountUsageUnavailableError extends Error {
+  constructor() {
+    super("COST_ACCOUNT_USAGE_UNAVAILABLE")
+    this.name = "AccountUsageUnavailableError"
+    this.code = "COST_ACCOUNT_USAGE_UNAVAILABLE"
+  }
+}
 
 // B-1085: `recent` is the newest minute the meter has shown. The meter runs one
 // to two minutes behind (measured 2026-10-11: at 10:44:58 UTC the newest minute
@@ -31,7 +40,7 @@ const WINDOW_QUERY = `query D1Window($accountTag: string, $from: Time, $to: Time
   } }
 }`
 
-const unavailable = () => new OperationCostError("COST_ACCOUNT_USAGE_UNAVAILABLE")
+const unavailable = () => new AccountUsageUnavailableError()
 
 // How far back the newest-minute probe looks. A quiet account shows no minute in
 // it, and then everything older is in the day total.
@@ -131,9 +140,9 @@ export function parseOperationCostAccountUsage(
   return usage
 }
 
-// Lives on the one budget authority, not in every public request isolate.
-// No background polling, retries or application-D1 queries. One concurrent
-// control-plane request refreshes a 30-second cache while operations need it.
+// One reader per isolate. No background polling, retries or application-D1
+// queries: one concurrent request refreshes a 30-second cache when batch work
+// asks, and a failure backs off for 30 seconds.
 export function createOperationCostAccountUsageReader({
   accountId,
   token,
@@ -200,7 +209,7 @@ export function createOperationCostAccountUsageReader({
         } catch (error) {
           // B-1036: say why there's no sample. A silent catch here hid a whole day of
           // "no provider sample" behind a guess. At most one line per 30 seconds.
-          console.warn("[operation-cost] account usage sample failed", {
+          console.warn("[d1-usage] account usage sample failed", {
             code: String(error?.code || error?.name || "unknown").slice(0, 80),
             message: String(error?.message || "").slice(0, 160),
           })
@@ -214,4 +223,15 @@ export function createOperationCostAccountUsageReader({
       return pending
     },
   }
+}
+
+let isolateReader = null
+
+// Today's account-wide usage, through this isolate's one reader.
+export function accountD1Usage(env) {
+  isolateReader ??= createOperationCostAccountUsageReader({
+    accountId: env?.CLOUDFLARE_ACCOUNT_ID,
+    token: env?.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+  })
+  return isolateReader.refresh()
 }

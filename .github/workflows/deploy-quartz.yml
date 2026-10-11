@@ -79,17 +79,6 @@ jobs:
         if: inputs.data_maintenance != true
         run: node scripts/verify-code-release.mjs
 
-      # This read-only sentinel performs no application D1 work. A pass does
-      # not replace complete-release admission below. Existing maintenance
-      # keeps its independent zero-D1 published-reader recovery path.
-      - name: Reject exhausted capacity before release setup
-        if: inputs.data_maintenance == true
-        timeout-minutes: 1
-        env:
-          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-        run: node scripts/early-release-capacity-sentinel.mjs
-
       - name: Setup Node.js (22.x)
         uses: actions/setup-node@v7
         with:
@@ -131,12 +120,8 @@ jobs:
       - name: Build Quartz site
         run: pnpm run build
 
-      # The proof imports the Worker runtime, which needs the generated
-      # operation-cost identities (not committed, B-863).
       - name: Prove exact built static route ownership
-        run: |
-          node scripts/generate-operation-cost-identities.mjs
-          node --test workers/iconoplasm-static-assets.workerd.test.js
+        run: node --test workers/iconoplasm-static-assets.workerd.test.js
 
       - name: Verify Geneguessr assets bundled
         run: |
@@ -173,11 +158,6 @@ jobs:
           mkdir -p .wrangler-pages
           cp wrangler.pages.toml .wrangler-pages/wrangler.toml
 
-      - name: Verify operation cost implementation and migration identities
-        run: |
-          node scripts/generate-operation-cost-migrations.mjs --check
-          node scripts/generate-operation-cost-identities.mjs
-
       - name: Validate Iconoplasm deployment topology
         run: pnpm run validate:iconoplasm-topology
 
@@ -208,8 +188,8 @@ jobs:
         timeout-minutes: 2
         run: node scripts/verify-iconoplasm-reader-recovery.mjs
 
-      # ARCHITECTURE FENCE [IPD-012]: inspect the account allowance through
-      # analytics before any migration reads; exhausted D1 is not a retry loop.
+      # Inspect the account allowance through analytics before any migration
+      # reads; exhausted D1 is not a retry loop.
       - name: Require account-wide D1 and Worker headroom before migrations
         if: inputs.data_maintenance == true
         shell: pwsh
@@ -217,15 +197,6 @@ jobs:
         run: |
           . ./scripts/lib/CloudflareWorkerRequestBudget.ps1
           Assert-CloudflareWorkerRequestHeadroom | ConvertTo-Json
-
-      - name: Check account capacity before release mutations
-        if: inputs.data_maintenance == true
-        timeout-minutes: 1
-        env:
-          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/preflight-operation-cost-release.mjs
 
       - name: Require analytics secrets before staging the schema transition
         if: inputs.data_maintenance == true
@@ -274,22 +245,7 @@ jobs:
             pnpm exec wrangler queues info "$queue" >/dev/null
           done
 
-      # ARCHITECTURE FENCE [IPD-012]: admission must exist before DDL, while
-      # application HTTP, queue consumers and periodic projection work wait
-      # for schema readiness. These three steps must remain adjacent.
-      # B-742: every state-owner upload retains the three independent GeneGuessr
-      # schedules. Restore Iconoplasm cron work only with a reviewed capacity
-      # release; neither a successful deploy nor a clock deadline is that proof.
-      - name: Refresh account capacity immediately before pausing application work
-        if: inputs.data_maintenance == true
-        timeout-minutes: 1
-        env:
-          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/preflight-operation-cost-release.mjs
-
-      - name: Stage migration admission in the existing state owner
+      - name: Pause the application for maintenance
         if: inputs.data_maintenance == true && steps.release-state.outputs.schema_transition != 'true'
         timeout-minutes: 5
         run: |
@@ -298,49 +254,22 @@ jobs:
           trap 'rm -f wrangler.iconoplasm-schema-transition.generated.toml' EXIT
           node scripts/deploy-iconoplasm-reader-recovery.mjs --env="" --config wrangler.iconoplasm-schema-transition.generated.toml --var "ICONOPLASM_SCHEMA_TRANSITION:1" --var "ICONOPLASM_SCHEMA_TRANSITION_MODE:reader-recovery" --var "ICONOPLASM_MIGRATION_ORIGIN_RUN_ID:$ICONOPLASM_RELEASE_ORIGIN_RUN_ID" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --triggers "55 23 * * *" "3 0 * * *" "6 12 * * *"
 
-      - name: Inspect staged migration prerequisites through admission
+      # B-1067: with the application paused (the step above), the reviewed
+      # migrations an online release refuses apply here, priced against today's
+      # headroom and guarded like an online one (scripts/apply-online-d1-migrations.mjs).
+      - name: Apply reviewed D1 migrations with the application paused
         if: inputs.data_maintenance == true
-        timeout-minutes: 2
+        timeout-minutes: 10
         env:
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/inspect-operation-cost-release.mjs
-
-      - name: Apply reviewed D1 migrations through prediction admission
-        if: inputs.data_maintenance == true
-        id: migrations
-        timeout-minutes: 3
-        env:
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/run-admitted-d1-migrations.mjs
-
-      - name: Record staged migration continuation checkpoint
-        if: steps.migrations.outputs.continuation_required == 'true'
-        run: |
-          echo "One individually admitted migration completed; retained schema-transition protection stays active."
-
-      - name: Prepare the published catalog through shared KV admission
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
-        timeout-minutes: 2
-        env:
-          ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/run-admitted-catalog-initialization.mjs
+          CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
+        run: node scripts/apply-online-d1-migrations.mjs --maintenance
 
       # The stateful Worker ships once here with a non-final HTML-shell cache identity (Pages is not live
       # yet) and again below with the final identity after Pages confirms.
       - name: Deploy the stateful Worker after data maintenance
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         timeout-minutes: 5
         run: pnpm exec wrangler deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST-backend" --var "SENTRY_RELEASE:$GITHUB_SHA"
-
-      - name: Ensure Iconoplasm finalization Queue consumer is bound
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
-        timeout-minutes: 2
-        # ARCHITECTURE FENCE [IPD-004]: preserve delayed work and verify the
-        # Wrangler-owned consumer instead of restoring CLI default batch sizes.
-        run: node scripts/reconcile-iconoplasm-finalization-queue.mjs --apply
 
       # B-847: reviewed online migrations (plan entries marked "online": true)
       # apply here, before the code that uses them, with the app live. A refusal
@@ -390,18 +319,18 @@ jobs:
           fi
 
       - name: Deploy the compatible public edge Worker
-        if: inputs.data_maintenance != true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance != true
         run: |
           set -euo pipefail
           pnpm exec wrangler versions upload --env="" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --tag "edge-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           pnpm exec wrangler versions deploy --env="" --version-tag "edge-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
 
       - name: Upload public edge worker script with routes (production)
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         run: pnpm exec wrangler deploy --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --var "SENTRY_RELEASE:$GITHUB_SHA"
 
       - name: Reassign production routes to the public edge worker
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         run: |
           node scripts/reassign-cloudflare-worker-routes.mjs \
             brinedew.bio \
@@ -414,7 +343,7 @@ jobs:
       # The mutable /blot/* alias and other dynamic routes go directly to the one
       # stateful runtime, without the old second public-proxy invocation.
       - name: Reassign Iconoplasm route to the stateful worker
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         run: |
           node scripts/reassign-cloudflare-worker-routes.mjs \
             brinedew.bio \
@@ -425,7 +354,6 @@ jobs:
       # bunny/the-only-iconoplasm-pull-zone-policy.json and applied through the
       # live Worker, which holds the account key. Never edit the zone by hand.
       - name: Reconcile the Iconoplasm Bunny pull zone policy
-        if: steps.migrations.outputs.continuation_required != 'true'
         env:
           ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
         run: node scripts/reconcile-iconoplasm-pull-zone.mjs
@@ -434,7 +362,6 @@ jobs:
       # previous frontend, while the reverse order can expose controls whose
       # migrations and authenticated handlers do not exist yet.
       - name: Deploy production static site to Cloudflare Pages
-        if: steps.migrations.outputs.continuation_required != 'true'
         working-directory: .wrangler-pages
         run: pnpm exec wrangler pages deploy ../public --project-name brinedew-bio --branch main
 
@@ -443,14 +370,14 @@ jobs:
       # that key with the previous deployment's asset URLs. Switch to the final key
       # only after Pages confirms the new static deployment.
       - name: Activate compatible Worker with current HTML shell cache version
-        if: inputs.data_maintenance != true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance != true
         run: |
           set -euo pipefail
           pnpm exec wrangler versions upload --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --tag "code-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           pnpm exec wrangler versions deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --version-tag "code-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
 
       - name: Activate current Iconoplasm HTML shell cache version
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         # The checked-in config owns the normal production trigger set. An
         # explicit --triggers list here previously carried the three-cron
         # reader-recovery containment into normal operation and silently
@@ -461,12 +388,11 @@ jobs:
       # once every stateful deploy above has run, in the normal and in the
       # maintenance path, or the recurring jobs are silently stopped.
       - name: Verify the installed cron triggers are the checked-in ones
-        if: steps.migrations.outputs.continuation_required != 'true'
         timeout-minutes: 2
         run: node scripts/stateful-worker-deploy-mode.mjs --verify wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml
 
       - name: Verify Iconoplasm publication aliases (production)
-        if: inputs.data_maintenance == true && steps.migrations.outputs.continuation_required != 'true'
+        if: inputs.data_maintenance == true
         run: pnpm run verify:iconoplasm-publication-aliases
 
       # B-858: the static edge policy says Cloudflare must not auto-inject its
@@ -474,12 +400,10 @@ jobs:
       # consent-gated one stand down). Enforce it on every release instead of
       # trusting a one-off manual run.
       - name: Enforce the Web Analytics consent setting from the static edge policy
-        if: steps.migrations.outputs.continuation_required != 'true'
         timeout-minutes: 2
         run: node scripts/reconcile-brinedew-static-edge-policy.mjs --apply rules
 
       - name: Smoke test production host ownership and browser bootstraps
-        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           set -euo pipefail
           smoke_dir="$(mktemp -d)"
@@ -547,7 +471,6 @@ jobs:
           fi
 
       - name: Smoke test Discord OAuth entry and anonymous session contract
-        if: steps.migrations.outputs.continuation_required != 'true'
         run: |
           set -euo pipefail
           headers_file="$(mktemp)"

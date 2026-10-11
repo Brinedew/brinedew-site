@@ -28,6 +28,8 @@ import {
   batchSpendNow,
   priceOf,
 } from "./batch-admission.js"
+import { batchRouteAdmission, batchRouteSpec } from "./batch-route-prices.js"
+import { matchIconoplasmRouteContract } from "../iconoplasm-route-contract.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
 import { registerCaretakerRoleRoutes } from "./caretaker-role-routes.js"
@@ -197,7 +199,12 @@ export function createIconoplasmApp({
   windowUsage,
   caretakerSession,
   settleGene,
+  isAdmin,
 }) {
+  if (typeof isAdmin !== "function")
+    throw new TypeError(
+      "createIconoplasmApp needs isAdmin: admin routes are priced once authorized",
+    )
   const app = new Hono()
 
   // Batch work stops at 85% of a wall and a reader's own action runs to it
@@ -209,21 +216,25 @@ export function createIconoplasmApp({
   // the stop and readers lost their votes for the day. A meter that can't be read
   // stops batch work. ARCHITECTURE FENCE [IPD-013]: every admin route carries
   // this gate; the app won't build without it (assertEveryAdminRoutePriced).
+  const admitOrRefuse = async (c, next, criticality, priced) => {
+    if (criticality === "critical") return next()
+    const usage = await accountUsage(c.env).catch(() => null)
+    const admitted = await admitBatchWork(c.env.ICONOPLASM_DB, { usage, criticality, ...priced })
+    if (admitted.ok) return next()
+    c.header("Retry-After", String(admitted.retryAfter))
+    c.header("Cache-Control", "no-store")
+    return c.json(admitted.body, admitted.status)
+  }
   const shedBatchWork = (criticalityOf, priceOf) =>
     Object.assign(
       async (c, next) => {
         const criticality = criticalityOf(c)
-        if (criticality === "critical") return next()
-        const usage = await accountUsage(c.env).catch(() => null)
-        const admitted = await admitBatchWork(c.env.ICONOPLASM_DB, {
-          usage,
+        return admitOrRefuse(
+          c,
+          next,
           criticality,
-          ...(await priceOf(c)),
-        })
-        if (admitted.ok) return next()
-        c.header("Retry-After", String(admitted.retryAfter))
-        c.header("Cache-Control", "no-store")
-        return c.json(admitted.body, admitted.status)
+          criticality === "critical" ? {} : await priceOf(c),
+        )
       },
       { [BATCH_GATE]: true },
     )
@@ -520,6 +531,28 @@ export function createIconoplasmApp({
       "the meter itself: it reads Cloudflare's analytics and a few admission minutes, and is how a script asks a job's price first",
   })
 
-  app.all("*", (c) => legacy(c.req.raw, c.env, executionContext(c)))
+  // B-1067: the legacy gateway's administrator and workstation routes are let
+  // in the same way, each by its entry in batch-route-prices.js, which refuses
+  // to load while one has none. Readers' routes have no entry. A request its
+  // route would turn away is not priced: its handler answers it before it reads
+  // a row, so an anonymous caller can't spend batch work's share, and its body
+  // is never read here.
+  app.all("*", async (c, next) => {
+    const route = matchIconoplasmRouteContract(new URL(c.req.url).pathname, c.req.method)?.route
+    const spec = batchRouteSpec(route)
+    if (!spec || spec.criticality === "critical") return next()
+    if (!(await isAdmin(c.req.raw, c.env))) return next()
+    const admission = await batchRouteAdmission(spec, () => c.req.text())
+    return admitOrRefuse(c, next, admission.criticality, { price: admission.price })
+  })
+  // A per-item price read the body (Hono keeps the text), so the handler gets a
+  // request rebuilt from that text.
+  app.all("*", async (c) => {
+    const raw = c.req.raw
+    const request = raw.bodyUsed
+      ? new Request(raw.url, { method: raw.method, headers: raw.headers, body: await c.req.text() })
+      : raw
+    return legacy(request, c.env, executionContext(c))
+  })
   return app
 }

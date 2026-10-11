@@ -94,6 +94,7 @@ test(
         },
       })
       const app = createIconoplasmApp({
+        isAdmin: async () => true,
         legacy: async () => new Response("legacy", { status: 299 }),
         // Only the registration's own rows are measured; the card build has its own.
         publishGene: async () => ({ ok: true }),

@@ -1,8 +1,13 @@
-import { OperationCostError } from "../lib/operation-cost-ledger.js"
+// Test helper: counts the D1 rows a real query reads and writes, from the
+// provider receipts (meta.rows_read / meta.rows_written), so the read-cost
+// golden tests can pin a hot query's price on a real schema.
+class OperationCostError extends Error {
+  constructor(code) {
+    super(code)
+    this.code = code
+  }
+}
 
-// Request-local wrapper for a reviewed domain operation. first() deliberately
-// uses all() so its provider receipt is retained; application semantics stay
-// unchanged. Only the executor can obtain this wrapper's underlying binding.
 export function createOperationCostD1Meter(database) {
   const statements = new WeakMap()
   const actual = { rows_read: 0, rows_written: 0, requests: 1 }

@@ -70,6 +70,7 @@ function harness(t, { aiReply = modelReply({ outfit: ["red_coat"] }), env: extra
     ...extra,
   }
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async () => ({}),
     refreshSummaries: async () => {},

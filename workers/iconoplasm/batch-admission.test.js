@@ -25,6 +25,7 @@ function harness(t, { meter }) {
   // What batch work really spent, at the instant it ran.
   const spent = []
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async (env, symbol) => {
       spent.push({ at: Date.now(), rows_written: 60, rows_read: 300 })

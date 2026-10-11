@@ -45,13 +45,8 @@ They do not probe authentication, scan D1, or repair publication.
 Routine publication processes changed content only. A scheduled or vote-driven
 step must never silently fall back to rebuilding the corpus.
 
-<!-- ARCHITECTURE FENCE [IPD-012] -->
-
-Operator work (migrations and release inventories) is reserved through the
-operation-cost authority before it runs. B-1067 deletes that ledger; until
-then it is the one path. Caretaking is plain rows in the main D1 (B-1065): the
-site writes them, and the workstation reads and PUTs gene texts through the
-admin text routes.
+Caretaking is plain rows in the main D1 (B-1065): the site writes them, and
+the workstation reads and PUTs gene texts through the admin text routes.
 
 <!-- ARCHITECTURE FENCE [IPD-013] -->
 
@@ -61,8 +56,12 @@ writer run past the 85% stop: on 2026-10-11 a copy wrote 62,000 rows in four
 minutes that way and readers lost their votes until 00:00 UTC (B-1085). Every
 admin route names its price; the gate adds the meter's total, what batch work
 was let in since the meter's newest minute (`icono_batch_admissions`, one row a
-minute) and the price, and refuses past the stop. A multi-page job prices its
-whole length on its first page. A meter that can't be read stops batch work.
+minute) and the price, and refuses past the stop. The Hono routes name their
+price beside the route in `workers/iconoplasm/app.js`; the legacy gateway's
+admin and workstation routes name theirs in
+`workers/iconoplasm/batch-route-prices.js`, which refuses to load while a
+contract route of those audiences has no entry (B-1067). A multi-page job
+prices its whole length on its first page. A meter that can't be read stops batch work.
 Before starting a bulk job by hand, ask
 `/api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M` and start only on
 `"fits": true`.
@@ -93,9 +92,10 @@ change to `cloudflare/deployment-topology.json` or
 transition or reader recovery is active.
 
 For any other reviewed data or topology change, dispatch that same workflow
-with `data_maintenance=true`. This is the only path that runs provider capacity
-admission, non-online schema migration, catalog preparation, and topology
-reconciliation. It is intentionally explicit because those operations consume
+with `data_maintenance=true`. This is the only path that pauses the
+application, applies reviewed migrations that are not online
+(`scripts/apply-online-d1-migrations.mjs --maintenance`, with the same price
+and size guards), and reconciles topology. It is intentionally explicit because those operations consume
 the shared account allowance and can pause application work. It is not a
 routine code-release fallback.
 
@@ -121,18 +121,21 @@ Verify all of the following from current sources:
 4. The operation has one named owner and one idempotent identity, and a failure
    has one durable retry owner rather than a blind retry loop.
 
-Exhausted evidence refuses new mutation work. Missing or late telemetry does
-not refuse it: D1 write admission then counts every worst-case receipt since the
-last same-day provider sample (or since midnight, when the meter is exactly
-zero). A telemetry outage never becomes invented capacity, a refunded uncertain
-reservation, or a whole-day stall (B-897).
+A batch request is refused with 503 `D1_BATCH_SHARE_SPENT` when its price
+does not fit under its tier's stop, and with 503 `D1_METER_UNAVAILABLE` when
+Cloudflare's meter can't be read. Both carry `Retry-After` and
+`retry_after_seconds`: the share is told the seconds to the next 00:00 UTC
+reset, because the provider's count never falls within a UTC day. When
+Cloudflare's own wall trips, D1 answers its daily-limit error and the gateway
+turns it into a 503 with the reset time. The workstation waits for the stated
+time before it sends the request again (`daily_budget_retry_after_seconds` in
+the Iconoplasm repository).
 
 ## Current inspection commands
 
 For explicit data or topology maintenance, dispatch the production workflow
-with `data_maintenance=true`. That workflow refreshes account capacity and
-admits each operation before it runs. Read actual D1 query and row counts from
-the provider when diagnosing exhaustion; a synthetic capacity model cannot
+with `data_maintenance=true`. Read actual D1 query and row counts from the
+provider when diagnosing exhaustion; a synthetic capacity model cannot
 establish current visitor demand or release readiness.
 
 Validate architecture ownership:
@@ -142,133 +145,39 @@ pnpm run test:architecture-fences
 pnpm run validate:iconoplasm-topology
 ```
 
-Inspect the shared admission endpoint through the authenticated supported
-operator path:
+Ask whether a job of a given price fits today, with the factory token:
 
 ```text
-GET /api/iconoplasm/admin/cost/operations/capacity
+GET /api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M
 ```
 
 Do not use application D1 reads to discover whether D1 read capacity is already
-exhausted. Use provider analytics and the existing capacity ledger.
+exhausted. Use provider analytics.
 
 ## Admission behavior
 
-Every mutation or background operation must declare:
+The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-policy.js`):
 
-- the owning operation;
-- an idempotent identity;
-- the resource meters it may spend;
-- a reviewed worst-case bound;
-- the durable completion or retry destination.
-
-Reserve before dispatch. D1 write admission measures pressure: the provider's
-rows-written meter plus the worst-case units of every reservation made since
-15 minutes before that meter was sampled. An uncertain reservation is never
-refunded; it keeps counting until the meter can see its real writes. Background
-lanes stop at 70% of the daily meter and user actions at 90%, so users always
-keep a band that background work cannot take.
-
-Exact ceilings live in executable policy
-(`workers/lib/iconoplasm-mutation-lane-reservations.js`), not this runbook.
-Tests must fail when a new path bypasses that policy.
-
-The operator ledger (the shared daily D1 budget that admin, workstation and
-background routes spend, `D1_OPERATOR_DAILY_LIMITS`) is shed by criticality,
-lowest tier first, after Google SRE's
-[Handling Overload](https://sre.google/sre-book/handling-overload/) and Stripe's
-reserved share for critical requests (B-1026). A request is refused once the
-day's operator reads or writes reach its tier's share, at the start and again
-before every statement, so a diagnostic admitted just under its share stops on
-its next query.
-
-The tier follows who is waiting for the request. Readers, votes and caretaker
-saves never enter this ledger. Inside it:
-
-- critical, refused only when the day is spent: a player's portrait delivery.
-  That is the lease routes (`authority_generation_executor`) and the publication
-  of that portrait, which shares its routes (ingest, catalog upsert and
-  reconcile, finalization) with bulk syncs. The caller declares a delivery: the
-  workstation sends `X-Iconoplasm-Criticality: critical` while it publishes a
-  generation session, and the finalization queue reads the message's existing
-  `drain_scoped_phases`. Only those routes may be declared critical, and only by
-  a credentialed caller;
-- sheddable_plus, refused at 85%: work nobody is waiting on that must still
-  finish (bulk syncs, replication, rewrites, Tags derivatives, blots,
-  moderation), and any budgeted family not named otherwise. The write-heavy
-  admin limiter's default target is this same share;
+- critical, never refused by us: a reader's portrait, vote or caretaker save,
+  the owner's own action on one gene, and the five generation lease routes the
+  Drain uses to deliver a reader's requested portrait;
+- sheddable_plus, refused at 85% of a wall: work nobody is waiting on that must
+  still finish (portrait registration, card rebuilds, syncs, replication,
+  rewrites, blots, catalogue delivery);
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
-  coverage, assets, storage audit, repair scope, blots backlog, the gallery
-  listing).
+  coverage, assets, storage audit, repair scope, the gallery listing).
 
-The refusal is the usual `ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED` 503, retried
-after the reset, and `budget.exhausted_by` names the tier
-(`rows_read_sheddable`, `rows_written_sheddable_plus`, ...). Tiers and shares
-live in `shared/iconoplasm-d1-budget-policy.js`; a new family that player
-deliveries depend on must be added to the critical set there.
-`workers/iconoplasm/budget-criticality-shedding.test.js` drives the real gateway
-against the real ledger at each share.
-
-A refusal states when the same request is worth sending again, in the standard
-`Retry-After` header and as `retry_after_seconds` in the body, always the same
-whole number of seconds. Every daily-budget 503 the gateway answers
-(`ICONOPLASM_D1_DAILY_BUDGET_EXHAUSTED` and `ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE`)
-and the two discovery 429s (batch and guest merge) take it from one function,
-`mutationRefusalRetryAfterSeconds`. A lane refusal is told 15 minutes
-(`MUTATION_ANALYTICS_LAG_MS`) only when reservations in flight are the whole reason,
-that is when the provider's count plus the request would fit without them: they
-stop counting once a provider sample is 15 minutes past their bucket. That is the
-earliest it can clear. The window is cut on 15-minute buckets and the sample can be
-a few minutes old, so it can take up to twice as long, and the next refusal then
-states 15 minutes again. Anything else (the provider's own count already blocks the
-request, the shared day is spent, the admin limiter) is told the seconds to the next
-00:00 UTC reset plus five seconds of slack for Cloudflare's own meters
-(`secondsUntilCloudflareDailyReset`), because the provider's count never falls
-within a UTC day. The workstation waits for the stated time before it sends the
-request again (`daily_budget_retry_after_seconds` in the Iconoplasm repository).
-The monthly caps are set far above what the free plan can write in a month, so
-they are not a cause; a refusal for one would still state the next reset, which is
-never late.
-
-A reservation's unit is a D1 row written, the provider's own meter, which counts
-every index entry and trigger write behind a statement. It is not a statement
-count: the provider allows 1,000 D1 calls per invocation and counts a batch as
-one, and the 50-statement invocation budget (`workers/lib/d1-invocation-budget.js`)
-is ours and bounds statements, not rows. What each operation reserves lives in
-`workers/lib/iconoplasm-mutation-write-bounds.js`, sized from the operation's own
-bounded input and pinned to receipts measured on the migrated schema by
-`workers/iconoplasm/finalization-reservation-receipts.test.js`. A reservation
-never goes below the 50-unit floor, and one above it carries its size in its
-identity so a receipt held under an earlier sizing is never replayed at another
-size. A migration that adds an index or trigger to a reserved path fails that
-test until the new number is pinned.
-
-The laptop routes (the five generation executor routes and the tags-derivative
-submission) reserve in the laptop-delivery lane, sized from their own body, and
-only after their bearer is checked: a request the route would turn away reserves
-nothing. A claim takes new leases every time it is sent, so each claim call is its
-own operation, sized for a scan in which every row is quarantined. Renew, fail,
-completion and the tags submission name the exact thing they change, so their
-identity is their body and a retry is the same operation. Reading a lease's
-material writes no row and reserves none. A completion carries at most 50
-requests, the size of one claim, and is refused above that before any write. One
-completion call delivers one Discord group, so the workstation sends the identical
-body again until every group is delivered, and a replay is admitted without a new
-reservation: the completion's reservation therefore covers the rows of the whole
-series, sized for the worst grouping (groups of two requests), and a call writes
-only what moves (a request already on the publication is not rewritten), so a call
-after the first costs the group it delivers, not the requests still pending. The
-tags head selection is not in this lane: the gateway hands it to the
-operation-cost authority, which admits it against its own declared bound. The
-numbers are pinned by `workers/iconoplasm/generation-executor-reservation-receipts.test.js`
-and `workers/iconoplasm/tags-derivative-reservation-receipts.test.js`, and a test
-fails when a route classed `workstation_sync_write` is neither sized nor admitted
-by the operation-cost authority.
+A price's unit is a D1 row, the provider's own meter, which counts every index
+entry and trigger write behind a statement. It is not a statement count: the
+provider allows 1,000 D1 calls per invocation and counts a batch as one, and
+the 50-statement invocation budget (`workers/lib/d1-invocation-budget.js`) is
+ours and bounds statements, not rows. Measured prices say where they were
+measured; the estimates in `batch-route-prices.js` are labelled as estimates
+and are replaced by a `d1QueriesAdaptiveGroups` measurement when one exists.
 
 A vision carries at most 24 distinct emulsion codes (the largest in production
 carries 17). The vision rebuild reads the codes first and refuses a vision above
-the bound before it writes anything; the finalization job stays in its retry
-ledger with the reason in its last error. Raise the bound only together with a new
+the bound before it writes anything. Raise the bound only together with a new
 measurement of `VISION_ROLLUP_ROWS`.
 
 ## Public-read behavior

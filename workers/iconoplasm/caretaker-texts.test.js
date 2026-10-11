@@ -62,6 +62,7 @@ async function harness(t, { accounts = null } = {}) {
   const published = []
   const env = { ICONOPLASM_DB: db, ...(accounts ? { DB: accounts } : {}) }
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async (_env, symbol) => {
       published.push(symbol)

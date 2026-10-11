@@ -210,25 +210,6 @@ function buildGeneguessrSubdomainRobotsTxt() {
   return buildPublicSubdomainRobotsTxt(GENEGUESSR_HOST)
 }
 
-async function runScheduledIconoplasmMaintenanceStep(env, ctx, path, body) {
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request(`https://geneguessr-api/__internal/iconoplasm/${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      env,
-      ctx,
-    )
-  const result = await response.json()
-  if (!response.ok || result?.ok === false)
-    throw new Error(
-      `Scheduled ${path} failed: ${response.status} ${result.code || result.error || "unknown"}`,
-    )
-  return result
-}
-
 async function runScheduledIconoplasmFulfillment(env) {
   const delivery = await deliverPendingRequestFulfillmentNotifications(env, { limit: 1 })
   const requestIds = delivery.delivered_request_ids || []
@@ -375,14 +356,13 @@ import { readSession } from "./lib/sealed-session.js"
 import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
-  IconoplasmSyncGovernor,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   publishRequestPickerObject,
   rebuildDirtyVisionRollups,
+  repairCanonInvariantsForScheduled,
+  isIconoplasmAdmin,
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
-  migrateIconoplasmCompactDiscoveryForScheduled,
   publishIconoplasmGeneStableObject,
   refreshIconoplasmRegisteredGeneSummaries,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
@@ -390,10 +370,7 @@ import {
   settleGeneAfterVote,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
-import {
-  createOperationCostAccountUsageReader,
-  readD1WindowUsage,
-} from "./iconoplasm/operation-cost-account-usage.js"
+import { accountD1Usage, readD1WindowUsage } from "./iconoplasm/operation-cost-account-usage.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -411,8 +388,6 @@ import {
 } from "./iconoplasm-background-schedule.js"
 import { handleRequestAtTheOnlyAllowedStatefulWorkerForBenchmarkDoNotDuplicate } from "./benchmark/the-only-allowed-benchmark-stateful-runtime-do-not-duplicate.js"
 
-export { IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate }
-export { IconoplasmSyncGovernor }
 // Import Discord bot handlers
 import {
   handleDailySummary,
@@ -1814,7 +1789,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
 
 // B-1063: Hono answers the routes it knows and hands every other request to
 // the legacy handler above.
-let factoryUsageReader = null
 const app = createIconoplasmApp({
   legacy: handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishGene: publishIconoplasmGeneStableObject,
@@ -1827,13 +1801,9 @@ const app = createIconoplasmApp({
     settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_assignment_supervote_cleared" }),
   // Today's account-wide D1 usage from Cloudflare's analytics, one reader per
   // isolate (it caches 30 s and backs off after a failure).
-  accountUsage: (env) => {
-    factoryUsageReader ??= createOperationCostAccountUsageReader({
-      accountId: env.CLOUDFLARE_ACCOUNT_ID,
-      token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
-    })
-    return factoryUsageReader.refresh()
-  },
+  accountUsage: accountD1Usage,
+  // The owner's session or the admin token, checked before an admin route is priced.
+  isAdmin: isIconoplasmAdmin,
   // The account's D1 rows in one window (B-1059): one analytics request per ask.
   windowUsage: (env, window) =>
     readD1WindowUsage({
@@ -1902,7 +1872,6 @@ export default {
         }),
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
-        discoveryMigration: () => migrateIconoplasmCompactDiscoveryForScheduled(env),
         sharedDelivery: () => drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env),
         materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         recognition: () => reconcileIconoplasmRecognitionPolicies(env),
@@ -1910,7 +1879,7 @@ export default {
         // not an Iconoplasm one.
         geneguessrBoard: () => publishLeaderboardObject(env),
         // B-896: the style picker's first page on the CDN (121 rows, written on change).
-        // B-1057: first rebuild, once each, the visions sync finalization marked, so
+        // B-1057: first rebuild, once each, the visions a card build marked, so
         // the page is built from fresh rollups. A failed rebuild re-marks its visions
         // and never blocks the page.
         requestPicker: async () => {
@@ -1924,12 +1893,7 @@ export default {
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
         caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),
         archive: () => archiveColdIconoplasmPublishEvents(env),
-        canonRepair: () =>
-          runScheduledIconoplasmMaintenanceStep(env, ctx, "repair-canon-invariants", {
-            limit: 250,
-            actorId: "cron",
-            reason: "scheduled_canon_invariant_repair",
-          }),
+        canonRepair: () => repairCanonInvariantsForScheduled(env),
       })
       if (background.handled) {
         const result = background.result

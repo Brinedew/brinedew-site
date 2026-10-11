@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 import { DatabaseSync } from "node:sqlite"
 
 import {
@@ -637,7 +636,6 @@ test("shared discovery read-model rebuild is admin-only and excludes the configu
   ]
   const env = buildEnv({ db })
   // The admin rebuild is a budgeted mutation, so the budget object is bound (idle day).
-  env.ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE = new FakeDailyBudgetNamespace()
 
   const response =
     await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(

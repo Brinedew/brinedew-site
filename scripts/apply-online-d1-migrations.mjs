@@ -8,8 +8,10 @@
 // in cloudflare/operation-cost-migration-plan.json together with its cost
 // prediction and optional size guards. This step runs before the Worker
 // deploy; a refusal stops the release before anything changes, and the
-// installed code keeps serving. Migrations without `online` keep the
-// maintenance protocol (`data_maintenance=true`).
+// installed code keeps serving. Migrations without `online` need the paused
+// maintenance release (`data_maintenance=true`), which runs this same step with
+// `--maintenance` once the application is paused: the same review, price and
+// guards, without the online requirement (B-1067).
 import { execFileSync } from "node:child_process"
 import { readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
@@ -53,7 +55,7 @@ function isReviewedHistoricalMigration(resource, name, applied) {
   )
 }
 
-export function planOnlineMigrations({ manifest, files, applied }) {
+export function planOnlineMigrations({ manifest, files, applied, maintenance = false }) {
   if (manifest?.schema !== "iconoplasm.migrationCostPlan.v1" || !manifest.migrations)
     throw new Error("COST_MIGRATION_PLAN_REQUIRED")
   const pending = []
@@ -71,7 +73,8 @@ export function planOnlineMigrations({ manifest, files, applied }) {
       const key = `${resource}/${name}`
       const reviewed = manifest.migrations[key]
       if (!reviewed) throw new Error(`COST_MIGRATION_NOT_REVIEWED: ${key}`)
-      if (reviewed.online !== true) throw new Error(`CODE_RELEASE_REQUIRES_MAINTENANCE: ${key}`)
+      if (reviewed.online !== true && !maintenance)
+        throw new Error(`CODE_RELEASE_REQUIRES_MAINTENANCE: ${key}`)
       requirePrediction(reviewed.prediction, key)
       total.rows_read += reviewed.prediction.rows_read
       total.rows_written += reviewed.prediction.rows_written
@@ -182,6 +185,7 @@ async function main() {
     manifest,
     files: sourceFiles(),
     applied: await readApplied({ accountId, token, ids }),
+    maintenance: process.argv.includes("--maintenance"),
   })
   if (!plan.pending.length || process.argv.includes("--plan-only")) {
     console.log(
