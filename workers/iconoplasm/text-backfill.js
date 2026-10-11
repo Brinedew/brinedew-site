@@ -6,10 +6,11 @@
 // one request; the GETs are not retried, a failure is reported per row and the
 // next run picks it up.
 //
-// Reruns are cheap: a row already copied is skipped without touching Bunny
-// unless its source moved (a new head revision, a new choice of caretaker
-// version, a new readers-see flag, Tags that changed length). `force` copies
-// every row on the page again.
+// Reruns are cheap and never undo the factory: a gene that already has a plain
+// row keeps its text and Tags, and only its flags (readers-see, the caretaker's
+// choice) come across, `force` included (factoryRowAhead). A caretaker version
+// whose Tags changed length is copied again; `force` re-copies every caretaker
+// version on the page.
 import {
   canonicalManifestationFieldsJson,
   splitManifestationTagsPayload,
@@ -197,10 +198,14 @@ function tagsUnchanged(row) {
     : row.have_tags_bytes == null
 }
 
-// The plain row is ahead when the factory saved a newer text through the PUT
-// route; then the old authority's text and Tags no longer count.
+// Once a gene has a plain row, it holds the factory's text: the workstation
+// writes factory texts only through PUT /admin/genes/:symbol/text, and nothing
+// appends factory revisions to the old authority any more. So only the gene's
+// flags come across. Comparing versions was wrong: a gene the PUT created first
+// has version 1, the old authority's revision is 1 or more, and the next
+// caretaker event on it would have put the old (often 4,000-character) text back.
 function factoryRowAhead(row) {
-  return Boolean(row.have_text_id) && Number(row.have_version) > Number(row.revision_number)
+  return Boolean(row.have_text_id)
 }
 
 function factoryRowCurrent(row) {
