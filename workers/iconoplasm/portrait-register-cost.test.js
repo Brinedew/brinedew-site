@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { createIconoplasmApp } from "./app.js"
+import { ADMISSION_COST } from "./batch-admission.js"
 
 // B-1072: what registering a portrait writes, measured by the provider's own
 // receipts on the complete migrated schema (every index and trigger). The
@@ -38,7 +39,7 @@ const portrait = (symbol, n) => ({
 })
 
 test(
-  "registering a new portrait writes a fixed handful of D1 rows, and re-registering it none",
+  "registering a new portrait writes a fixed handful of D1 rows, and re-registering it only its admission row",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -116,14 +117,18 @@ test(
 
       const first = await register([portrait("TP53", 100)])
       t.diagnostic(JSON.stringify({ "new portrait": first }))
+      // The batch gate's own minute row (B-1085) comes on top, at its stated price.
       assert.ok(
-        first.rows_written <= NEW_PORTRAIT_WORST_CASE_ROWS_WRITTEN,
+        first.rows_written <= NEW_PORTRAIT_WORST_CASE_ROWS_WRITTEN + ADMISSION_COST.rows_written,
         `a new portrait wrote ${first.rows_written} rows`,
       )
 
       const again = await register([portrait("TP53", 100)])
       t.diagnostic(JSON.stringify({ "unchanged re-registration": again }))
-      assert.equal(again.rows_written, 0, "an unchanged portrait writes nothing")
+      assert.ok(
+        again.rows_written <= ADMISSION_COST.rows_written,
+        `an unchanged portrait writes only its admission row, not ${again.rows_written}`,
+      )
     } finally {
       await runtime.dispose()
     }
