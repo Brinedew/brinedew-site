@@ -5,26 +5,25 @@ import {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
   createIconoplasmCaretakerAdminHandlers,
 } from "./iconoplasm-caretaker-admin-routes.js"
-import {
-  offerCaretakerAssignment,
-  registerAuthorityAccount,
-  registerCaretakerTermsVersion,
-  registerGeneIdentity,
-  seedSystemManifestation,
-  transitionCaretakerAssignment,
-} from "./iconoplasm/caretaker/manifestation-authority.js"
-import {
-  TestD1,
-  command,
-  sha,
-  storage,
-} from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { caretakerPseudonym, caretakerTerms } from "./iconoplasm/caretaker-roles.js"
+import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
+// B-1065 B2b: the admin's caretaker page, through its declared handlers, on the
+// roles table of the real main schema (every migration). Failure modes:
+// 1. the registry or a picker shows a person by more than their pseudonym, or
+//    loses their account status;
+// 2. an admin change applies from a stale version, or a retry applies twice;
+// 3. a suspension or an end lands without a bounded reason;
+// 4. ending with "withdraw" leaves the person's texts in use, or a lost answer
+//    between the end and the withdrawal leaves it half done;
+// 5. ending a role whose supervote decides the gene leaves the old winner
+//    published;
+// 6. a cross-site request changes a role.
 const ORIGIN = "https://iconoplasm.brinedew.bio"
-const NOW = "2026-08-30T00:00:00.000Z"
 const ADMIN = "account_admin_routes"
 const USER = "account_user_routes1"
-const TERMS = "terms_routes_0001"
+const ROLE = "assignment_admin_8101"
 
 function json(value, status = 200, headers = {}) {
   return new Response(JSON.stringify(value), {
@@ -33,338 +32,237 @@ function json(value, status = 200, headers = {}) {
   })
 }
 
-function mutationRequest(path, body) {
+function mutationRequest(
+  path,
+  body,
+  headers = { origin: ORIGIN, "sec-fetch-site": "same-origin" },
+) {
   return new Request(`${ORIGIN}${path}`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: ORIGIN,
-      "sec-fetch-site": "same-origin",
-    },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   })
 }
 
-function handlers(db, wakeCalls = []) {
-  return createIconoplasmCaretakerAdminHandlers({
+function setup(t, { supervote = false } = {}) {
+  const db = iconoplasmDatabase()
+  const accounts = new TestD1()
+  t.after(() => {
+    db.database.close()
+    accounts.close()
+  })
+  accounts.raw.exec(`
+    CREATE TABLE brinedew_accounts (account_id TEXT PRIMARY KEY, status TEXT NOT NULL);
+    INSERT INTO brinedew_accounts VALUES ('${USER}', 'active'), ('${ADMIN}', 'active');
+  `)
+  db.database
+    .prepare(
+      `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
+       VALUES ('A8101', 'gene_admin_8101', 'text_admin_8101', 1, 'Factory words.', ?)`,
+    )
+    .run("0".repeat(64))
+  db.database
+    .prepare(
+      `INSERT INTO icono_caretaker_assignments
+         (caretaker_assignment_id, gene_symbol, account_id, status, terms_version_id,
+          terms_accepted_at, relinquish_policy, invited_by_account_id, started_at,
+          supervote_asset_sha256, supervote_direction, supervote_version)
+       VALUES (?, 'A8101', ?, 'active', ?, '2026-10-01', 'retain', ?, '2026-10-01', ?, ?, ?)`,
+    )
+    .run(
+      ROLE,
+      USER,
+      caretakerTerms().terms_version_id,
+      USER,
+      supervote ? "a".repeat(64) : null,
+      supervote ? 1 : null,
+      supervote ? 1 : 0,
+    )
+  const settled = []
+  const api = createIconoplasmCaretakerAdminHandlers({
     isAdmin: async () => true,
     json,
     resolveActiveAccount: async () => ({ account_id: ADMIN }),
-    wakeAuthorityProjection: async (_env, event) => {
-      wakeCalls.push(event.event_id)
-      return { ok: true, results: [{ event_id: event.event_id, status: "published" }] }
-    },
+    settleGene: async (_env, _ctx, symbol) => settled.push(symbol),
   })
-}
-
-async function call(handler, { request, routeId, params = {}, db }) {
-  return handler({
-    match: { route: { id: routeId }, params },
-    request,
-    env: { ICONOPLASM_AUTHORING_DB: db },
-    done: (_name, response) => response,
-  })
-}
-
-async function bootstrap(t, suffix, { accepted = false } = {}) {
-  const db = new TestD1()
-  t.after(() => db.close())
-  const geneId = `gene_admin_${suffix}`
-  const assignmentId = `assignment_admin_${suffix}`
-  const seedRevisionId = `revision_seed_admin_${suffix}`
-  await registerAuthorityAccount(db, {
-    accountId: ADMIN,
-    publicCreditLabel: "Brinedew administrator",
-    now: NOW,
-  })
-  await registerAuthorityAccount(db, {
-    accountId: USER,
-    publicCreditLabel: "Caretaker specimen",
-    now: NOW,
-  })
-  await registerGeneIdentity(db, {
-    geneId,
-    canonicalSymbol: `A${suffix}`,
-    now: NOW,
-  })
-  await registerCaretakerTermsVersion(db, {
-    termsVersionId: TERMS,
-    termsSha256: sha("f"),
-    documentUrl: "https://iconoplasm.brinedew.bio/caretaker-terms",
-    displayLabel: "Caretaker terms - 30 August 2026",
-    effectiveAt: NOW,
-    createdByAccountId: ADMIN,
-  })
-  await seedSystemManifestation(db, {
-    geneId,
-    storage: storage(1),
-    expectedHeadVersion: 0,
-    expectedCanonicalRevisionId: null,
-    manifestationId: `manifestation_seed_admin_${suffix}`,
-    revisionId: seedRevisionId,
-    selectionId: `selection_seed_admin_${suffix}`,
-    eventUuid: `event_seed_admin_${suffix}`,
-    now: NOW,
-    ...command(`command_seed_admin_${suffix}`, "1", null, "migration"),
-  })
-  if (accepted) {
-    await offerCaretakerAssignment(db, {
-      geneId,
-      accountId: USER,
-      invitedByAccountId: ADMIN,
-      entitlementPolicyVersion: CARETAKER_ENTITLEMENT_POLICY_VERSION,
-      expectedGeneRevision: 1,
-      assignmentId,
-      eventUuid: `event_offer_admin_${suffix}`,
-      now: NOW,
-      ...command(`command_offer_admin_${suffix}`, "2", ADMIN, "administrator"),
+  const env = { ICONOPLASM_DB: db, DB: accounts }
+  const read = async (name, path) =>
+    (
+      await api[name]({
+        request: new Request(`${ORIGIN}${path}`),
+        env,
+        done: (_name, response) => response,
+      })
+    ).json()
+  const act = async (action, body, headers) => {
+    const response = await api["caretaker_admin.mutate"]({
+      match: { params: { assignment_id: ROLE, action } },
+      request: mutationRequest(
+        `/api/iconoplasm/admin/caretakers/assignments/${ROLE}/${action}`,
+        body,
+        headers,
+      ),
+      env,
+      ctx: {},
+      done: (_name, response) => response,
     })
-    await transitionCaretakerAssignment(db, {
-      assignmentId,
-      action: "accept",
-      expectedAssignmentVersion: 1,
-      termsVersionId: TERMS,
-      relinquishPolicy: "retain",
-      eventUuid: `event_accept_admin_${suffix}`,
-      now: NOW,
-      ...command(`command_accept_admin_${suffix}`, "3", USER, "account"),
-    })
+    return { status: response.status, body: await response.json() }
   }
-  db.raw
-    .prepare(
-      "UPDATE icono_authority_state SET authority_mode = 'authoritative' WHERE singleton = 1",
-    )
-    .run()
-  return { assignmentId, db, geneId, seedRevisionId }
+  return { db, api, read, act, settled }
 }
 
-test("admin discovery returns stable IDs, exact current head state, and server-owned policy", async (t) => {
-  const context = await bootstrap(t, "8101", { accepted: true })
-  const api = handlers(context.db)
+test("1: the registry and the pickers name people by pseudonym and keep their account status", async (t) => {
+  const h = setup(t)
+  const label = await caretakerPseudonym(USER)
+  assert.match(label, /^Caretaker [0-9A-F]{8}$/)
 
-  const termsResponse = await call(api["caretaker_admin.terms"], {
-    request: new Request(`${ORIGIN}/api/iconoplasm/admin/caretakers/terms`),
-    routeId: "caretaker_admin_terms",
-    db: context.db,
-  })
-  const terms = await termsResponse.json()
+  const terms = await h.read("caretaker_admin.terms", "/api/iconoplasm/admin/caretakers/terms")
   assert.equal(terms.entitlement_policy_version, CARETAKER_ENTITLEMENT_POLICY_VERSION)
-  assert.deepEqual(terms.terms[0], {
-    terms_version_id: TERMS,
-    document_sha256: sha("f"),
-    document_url: "https://iconoplasm.brinedew.bio/caretaker-terms",
-    display_label: "Caretaker terms - 30 August 2026",
-    effective_at: NOW,
-    retired_at: null,
-  })
+  assert.equal(terms.terms[0].terms_version_id, caretakerTerms().terms_version_id)
 
-  const accountsResponse = await call(api["caretaker_admin.accounts"], {
-    request: new Request(`${ORIGIN}/api/iconoplasm/admin/caretakers/accounts?query=specimen`),
-    routeId: "caretaker_admin_accounts",
-    db: context.db,
-  })
-  assert.deepEqual((await accountsResponse.json()).accounts, [
-    {
-      account_id: USER,
-      author_label: "Caretaker specimen",
-      status: "active",
-    },
-  ])
+  const { accounts } = await h.read(
+    "caretaker_admin.accounts",
+    `/api/iconoplasm/admin/caretakers/accounts?query=user_routes`,
+  )
+  assert.deepEqual(accounts, [{ account_id: USER, author_label: label, status: "active" }])
 
-  const genesResponse = await call(api["caretaker_admin.genes"], {
-    request: new Request(`${ORIGIN}/api/iconoplasm/admin/caretakers/genes?query=A8101`),
-    routeId: "caretaker_admin_genes",
-    db: context.db,
-  })
-  const genes = (await genesResponse.json()).genes
+  const { genes } = await h.read(
+    "caretaker_admin.genes",
+    "/api/iconoplasm/admin/caretakers/genes?query=a81",
+  )
   assert.equal(genes.length, 1)
-  assert.equal(genes[0].gene_id, context.geneId)
-  assert.equal(genes[0].canonical_revision_id, context.seedRevisionId)
+  assert.equal(genes[0].canonical_symbol, "A8101")
+  assert.equal(genes[0].gene_id, "gene_admin_8101")
   assert.equal(genes[0].open_assignment_status, "active")
 
-  const registryResponse = await call(api["caretaker_admin.registry"], {
-    request: new Request(
-      `${ORIGIN}/api/iconoplasm/admin/caretakers/registry?status=active&limit=1`,
-    ),
-    routeId: "caretaker_admin_registry",
-    db: context.db,
-  })
-  const registry = await registryResponse.json()
-  assert.equal(registry.assignments[0].caretaker_assignment_id, context.assignmentId)
-  assert.equal(registry.assignments[0].account_id, USER)
-  assert.equal(registry.assignments[0].head_version, 1)
-  assert.equal(registry.assignments[0].gene_revision, 3)
+  const registry = await h.read(
+    "caretaker_admin.registry",
+    "/api/iconoplasm/admin/caretakers/registry?status=active&limit=1",
+  )
+  assert.equal(registry.assignments.length, 1)
+  assert.equal(registry.assignments[0].caretaker_assignment_id, ROLE)
+  assert.equal(registry.assignments[0].author_label, label)
+  assert.equal(registry.assignments[0].account_status, "active")
+  assert.equal(registry.assignments[0].canonical_revision_id, "text_admin_8101")
   assert.equal(registry.next_cursor, null)
 })
 
-test("offer rejects browser-invented policy and replays without repeating completed projection", async (t) => {
-  const context = await bootstrap(t, "8102")
-  const wakeCalls = []
-  const api = handlers(context.db, wakeCalls)
-  const path = "/api/iconoplasm/admin/caretakers/offers"
-  const baseBody = {
-    command_id: "command_admin_offer_8102",
-    gene_id: context.geneId,
-    account_id: USER,
-    expected_gene_revision: 1,
-  }
-
-  const mismatchResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(path, {
-      ...baseBody,
-      entitlement_policy_version: "browser_invented_v9",
-    }),
-    routeId: "caretaker_admin_offer",
-    db: context.db,
-  })
-  assert.equal(mismatchResponse.status, 409)
-  assert.equal((await mismatchResponse.json()).error.code, "ENTITLEMENT_POLICY_VERSION_MISMATCH")
-
-  const body = {
-    ...baseBody,
-    entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
-  }
-  const acceptedResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(path, body),
-    routeId: "caretaker_admin_offer",
-    db: context.db,
-  })
-  const accepted = await acceptedResponse.json()
-  assert.equal(acceptedResponse.status, 200)
-  assert.equal(accepted.status, "pending_acceptance")
-  assert.equal(accepted.replayed, false)
-
-  const replayResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(path, body),
-    routeId: "caretaker_admin_offer",
-    db: context.db,
-  })
-  const replay = await replayResponse.json()
-  assert.equal(replayResponse.status, 200)
-  assert.equal(replay.projection_pending, undefined)
-  assert.equal(replay.replayed, true)
-  assert.equal(replay.caretaker_assignment_id, accepted.caretaker_assignment_id)
-  assert.equal(
-    context.db.raw
-      .prepare("SELECT count(*) AS total FROM icono_caretaker_assignments WHERE gene_id = ?")
-      .get(context.geneId).total,
-    1,
-  )
-  assert.equal(wakeCalls.length, 1)
-})
-
-test("administrator suspend, resume, and end preserve independent CAS tokens", async (t) => {
-  const context = await bootstrap(t, "8103", { accepted: true })
-  const api = handlers(context.db)
-  const basePath = `/api/iconoplasm/admin/caretakers/assignments/${context.assignmentId}`
-
-  const suspendResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(`${basePath}/suspend`, {
-      command_id: "command_admin_suspend_8103",
-      expected_assignment_version: 2,
-      suspension_reason: "Policy review",
-    }),
-    routeId: "caretaker_admin_assignment_action",
-    params: { assignment_id: context.assignmentId, action: "suspend" },
-    db: context.db,
-  })
-  const suspended = await suspendResponse.json()
-  assert.equal(suspended.status, "suspended")
-  assert.equal(suspended.assignment_version, 3)
-
-  const resumeResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(`${basePath}/resume`, {
-      command_id: "command_admin_resume_8103",
-      expected_assignment_version: 3,
-    }),
-    routeId: "caretaker_admin_assignment_action",
-    params: { assignment_id: context.assignmentId, action: "resume" },
-    db: context.db,
-  })
-  const resumed = await resumeResponse.json()
-  assert.equal(resumed.status, "active")
-  assert.equal(resumed.assignment_version, 4)
-
-  const endResponse = await call(api["caretaker_admin.mutate"], {
-    request: mutationRequest(`${basePath}/end`, {
-      command_id: "command_admin_end_8103",
-      expected_assignment_version: 4,
-      expected_head_version: 1,
-      expected_canonical_revision_id: context.seedRevisionId,
+test("2, 3: suspend, resume and end each apply once from the version the page saw, with a reason", async (t) => {
+  const h = setup(t)
+  for (const reason of [undefined, "   ", "x".repeat(501)]) {
+    const suspend = await h.act("suspend", {
+      expected_assignment_version: 1,
+      ...(reason === undefined ? {} : { suspension_reason: reason }),
+    })
+    assert.equal(suspend.status, 400)
+    assert.equal(suspend.body.error.code, "ADMINISTRATOR_REASON_REQUIRED")
+    const end = await h.act("end", {
+      expected_assignment_version: 1,
       relinquish_policy: "retain",
-      reason: "Administrator ended tenure",
-    }),
-    routeId: "caretaker_admin_assignment_action",
-    params: { assignment_id: context.assignmentId, action: "end" },
-    db: context.db,
+      ...(reason === undefined ? {} : { reason }),
+    })
+    assert.equal(end.status, 400)
+    assert.equal(end.body.error.code, "ADMINISTRATOR_REASON_REQUIRED")
+  }
+
+  const suspended = await h.act("suspend", {
+    expected_assignment_version: 1,
+    suspension_reason: "Policy review",
   })
-  const ended = await endResponse.json()
-  assert.equal(ended.status, "ended")
-  assert.equal(ended.assignment_version, 5)
-  assert.equal(ended.relinquish_policy, "retain")
+  assert.deepEqual(
+    [suspended.status, suspended.body.status, suspended.body.assignment_version],
+    [200, "suspended", 2],
+  )
+  const retry = await h.act("suspend", {
+    expected_assignment_version: 1,
+    suspension_reason: "Policy review",
+  })
+  assert.equal(retry.body.replayed, true, "a retry of a landed change replays")
+  assert.equal(retry.body.assignment_version, 2)
+
+  const stale = await h.act("end", {
+    expected_assignment_version: 1,
+    relinquish_policy: "retain",
+    reason: "Too late",
+  })
+  assert.equal(stale.status, 409)
+  assert.equal(stale.body.error.code, "ASSIGNMENT_VERSION_CONFLICT")
+
+  const resumed = await h.act("resume", { expected_assignment_version: 2 })
+  assert.deepEqual([resumed.body.status, resumed.body.assignment_version], ["active", 3])
+  const ended = await h.act("end", {
+    expected_assignment_version: 3,
+    relinquish_policy: "retain",
+    reason: "Administrator ended tenure",
+  })
+  assert.deepEqual([ended.body.status, ended.body.assignment_version], ["ended", 4])
+  const row = h.db.database
+    .prepare(
+      `SELECT end_reason, relinquish_policy, ended_by_account_id FROM icono_caretaker_assignments`,
+    )
+    .get()
+  assert.deepEqual(
+    { ...row },
+    {
+      end_reason: "Administrator ended tenure",
+      relinquish_policy: "retain",
+      ended_by_account_id: ADMIN,
+    },
+  )
+  assert.deepEqual(h.settled, [], "nothing readers see changed")
 })
 
-test("irreversible and suspending transitions require a bounded administrator reason", async (t) => {
-  const context = await bootstrap(t, "8105", { accepted: true })
-  const api = handlers(context.db)
-  const basePath = `/api/iconoplasm/admin/caretakers/assignments/${context.assignmentId}`
-  const invalidReasons = [undefined, "   ", "x".repeat(501)]
-  for (const [index, reason] of invalidReasons.entries()) {
-    const response = await call(api["caretaker_admin.mutate"], {
-      request: mutationRequest(`${basePath}/suspend`, {
-        command_id: `command_admin_bad_suspend_8105_${index}`,
-        expected_assignment_version: 2,
-        ...(reason === undefined ? {} : { suspension_reason: reason }),
-      }),
-      routeId: "caretaker_admin_assignment_action",
-      params: { assignment_id: context.assignmentId, action: "suspend" },
-      db: context.db,
-    })
-    assert.equal(response.status, 400)
-    assert.deepEqual(await response.json(), {
-      error: {
-        code: "ADMINISTRATOR_REASON_REQUIRED",
-        message: "suspension_reason must contain between 1 and 500 characters",
-      },
-    })
+test("4, 5: an end with withdraw takes the texts out of use, and an end with a supervote re-elects", async (t) => {
+  const h = setup(t, { supervote: true })
+  h.db.database
+    .prepare(
+      `INSERT INTO icono_caretaker_text_versions
+         (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
+          text, text_sha256, readers_see)
+       VALUES ('version_admin_8101', 'A8101', 'line_admin_8101', 1, ?, ?, 'Caretaker words.', ?, 1)`,
+    )
+    .run(USER, ROLE, "1".repeat(64))
+  h.db.database.exec(
+    `UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'version_admin_8101', readers_see = 1`,
+  )
+  const body = {
+    expected_assignment_version: 1,
+    relinquish_policy: "withdraw",
+    reason: "Asked to leave",
   }
-  for (const [index, reason] of invalidReasons.entries()) {
-    const response = await call(api["caretaker_admin.mutate"], {
-      request: mutationRequest(`${basePath}/end`, {
-        command_id: `command_admin_bad_end_8105_${index}`,
-        expected_assignment_version: 2,
-        expected_head_version: 1,
-        expected_canonical_revision_id: context.seedRevisionId,
-        relinquish_policy: "retain",
-        ...(reason === undefined ? {} : { reason }),
-      }),
-      routeId: "caretaker_admin_assignment_action",
-      params: { assignment_id: context.assignmentId, action: "end" },
-      db: context.db,
-    })
-    assert.equal(response.status, 400)
-    assert.deepEqual(await response.json(), {
-      error: {
-        code: "ADMINISTRATOR_REASON_REQUIRED",
-        message: "reason must contain between 1 and 500 characters",
-      },
-    })
-  }
+  const ended = await h.act("end", body)
+  assert.equal(ended.status, 200, JSON.stringify(ended.body))
+  assert.equal(ended.body.status, "ended")
+  assert.deepEqual(h.settled, ["A8101"], "the gene is settled once, for both reasons")
+  const version = h.db.database
+    .prepare(`SELECT withdrawn_at FROM icono_caretaker_text_versions`)
+    .get()
+  assert.ok(version.withdrawn_at, "the caretaker's version is withdrawn")
+  assert.equal(
+    h.db.database.prepare(`SELECT chosen_caretaker_version_id AS id FROM icono_gene_texts`).get()
+      .id,
+    null,
+    "the gene falls back to the factory text",
+  )
+
+  // A retry after a lost answer finds the work done and settles nothing again.
+  h.settled.length = 0
+  const retry = await h.act("end", body)
+  assert.equal(retry.body.replayed, true)
+  assert.deepEqual(h.settled, [])
 })
 
-test("admin mutation requires strict same-origin browser metadata", async (t) => {
-  const context = await bootstrap(t, "8104")
-  const api = handlers(context.db)
-  const request = new Request(`${ORIGIN}/api/iconoplasm/admin/caretakers/offers`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ command_id: "command_bad_origin_8104" }),
-  })
-  const response = await call(api["caretaker_admin.mutate"], {
-    request,
-    routeId: "caretaker_admin_offer",
-    db: context.db,
-  })
+test("6: a cross-site request changes nothing", async (t) => {
+  const h = setup(t)
+  const response = await h.act(
+    "suspend",
+    { expected_assignment_version: 1, suspension_reason: "Policy review" },
+    {},
+  )
   assert.equal(response.status, 403)
-  assert.equal((await response.json()).error.code, "STRICT_SAME_ORIGIN_REQUIRED")
+  assert.equal(response.body.error.code, "STRICT_SAME_ORIGIN_REQUIRED")
+  assert.equal(
+    h.db.database.prepare(`SELECT status FROM icono_caretaker_assignments`).get().status,
+    "active",
+  )
 })

@@ -1,31 +1,19 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import test from "node:test"
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
 import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
+// The gene page's caretaker name and avatar, from the roles table of the real
+// main schema (every migration) and the sign-in database's profile.
 function buildDatabases(t) {
-  const iconoplasm = new TestD1()
+  const iconoplasm = iconoplasmDatabase()
+  iconoplasm.raw = iconoplasm.database
   const accounts = new TestD1()
   t.after(() => {
-    iconoplasm.close()
+    iconoplasm.database.close()
     accounts.close()
   })
-  iconoplasm.raw.exec(
-    readFileSync(
-      new URL(
-        "../migrations-iconoplasm/0086_caretaker_assignment_notifications.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  )
-  iconoplasm.raw.exec(
-    readFileSync(
-      new URL("../migrations-iconoplasm/0091_public_caretaker_lookup.sql", import.meta.url),
-      "utf8",
-    ),
-  )
   accounts.raw.exec(`
     CREATE TABLE users (
       discord_id TEXT PRIMARY KEY,
@@ -45,15 +33,16 @@ function buildDatabases(t) {
   return { iconoplasm, accounts }
 }
 
-function assignmentSql({ symbol, accountId, status = "active", sequence = 1 }) {
+function assignmentSql({ symbol, accountId, status = "active" }) {
+  const at = (when) => (when ? "'2026-10-01'" : "NULL")
   return `
-    INSERT INTO icono_caretaker_assignment_notifications (
-      caretaker_assignment_id, account_id, gene_id, canonical_symbol,
-      assignment_status, assignment_version, notification_state,
-      authority_event_id, authority_event_sequence, resolved_at
+    INSERT INTO icono_caretaker_assignments (
+      caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+      relinquish_policy, invited_by_account_id, started_at, suspended_at, ended_at, end_reason
     ) VALUES (
-      'assignment_${symbol}_${sequence}', '${accountId}', 'gene_${symbol}', '${symbol}',
-      '${status}', ${sequence}, 'resolved', 'event_${symbol}_${sequence}', ${sequence}, CURRENT_TIMESTAMP
+      'assignment_${symbol}', '${symbol}', '${accountId}', '${status}', '2026-10-01', 'retain',
+      '${accountId}', '2026-10-01', ${at(status === "suspended")}, ${at(status === "ended")},
+      ${status === "ended" ? "'caretaker_resigned'" : "NULL"}
     );
   `
 }

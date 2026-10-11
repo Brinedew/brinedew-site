@@ -578,12 +578,19 @@ export async function eraseBrinedewAccountOnRequest(
   await requestBrinedewAccountErasure(db, lifecycle)
   // The person's caretaker role ends first, before anything is removed; a role
   // that held a supervote re-runs its gene's election (`services.settleGene`).
+  // A failed election never stops the erasure: the end moved the gene's vote
+  // version, so the gene's next vote elects without the supervote.
   for (const symbol of await endRolesOfErasedAccount(
     env.ICONOPLASM_DB,
     accountId,
     new Date(now).toISOString(),
-  ))
-    await services.settleGene?.(env, symbol)
+  )) {
+    try {
+      await services.settleGene?.(env, symbol)
+    } catch (error) {
+      console.error("[ICONOPLASM_ERASURE_SETTLE]", symbol, error)
+    }
+  }
   const discordIds = await readBrinedewAccountDiscordSubjects(db, accountId)
   const erasure = await eraseAccountData(
     env,
