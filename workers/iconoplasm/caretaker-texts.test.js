@@ -1,4 +1,6 @@
 import assert from "node:assert/strict"
+import { readdirSync, readFileSync } from "node:fs"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { TestD1 } from "./caretaker/manifestation-authority-test-support.js"
@@ -24,7 +26,11 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 // 8. the panel loses the chosen text or the factory's text beyond History's
 //    first page, or the Tags route hands out another gene's Tags;
 // 9. ending a role with "withdraw" (admin) or erasing a "withdraw" account
-//    leaves its plain versions in use.
+//    leaves its plain versions in use;
+// 10. (B-724) a candidate made from version 1 is shown as made from a later
+//    version, a legacy image gets an invented source, the sources reach a
+//    stranger, the lookup reads another gene's pool, or an unreadable primary
+//    database breaks the panel.
 
 const ORIGIN = "https://iconoplasm.test"
 const CARETAKER = "account_caretaker_0001"
@@ -62,11 +68,11 @@ function assignment(db, { id, geneId, accountId, status = "active" }) {
     )
 }
 
-async function harness(t) {
+async function harness(t, { primary } = {}) {
   const db = new TestD1()
   t.after(() => db.close())
   const published = []
-  const env = { ICONOPLASM_AUTHORING_DB: db }
+  const env = { ICONOPLASM_AUTHORING_DB: db, ...(primary ? { ICONOPLASM_DB: primary } : {}) }
   const app = createIconoplasmApp({
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async (_env, symbol) => {
@@ -341,4 +347,125 @@ test("9: a role's withdrawal takes all its versions out of use and the gene fall
   )
   assert.equal(await h.chosen(), "The factory's MFNG.")
   assert.ok(h.versions().every((row) => row.withdrawn_at === NOW))
+})
+
+// The real primary schema (every checked-in migration), counting what it reads.
+const PRIMARY_MIGRATIONS = new URL("../../migrations-iconoplasm/", import.meta.url)
+const hex = (character) => character.repeat(64)
+class PrimaryD1 {
+  constructor() {
+    this.sqlite = new DatabaseSync(":memory:")
+    for (const name of readdirSync(PRIMARY_MIGRATIONS)
+      .filter((file) => file.endsWith(".sql"))
+      .sort())
+      this.sqlite.exec(readFileSync(new URL(name, PRIMARY_MIGRATIONS), "utf8"))
+    this.statements = []
+    this.rowsRead = 0
+  }
+  prepare(sql) {
+    const db = this
+    let args = []
+    return {
+      bind(...values) {
+        args = values
+        return this
+      },
+      async all() {
+        db.statements.push(sql)
+        const results = db.sqlite.prepare(sql).all(...args)
+        db.rowsRead += results.length
+        return { results }
+      },
+    }
+  }
+  candidate(symbol, assetSha, sourceVersionId) {
+    if (sourceVersionId == null) {
+      this.sqlite
+        .prepare(
+          `INSERT INTO icono_portrait_assets
+             (gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status)
+           VALUES (?, ?, 'hero', 'thumb', 'draft')`,
+        )
+        .run(symbol, assetSha)
+      return
+    }
+    this.sqlite
+      .prepare(
+        `INSERT INTO icono_portrait_assets (
+           gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status,
+           generation_provenance_status, generation_request_id, generation_attempt_id,
+           generation_provider_id, generation_model_id, generation_prompt_sha256,
+           generation_config_sha256, source_gene_id, source_manifestation_id,
+           source_manifestation_revision_id, source_manifestation_body_sha256,
+           source_canonical_selection_id, source_canonical_head_version,
+           source_gene_revision, source_snapshot_sha256
+         ) VALUES (?, ?, 'hero', 'thumb', 'draft', 'bound', ?, ?, 'provider', 'model', ?, ?,
+                   'gene_for_test', 'line_for_test', ?, ?, 'selection_for_test', 1, 1, ?)`,
+      )
+      .run(
+        symbol,
+        assetSha,
+        `request_${assetSha.slice(0, 12)}`,
+        `attempt_${assetSha.slice(0, 12)}`,
+        hex("1"),
+        hex("2"),
+        sourceVersionId,
+        hex("3"),
+        hex("4"),
+      )
+  }
+  close() {
+    this.sqlite.close()
+  }
+}
+
+test("10: a candidate keeps pointing at the version that made it, for its caretaker only", async (t) => {
+  const primary = new PrimaryD1()
+  t.after(() => primary.close())
+  const h = await harness(t, { primary })
+  const first = await h.save("First words.")
+  primary.candidate("MFNG", hex("a"), first.body.manifestation_revision_id)
+  primary.candidate("MFNG", hex("c"), null)
+  primary.candidate("OTHER1", hex("d"), "revision_belongs_to_another_gene")
+  const second = await h.save("Second words, after another edit.")
+  primary.candidate("MFNG", hex("b"), second.body.manifestation_revision_id)
+
+  primary.statements.length = 0
+  primary.rowsRead = 0
+  const dossier = (await h.call("GET", "")).body
+  const sources = new Map(
+    dossier.candidate_sources.map((entry) => [
+      entry.asset_sha256,
+      entry.source_manifestation_revision_id,
+    ]),
+  )
+  assert.equal(sources.get(hex("a")), first.body.manifestation_revision_id, "still version 1")
+  assert.equal(sources.get(hex("b")), second.body.manifestation_revision_id)
+  assert.equal(sources.size, 2, "no invented source for a legacy image, none from another gene")
+  const history = dossier.manifestations
+    .flatMap((line) => line.revisions)
+    .find((revision) => revision.manifestation_revision_id === first.body.manifestation_revision_id)
+  assert.equal(history.body, "First words.")
+  assert.equal(primary.statements.length, 1, "one primary read per panel")
+  assert.equal(primary.rowsRead, 2, "this gene's two bound candidates")
+  assert.match(primary.statements[0], /WHERE gene_symbol = \?/)
+  assert.doesNotMatch(primary.statements[0], /upper\(|lower\(/i)
+
+  primary.statements.length = 0
+  assert.deepEqual((await h.call("GET", "", null, { as: STRANGER })).body, { enabled: false })
+  assert.equal(primary.statements.length, 0, "a stranger's request never reads the pool")
+})
+
+test("10: an unreadable primary database leaves the panel intact", async (t) => {
+  const h = await harness(t, {
+    primary: {
+      prepare() {
+        throw new Error("primary D1 unavailable")
+      },
+    },
+  })
+  await h.save("Words.")
+  const dossier = (await h.call("GET", "")).body
+  assert.equal(dossier.enabled, true)
+  assert.equal("candidate_sources" in dossier, false)
 })
