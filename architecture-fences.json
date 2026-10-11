@@ -4,10 +4,10 @@
   "fences": [
     {
       "id": "IPD-001",
-      "title": "Bunny is the healthy-path portrait accelerator",
-      "decision": "Bunny accelerates the two published Iconoplasm objects (the stable gene object genes/v3/<SYMBOL>.json and the catalog object catalog/v3/index.json) and the immutable portrait bytes on healthy networks. First-party identity remains canonical, and a failed accelerator affects only the requesting context.",
-      "reason": "Healthy readers should not spend the shared Worker allowance on image bytes, while one provider or region must not become a second canon.",
-      "change_control": "A replacement must preserve byte identity, bounded fallback, regional independence, and equal or lower shared-budget use. Implementation details may change without preserving the old mechanism.",
+      "title": "Readers load published objects and portraits from img.brinedew.bio",
+      "decision": "Readers load the published Iconoplasm objects (genes/v3/<SYMBOL>.json, catalog/v3/index.json) and the immutable portrait bytes from img.brinedew.bio, Cloudflare's free cache in front of the Bunny pull zone (B-1087). The site rewrites every delivered image URL onto that host and runs no probe or Worker fallback. The extension keeps its probe and fallback until its next store release. First-party identity remains canonical.",
+      "reason": "Repeat views should cost neither the Worker allowance nor Bunny bandwidth. The old probe and fallback existed because some ISP resolvers could not resolve *.b-cdn.net; img.brinedew.bio resolves through Cloudflare like the site itself, and a fallback only moved images onto metered Worker requests.",
+      "change_control": "A replacement must preserve byte identity and keep repeat reads off the Worker and off Bunny's bill. Implementation details may change without preserving the old mechanism.",
       "runbook": "docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md",
       "linear_issue": "B-649",
       "additional_required_marker_categories": ["config", "deploy"],
