@@ -26,7 +26,6 @@ const registry = JSON.parse(readRepositoryFile("architecture-fences.json"))
 
 test("IPD-001 portrait module URLs follow actual bytes through the immutable import chain", () => {
   for (const [module, consumers] of [
-    ["generated/portrait-delivery-core.js", ["portrait-delivery.js"]],
     ["portrait-delivery.js", ["app.js", "gene-card-thumb-delivery.js"]],
   ]) {
     const bytes = readFileSync(path.join(REPOSITORY_ROOT, "quartz/static/iconoplasm", module))
@@ -300,7 +299,7 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
   const delivery = registry.fences.find((entry) => entry.id === "IPD-001")
   const readPlane = registry.fences.find((entry) => entry.id === "IPD-008")
   const canon = registry.fences.find((entry) => entry.id === "IPD-011")
-  assert.match(delivery.decision, /Bunny accelerates the two published Iconoplasm objects/i)
+  assert.match(delivery.decision, /published Iconoplasm objects .* from img\.brinedew\.bio/i)
   assert.match(delivery.decision, /First-party identity remains canonical/i)
   assert.match(readPlane.decision, /read the two published objects/i)
   assert.match(canon.decision, /same identity/i)
