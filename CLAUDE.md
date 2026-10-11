@@ -492,7 +492,7 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 ## quartz draft system patterns
 
-**RemoveDrafts is build-time filtering:** Files with `draft: true` don't exist on live site at all - they're excluded during build, not just hidden from navigation. Much stronger than tag-based hiding.
+**Drafts are published with a curtain.** A `draft: true` page is built and served like any other, with an "Unpublished draft" badge. The build (`renderPage.tsx`) wraps everything after the preview in `.draft-locked`, which CSS hides; the preview ends at the first top-level `---`, else at the end of the lead (first `##`), else after three blocks. `quartz/components/scripts/draftGate.inline.ts` asks `/api/auth/me` (only when the session-presence cookie exists) and adds `body.draft-unlocked` for the admin and Discord guild members; signed-in non-supporters get the "become a supporter" card. The curtain is soft: pages are static, so the hidden text is in the HTML source.
 
 **Draft property vs status tags:** Use frontmatter `draft: true/false` instead of `status/published` tags. Integrates with Quartz's built-in filtering and follows static site conventions.
 
@@ -502,13 +502,9 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 **Put scripts in scripts/ folder:** Don't create PowerShell or Python scripts in the project root. Always use `scripts/` directory to keep tools organized and separate from content.
 
-## CRITICAL — Never inject HTML via Worker
+## Draft gating lives in the build and the page, never the Worker
 
-The Worker must ONLY truncate content (remove text after <hr> or 100 words). NEVER inject CTA HTML via Worker — it breaks table layouts and causes HTML to be malformed. The CTA must be a SITE ELEMENT rendered by the Quartz template (renderPage.tsx), outside the <article> element.
-
-## CRITICAL — Build-time over Worker
-
-Build-time transformations (renderPage.tsx HAST tree modification) are more reliable than Worker-based truncation. Use .draft-locked wrapper at build time, CSS hiding at render time, and JS auth check for revealing. This avoids Worker route dependency.
+Pages serve the HTML directly, so the Worker never sees a wiki or post page. The CTA card is rendered by the Quartz template (`DefaultFrame.tsx`), outside the `<article>`; the curtain is the build-time `.draft-locked` wrapper; the reveal is `draftGate.inline.ts`. See "quartz draft system patterns" above.
 
 ## deploy-quartz.yml: public edge worker route wiring
 
