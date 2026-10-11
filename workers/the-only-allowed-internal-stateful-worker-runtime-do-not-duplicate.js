@@ -388,6 +388,7 @@ import {
   publishIconoplasmGeneStableObject,
   refreshIconoplasmRegisteredGeneSummaries,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
+  resolveActiveCaretakerAccountSession,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
 import {
@@ -1936,6 +1937,8 @@ const app = createIconoplasmApp({
   legacy: handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishGene: publishIconoplasmGeneStableObject,
   refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
+  // The signed-in Brinedew account behind a caretaker panel request.
+  caretakerSession: resolveActiveCaretakerAccountSession,
   // Today's account-wide D1 usage from Cloudflare's analytics, one reader per
   // isolate (it caches 30 s and backs off after a failure).
   accountUsage: (env) => {

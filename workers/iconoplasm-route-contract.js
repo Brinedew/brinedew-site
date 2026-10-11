@@ -626,17 +626,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
-    id: "caretaker_revision_body",
-    match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/body$/, [
-      "gene",
-      "revision_id",
-    ]),
-    methods: GET,
-    auth: "authenticated-caretaker",
-    budgetFamily: "caretaker_manifestations_read",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
     id: "caretaker_derivative_body",
     match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/derivatives\/([^/]+)\/body$/, [
       "gene",
@@ -664,40 +653,8 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
-    id: "caretaker_manifestation_tags_save",
-    match: pattern(
-      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivatives$/,
-      ["gene", "revision_id"],
-    ),
-    methods: POST,
-    auth: "authenticated-caretaker",
-    budgetFamily: "caretaker_manifestations_write",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
     id: "caretaker_taggerize",
     match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/taggerize$/, ["gene"]),
-    methods: POST,
-    auth: "authenticated-caretaker",
-    budgetFamily: "caretaker_manifestations_write",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
-    id: "caretaker_manifestation_tags_select",
-    match: pattern(
-      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/revisions\/([^/]+)\/tags-derivative-head$/,
-      ["gene", "revision_id"],
-    ),
-    methods: POST,
-    auth: "authenticated-caretaker",
-    budgetFamily: "caretaker_manifestations_write",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
-    id: "caretaker_canonical_selection",
-    match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/canonical-selections$/, [
-      "gene",
-    ]),
     methods: POST,
     auth: "authenticated-caretaker",
     budgetFamily: "caretaker_manifestations_write",

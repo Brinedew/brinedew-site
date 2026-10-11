@@ -161,7 +161,6 @@ import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generati
 import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
-import { copyGeneTextFromAuthority } from "./iconoplasm/text-backfill.js"
 import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
 import {
   caretakerSupervoteRequestSha256,
@@ -25000,9 +24999,6 @@ export async function drainIconoplasmManifestationAuthorityProjection(
       }
       return projected
     },
-    // B-1065 write-through: the plain text tables follow every accepted text until
-    // the writers move onto them (PR C deletes this with the old authority).
-    projectGeneText: (event) => copyGeneTextFromAuthority(env, event.gene_id),
     projectPublicMaterialEvent: (event) =>
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
         authorityEventId: event.event_id,
@@ -25030,7 +25026,7 @@ export async function drainIconoplasmAuthorityAccountProjection(env, { limit = 1
   })
 }
 
-async function resolveActiveCaretakerAccountSession(request, env) {
+export async function resolveActiveCaretakerAccountSession(request, env) {
   const session = await iconoplasmSessionUser(request, env)
   const accountId = String(session?.account_id || "").trim()
   if (!accountId) {

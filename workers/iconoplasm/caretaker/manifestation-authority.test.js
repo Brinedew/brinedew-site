@@ -26,6 +26,8 @@ const MIGRATIONS = [
   "../../../migrations-iconoplasm-authoring/0002_caretaker_server_boundary.sql",
   "../../../migrations-iconoplasm-authoring/0007_manifestation_page_visibility.sql",
   "../../../migrations-iconoplasm-authoring/0017_canonical_lifecycle_keyed_guards.sql",
+  "../../../migrations-iconoplasm-authoring/0024_plain_gene_texts.sql",
+  "../../../migrations-iconoplasm-authoring/0025_caretaker_chosen_text_index.sql",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
 const NOW = "2026-08-30T00:00:00.000Z"
 const ADMIN = "account_admin_0001"
