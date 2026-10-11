@@ -36,13 +36,13 @@ $$
 
 and life expectancy at birth is the area under the survival curve, $e_0 = \int_0^\infty S(x)\,\mathrm{d}x$. A model for $\mu(x)$ is therefore a model for the entire life table.
 
-Published tables usually report one of two discrete quantities rather than $\mu(x)$ itself. The **death probability** $q_x$ is the chance that someone alive at exact age $x$ dies before age $x + 1$:
+Published tables usually report one of two discrete quantities rather than $\mu(x)$ itself. The **death probability**, written $q_x$, is the chance that someone alive at exact age $x$ dies before age $x + 1$:
 
 $$
 q_x = 1 - \frac{S(x+1)}{S(x)} = 1 - \exp\!\left(-\int_x^{x+1} \mu(t)\,\mathrm{d}t\right).
 $$
 
-The **central death rate** $m_x$ is the number of deaths at age $x$ divided by the person-years lived at that age. If the hazard is constant within each year of age, $m_x = \mu$ and $q_x = 1 - e^{-m_x}$. At low mortality the three quantities are nearly equal; they diverge at the oldest ages, where $q_x$ can never exceed 1 but $\mu(x)$ can.
+The **central death rate**, written $m_x$, is the number of deaths at age $x$ divided by the person-years lived at that age. If the hazard is constant within each year of age, $m_x = \mu$ and $q_x = 1 - e^{-m_x}$. At low mortality the three quantities are nearly equal; they diverge at the oldest ages, where $q_x$ can never exceed 1 but $\mu(x)$ can.
 
 Mortality is almost always plotted on a logarithmic scale. On that scale an exponential hazard is a straight line, and its slope $b$ sets the **mortality rate doubling time** (MRDT), $\ln 2 / b$. The MRDT is the most widely quoted single number for the pace of demographic ageing.[^finch1990]
 
@@ -366,8 +366,6 @@ For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelih
 ## Data and figures
 
 Figures 1 to 3 were drawn for this article from the Social Security Administration's [Period Life Table, 2023](https://www.ssa.gov/oact/STATS/table4c6.html), as used in the 2026 Trustees Report. Hazards were computed as $\mu = -\ln(1 - q_x)$ and placed at mid-year. The fitted curves minimise squared error in log hazard. The "typical miss" in Figure 2 is the root-mean-square error on the log scale, converted to a percentage, $e^{\text{RMSE}} - 1$. The portrait of Gompertz is in the public domain ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Gompertz.png)).
-
-## References
 
 [^gompertz1825]: Gompertz B (1825). "On the nature of the function expressive of the law of human mortality, and on a new mode of determining the value of life contingencies". *Philosophical Transactions of the Royal Society of London*. 115: 513–583. [doi:10.1098/rstl.1825.0026](https://doi.org/10.1098/rstl.1825.0026)
 
