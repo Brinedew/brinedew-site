@@ -348,21 +348,6 @@ For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelih
 - **Evolutionary and comparative biology.** Standardised mortality trajectories let researchers compare ageing across species and test evolutionary theories of senescence.[^jones2014][^colchero2012]
 - **Epidemiology.** Age-specific incidence of diseases is often modelled with the same functions. Power-law cancer incidence is the classic case.[^juckett1993]
 
-## See also
-
-- [[Armitage–Doll model]]: a multistage model of carcinogenesis whose power-law incidence is a Weibull hazard
-- [[selection-shadow-theory]], [[antagonistic-pleiotropy-theory]] and [[disposable-soma-theory]]: evolutionary explanations of senescence
-- [[Indeterminate growth]]: a life history associated with flat or declining adult mortality
-- [[History of biogerontology]]
-- [[Taxonomy of non mechanistic models in biology]]
-
-## Further reading
-
-- Olshansky SJ, Carnes BA (1997). "Ever since Gompertz". *Demography*. 34 (1): 1–15. [doi:10.2307/2061656](https://doi.org/10.2307/2061656). A review of the Gompertz law's history and its use in demography.
-- Kirkwood TBL (2015). "Deciphering death: a commentary on Gompertz (1825)". *Philosophical Transactions of the Royal Society B*. 370 (1666): 20140379. [doi:10.1098/rstb.2014.0379](https://doi.org/10.1098/rstb.2014.0379). A short, readable guide to the original paper.
-- Thatcher AR, Kannisto V, Vaupel JW (1998). *The Force of Mortality at Ages 80 to 120*. Odense University Press. [Full text](https://www.demogr.mpg.de/books/odense/5/). The standard comparison of models at the oldest ages.
-- Bebbington M, Lai CD, Zitikis R (2007). "Modeling human mortality using mixtures of bathtub shaped failure distributions". *Journal of Theoretical Biology*. 245 (3): 528–538. [doi:10.1016/j.jtbi.2006.11.011](https://doi.org/10.1016/j.jtbi.2006.11.011). The reliability-engineering view of whole-life mortality.
-
 ## Data and figures
 
 Figures 1 to 3 were drawn for this article from the Social Security Administration's [Period Life Table, 2023](https://www.ssa.gov/oact/STATS/table4c6.html), as used in the 2026 Trustees Report. Hazards were computed as $\mu = -\ln(1 - q_x)$ and placed at mid-year. The fitted curves minimise squared error in log hazard. The "typical miss" in Figure 2 is the root-mean-square error on the log scale, converted to a percentage, $e^{\text{RMSE}} - 1$. The portrait of Gompertz is in the public domain ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Gompertz.png)).
