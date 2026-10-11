@@ -157,7 +157,6 @@ import {
   BrinedewAccountIdentityError,
   readBrinedewAccount,
 } from "./lib/brinedew-account-identity.js"
-import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { FREE_DAILY_LIMITS, readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
@@ -14861,18 +14860,12 @@ export async function markVisionRollupsDirty(env, rawVisionIds, now = new Date()
   return visionIds.length
 }
 
-// A batch rebuild is about a dozen statements however many visions it holds;
-// one more attempt needs at most this many, plus two for the closing statements.
-const VISION_ROLLUP_BATCH_MAX_STATEMENTS = 16
 // Unmeasured estimate (2026-10-11): one vision's assets, codes and rollups read
 // back. Replace it with a receipt when one exists.
 const VISION_ROLLUP_ESTIMATED_ROWS_READ = 1000
 
 export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIRTY_BATCH } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
-  // Bounded like a Queue invocation: our own 50-statement budget.
-  const invocationBudget = createD1InvocationBudget()
-  env = { ...env, ICONOPLASM_DB: invocationBudget.binding(env.ICONOPLASM_DB) }
   const db = env.ICONOPLASM_DB
   const picked = await db
     .prepare(
@@ -14904,7 +14897,12 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
     }
   const refused = []
   const rebuiltIds = []
-  while (visionIds.length && invocationBudget.canStart(VISION_ROLLUP_BATCH_MAX_STATEMENTS + 2)) {
+  // Bounded by construction: each failed attempt sets one vision aside, so a run
+  // of `limit` visions makes at most limit + 1 attempts of a few D1 calls each,
+  // far under Cloudflare's 1,000 calls an invocation. Chesterton's fence
+  // (B-1067): a statement budget of our own here stopped after about 30
+  // refusals and stranded every good vision queued behind them.
+  while (visionIds.length) {
     try {
       await rebuildVisionRollupsBatch(env, visionIds)
       rebuiltIds.push(...visionIds)

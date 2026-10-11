@@ -169,9 +169,9 @@ The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-po
 
 A price's unit is a D1 row, the provider's own meter, which counts every index
 entry and trigger write behind a statement. It is not a statement count: the
-provider allows 1,000 D1 calls per invocation and counts a batch as one, and
-the 50-statement invocation budget (`workers/lib/d1-invocation-budget.js`) is
-ours and bounds statements, not rows. Measured prices say where they were
+provider allows 1,000 D1 calls per invocation and counts a batch as one. That
+call limit is the only bound on statements; there is no statement budget of
+our own. Measured prices say where they were
 measured; the estimates in `batch-route-prices.js` are labelled as estimates
 and are replaced by a `d1QueriesAdaptiveGroups` measurement when one exists.
 
