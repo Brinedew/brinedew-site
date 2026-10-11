@@ -24,6 +24,7 @@ import {
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
 import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
+import { COPY_TABLES, copyCaretakingPage } from "./caretaking-copy.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
 // allows one request (the canonical text's body, the card's PUT and its
@@ -472,6 +473,29 @@ export function createIconoplasmApp({
         if (!(error instanceof GeneTextError)) throw error
         return c.json({ ok: false, code: error.code, error: error.message }, error.status)
       }
+    },
+  )
+
+  /**
+   * B-1065 B2b: copies one page of caretaking (texts, caretaker versions or
+   * roles) from the authoring database into the main one
+   * (workers/iconoplasm/caretaking-copy.js). Batch work: it stops at the 85% tier.
+   */
+  app.post(
+    "/api/iconoplasm/admin/caretaking/copy",
+    factoryAuth,
+    outsideMaintenance,
+    zValidator(
+      "json",
+      z.object({
+        table: z.enum(COPY_TABLES),
+        after: z.nullish(z.string().check(z.maxLength(128))),
+      }),
+    ),
+    shedBatchWork(() => "sheddable_plus"),
+    async (c) => {
+      c.header("Cache-Control", "no-store")
+      return c.json({ ok: true, ...(await copyCaretakingPage(c.env, c.req.valid("json"))) })
     },
   )
 

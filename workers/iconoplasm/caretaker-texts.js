@@ -132,7 +132,8 @@ export function withdrawCaretakerTextStatements(db, { geneId, lineId, assignment
             SET chosen_caretaker_version_id = (
               SELECT version_id FROM icono_caretaker_text_versions
                WHERE gene_id = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
-               ORDER BY created_at DESC, version_id DESC LIMIT 1)
+               ORDER BY created_at DESC, version_id DESC LIMIT 1),
+                updated_at = CURRENT_TIMESTAMP
           WHERE gene_id = ? AND chosen_caretaker_version_id IN (
             SELECT version_id FROM icono_caretaker_text_versions
              WHERE gene_id = ? AND ${column} = ?)`,
@@ -553,7 +554,10 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
   if (withTags)
     statements.push(
       db
-        .prepare(`UPDATE icono_gene_texts SET chosen_caretaker_version_id = ? WHERE gene_id = ?`)
+        .prepare(
+          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE gene_id = ?`,
+        )
         .bind(versionId, gene.gene_id),
     )
   await runWrite(db, statements)
@@ -619,7 +623,8 @@ export async function restoreCaretakerLine(env, { geneLocator, accountId, lineId
             SET chosen_caretaker_version_id = COALESCE((
               SELECT version_id FROM icono_caretaker_text_versions
                WHERE line_id = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
-               ORDER BY version DESC LIMIT 1), chosen_caretaker_version_id)
+               ORDER BY version DESC LIMIT 1), chosen_caretaker_version_id),
+                updated_at = CURRENT_TIMESTAMP
           WHERE gene_id = ?`,
       )
       .bind(lineId, gene.gene_id),
