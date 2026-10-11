@@ -126,7 +126,7 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
 test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe fallback", async () => {
   assert.deepEqual(DEFAULT_PORTRAIT_DELIVERY_POLICY.accelerator, {
     id: "bunny",
-    origin: "https://iconoplasmportraits.b-cdn.net",
+    origin: "https://img.brinedew.bio",
     enabled: true,
   })
   assert.equal(DEFAULT_PORTRAIT_DELIVERY_POLICY.decision_scope, "tab")
@@ -151,7 +151,7 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   )
   assert.equal(
     await healthy.ensure(canonicalUrl),
-    "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp",
+    "https://img.brinedew.bio/portraits/v1/aa/asset/medium.webp",
   )
   assert.equal(healthyProbeCount, 1)
   assert.equal(
@@ -182,7 +182,7 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   }
   assert.equal(
     portraitSourceFromUrl(
-      "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp",
+      "https://img.brinedew.bio/portraits/v1/aa/asset/medium.webp",
       disabledPolicy,
     ),
     "accelerator",
@@ -200,14 +200,14 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
   )
   assert.equal(
     wranglerConfig.match(
-      /^ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https:\/\/iconoplasmportraits\.b-cdn\.net"$/gm,
+      /^ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https:\/\/img\.brinedew\.bio"$/gm,
     )?.length,
     2,
-    "Production and staging must both declare the direct Bunny delivery origin",
+    "Production and staging must both declare the cached Bunny origin (img.brinedew.bio, B-1087)",
   )
   assert.match(
     readRepositoryFile("quartz/components/Head.tsx"),
-    /<link rel="preconnect" href="https:\/\/iconoplasmportraits\.b-cdn\.net" \/>/,
+    /<link rel="preconnect" href="https:\/\/img\.brinedew\.bio" \/>/,
   )
 })
 

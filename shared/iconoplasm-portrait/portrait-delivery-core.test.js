@@ -23,7 +23,7 @@ import {
 // 9. Garbage retry values in storage are ignored.
 
 const CANONICAL = "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp"
-const BUNNY = "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp"
+const BUNNY = "https://img.brinedew.bio/portraits/v1/aa/asset/medium.webp"
 
 function clock(start = 1_000_000) {
   let t = start
@@ -189,5 +189,15 @@ test("9. garbage retry values are ignored and the policy clamps the window", () 
     normalizePortraitDeliveryPolicy({}).accelerator_retry_after_ms,
     60_000,
     "a server policy without the field keeps the default window",
+  )
+})
+
+test("B-1087: a card that still names Bunny's own host is served from img.brinedew.bio", async () => {
+  const session = createPortraitDeliverySession({ probe: async () => true })
+  const former = "https://iconoplasmportraits.b-cdn.net/portraits/v1/aa/asset/medium.webp"
+  assert.equal(await session.ensure(former), BUNNY)
+  assert.equal(
+    await session.ensure("https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json"),
+    "https://iconoplasmportraits.b-cdn.net/genes/v3/TP53.json",
   )
 })

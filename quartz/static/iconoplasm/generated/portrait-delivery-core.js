@@ -6,7 +6,7 @@ var DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
   canonical_origin: "https://iconoplasm.brinedew.bio",
   accelerator: Object.freeze({
     id: "bunny",
-    origin: "https://iconoplasmportraits.b-cdn.net",
+    origin: "https://img.brinedew.bio",
     enabled: true
   }),
   probe_timeout_ms: 2500,
@@ -21,6 +21,7 @@ var DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
 var SOURCES = /* @__PURE__ */ new Set(["accelerator", "canonical"]);
 var STATES = /* @__PURE__ */ new Set(["undecided", "accelerator", "canonical", "terminal_failure"]);
 var DELIVERED_IMAGE_PATH_PREFIXES = Object.freeze(["/portraits/", "/gene-cards/"]);
+var FORMER_ACCELERATOR_ORIGINS = Object.freeze(["https://iconoplasmportraits.b-cdn.net"]);
 function normalizedOrigin(raw, fallback = "") {
   try {
     const origin = new URL(String(raw || fallback)).origin;
@@ -90,6 +91,7 @@ function portraitPath(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY_POLICY) {
     const parsed = new URL(value, normalizedPolicy.canonical_origin);
     const allowedOrigins = /* @__PURE__ */ new Set([normalizedPolicy.canonical_origin]);
     if (normalizedPolicy.accelerator.origin) allowedOrigins.add(normalizedPolicy.accelerator.origin);
+    for (const origin of FORMER_ACCELERATOR_ORIGINS) allowedOrigins.add(origin);
     if (!allowedOrigins.has(parsed.origin) || !DELIVERED_IMAGE_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix)))
       return "";
     return parsed.pathname + parsed.search;
@@ -105,6 +107,7 @@ function portraitSourceFromUrl(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY_POLICY
     const origin = new URL(String(rawUrl || ""), normalizedPolicy.canonical_origin).origin;
     if (origin === normalizedPolicy.canonical_origin) return "canonical";
     if (origin === normalizedPolicy.accelerator.origin) return "accelerator";
+    if (FORMER_ACCELERATOR_ORIGINS.includes(origin)) return "accelerator";
   } catch (_error) {
   }
   return "";

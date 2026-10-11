@@ -195,7 +195,7 @@ function createApi(posts, options = {}) {
 // Every portrait is served as a 384x512 (3:4) picture, a distinct hue per URL.
 // The picker's first page on the CDN (B-896): served, or unreachable.
 async function routePicker(context, reachable) {
-  await context.route("https://iconoplasmportraits.b-cdn.net/picker/v1/styles.json", (route) =>
+  await context.route("https://img.brinedew.bio/picker/v1/styles.json", (route) =>
     reachable
       ? route.fulfill({
           status: 200,
