@@ -14,9 +14,9 @@ aliases:
 
 **Mortality rate models**, also called **laws of mortality**, are mathematical functions that describe how the risk of death changes with age. Most of them specify the *force of mortality*, or hazard, $\mu(x)$: the instantaneous rate at which members of a population who have survived to age $x$ die. Everything else in a life table, from the probability of surviving to a given birthday to life expectancy, follows from that one curve. The models are used to price annuities and life insurance, to smooth and extend life tables, to forecast population ageing, to compare the pace of ageing across species, and to test what an intervention against ageing actually changes.
 
-The founding observation is the **Gompertz law**, published by the actuary Benjamin Gompertz in 1825: across adulthood, the death rate rises exponentially with age.[^gompertz1825] In people the rate doubles roughly every eight years,[^finch1990] so the annual risk of death grows two- to two-and-a-half-fold with each decade of adult life. Later work added terms for what the exponential misses. William Makeham added a constant, age-independent risk in 1860.[^makeham1860] Multi-component models by Thorvald Thiele (1871), William Siler (1979) and Larry Heligman and John Pollard (1980) reproduce the whole "bathtub" shape of human mortality: high risk in infancy, a minimum around age ten, a hump in early adulthood, and the senescent rise.[^thiele1871][^siler1979][^heligman1980] Power-law (Weibull) and logistic models offer different shapes with different biological readings.[^weibull1951][^perks1932]
+The founding observation is the **Gompertz law**, published by the actuary Benjamin Gompertz in 1825: across adulthood, the death rate rises exponentially with age.[^gompertz1825] In people the rate doubles roughly every eight years,[^finch1990] so the annual risk of death grows two- to two-and-a-half-fold with each decade of adult life. Later work added terms for what the exponential misses. William Makeham added a constant, age-independent risk in 1860.[^makeham1860] Multi-component models add a separate term for each stage of life. Human mortality has a "bathtub" shape: high risk in infancy, a minimum around age ten, a hump in early adulthood, and the senescent rise. William Siler's 1979 model captures the infant decline and the senescent rise, and the models of Thorvald Thiele (1871) and of Larry Heligman and John Pollard (1980) also capture the hump.[^thiele1871][^siler1979][^heligman1980] Power-law (Weibull) and logistic models offer different shapes with different biological readings.[^weibull1951][^perks1932] The models are fitted to counts of deaths and person-years by maximum likelihood, and a model that fits well inside the data can still extrapolate badly outside it.
 
-Two questions have dominated the field since the 1990s. The first is whether the exponential rise continues to the end of life or slows into a *mortality plateau* at extreme ages. Plateaus are well documented in large laboratory cohorts of insects,[^carey1992][^curtsinger1992] but in humans the evidence is contested, because a small rate of age-misreporting can manufacture a plateau.[^barbi2018][^newman2018][^gavrilov2011] The second is why mortality takes this shape at all. Explanations range from the declining force of natural selection with age,[^hamilton1966] through the reliability of redundant systems,[^gavrilov2001] to the selective survival of robust individuals in heterogeneous populations.[^vaupel1979] Since Ronald Lee and Lawrence Carter's 1992 model, a second family of *stochastic* models has described how mortality at each age changes over calendar time; these are the standard tools of mortality forecasting.[^leecarter1992]
+Two questions run through the field. The first is whether the exponential rise continues to the end of life or slows into a *mortality plateau* at extreme ages. Plateaus are well documented in large laboratory cohorts of insects,[^carey1992][^curtsinger1992] but in humans the evidence is contested, because a small rate of age-misreporting can manufacture a plateau.[^barbi2018][^newman2018][^gavrilov2011] The second is why mortality takes this shape at all. Explanations range from the declining force of natural selection with age,[^hamilton1966] through the reliability of redundant systems,[^gavrilov2001] to the selective survival of robust individuals in heterogeneous populations.[^vaupel1979] Mortality patterns also differ widely between species: some animals and plants show no increase in mortality with age, or a decrease.[^jones2014] Since Ronald Lee and Lawrence Carter's 1992 model, a second family of *stochastic* models has described how mortality at each age changes over calendar time; these are the standard tools of mortality forecasting.[^leecarter1992]
 
 ![[mortality-us-2023-gompertz.png|Figure 1. Annual death rates by age in the United States, 2023 (Social Security Administration period life table). The vertical axis is logarithmic, so an exponential rise appears as a straight line. Dashed lines are Gompertz curves fitted to ages 35 to 85; fitted death rates double every 9.5 years for men and 8.5 years for women. The Gompertz line misses infancy, childhood and the young-adult hump.]]
 
@@ -54,7 +54,7 @@ A model may describe a *period* (the death rates observed in one calendar year, 
 
 John Graunt's *Natural and Political Observations … upon the Bills of Mortality* (1662) tabulated London's weekly burial records and estimated, crudely, how many of every hundred births survived to each decade of life.[^graunt1662] Edmond Halley's 1693 table for the city of Breslau, built from births and funerals in a population with little migration, was the first life table accurate enough to price an annuity.[^halley1693] Neither proposed a formula.
 
-The first law of mortality was Abraham de Moivre's, in *Annuities upon Lives* (1725). To make annuity arithmetic tractable, he assumed that the number of survivors falls in a straight line to zero at a maximum age of 86.[^demoivre1725] In modern notation $l_x \propto \omega - x$, and the hazard is $\mu(x) = 1/(\omega - x)$. The assumption was a computational convenience, not a description: it implies a hazard that is nearly flat through adulthood and then rises without limit as the maximum age approaches.
+The first law of mortality was Abraham de Moivre's, in *Annuities upon Lives* (1725). To make annuity arithmetic tractable, he assumed that the number of survivors falls in a straight line to zero at a maximum age of 86.[^demoivre1725] In modern notation $l_x \propto \omega - x$, and the hazard is $\mu(x) = 1/(\omega - x)$. The assumption was a computational convenience, not a description: it implies a hazard that rises only fourfold between birth and age 64 and then increases without limit as the maximum age approaches.
 
 ### Gompertz and Makeham
 
@@ -66,11 +66,11 @@ William Makeham supplied the first in 1860 by adding a constant term to the haza
 
 ### Whole-life and logistic formulae
 
-The Danish astronomer and actuary Thorvald Thiele published the first formula for the whole of life in 1871. It sums three terms: a declining exponential for childhood, a bell-shaped bump for early adulthood, and a Gompertz exponential for old age.[^thiele1871] Wilfred Perks introduced logistic formulae in 1932, in which the exponential rise flattens at the oldest ages.[^perks1932] In 1959 Robert Beard showed how such flattening could arise: if every individual follows a Gompertz–Makeham hazard but individuals differ in frailty, the population hazard takes a logistic form.[^beard1959]
+The Danish astronomer and actuary Thorvald Thiele published the first formula for the whole of life in 1871. It sums three terms: a declining exponential for childhood, a bell-shaped bump for early adulthood, and a Gompertz exponential for old age.[^thiele1871] Wilfred Perks introduced logistic formulae in 1932, in which the exponential rise flattens at the oldest ages.[^perks1932] In 1959 Robert Beard showed how such flattening could arise. Suppose individuals differ in *frailty*, a fixed multiplier of their personal risk of death, and each individual's Gompertz hazard is scaled by it. The frailest die first, and if frailty follows a gamma distribution the hazard of the surviving population takes a logistic form.[^beard1959]
 
 ### Reliability, frailty and multi-component models
 
-Waloddi Weibull, a Swedish engineer studying the strength and fatigue of materials, published the distribution that bears his name in 1939 and popularised it in English in 1951.[^weibull1951] Its hazard is a power of age rather than an exponential, and it became the standard model of failure in reliability engineering before biologists applied it to organisms.[^ricklefs2002]
+Waloddi Weibull, a Swedish engineer studying the strength and fatigue of materials, published the distribution that bears his name in 1939 and popularised it in English in 1951.[^weibull1939][^weibull1951] Its hazard is a power of age rather than an exponential, and it became the standard model of failure in reliability engineering before biologists applied it to organisms.[^ricklefs2002]
 
 In 1960 Bernard Strehler and Albert Mildvan proposed the first mechanistic theory of the Gompertz law (described [below](#strehlermildvan-theory)).[^strehler1960] In 1979 James Vaupel, Kenneth Manton and Eric Stallard formalised frailty as a random multiplier of each individual's hazard and showed how it bends the population curve.[^vaupel1979] In the same year the ecologist William Siler proposed a five-parameter competing-risk model for animal populations,[^siler1979] and in 1980 Heligman and Pollard published an eight-parameter model that captured the young-adult hump in human data.[^heligman1980]
 
@@ -90,7 +90,9 @@ These three components correspond to three biological regimes: the fragility of 
 
 ## Models of the age pattern
 
-The models below describe mortality by age within a single population and time. They are ordered roughly by date and grouped by the shape they produce.
+The models below describe mortality by age within a single population and time. They are ordered roughly by date and grouped by the shape they produce. Figure 2 compares five of them on the same data.
+
+![[mortality-model-fits-us-men-2023.png|Figure 2. The same data fitted with five laws: annual death rates of American men in 2023, on a log scale. (A) One-process laws fitted to adult ages and extrapolated (dashed) to younger ages. (B) Multi-component laws fitted to all ages. Over each model's own fitting range, the fitted rate misses the observed one on a typical age by about 26% for Gompertz, 20% for Gompertz–Makeham, 61% for Weibull, 42% for Siler and 11% for Heligman–Pollard. Panels A and B use different age ranges, so their errors are not directly comparable.]]
 
 ### De Moivre's law
 
@@ -98,7 +100,7 @@ $$
 \mu(x) = \frac{1}{\omega - x}, \qquad 0 \le x < \omega.
 $$
 
-De Moivre's linear survival curve has a single parameter, the maximum age $\omega$. It is now used mainly in textbook exercises, because it implies an implausibly flat adult hazard followed by certain death at a fixed age.[^demoivre1725]
+De Moivre's linear survival curve has a single parameter, the maximum age $\omega$. It is now used mainly in textbook exercises, because it implies a slowly rising adult hazard followed by certain death at a fixed age.[^demoivre1725]
 
 ### Gompertz law
 
@@ -114,7 +116,7 @@ $$
 \mu(x) = b\,e^{b(x - M)}, \qquad M = \frac{1}{b}\ln\frac{b}{a}.
 $$
 
-For the 2023 American fits, $M$ is about 85 years for men and 90 for women.
+The Gompertz curves fitted to American data for 2023 place $M$ at about 85 years for men and 90 for women. The ages at which most deaths actually occur in the 2023 table are 87 and 89; the fitted values differ because the curve is fitted to ages 35 to 85 and the real hazard steepens above that range.
 
 The Gompertz law describes adult mortality in people and in many laboratory animals with two parameters. Its weaknesses are just as clear. It cannot represent the decline of mortality in childhood or the young-adult hump, and it predicts a hazard that grows without limit. Whether that unbounded growth is real at the highest ages is the subject of the [plateau debate](#late-life-deceleration-and-the-plateau-debate).
 
@@ -124,7 +126,7 @@ $$
 \mu(x) = a\,e^{bx} + c, \qquad S(x) = \exp\!\left[-cx - \frac{a}{b}\left(e^{bx} - 1\right)\right].
 $$
 
-Makeham's constant $c$ represents deaths whose risk does not depend on age, which he attributed to chance.[^makeham1860] Adding it lets the law follow mortality down into the late teens, where senescent risk is negligible but deaths are not. Fitted to American men aged 15 to 100 in 2023, $c$ is about 0.0009 per year (Figure 2A). In modern low-mortality populations the constant is small and hard to estimate. It also absorbs part of the young-adult hump, so it should not be read as a pure measure of "extrinsic" mortality.[^horiuchi1998]
+Makeham's constant $c$ represents deaths whose risk does not depend on age, which he attributed to chance.[^makeham1860] Adding it lets the law follow mortality down into the late teens, where senescent risk is negligible but deaths are not. Fitted to American men aged 15 to 100 in 2023, $c$ is about 0.0009 per year (Figure 2A). In modern low-mortality populations the constant is small and hard to estimate. It also absorbs part of the young-adult hump, so it should not be read as a pure measure of "extrinsic" mortality; the division of deaths into senescent and background components is itself a simplification.[^horiuchi1998]
 
 ### Weibull model
 
@@ -136,11 +138,11 @@ In the Weibull model the hazard rises as a power of age: $\alpha$ is a character
 
 Reliability engineering derives the Weibull law from systems that fail when any of many components fails, or when damage accumulates in several independent steps. In epidemiology the same power law describes the incidence of many cancers, which rises roughly as the fifth or sixth power of age; the [[Armitage–Doll model]] explains this as the need for several sequential mutations in one cell lineage. For all-cause human mortality, the Gompertz law usually fits better. A comparison of the two functions found the Gompertz law the better descriptor of all-cause mortality, and the Weibull law the better descriptor of single causes of death.[^juckett1993] In the 2023 American data, the best Weibull fit to men aged 30 to 100 ($\beta \approx 5.6$) misses observed death rates by about 61% on a typical age, against 26% for the Gompertz law over the same range.
 
-Robert Ricklefs and Alex Scheuerlein argued that the choice between the two models has biological content.[^ricklefs2002] The Gompertz law multiplies baseline risk, which suits ageing as rising vulnerability to external hazards. The Weibull law adds age-related risk to baseline risk, which suits ageing as the growth of internal causes of death. They proposed comparing wild and captive populations of the same species to tell the two apart, and found that the comparison favoured the intrinsic-causes (Weibull) reading for birds but gave mixed results for mammals.
+Robert Ricklefs and Alex Scheuerlein argued that the choice between the two models has biological content.[^ricklefs2002] In the forms they compared, both of which include a constant baseline mortality, the Gompertz ageing term multiplies baseline risk, which suits ageing as rising vulnerability to external hazards. The Weibull ageing term is added to baseline risk, which suits ageing as the growth of internal causes of death. They proposed comparing wild and captive populations of the same species to tell the two apart, and found that the comparison favoured the intrinsic-causes (Weibull) reading for birds but gave mixed results for mammals.
 
 ### Logistic models
 
-Logistic models bend the Gompertz exponential so that the hazard rises ever more slowly and approaches a ceiling. The general Perks form is[^perks1932]
+Logistic models bend the Gompertz exponential so that the hazard rises ever more slowly and approaches a ceiling. They take their name from the logistic (S-shaped) curve of population growth, which has the same mathematical form: near-exponential growth that saturates. The general Perks form is[^perks1932]
 
 $$
 \mu(x) = \frac{c + a\,e^{bx}}{1 + d\,e^{bx}},
@@ -156,19 +158,17 @@ $$
 
   The Human Mortality Database, the main open archive of national life tables, fits this model by maximum likelihood to smooth death rates above age 80.[^hmd2025]
 
-- **The gamma-Gompertz model** assumes that each individual's hazard is a Gompertz curve multiplied by a frailty $Z$ drawn from a gamma distribution with mean 1 and variance $\gamma$. The frailest die first, so the survivors are increasingly robust and the population hazard bends:[^vaupel1979][^beard1959]
+- **The gamma-Gompertz model** assumes that each individual's hazard is a Gompertz curve multiplied by a frailty $Z$ drawn from a gamma distribution (a flexible distribution of positive numbers) with mean 1 and variance $\gamma$. The frailest die first, so the survivors are increasingly robust and the population hazard bends:[^vaupel1979][^beard1959]
 
 $$
 \mu(x) = \frac{a\,e^{bx}}{1 + \dfrac{a\gamma}{b}\left(e^{bx} - 1\right)} \;\longrightarrow\; \frac{b}{\gamma} \quad \text{as } x \to \infty.
 $$
 
-  Adding Makeham's constant gives the gamma-Gompertz–Makeham model, which Beard derived in 1959.[^beard1959]
+  Adding Makeham's constant outside the frailty term gives the gamma-Gompertz–Makeham model, which Beard derived in 1959.[^beard1959]
 
 Logistic models have no term for childhood or the young-adult hump. They are applied to adult and old-age mortality, where they usually fit at least as well as the Gompertz law and extrapolate more conservatively.[^thatcher1998]
 
 ### Multi-component models
-
-![[mortality-model-fits-us-men-2023.png|Figure 2. The same data fitted with five laws: annual death rates of American men in 2023, on a log scale. (A) One-process laws fitted to adult ages and extrapolated (dashed) to younger ages. (B) Multi-component laws fitted to all ages. On a typical age the fitted rate misses the observed one by about 26% for Gompertz, 20% for Gompertz–Makeham, 61% for Weibull, 42% for Siler and 11% for Heligman–Pollard.]]
 
 Multi-component models add a separate term for each regime of the human age pattern, at the cost of more parameters.
 
@@ -192,7 +192,7 @@ $$
 \frac{q_x}{1 - q_x} = A^{(x + B)^C} + D\,\exp\!\left[-E\left(\ln x - \ln F\right)^2\right] + G\,H^x.
 $$
 
-The first term describes the fall in childhood mortality. $A$ is close to the death probability at age 1, $B$ is an age offset that sets infant mortality, and $C$ is the rate of decline. The second term is the accident hump: $D$ is its height, $E$ its narrowness and $F$ the age at which it peaks. The third term is a Gompertz curve written in odds. The model fits national life tables closely across the whole age range: in Figure 2B its typical error is about 11%, and the fitted hump for American men peaks near age 38, later and broader than the classic peak in the early twenties. Its parameters are strongly intercorrelated, so they can be unstable from one year or population to the next, and its senescent term inherits the Gompertz law's behaviour at the oldest ages. Software implementations often use variants that model $q_x$ directly rather than the odds.
+The first term describes the fall in childhood mortality. $A$ is close to the death probability at age 1, $B$ is an age offset that sets infant mortality, and $C$ is the rate of decline. The second term is the accident hump: $D$ is its height, $E$ its narrowness and $F$ the age at which it peaks. The third term is a Gompertz curve written in odds. The model fits national life tables closely across the whole age range: in Figure 2B its typical error is about 11%. For American men in 2023 the fitted hump term is broad and centred in the late thirties rather than in the early twenties, where the hump peaked in mid-twentieth-century tables. This is a property of the fit rather than a direct observation, because the hump and senescent terms trade off against each other. Its parameters are strongly intercorrelated, so they can be unstable from one year or population to the next, and its senescent term inherits the Gompertz law's behaviour at the oldest ages. Software implementations often use variants that model $q_x$ directly rather than the odds.
 
 ### Weon–Je model
 
@@ -202,7 +202,7 @@ $$
 S(x) = \exp\!\left[-\left(\frac{x}{\alpha}\right)^{\beta(x)}\right],
 $$
 
-where $\alpha$ is a characteristic life and $\beta(x)$ is usually a low-order polynomial in age. A constant $\beta$ recovers the ordinary Weibull model. A rising $\beta(x)$ makes the survival curve more rectangular, which matches the trend in modern populations toward deaths concentrated in a narrow band of old ages. Differentiating the cumulative hazard gives
+where $\alpha$ is a characteristic life and $\beta(x)$ is usually a low-order polynomial in age. A constant $\beta$ recovers the ordinary Weibull model. A rising $\beta(x)$ makes the survival curve more *rectangular*: nearly flat until old age and then dropping steeply, as when most deaths fall in a narrow band of old ages. Modern populations have been moving in that direction. Differentiating the cumulative hazard gives
 
 $$
 \mu(x) = \left(\frac{x}{\alpha}\right)^{\beta(x)}\left[\frac{\beta(x)}{x} + \beta'(x)\ln\frac{x}{\alpha}\right].
@@ -232,7 +232,7 @@ That the death rate of adult humans rises by a nearly constant percentage each y
 
 ### Strehler–Mildvan theory
 
-Strehler and Mildvan proposed that each organism has a "vitality" that declines linearly with age, and that it is exposed to random challenges whose magnitudes follow an exponential (Maxwell–Boltzmann) distribution.[^strehler1960] Death occurs when a challenge exceeds the remaining vitality. The probability of such a challenge then rises exponentially as vitality falls, which gives the Gompertz law. The theory also predicted the **Strehler–Mildvan correlation**: across populations, a lower Gompertz intercept $a$ goes with a steeper slope $b$. The correlation is observed. Leonid and Natalia Gavrilov describe the same pattern as the *compensation effect of mortality*: death rates of different populations of a species converge at old ages.[^gavrilov2001] Its interpretation is complicated by estimation: fitted values of $a$ and $b$ are strongly correlated even within a single data set, and David Juckett and Barnett Rosenberg traced part of the regression of $\ln a$ on $b$ to where mortality curves intersect and to errors in fitted parameters.[^juckett1993]
+Strehler and Mildvan proposed that each organism has a "vitality", its capacity to restore its physiological state after a disturbance, which declines linearly with age. The organism is exposed to random challenges whose magnitudes follow an exponential (Maxwell–Boltzmann) distribution, so large challenges are exponentially rarer than small ones.[^strehler1960] Death occurs when a challenge exceeds the remaining vitality. The probability of such a challenge then rises exponentially as vitality falls, which gives the Gompertz law. The theory also predicted the **Strehler–Mildvan correlation**: across populations, a lower Gompertz intercept $a$ goes with a steeper slope $b$. The correlation is observed. Leonid and Natalia Gavrilov describe the same pattern as the *compensation effect of mortality*: death rates of different populations of a species converge at old ages.[^gavrilov2001] Its interpretation is complicated by estimation: fitted values of $a$ and $b$ are strongly correlated even within a single data set, and David Juckett and Barnett Rosenberg traced part of the regression of $\ln a$ on $b$ to where mortality curves intersect and to errors in fitted parameters.[^juckett1993]
 
 ### Reliability theory
 
@@ -244,13 +244,13 @@ A population is a mixture of individuals of different frailty. Even if every ind
 
 ### Evolutionary theory
 
-Evolutionary theory explains why mortality rises with age, but not the exact exponential form. Peter Medawar argued that natural selection weakens with age, because few individuals in the wild survive long enough for late-acting genes to matter.[^medawar1952] [[wd-hamilton|W. D. Hamilton]] formalised this in 1966: the force of selection on age-specific survival declines from the age at first reproduction.[^hamilton1966] Mutations with harmful effects late in life therefore accumulate in a [[selection-shadow-theory|selection shadow]], and genes with early benefits and late costs are favoured ([[antagonistic-pleiotropy-theory|antagonistic pleiotropy]]). Physiological versions of the argument appear in the [[disposable-soma-theory|disposable soma theory]]. Hamilton's model predicted that mortality would rise steeply once reproduction ends. Plateaus in laboratory cohorts and the diversity of mortality patterns across species have since forced refinements.[^jones2014]
+Evolutionary theory explains why mortality rises with age, but not the exact exponential form. Peter Medawar argued that natural selection weakens with age, because few individuals in the wild survive long enough for late-acting genes to matter.[^medawar1952] [[wd-hamilton|W. D. Hamilton]] formalised this in 1966: the force of selection on age-specific survival declines from the age at first reproduction, because a gene that kills its carrier after much of that carrier's reproduction is done has already been passed on.[^hamilton1966] Mutations whose harm appears only late in life are therefore barely opposed by selection and accumulate in a [[selection-shadow-theory|selection shadow]]. Genes that help early in life and harm late in life can even be favoured, a mechanism called [[antagonistic-pleiotropy-theory|antagonistic pleiotropy]]. Physiological versions of the argument appear in the [[disposable-soma-theory|disposable soma theory]]. Hamilton's model predicted that mortality would rise steeply once reproduction ends. Plateaus in laboratory cohorts and the diversity of mortality patterns across species have since forced refinements.[^jones2014]
 
 ### Cellular and physiological models
 
 Recent work links the Gompertz law to measurable physiological variables. Omer Karin, Uri Alon and colleagues measured the turnover of senescent cells in mice. These cells are removed with a half-life of days in young animals but weeks in old ones, and the slowing creates fluctuations whose growth with age can be modelled. A model in which death occurs when the senescent-cell burden crosses a threshold reproduces the Gompertz law in mice and humans, as well as the rapid effects of dietary shifts on mortality in flies.[^karin2019] (See [[cellular-senescence]] and [[sasp]].)
 
-In the nematode *Caenorhabditis elegans*, Nicholas Stroustrup and colleagues collected high-precision survival data from large populations. They found that interventions as diverse as temperature, diet, oxidative stress and mutations in the insulin/IGF-1 pathway (see [[kenyon-daf-2-experiment]]) all stretch or compress the survival curve in time without changing its shape. This *temporal scaling* suggests that a single physiological rate constant governs ageing in the worm.[^stroustrup2016]
+In the nematode *Caenorhabditis elegans*, Nicholas Stroustrup and colleagues collected high-precision survival data from large populations. They found that interventions as diverse as temperature, diet, oxidative stress and mutations in the insulin/IGF-1 pathway (see [[kenyon-daf-2-experiment]]) all stretch or compress the survival curve in time without changing its shape. This *temporal scaling* suggests that, in the worm, the risk of death is governed by a physiological state that decays at a single effective rate, which these interventions speed up or slow down.[^stroustrup2016]
 
 ## Late-life deceleration and the plateau debate
 
@@ -272,13 +272,13 @@ In national statistics, the rate of increase of human mortality slows after abou
 Two lines of evidence point the other way:
 
 - **Single-year cohorts.** Studying single-year American birth cohorts in the Social Security Death Master File, the Gavrilovs found that mortality follows the Gompertz law up to ages 102 to 105 without noticeable deceleration.[^gavrilov2011] They argued that earlier reports of deceleration below age 100 were artefacts of mixing birth cohorts with different mortality levels, of using cross-sectional data, and of age exaggeration.
-- **Error models.** Saul Newman showed that age-estimation and cohort-blending errors at rates below 1 in 10,000 are enough to produce late-life deceleration and plateaus. Correcting for such errors removed the plateaus in his analysis.[^newman2018]
+- **Error models.** Saul Newman showed that age-estimation and cohort-blending errors at rates below 1 in 10,000 are enough to produce late-life deceleration and plateaus. Correcting for such errors removed the plateaus in his analysis, and he concluded that human ageing does not slow at old ages. The Italian estimates, by contrast, rest on individually validated ages.[^newman2018][^barbi2018]
 
-The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 3 illustrates the problem. Fitted to American women aged 60 to 100, the Gompertz, Kannisto and gamma-Gompertz curves differ by less than their typical error. At age 110 they differ by a factor of two. In the 2023 American period table there is no sign of deceleration up to age 100. If anything the slope steepens: fitted over ages 60 to 100, women's death rates double every 6.6 years, against 8.5 years for ages 35 to 85. The behaviour of mortality above 105 must therefore be measured, not extrapolated, and such measurements rest on a few thousand deaths in which small age errors matter. As of the mid-2020s the existence of a human plateau remains contested. It bears on whether human lifespan has a fixed limit, a question argued in the same years from trends in maximum reported age at death.[^dong2016][^lenart2017]
+The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 3 illustrates the problem. Fitted to American women aged 60 to 100, the Gompertz, Kannisto and gamma-Gompertz curves differ by less than their typical error. At age 110 they differ by a factor of two. In the 2023 American period table there is no sign of deceleration up to age 100. If anything the slope steepens: women's death rates double every 8.0 years between ages 60 and 80 and every 6.0 years between 80 and 100. Rates at these ages in a national period table depend partly on how the producing agency smooths sparse data, so this is weak evidence either way. The behaviour of mortality above 105 must therefore be measured, not extrapolated, and such measurements rest on a few thousand deaths in which small age errors matter. As of the mid-2020s the existence of a human plateau remains contested. It bears on whether human lifespan has a fixed limit, a question argued in the same years from trends in maximum reported age at death.[^dong2016][^lenart2017]
 
 ## Mortality across species
 
-The Gompertz law is not universal. Caleb Finch, Malcolm Pike and Matthew Witten compared mortality rate doubling times across species and found that humans and rhesus monkeys share a doubling time of about eight years, despite large differences in lifespan.[^finch1990] Owen Jones and colleagues compared standardised mortality and fertility trajectories for 46 species: 11 mammals, 12 other vertebrates, 10 invertebrates, 12 vascular plants and a green alga.[^jones2014] Mortality after maturity rose steeply in some species, was constant in others, and declined in yet others, including both long- and short-lived species. Species with [[Indeterminate growth|indeterminate growth]] often fall in the constant or declining group, because larger individuals are harder to kill.
+The Gompertz law is not universal. Caleb Finch, Malcolm Pike and Matthew Witten compared mortality rate doubling times across species and found that humans and rhesus monkeys share a doubling time of about eight years, despite large differences in lifespan.[^finch1990] Owen Jones and colleagues compared standardised mortality and fertility trajectories for 46 species: 11 mammals, 12 other vertebrates, 10 invertebrates, 12 vascular plants and a green alga.[^jones2014] Mortality after maturity rose steeply in some species, was constant in others, and declined in yet others, including both long- and short-lived species. Among the species with declining adult mortality is the desert tortoise, which keeps growing after maturity (see [[Indeterminate growth|indeterminate growth]]).
 
 The naked mole-rat (*Heterocephalus glaber*) is the best-documented mammalian exception. In a compendium of more than 3,000 lifespan records, its hazard did not increase with age, even at ages 25 times its age at sexual maturity.[^ruby2018]
 
@@ -294,9 +294,9 @@ $$
 \ln m_{x,t} = a_x + b_x k_t + \varepsilon_{x,t},
 $$
 
-where $a_x$ is the average age pattern, $k_t$ is a single index of the overall level of mortality, and $b_x$ is how strongly each age responds to changes in $k_t$. The parameters are identified by constraints such as $\sum_x b_x = 1$ and $\sum_t k_t = 0$, and are estimated by singular value decomposition. To forecast, the index $k_t$ is projected as a random walk with drift, which produces probabilistic forecasts with prediction intervals. The model makes no assumption about the shape of $a_x$. It assumes instead that the improvement at each age stays in fixed proportion over time.
+where $a_x$ is the average age pattern, $k_t$ is a single index of the overall level of mortality, and $b_x$ is how strongly each age responds to changes in $k_t$. Without further conditions the parameters are not unique (multiplying every $b_x$ by 2 and halving every $k_t$ gives the same fit), so constraints such as $\sum_x b_x = 1$ and $\sum_t k_t = 0$ fix them. Lee and Carter estimated them with a singular value decomposition, a standard matrix factorisation; Natacha Brouhns and colleagues later recast the model as a Poisson regression on death counts.[^brouhns2002] To forecast, the index $k_t$ is projected as a *random walk with drift*: each year it moves by a fixed average amount plus random noise, which yields forecasts with prediction intervals. Nan Li and Lee extended the model to forecast several related populations, such as the two sexes or neighbouring countries, without letting their projections diverge implausibly.[^lilee2005] The model makes no assumption about the shape of $a_x$. It assumes instead that the improvement at each age stays in fixed proportion over time.
 
-Extensions address its main weaknesses. The Renshaw–Haberman model adds a term for each year of birth, to capture cohort effects: generations whose mortality is persistently higher or lower than their neighbours'.[^renshaw2006] The Cairns–Blake–Dowd model, designed for pension liabilities at older ages, models the logit of $q_{x,t}$ as a straight line in age whose intercept and slope both evolve as random walks:[^cbd2006]
+Extensions address its main weaknesses. The Renshaw–Haberman model adds a term for each year of birth, to capture cohort effects: generations whose mortality is persistently higher or lower than their neighbours'.[^renshaw2006] The Cairns–Blake–Dowd model, designed for pension liabilities at older ages, models the logit of $q_{x,t}$, that is $\ln[q/(1-q)]$, as a straight line in age whose intercept and slope both evolve as random walks:[^cbd2006]
 
 $$
 \operatorname{logit} q_{x,t} = \kappa_t^{(1)} + \kappa_t^{(2)}\,(x - \bar{x}).
@@ -312,7 +312,7 @@ $$
 Y_x = \alpha + \beta\,Y_x^{(s)}, \qquad Y_x = \tfrac{1}{2}\ln\frac{1 - l_x}{l_x}.
 $$
 
-With two parameters, this lets demographers build complete life tables for populations with incomplete registration.
+With two parameters, this lets demographers build complete life tables for populations with incomplete registration. Families of *model life tables*, such as Ansley Coale and Paul Demeny's regional tables, serve the same purpose by tabulating typical schedules indexed by level of mortality.[^coale1966]
 
 ### Rectangularisation and the shifting mode
 
@@ -322,7 +322,7 @@ Over the twentieth century, mortality fell first in infancy and childhood and, s
 
 ### Data and likelihood
 
-Mortality models are fitted to counts of deaths $D_x$ and exposures $E_x$ (person-years at risk) by age. The standard statistical model treats deaths as Poisson-distributed given the exposure,
+Mortality models are fitted to counts of deaths $D_x$ and *exposures* $E_x$ by age. The exposure is the total time that members of the population spent alive at that age, in person-years. If each person-year carries the same small risk independently, the number of deaths is approximately Poisson-distributed with mean equal to exposure times hazard,
 
 $$
 D_x \sim \operatorname{Poisson}\!\big(E_x\,\mu(x + \tfrac{1}{2})\big), \qquad \ln L = \sum_x \big[D_x \ln \mu(x + \tfrac{1}{2}) - E_x\,\mu(x + \tfrac{1}{2})\big] + \text{const},
@@ -330,7 +330,7 @@ $$
 
 and estimates parameters by maximum likelihood. The Human Mortality Database uses exactly this approach to fit the Kannisto model at ages above 80.[^hmd2025] An older and still common shortcut is least squares on the logarithm of observed rates. It is simple, but it handles ages with zero deaths poorly and weights noisy old-age estimates as heavily as precise middle-age ones. (The fits in Figures 2 and 3 use least squares on log rates because a published life table supplies rates, not deaths and exposures.)
 
-For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelihood to fit and compare nested Gompertz, Gompertz–Makeham, logistic and logistic–Makeham models with likelihood-ratio tests.[^pletcher1999] For wild animals, whose ages at death are usually known only through incomplete capture–recapture records, the BaSTA package estimates Gompertz, Weibull, logistic and Siler models by Bayesian inference.[^colchero2012] Tiffany Tai and Andrew Noymer compared methods of estimating the Gompertz slope from empirical data.[^tai2018]
+For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelihood to fit Gompertz, Gompertz–Makeham, logistic and logistic–Makeham models. Each of these is a special case of the next, so likelihood-ratio tests can ask whether an extra parameter is justified.[^pletcher1999] For wild animals, whose ages at death are usually known only through incomplete capture–recapture records, the BaSTA package estimates Gompertz, Weibull, logistic and Siler models by Bayesian inference.[^colchero2012] Tiffany Tai and Andrew Noymer compared methods of estimating the Gompertz slope from empirical data.[^tai2018]
 
 ### Practical difficulties
 
@@ -338,7 +338,7 @@ For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelih
 - **Sample size.** Distinguishing a Gompertz from a Weibull or logistic hazard, or detecting a plateau, needs very large cohorts or very long follow-up. The medfly study that established insect plateaus used more than a million animals.[^carey1992]
 - **Age misreporting.** At the oldest ages a small number of exaggerated ages can dominate the estimates. Validated data are therefore essential, and even validated data may contain errors.[^newman2018][^gavrilov2011]
 - **Period versus cohort.** Period data blend cohorts with different histories. Old-age patterns in period tables can reflect cohort composition rather than ageing.[^gavrilov2011]
-- **Model choice.** Information criteria such as Akaike's are used to choose between models. With the data typical of animal studies, several models often fit equally well, and the choice should then rest on what the parameters are meant to measure.[^ricklefs2002]
+- **Model choice.** Information criteria such as Akaike's, which reward fit and penalise extra parameters, are used to choose between models. With the data typical of animal studies, several models often fit equally well, and the choice should then rest on what the parameters are meant to measure.[^ricklefs2002]
 
 ## Applications
 
@@ -379,6 +379,8 @@ Figures 1 to 3 were drawn for this article from the Social Security Administrati
 
 [^beard1959]: Beard RE (1959). "Note on some mathematical mortality models". In Wolstenholme GEW, O'Connor M (eds.), *The Lifespan of Animals*. CIBA Foundation Colloquia on Ageing, vol. 5. pp. 302–311. [doi:10.1002/9780470715253.app1](https://doi.org/10.1002/9780470715253.app1)
 
+[^weibull1939]: Weibull W (1939). "A statistical theory of the strength of materials". *Ingeniörsvetenskapsakademiens Handlingar*. 151. Stockholm.
+
 [^weibull1951]: Weibull W (1951). "A statistical distribution function of wide applicability". *Journal of Applied Mechanics*. 18 (3): 293–297. [doi:10.1115/1.4010337](https://doi.org/10.1115/1.4010337)
 
 [^strehler1960]: Strehler BL, Mildvan AS (1960). "General theory of mortality and aging". *Science*. 132 (3418): 14–21. [doi:10.1126/science.132.3418.14](https://doi.org/10.1126/science.132.3418.14)
@@ -415,11 +417,15 @@ Figures 1 to 3 were drawn for this article from the Social Security Administrati
 
 [^mair2003]: Mair W, Goymer P, Pletcher SD, Partridge L (2003). "Demography of dietary restriction and death in *Drosophila*". *Science*. 301 (5640): 1731–1733. [doi:10.1126/science.1086016](https://doi.org/10.1126/science.1086016)
 
+[^brouhns2002]: Brouhns N, Denuit M, Vermunt JK (2002). "A Poisson log-bilinear regression approach to the construction of projected lifetables". *Insurance: Mathematics and Economics*. 31 (3): 373–393. [doi:10.1016/S0167-6687(02)00185-3](https://doi.org/10.1016/S0167-6687(02)00185-3)
+
 [^currie2004]: Currie ID, Durban M, Eilers PHC (2004). "Smoothing and forecasting mortality rates". *Statistical Modelling*. 4 (4): 279–298. [doi:10.1191/1471082X04st080oa](https://doi.org/10.1191/1471082X04st080oa)
 
 [^renshaw2006]: Renshaw AE, Haberman S (2006). "A cohort-based extension to the Lee–Carter model for mortality reduction factors". *Insurance: Mathematics and Economics*. 38 (3): 556–570. [doi:10.1016/j.insmatheco.2005.12.001](https://doi.org/10.1016/j.insmatheco.2005.12.001)
 
 [^cbd2006]: Cairns AJG, Blake D, Dowd K (2006). "A two-factor model for stochastic mortality with parameter uncertainty: theory and calibration". *Journal of Risk and Insurance*. 73 (4): 687–718. [doi:10.1111/j.1539-6975.2006.00195.x](https://doi.org/10.1111/j.1539-6975.2006.00195.x)
+
+[^lilee2005]: Li N, Lee R (2005). "Coherent mortality forecasts for a group of populations: an extension of the Lee–Carter method". *Demography*. 42 (3): 575–594. [doi:10.1353/dem.2005.0021](https://doi.org/10.1353/dem.2005.0021)
 
 [^weon2009]: Weon BM, Je JH (2009). "Theoretical estimation of maximum human lifespan". *Biogerontology*. 10 (1): 65–71. [doi:10.1007/s10522-008-9156-4](https://doi.org/10.1007/s10522-008-9156-4)
 
@@ -460,6 +466,8 @@ Figures 1 to 3 were drawn for this article from the Social Security Administrati
 [^medawar1952]: Medawar PB (1952). *An Unsolved Problem of Biology*. London: H. K. Lewis.
 
 [^brass1971]: Brass W (1971). "On the scale of mortality". In Brass W (ed.), *Biological Aspects of Demography*. London: Taylor & Francis. pp. 69–110.
+
+[^coale1966]: Coale AJ, Demeny P (1966). *Regional Model Life Tables and Stable Populations*. Princeton: Princeton University Press.
 
 [^graunt1662]: Graunt J (1662). *Natural and Political Observations Mentioned in a Following Index, and Made upon the Bills of Mortality*. London. [Digitised copy](https://wellcomecollection.org/works/ear22f7e)
 
