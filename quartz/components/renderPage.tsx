@@ -336,21 +336,39 @@ export function renderPage(
   const Body = BodyConstructor()
   const frame = resolveFrame(frameName)
 
-  // Draft handling: wrap content after first <hr> in .draft-locked
-  function transformDraftTree(draftRoot: Root): void {
-    const hrIndex = draftRoot.children.findIndex(
-      (child) => child.type === "element" && child.tagName === "hr",
+  // Draft handling: everything after the preview goes in .draft-locked, which
+  // stays hidden until draftGate.inline.ts opens it for a supporter or the admin.
+  // The preview ends at the author's first top-level <hr>; without one, at the end
+  // of the lead (the first <h2> that follows some text); without that, after the
+  // third block.
+  function draftPreviewEnd(draftRoot: Root): number {
+    const blocks = draftRoot.children.flatMap((child, index) =>
+      child.type === "element" ? [{ tag: child.tagName, index }] : [],
     )
-    if (hrIndex < 0) return
+    const hr = blocks.find((block) => block.tag === "hr")
+    if (hr) return hr.index
 
-    const locked = draftRoot.children.slice(hrIndex)
+    const isHeading = (tag: string) => /^h[1-6]$/.test(tag)
+    const firstText = blocks.findIndex((block) => !isHeading(block.tag))
+    const leadEnd = blocks.find((block, i) => block.tag === "h2" && firstText >= 0 && i > firstText)
+    if (leadEnd) return leadEnd.index
+
+    const fourthText = blocks.filter((block) => !isHeading(block.tag))[3]
+    return fourthText ? fourthText.index : -1
+  }
+
+  function transformDraftTree(draftRoot: Root): void {
+    const previewEnd = draftPreviewEnd(draftRoot)
+    if (previewEnd < 0) return
+
+    const locked = draftRoot.children.slice(previewEnd)
     const lockedWrapper: Element = {
       type: "element",
       tagName: "div",
       properties: { className: ["draft-locked"] },
       children: locked as ElementContent[],
     }
-    draftRoot.children = [...draftRoot.children.slice(0, hrIndex), lockedWrapper]
+    draftRoot.children = [...draftRoot.children.slice(0, previewEnd), lockedWrapper]
   }
 
   const isDraftPage =
