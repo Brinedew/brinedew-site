@@ -1807,6 +1807,10 @@
   .draft-unlocked .draft-locked {
     display: block;
   }
+  /* draftGate.inline.ts adds .draft-unlocked for supporters and the admin. */
+  body.draft-unlocked #draft-cta.icono-card.icono-guest-login-card {
+    display: none;
+  }
 
   /* Fadeout gradient on truncated draft content for unauthorized users */
   body[data-page-draft="true"]:not(.draft-unlocked) .markdown-preview-view::after {

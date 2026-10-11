@@ -6,6 +6,7 @@ import { QuartzEmitterPlugin } from "../types"
 import spaRouterScript from "../../components/scripts/spa.inline"
 // @ts-ignore
 import popoverScript from "../../components/scripts/popover.inline"
+import draftGateScript from "../../components/scripts/draftGate.inline"
 import baseStyles from "../../styles/base.scss"
 import customStyles from "../../styles/custom.scss"
 import popoverStyle from "../../components/styles/popover.scss"
@@ -83,6 +84,9 @@ async function joinScripts(scripts: string[]): Promise<string> {
 
 function addGlobalPageResources(ctx: BuildCtx, componentResources: ComponentResources) {
   const cfg = ctx.cfg.configuration
+
+  // draft pages: open the .draft-locked curtain for supporters and the admin
+  componentResources.afterDOMLoaded.push(draftGateScript)
 
   // popovers
   if (cfg.enablePopovers) {
