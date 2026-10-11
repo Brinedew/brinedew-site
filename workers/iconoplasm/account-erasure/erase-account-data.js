@@ -35,7 +35,7 @@
 // The steps whose column has no index (portrait creators, publish event actors, the caretaker
 // outbox) cost a table scan to ask. They run last, after everything indexed is gone, and walk
 // each table once by rowid.
-import { projectBrinedewAccountToManifestationAuthority } from "../../lib/brinedew-authority-account-projection.js"
+import { endRolesOfErasedAccount } from "../caretaker-roles.js"
 import {
   BrinedewAccountIdentityError,
   brinedewFormerAuthorLabel,
@@ -576,6 +576,14 @@ export async function eraseBrinedewAccountOnRequest(
     return { account, erasure: { complete: true, rows_written: 0, changed: {} } }
   }
   await requestBrinedewAccountErasure(db, lifecycle)
+  // The person's caretaker role ends first, before anything is removed; a role
+  // that held a supervote re-runs its gene's election (`services.settleGene`).
+  for (const symbol of await endRolesOfErasedAccount(
+    env.ICONOPLASM_DB,
+    accountId,
+    new Date(now).toISOString(),
+  ))
+    await services.settleGene?.(env, symbol)
   const discordIds = await readBrinedewAccountDiscordSubjects(db, accountId)
   const erasure = await eraseAccountData(
     env,
@@ -585,11 +593,5 @@ export async function eraseBrinedewAccountOnRequest(
   if (!erasure.complete) {
     return { account: await readBrinedewAccount(db, accountId), erasure }
   }
-  await projectBrinedewAccountToManifestationAuthority({
-    primaryDb: db,
-    authoringDb: env.ICONOPLASM_AUTHORING_DB,
-    accountId,
-    now: Date.now(),
-  })
   return { account: await eraseBrinedewAccount(db, lifecycle), erasure }
 }

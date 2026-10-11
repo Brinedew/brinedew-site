@@ -1,18 +1,24 @@
+// B-1065 B2b: the admin's caretaker registry and role actions, on the roles
+// table of the main database (workers/iconoplasm/caretaker-roles.js). The admin
+// page (quartz/static/iconoplasm/caretaker-admin-*.js) keeps its JSON; fields
+// of the old authority it still echoes (head_version, gene_revision) read 0.
+//
+// Offering a gene to a named person comes back with B-1083; its old route was
+// never declared, so nobody could reach it.
 import {
   CARETAKER_ENTITLEMENT_POLICY_VERSION,
-  endCaretakerAssignment,
-  offerCaretakerAssignment,
-  transitionCaretakerAssignment,
-} from "./iconoplasm/caretaker/manifestation-authority.js"
+  caretakerPseudonym,
+  caretakerTerms,
+  changeRole,
+  rolesDb,
+} from "./iconoplasm/caretaker-roles.js"
+import { withdrawCaretakerTextStatements } from "./iconoplasm/caretaker-texts.js"
 import {
   ManifestationAuthorityError,
   authorityError,
 } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
-import { deliverAcceptedAuthorityEvent } from "./iconoplasm/caretaker/manifestation-authority-projection-delivery.js"
 import {
-  commandEnvelope,
   readBoundedJson,
-  requireAuthoritativeMode,
   requireStrictSameOriginMutation,
 } from "./iconoplasm/caretaker/manifestation-authority-http-security.js"
 
@@ -20,6 +26,7 @@ const NO_STORE = Object.freeze({ "Cache-Control": "private, no-store" })
 const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
 const ASSIGNMENT_ACTIONS = new Set(["cancel", "suspend", "resume", "end"])
 const ASSIGNMENT_STATUSES = new Set(["pending_acceptance", "active", "suspended", "ended"])
+const RELINQUISH_POLICIES = new Set(["retain", "withdraw"])
 const DEFAULT_PAGE_LIMIT = 50
 const MAX_PAGE_LIMIT = 100
 
@@ -88,19 +95,21 @@ async function all(db, sql, ...params) {
   return Array.isArray(result?.results) ? result.results : []
 }
 
-function requireAuthoringDb(env) {
-  const db = env?.ICONOPLASM_AUTHORING_DB
-  if (!db?.prepare || !db?.batch) {
-    throw authorityError(
-      "AUTHORING_DB_REQUIRED",
-      "Manifestation authority database is unavailable",
-      503,
-    )
-  }
-  return db
+// The Brinedew account status of each caretaker, from the sign-in database.
+async function accountStatuses(accountDb, accountIds) {
+  const ids = [...new Set(accountIds)]
+  if (!ids.length || !accountDb?.prepare) return new Map()
+  const rows = await all(
+    accountDb,
+    `SELECT account_id, status FROM brinedew_accounts
+      WHERE account_id IN (${ids.map(() => "?").join(", ")})`,
+    ...ids,
+  )
+  return new Map(rows.map((row) => [row.account_id, row.status]))
 }
 
-export async function readCaretakerAdminRegistry(db, raw = {}) {
+export async function readCaretakerAdminRegistry(env, raw = {}) {
+  const db = rolesDb(env)
   const limit = boundedLimit(raw.limit)
   const query = optionalSearch(raw.query)
   const like = `%${query}%`
@@ -111,33 +120,23 @@ export async function readCaretakerAdminRegistry(db, raw = {}) {
   const cursor = decodeCursor(raw.after)
   const rows = await all(
     db,
-    `SELECT assignment.caretaker_assignment_id, assignment.gene_id,
-            gene.canonical_symbol, assignment.account_id,
-            account.public_credit_label AS author_label,
-            account.status AS account_status, assignment.status,
-            assignment.assignment_version, assignment.terms_version_id,
-            assignment.entitlement_policy_version, assignment.relinquish_policy,
-            assignment.created_at, assignment.started_at,
-            assignment.suspended_at, assignment.ended_at, assignment.updated_at,
-            head.head_version, head.gene_revision,
-            head.canonical_revision_id
-       FROM icono_caretaker_assignments assignment
-       JOIN icono_gene_identities gene ON gene.gene_id = assignment.gene_id
-       JOIN icono_authority_accounts account ON account.account_id = assignment.account_id
-       JOIN icono_manifestation_heads head ON head.gene_id = assignment.gene_id
-      WHERE (? = '' OR assignment.status = ?)
-        AND (? = '' OR gene.canonical_symbol LIKE ? COLLATE NOCASE
-          OR account.public_credit_label LIKE ? COLLATE NOCASE
-          OR assignment.account_id LIKE ? COLLATE NOCASE
-          OR assignment.caretaker_assignment_id LIKE ? COLLATE NOCASE)
-        AND (? IS NULL OR assignment.updated_at < ?
-          OR (assignment.updated_at = ? AND assignment.caretaker_assignment_id < ?))
-      ORDER BY assignment.updated_at DESC, assignment.caretaker_assignment_id DESC
+    `SELECT a.caretaker_assignment_id, t.gene_id, a.gene_symbol, a.account_id, a.status,
+            a.assignment_version, a.terms_version_id, a.relinquish_policy,
+            a.created_at, a.started_at, a.suspended_at, a.ended_at, a.updated_at,
+            t.text_id
+       FROM icono_caretaker_assignments a
+       LEFT JOIN icono_gene_texts t ON t.gene_symbol = a.gene_symbol
+      WHERE (? = '' OR a.status = ?)
+        AND (? = '' OR a.gene_symbol LIKE ? COLLATE NOCASE
+          OR a.account_id LIKE ? COLLATE NOCASE
+          OR a.caretaker_assignment_id LIKE ? COLLATE NOCASE)
+        AND (? IS NULL OR a.updated_at < ?
+          OR (a.updated_at = ? AND a.caretaker_assignment_id < ?))
+      ORDER BY a.updated_at DESC, a.caretaker_assignment_id DESC
       LIMIT ?`,
     status,
     status,
     query,
-    like,
     like,
     like,
     like,
@@ -148,26 +147,33 @@ export async function readCaretakerAdminRegistry(db, raw = {}) {
     limit + 1,
   )
   const hasMore = rows.length > limit
-  const page = rows.slice(0, limit).map((row) => ({
-    caretaker_assignment_id: row.caretaker_assignment_id,
-    gene_id: row.gene_id,
-    canonical_symbol: row.canonical_symbol,
-    account_id: row.account_id,
-    author_label: row.author_label,
-    account_status: row.account_status,
-    status: row.status,
-    assignment_version: Number(row.assignment_version),
-    terms_version_id: row.terms_version_id || null,
-    entitlement_policy_version: row.entitlement_policy_version,
-    relinquish_policy: row.relinquish_policy || null,
-    created_at: row.created_at,
-    started_at: row.started_at || null,
-    suspended_at: row.suspended_at || null,
-    ended_at: row.ended_at || null,
-    head_version: Number(row.head_version),
-    gene_revision: Number(row.gene_revision),
-    canonical_revision_id: row.canonical_revision_id || null,
-  }))
+  const shown = rows.slice(0, limit)
+  const statuses = await accountStatuses(
+    env?.DB,
+    shown.map((row) => row.account_id),
+  )
+  const page = []
+  for (const row of shown)
+    page.push({
+      caretaker_assignment_id: row.caretaker_assignment_id,
+      gene_id: row.gene_id || null,
+      canonical_symbol: row.gene_symbol,
+      account_id: row.account_id,
+      author_label: await caretakerPseudonym(row.account_id),
+      account_status: statuses.get(row.account_id) || null,
+      status: row.status,
+      assignment_version: Number(row.assignment_version),
+      terms_version_id: row.terms_version_id || null,
+      entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
+      relinquish_policy: row.relinquish_policy || null,
+      created_at: row.created_at,
+      started_at: row.started_at || null,
+      suspended_at: row.suspended_at || null,
+      ended_at: row.ended_at || null,
+      head_version: 0,
+      gene_revision: 0,
+      canonical_revision_id: row.text_id || null,
+    })
   const tail = hasMore ? rows[limit - 1] : null
   return Object.freeze({
     ok: true,
@@ -181,57 +187,49 @@ export async function readCaretakerAdminRegistry(db, raw = {}) {
   })
 }
 
-export async function searchCaretakerAdminAccounts(db, raw = {}) {
+// The person picker for an offer (B-1083): accounts by ID.
+export async function searchCaretakerAdminAccounts(env, raw = {}) {
   const limit = boundedLimit(raw.limit, 20)
   const query = optionalSearch(raw.query)
-  const like = `%${query}%`
+  if (!env?.DB?.prepare) throw authorityError("ACCOUNTS_UNAVAILABLE", "Accounts are unavailable", 503)
   const rows = await all(
-    db,
-    `SELECT account_id, public_credit_label AS author_label, status
-       FROM icono_authority_accounts
-      WHERE (? = '' OR account_id LIKE ? COLLATE NOCASE
-        OR public_credit_label LIKE ? COLLATE NOCASE)
-      ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,
-               public_credit_label COLLATE NOCASE, account_id
+    env.DB,
+    `SELECT account_id, status FROM brinedew_accounts
+      WHERE (? = '' OR account_id LIKE ?)
+      ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, account_id
       LIMIT ?`,
     query,
-    like,
-    like,
+    `%${query}%`,
     limit,
   )
-  return Object.freeze({
-    ok: true,
-    accounts: Object.freeze(
-      rows.map((row) => ({
-        account_id: row.account_id,
-        author_label: row.author_label,
-        status: row.status,
-      })),
-    ),
-  })
+  const accounts = []
+  for (const row of rows)
+    accounts.push({
+      account_id: row.account_id,
+      author_label: await caretakerPseudonym(row.account_id),
+      status: row.status,
+    })
+  return Object.freeze({ ok: true, accounts: Object.freeze(accounts) })
 }
 
-export async function searchCaretakerAdminGenes(db, raw = {}) {
+// The gene picker for an offer (B-1083): genes whose symbol starts with the
+// query, so the lookup walks the primary key instead of every gene.
+export async function searchCaretakerAdminGenes(env, raw = {}) {
+  const db = rolesDb(env)
   const limit = boundedLimit(raw.limit, 20)
-  const query = optionalSearch(raw.query)
-  const like = `%${query}%`
+  const prefix = optionalSearch(raw.query).toUpperCase()
   const rows = await all(
     db,
-    `SELECT gene.gene_id, gene.canonical_symbol, gene.status,
-            head.head_version, head.gene_revision, head.canonical_revision_id,
-            assignment.status AS open_assignment_status
-       FROM icono_gene_identities gene
-       JOIN icono_manifestation_heads head ON head.gene_id = gene.gene_id
-       LEFT JOIN icono_caretaker_assignments assignment
-         ON assignment.gene_id = gene.gene_id
-        AND assignment.status IN ('pending_acceptance', 'active', 'suspended')
-      WHERE (? = '' OR gene.gene_id LIKE ? COLLATE NOCASE
-        OR gene.canonical_symbol LIKE ? COLLATE NOCASE)
-      ORDER BY gene.canonical_symbol COLLATE NOCASE, gene.gene_id
+    `SELECT t.gene_id, t.gene_symbol, t.text_id, a.status AS open_assignment_status
+       FROM icono_gene_texts t
+       LEFT JOIN icono_caretaker_assignments a
+         ON a.gene_symbol = t.gene_symbol
+        AND a.status IN ('pending_acceptance', 'active', 'suspended')
+      WHERE t.gene_symbol >= ? AND t.gene_symbol < ?
+      ORDER BY t.gene_symbol
       LIMIT ?`,
-    query,
-    like,
-    like,
+    prefix,
+    `${prefix}￿`,
     limit,
   )
   return Object.freeze({
@@ -239,40 +237,32 @@ export async function searchCaretakerAdminGenes(db, raw = {}) {
     genes: Object.freeze(
       rows.map((row) => ({
         gene_id: row.gene_id,
-        canonical_symbol: row.canonical_symbol,
-        status: row.status,
-        head_version: Number(row.head_version),
-        gene_revision: Number(row.gene_revision),
-        canonical_revision_id: row.canonical_revision_id || null,
+        canonical_symbol: row.gene_symbol,
+        status: "active",
+        head_version: 0,
+        gene_revision: 0,
+        canonical_revision_id: row.text_id || null,
         open_assignment_status: row.open_assignment_status || null,
       })),
     ),
   })
 }
 
-export async function readCaretakerAdminTerms(db) {
-  const terms = await all(
-    db,
-    `SELECT terms_version_id, terms_sha256 AS document_sha256,
-            document_url, display_label, effective_at, retired_at
-       FROM icono_caretaker_terms_versions
-      ORDER BY effective_at DESC, terms_version_id DESC`,
-  )
+export async function readCaretakerAdminTerms() {
+  const terms = caretakerTerms()
   return Object.freeze({
     ok: true,
     entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
-    terms: Object.freeze(
-      terms.map((term) =>
-        Object.freeze({
-          terms_version_id: term.terms_version_id,
-          document_sha256: term.document_sha256,
-          document_url: term.document_url,
-          display_label: term.display_label,
-          effective_at: term.effective_at,
-          retired_at: term.retired_at || null,
-        }),
-      ),
-    ),
+    terms: Object.freeze([
+      Object.freeze({
+        terms_version_id: terms.terms_version_id,
+        document_sha256: terms.terms_sha256,
+        document_url: terms.document_url,
+        display_label: terms.display_label,
+        effective_at: terms.effective_at,
+        retired_at: null,
+      }),
+    ]),
   })
 }
 
@@ -282,56 +272,80 @@ function bodyRouteId(body, key, routeId) {
   }
 }
 
-async function deliverMutation(db, wakeAuthorityProjection, env, result) {
-  const delivery = await deliverAcceptedAuthorityEvent(
-    db,
-    {
-      onAuthorityEvent: async (event) => {
-        const wake = await wakeAuthorityProjection(env, event)
-        const accepted = wake?.results?.find((item) => item.event_id === event.event_id)
-        if (accepted?.status !== "published")
-          throw new Error("Accepted manifestation authority event remains pending")
-      },
-    },
-    result,
-  )
-  return {
-    status: delivery.pending ? 202 : 200,
-    payload: delivery.pending ? { ...result, projection_pending: true } : result,
+// One admin change of one role. Ending with "withdraw" takes the role's texts
+// out of use after the role ends; it runs again on a retry of the same end, so
+// a lost answer between the two leaves nothing half done.
+export async function changeCaretakerRoleAsAdmin(env, { assignmentId, action, actorAccountId, body }) {
+  const db = rolesDb(env)
+  if (!ASSIGNMENT_ACTIONS.has(action))
+    throw authorityError("INVALID_ASSIGNMENT_ACTION", "Assignment action is invalid", 400)
+  let reason = null
+  let policy = null
+  if (action === "end") {
+    reason = requiredReason(body.reason, "reason")
+    policy = String(body.relinquish_policy || "")
+    if (!RELINQUISH_POLICIES.has(policy))
+      throw authorityError("INVALID_RELINQUISH_POLICY", "relinquish_policy must be retain or withdraw")
+  } else if (action === "suspend") {
+    reason = requiredReason(body.suspension_reason, "suspension_reason")
+  } else if (action === "cancel") {
+    reason = "administrator_cancelled"
   }
+  const now = new Date().toISOString()
+  const change = await changeRole(db, {
+    roleId: assignmentId,
+    action,
+    expectedVersion: body.expected_assignment_version,
+    actorAccountId,
+    now,
+    reason,
+    policy,
+  })
+  const settle = new Set(change.reElect)
+  const { role } = change
+  if (role.status === "ended" && role.relinquish_policy === "withdraw") {
+    const withdrawn = await db.batch(
+      withdrawCaretakerTextStatements(db, {
+        symbol: role.gene_symbol,
+        assignmentId: role.caretaker_assignment_id,
+        at: now,
+      }),
+    )
+    if (withdrawn.some((result) => Number(result?.meta?.changes || 0) > 0))
+      settle.add(role.gene_symbol)
+  }
+  return { result: change.result, settle: [...settle] }
 }
 
 function errorResponse(error, json) {
   if (error instanceof ManifestationAuthorityError) {
     return json({ error: { code: error.code, message: error.message } }, error.status, NO_STORE)
   }
-  return json({ error: { code: "MANIFESTATION_AUTHORITY_INTERNAL_ERROR" } }, 500, NO_STORE)
+  console.error("[ICONOPLASM_CARETAKER_ADMIN]", error)
+  return json({ error: { code: "CARETAKER_ADMIN_INTERNAL_ERROR" } }, 500, NO_STORE)
 }
 
 function requireServices(services) {
-  for (const name of ["isAdmin", "json", "resolveActiveAccount", "wakeAuthorityProjection"]) {
+  for (const name of ["isAdmin", "json", "resolveActiveAccount", "settleGene"]) {
     if (typeof services?.[name] !== "function") {
       throw new TypeError(`Caretaker admin route service is missing: ${name}`)
     }
   }
 }
 
+// `settleGene(env, ctx, symbol)` re-runs a gene's election and republishes its
+// card: after a role with a supervote ends, or its texts are withdrawn.
 export function createIconoplasmCaretakerAdminHandlers(services) {
   requireServices(services)
-  const { isAdmin, json, resolveActiveAccount, wakeAuthorityProjection } = services
-
-  async function authorize(request, env) {
-    if (!(await isAdmin(request, env))) return null
-    return true
-  }
+  const { isAdmin, json, resolveActiveAccount, settleGene } = services
 
   function read(handlerName, reader) {
     return async ({ request, env, done }) => {
-      if (!(await authorize(request, env))) {
+      if (!(await isAdmin(request, env))) {
         return done(`${handlerName}_403`, json({ error: "Unauthorized" }, 403, NO_STORE))
       }
       try {
-        const value = await reader(requireAuthoringDb(env), new URL(request.url).searchParams)
+        const value = await reader(env, new URL(request.url).searchParams)
         return done(handlerName, json(value, 200, NO_STORE))
       } catch (error) {
         const response = errorResponse(error, json)
@@ -340,77 +354,35 @@ export function createIconoplasmCaretakerAdminHandlers(services) {
     }
   }
 
-  async function mutate({ match, request, env, done }) {
+  async function mutate({ match, request, env, ctx, done }) {
     const routeName = "caretaker_admin_assignment_mutation"
-    if (!(await authorize(request, env))) {
+    if (!(await isAdmin(request, env))) {
       return done(`${routeName}_403`, json({ error: "Unauthorized" }, 403, NO_STORE))
     }
     try {
       requireStrictSameOriginMutation(request)
-      const db = requireAuthoringDb(env)
-      await requireAuthoritativeMode(db)
       const session = await resolveActiveAccount(request, env)
       const actorAccountId = requiredId(session?.account_id, "account_id")
-      const parsed = await readBoundedJson(request)
-      const body = parsed.value
-      const command = await commandEnvelope(
-        request,
-        parsed.raw,
-        body,
-        "administrator",
+      const { value: body } = await readBoundedJson(request)
+      const assignmentId = requiredId(match?.params?.assignment_id, "caretaker_assignment_id")
+      bodyRouteId(body, "caretaker_assignment_id", assignmentId)
+      const action = String(match?.params?.action || "")
+        .trim()
+        .toLowerCase()
+      const { result, settle } = await changeCaretakerRoleAsAdmin(env, {
+        assignmentId,
+        action,
         actorAccountId,
-      )
-      let result
-      if (match?.route?.id === "caretaker_admin_offer") {
-        if (body.entitlement_policy_version !== CARETAKER_ENTITLEMENT_POLICY_VERSION) {
-          throw authorityError(
-            "ENTITLEMENT_POLICY_VERSION_MISMATCH",
-            "Caretaker entitlement policy changed; refresh the admin registry",
-            409,
-          )
+        body,
+      })
+      for (const symbol of settle) {
+        try {
+          await settleGene(env, ctx, symbol)
+        } catch (error) {
+          console.error("[ICONOPLASM_CARETAKER_ADMIN_SETTLE]", symbol, error)
         }
-        result = await offerCaretakerAssignment(db, {
-          geneId: requiredId(body.gene_id, "gene_id"),
-          accountId: requiredId(body.account_id, "account_id"),
-          invitedByAccountId: actorAccountId,
-          entitlementPolicyVersion: CARETAKER_ENTITLEMENT_POLICY_VERSION,
-          expectedGeneRevision: body.expected_gene_revision,
-          ...command,
-        })
-      } else {
-        const assignmentId = requiredId(match?.params?.assignment_id, "caretaker_assignment_id")
-        bodyRouteId(body, "caretaker_assignment_id", assignmentId)
-        const action = String(match?.params?.action || "")
-          .trim()
-          .toLowerCase()
-        if (!ASSIGNMENT_ACTIONS.has(action)) {
-          throw authorityError("INVALID_ASSIGNMENT_ACTION", "Assignment action is invalid", 400)
-        }
-        result =
-          action === "end"
-            ? await endCaretakerAssignment(db, {
-                assignmentId,
-                expectedAssignmentVersion: body.expected_assignment_version,
-                expectedHeadVersion: body.expected_head_version,
-                expectedCanonicalRevisionId: body.expected_canonical_revision_id,
-                relinquishPolicy: body.relinquish_policy,
-                reason: requiredReason(body.reason, "reason"),
-                ...command,
-              })
-            : await transitionCaretakerAssignment(db, {
-                assignmentId,
-                action,
-                expectedAssignmentVersion: body.expected_assignment_version,
-                suspensionReason:
-                  action === "suspend"
-                    ? requiredReason(body.suspension_reason, "suspension_reason")
-                    : null,
-                graceEndsAt: body.grace_ends_at,
-                ...command,
-              })
       }
-      const delivered = await deliverMutation(db, wakeAuthorityProjection, env, result)
-      return done(routeName, json(delivered.payload, delivered.status, NO_STORE))
+      return done(routeName, json(result, 200, NO_STORE))
     } catch (error) {
       const response = errorResponse(error, json)
       return done(`${routeName}_${response.status}`, response)
@@ -418,27 +390,27 @@ export function createIconoplasmCaretakerAdminHandlers(services) {
   }
 
   return Object.freeze({
-    "caretaker_admin.registry": read("caretaker_admin_registry", (db, params) =>
-      readCaretakerAdminRegistry(db, {
+    "caretaker_admin.registry": read("caretaker_admin_registry", (env, params) =>
+      readCaretakerAdminRegistry(env, {
         query: params.get("query"),
         status: params.get("status"),
         limit: params.get("limit"),
         after: params.get("after"),
       }),
     ),
-    "caretaker_admin.accounts": read("caretaker_admin_accounts", (db, params) =>
-      searchCaretakerAdminAccounts(db, {
+    "caretaker_admin.accounts": read("caretaker_admin_accounts", (env, params) =>
+      searchCaretakerAdminAccounts(env, {
         query: params.get("query"),
         limit: params.get("limit"),
       }),
     ),
-    "caretaker_admin.genes": read("caretaker_admin_genes", (db, params) =>
-      searchCaretakerAdminGenes(db, {
+    "caretaker_admin.genes": read("caretaker_admin_genes", (env, params) =>
+      searchCaretakerAdminGenes(env, {
         query: params.get("query"),
         limit: params.get("limit"),
       }),
     ),
-    "caretaker_admin.terms": read("caretaker_admin_terms", (db) => readCaretakerAdminTerms(db)),
+    "caretaker_admin.terms": read("caretaker_admin_terms", () => readCaretakerAdminTerms()),
     "caretaker_admin.mutate": mutate,
   })
 }

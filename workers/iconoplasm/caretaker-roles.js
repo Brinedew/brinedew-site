@@ -16,6 +16,7 @@
 import { sha256Hex } from "../lib/iconoplasm-sha256.js"
 import { CURRENT_CARETAKER_TERMS } from "./caretaker/caretaker-terms-registry.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
+import { geneVoteVersionBumpStatement } from "./votes/vote-guards.js"
 
 export const OPEN_ROLE_STATUSES = Object.freeze(["pending_acceptance", "active", "suspended"])
 const OPEN = `('pending_acceptance', 'active', 'suspended')`
@@ -30,7 +31,26 @@ const GENE_LOCATOR = /^[A-Za-z0-9_.-]{1,128}$/
 export const ROLE_COLUMNS = `caretaker_assignment_id, gene_symbol, account_id, status,
   assignment_version, terms_version_id, terms_accepted_at, relinquish_policy,
   invited_by_account_id, ended_by_account_id, end_reason, started_at, suspended_at,
-  suspension_reason, ended_at, comments_read_through_id, created_at, updated_at`
+  suspension_reason, ended_at, comments_read_through_id, created_at, updated_at,
+  supervote_asset_sha256, supervote_direction, supervote_version`
+
+// A role that ends while its supervote names one of the gene's images takes
+// that vote out of the election (it counts only while the role is open). The
+// gene's vote version advances in the same batch, and the caller re-runs the
+// election for the genes in `reElect`.
+function endedSupervoteBump(db, symbol, roleId, version) {
+  return geneVoteVersionBumpStatement(db, symbol, {
+    whenSql: `EXISTS (SELECT 1 FROM icono_caretaker_assignments
+                       WHERE caretaker_assignment_id = ?2 AND assignment_version = ?3
+                         AND status = 'ended' AND supervote_asset_sha256 IS NOT NULL)`,
+    whenArgs: [roleId, version],
+  })
+}
+
+// A caretaker starts with every comment already on the gene read.
+const LATEST_COMMENT_SQL = (symbolSql) =>
+  `COALESCE((SELECT MAX(id) FROM icono_gene_comments
+              WHERE gene_symbol = ${symbolSql} AND status = 'visible'), 0)`
 
 export function rolesDb(env) {
   const db = env?.ICONOPLASM_DB
@@ -113,6 +133,16 @@ export async function requireSteward(db, geneLocator, accountId) {
   if (role.status !== "active")
     throw authorityError("ASSIGNMENT_NOT_ACTIVE", "Caretaker assignment is not active", 409)
   return { gene, assignment: role }
+}
+
+// A caretaker's public name is a pseudonym that stays the same for one account,
+// so History and the admin registry tell two caretakers apart without naming
+// either.
+export async function caretakerPseudonym(accountId) {
+  const digest = await sha256Hex(
+    new TextEncoder().encode(`iconoplasm.caretaker-label\n${accountId}`),
+  )
+  return `Caretaker ${digest.slice(0, 8).toUpperCase()}`
 }
 
 export function caretakerTerms() {
@@ -259,7 +289,7 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
         status: existing.status,
         assignment_version: Number(existing.assignment_version),
       },
-      ended: [],
+      reElect: [],
     }
   const availability = await readClaimAvailability(db, {
     geneLocator,
@@ -282,10 +312,19 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
     throw refusal
   }
   if (!claim.available) throw claimUnavailable()
+  if (body.entitlement_policy_version !== claim.entitlement_policy_version)
+    throw authorityError(
+      "ENTITLEMENT_POLICY_VERSION_MISMATCH",
+      "Caretaker eligibility changed; refresh the gene page",
+      409,
+    )
   const previous = claim.switch_from
   if ((body.previous_assignment_id || null) !== (previous?.caretaker_assignment_id || null))
     throw claimUnavailable("The current caretaker role changed; refresh the gene page")
   const statements = []
+  const previousVersion = Number(
+    body.expected_previous_assignment_version ?? previous?.assignment_version,
+  )
   if (previous)
     statements.push(
       db
@@ -304,8 +343,14 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
           now,
           previous.caretaker_assignment_id,
           accountId,
-          Number(body.expected_previous_assignment_version ?? previous.assignment_version),
+          previousVersion,
         ),
+      endedSupervoteBump(
+        db,
+        previous.canonical_symbol,
+        previous.caretaker_assignment_id,
+        previousVersion + 1,
+      ),
     )
   statements.push(
     db
@@ -313,8 +358,8 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
         `INSERT INTO icono_caretaker_assignments
            (caretaker_assignment_id, gene_symbol, account_id, status, assignment_version,
             terms_version_id, terms_accepted_at, relinquish_policy, invited_by_account_id,
-            started_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?, ?)`,
+            started_at, created_at, updated_at, comments_read_through_id)
+         VALUES (?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?, ?, ${LATEST_COMMENT_SQL("?")})`,
       )
       .bind(
         roleId,
@@ -327,6 +372,7 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
         now,
         now,
         now,
+        gene.canonical_symbol,
       ),
   )
   try {
@@ -337,6 +383,14 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
     if (!isConstraintError(error)) throw error
     throw claimUnavailable()
   }
+  const previousRole = previous
+    ? await first(
+        db,
+        `SELECT supervote_asset_sha256 FROM icono_caretaker_assignments
+          WHERE caretaker_assignment_id = ?`,
+        previous.caretaker_assignment_id,
+      )
+    : null
   return {
     result: {
       ok: true,
@@ -345,7 +399,7 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
       assignment_version: 1,
       gene_revision: 0,
     },
-    ended: previous ? [previous.canonical_symbol] : [],
+    reElect: previousRole?.supervote_asset_sha256 ? [previous.canonical_symbol] : [],
   }
 }
 
@@ -356,7 +410,8 @@ const TRANSITIONS = Object.freeze({
     from: ["pending_acceptance"],
     to: "active",
     set: `status = 'active', terms_version_id = ?, terms_accepted_at = ?, started_at = ?,
-          relinquish_policy = 'retain'`,
+          relinquish_policy = 'retain',
+          comments_read_through_id = ${LATEST_COMMENT_SQL("icono_caretaker_assignments.gene_symbol")}`,
     args: (now) => [caretakerTerms().terms_version_id, now, now],
   },
   decline: {
@@ -419,9 +474,25 @@ export function changeRoleStatement(
     )
 }
 
+// `extraStatements` run in the same batch, after the change; each must guard
+// itself on the change having applied.
 export async function changeRole(db, input, { extraStatements = () => [] } = {}) {
   const transition = TRANSITIONS[input.action]
-  const results = await db.batch([changeRoleStatement(db, input), ...extraStatements(db)])
+  const before =
+    transition?.to === "ended"
+      ? await first(
+          db,
+          `SELECT gene_symbol FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?`,
+          input.roleId,
+        )
+      : null
+  const results = await db.batch([
+    changeRoleStatement(db, input),
+    ...(before
+      ? [endedSupervoteBump(db, before.gene_symbol, input.roleId, Number(input.expectedVersion) + 1)]
+      : []),
+    ...extraStatements(db),
+  ])
   const role = await first(
     db,
     `SELECT ${ROLE_COLUMNS} FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?`,
@@ -435,6 +506,8 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
   return {
     changed,
     role,
+    reElect:
+      changed && role.status === "ended" && role.supervote_asset_sha256 ? [role.gene_symbol] : [],
     result: {
       ok: true,
       caretaker_assignment_id: role.caretaker_assignment_id,
@@ -468,4 +541,23 @@ export async function changeOwnRole(db, { geneLocator, roleId, action, accountId
     reason: "caretaker_resigned",
     policy: LEAVE_POLICY,
   })
+}
+
+// B-987, B-1065 B2b: a person who asks to be erased stops looking after their
+// gene at once. Their texts stay with the gene (the erasure rule keeps content,
+// and an erased author shows as "Removed account"). Returns the genes whose
+// election lost the person's supervote.
+export async function endRolesOfErasedAccount(db, accountId, now) {
+  const role = await openRoleOfAccount(db, accountId)
+  if (!role) return []
+  const { reElect } = await changeRole(db, {
+    roleId: role.caretaker_assignment_id,
+    action: role.status === "pending_acceptance" ? "cancel" : "end",
+    expectedVersion: role.assignment_version,
+    actorAccountId: null,
+    now,
+    reason: "account_erasure_requested",
+    policy: LEAVE_POLICY,
+  })
+  return reElect
 }

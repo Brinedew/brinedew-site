@@ -11,7 +11,29 @@
 //
 // Deleted with the authoring database (B-1065 PR C).
 
-export const COPY_TABLES = ["texts", "versions", "assignments"]
+export const COPY_TABLES = ["texts", "versions", "assignments", "supervotes"]
+
+// The supervote moves within this database, from the old per-gene head onto the
+// role (migration 0126 runs the same statement). Only a head newer than the
+// role's own copy is taken.
+const SUPERVOTE_SQL = `UPDATE icono_caretaker_assignments
+   SET supervote_asset_sha256 = (
+         SELECT CASE WHEN s.active = 1 THEN s.asset_sha256 END
+           FROM icono_caretaker_supervote_projection s
+          WHERE s.caretaker_assignment_id = icono_caretaker_assignments.caretaker_assignment_id),
+       supervote_direction = (
+         SELECT CASE WHEN s.active = 1 THEN s.direction END
+           FROM icono_caretaker_supervote_projection s
+          WHERE s.caretaker_assignment_id = icono_caretaker_assignments.caretaker_assignment_id),
+       supervote_version = (
+         SELECT s.supervote_version
+           FROM icono_caretaker_supervote_projection s
+          WHERE s.caretaker_assignment_id = icono_caretaker_assignments.caretaker_assignment_id)
+ WHERE status IN ('active', 'suspended')
+   AND supervote_version < COALESCE((
+         SELECT s.supervote_version
+           FROM icono_caretaker_supervote_projection s
+          WHERE s.caretaker_assignment_id = icono_caretaker_assignments.caretaker_assignment_id), 0)`
 
 // Rows go to D1 as one JSON parameter (json_each), and one D1 value holds at
 // most 2 MB. A text is at most 16 KiB and its Tags 32 KiB, so a page stops at
@@ -135,6 +157,11 @@ export async function copyCaretakingPage(env, { table, after = "" }) {
   const source = env?.ICONOPLASM_AUTHORING_DB
   const target = env?.ICONOPLASM_DB
   if (!source || !target) throw new Error("Both Iconoplasm databases must be bound")
+  if (table === "supervotes") {
+    const moved = await target.prepare(SUPERVOTE_SQL).run()
+    const written = Number(moved?.meta?.changes || 0)
+    return { table, read: written, written, next_after: null }
+  }
   const { results = [] } = await source
     .prepare(SOURCE_SQL[table])
     .bind(after || "")

@@ -23,6 +23,7 @@ import {
 } from "../lib/cloudflare-availability.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
+import { registerCaretakerRoleRoutes } from "./caretaker-role-routes.js"
 import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
 import { COPY_TABLES, copyCaretakingPage } from "./caretaking-copy.js"
 
@@ -189,6 +190,7 @@ export function createIconoplasmApp({
   accountUsage,
   windowUsage,
   caretakerSession,
+  settleGene,
 }) {
   const app = new Hono()
 
@@ -499,8 +501,9 @@ export function createIconoplasmApp({
     },
   )
 
-  // B-1065 B2a: the caretaker panel's text routes, on the plain text tables.
+  // B-1065: the caretaker panel and role routes, on the main database.
   registerCaretakerTextRoutes(app, { caretakerSession, publishGene })
+  registerCaretakerRoleRoutes(app, { caretakerSession, settleGene })
 
   app.all("*", (c) => legacy(c.req.raw, c.env, executionContext(c)))
   return app
