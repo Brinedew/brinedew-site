@@ -81,7 +81,9 @@
       "ref": "img_cache_everything",
       "description": "B-1087: cache every img.brinedew.bio response (JSON is not in Cloudflare's default extension list) for as long as the origin's Cache-Control allows",
       "expression": "(http.host eq \"img.brinedew.bio\")",
-      "cache": true
+      "cache": true,
+      "browserTtlWhy": "The zone's Browser Cache TTL (4 hours) raises any shorter origin max-age. Card objects are max-age=60 because a vote can change their winner, so browsers must keep the origin's lifetime.",
+      "browserTtl": "respect_origin"
     }
   ]
 }

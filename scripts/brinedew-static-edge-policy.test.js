@@ -182,7 +182,7 @@ test("the rules stage writes the configuration and cache rules and turns Cloudfl
             description: policy.cacheRules[0].description,
             expression: '(http.host eq "img.brinedew.bio")',
             action: "set_cache_settings",
-            action_parameters: { cache: true },
+            action_parameters: { cache: true, browser_ttl: { mode: "respect_origin" } },
             enabled: true,
           },
         ],
