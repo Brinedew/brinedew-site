@@ -12,6 +12,7 @@ import {
 } from "./iconoplasm-request-notifications.js"
 import { iconoplasmGenerationFingerprint } from "./lib/iconoplasm-generation-provenance.js"
 import { createRequestInbox } from "../quartz/static/iconoplasm/request-inbox.js"
+import { withGeneTexts } from "./test-helpers/account-erasure-fixture.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const BRINEDEW_USER_ID = "1289482311557058641"
@@ -543,40 +544,22 @@ class FulfillmentDb {
   }
 }
 
-// The request's text, as the plain tables of authoring migration 0024 hold it (B-1065).
-class FulfillmentAuthoringStatement {
-  bind() {
-    return this
-  }
-
-  async first() {
-    return {
-      gene_id: FULFILLMENT_SOURCE.source_gene_id,
-      canonical_symbol: "INS",
-      gene_status: "active",
-      origin: "factory",
-      text_id: FULFILLMENT_SOURCE.source_manifestation_revision_id,
-      line_id: null,
-      version: FULFILLMENT_SOURCE.source_gene_revision,
-      text: "INS keeps the pantry keys.",
-      text_sha256: FULFILLMENT_SOURCE.source_manifestation_body_sha256,
-      tags: null,
-      fields_json: null,
-      readers_see: 0,
-    }
-  }
-}
-
-const FULFILLMENT_AUTHORING_DB = Object.freeze({
-  prepare() {
-    return new FulfillmentAuthoringStatement()
-  },
-})
-
 function fulfillmentEnv(db) {
   return {
-    ICONOPLASM_DB: db,
-    ICONOPLASM_AUTHORING_DB: FULFILLMENT_AUTHORING_DB,
+    // The request's text, in the plain tables of main migration 0125 (B-1065).
+    ICONOPLASM_DB: withGeneTexts(db, (texts) =>
+      texts
+        .prepare(
+          `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
+           VALUES ('INS', ?, ?, ?, 'INS keeps the pantry keys.', ?)`,
+        )
+        .run(
+          FULFILLMENT_SOURCE.source_gene_id,
+          FULFILLMENT_SOURCE.source_manifestation_revision_id,
+          FULFILLMENT_SOURCE.source_gene_revision,
+          FULFILLMENT_SOURCE.source_manifestation_body_sha256,
+        ),
+    ),
   }
 }
 

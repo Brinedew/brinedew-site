@@ -159,6 +159,34 @@ export function iconoplasmDatabase() {
   return new SqliteD1(database)
 }
 
+// A test whose main database is a hand-routed fake still reads gene texts from
+// the real tables of main migration 0125: every statement that names
+// icono_gene_texts goes to them, and `seed(database)` fills them once, on the
+// first such read (so a test can set up its gene after building the env).
+export function withGeneTexts(db, seed) {
+  const database = new DatabaseSync(":memory:")
+  applyMigrations(database, "migrations-iconoplasm/", ["0125_plain_caretaking.sql"])
+  const texts = new SqliteD1(database)
+  let seeded = null
+  const ready = () => (seeded ??= Promise.resolve(seed(database)))
+  const lazy = (statement) => ({
+    bind: (...args) => lazy(statement.bind(...args)),
+    first: async () => (await ready(), statement.first()),
+    all: async () => (await ready(), statement.all()),
+    run: async () => (await ready(), statement.run()),
+  })
+  return new Proxy(db, {
+    get(target, key) {
+      if (key === "prepare") {
+        return (sql) =>
+          /\bicono_gene_texts\b/.test(String(sql)) ? lazy(texts.prepare(sql)) : target.prepare(sql)
+      }
+      const value = Reflect.get(target, key)
+      return typeof value === "function" ? value.bind(target) : value
+    },
+  })
+}
+
 // The cold audit copy of publish events: created by code (iconoplasm-publish-event-archive.js)
 // on the first archive run.
 export function auditDatabase() {

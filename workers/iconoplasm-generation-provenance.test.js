@@ -13,8 +13,7 @@ import {
   validateExactGenerationSource,
 } from "./lib/iconoplasm-generation-provenance.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
-import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
-import { registerGeneIdentity } from "./iconoplasm/caretaker/caretaker-assignment-commands.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 import {
   canonicalManifestationFieldsJson,
   prepareManifestationTagsPayload,
@@ -66,21 +65,20 @@ test("generation source fingerprint matches the frozen Website/workstation vecto
 })
 
 // B-1065: a generation request names the text it was drawn from, and the
-// generator reads that exact text back from the plain tables of authoring
-// migration 0024 (every migration loaded). Failure modes written before the code:
+// generator reads that exact text back from the plain tables of main migration
+// 0125 (every migration loaded). Failure modes written before the code:
 // 1. a request queued before the move to plain tables, whose IDs and hashes came
 //    from the old authority, stops validating after the backfill;
 // 2. a newer factory text silently replaces the one a queued request named;
-// 3. a caretaker version that was withdrawn, or a gene that was disabled, still
-//    feeds the generator;
+// 3. a caretaker version that was withdrawn still feeds the generator;
 // 4. a request whose hashes don't match the stored bytes is accepted;
 // 5. a Tags request is made for a text without Tags, or a prose request needs
 //    Tags it doesn't use.
 function harness(t) {
-  const db = new TestD1()
-  t.after(() => db.close())
-  const env = { ICONOPLASM_AUTHORING_DB: db }
-  const run = (sql, ...args) => db.raw.prepare(sql).run(...args)
+  const db = iconoplasmDatabase()
+  t.after(() => db.database.close())
+  const env = { ICONOPLASM_DB: db }
+  const run = (sql, ...args) => db.database.prepare(sql).run(...args)
   return { db, env, run }
 }
 
@@ -97,7 +95,6 @@ const FIELDS = { protein_class: "kinase", locations: ["nucleus"], note: "café" 
 
 test("a request queued under the old authority validates against its backfilled text", async (t) => {
   const h = harness(t)
-  await registerGeneIdentity(h.db, { geneId: "gene_tp53", canonicalSymbol: "TP53" })
   // What the old authority hashed when it accepted these Tags.
   const tagsText = "guardian, watchful"
   const canonicalFields = canonicalManifestationFieldsJson(FIELDS)
@@ -112,8 +109,9 @@ test("a request queued under the old authority validates against its backfilled 
   const bodySha = await sha256Hex(ENCODER.encode(prose))
   // The backfill keeps the old revision ID as the text ID and the canonical bytes.
   h.run(
-    `INSERT INTO icono_gene_texts (gene_id, text_id, version, text, text_sha256, tags, fields_json)
-     VALUES ('gene_tp53', 'revision_old_0001', 3, ?, ?, ?, ?)`,
+    `INSERT INTO icono_gene_texts
+       (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json)
+     VALUES ('TP53', 'gene_tp53', 'revision_old_0001', 3, ?, ?, ?, ?)`,
     prose,
     bodySha,
     old.tags_text,
@@ -186,16 +184,14 @@ test("a newer factory text retires queued requests, while a caretaker version st
   const caretakerText = "A caretaker's gatekeeper."
   h.run(
     `INSERT INTO icono_caretaker_text_versions
-       (version_id, gene_id, line_id, version, account_id, caretaker_assignment_id,
+       (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
         text, text_sha256, tags, fields_json)
-     VALUES ('ct_version_0001', ?, 'line_0001', 1, 'account_1', 'assignment_1', ?, ?, 'sentinel', '{}')`,
-    first.gene_id,
+     VALUES ('ct_version_0001', 'WEE1', 'line_0001', 1, 'account_1', 'assignment_1', ?, ?, 'sentinel', '{}')`,
     caretakerText,
     await sha256Hex(ENCODER.encode(caretakerText)),
   )
   h.run(
-    "UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'ct_version_0001' WHERE gene_id = ?",
-    first.gene_id,
+    "UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'ct_version_0001' WHERE gene_symbol = 'WEE1'",
   )
   const caretakerSource = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "WEE1" })
   assert.equal(caretakerSource.source_manifestation_revision_id, "ct_version_0001")
@@ -227,7 +223,7 @@ test("a newer factory text retires queued requests, while a caretaker version st
   assert.equal((await readExactGenerationSource(h.env, fallback)).prose, "A stricter gatekeeper.")
 })
 
-test("tampered hashes, inactive genes and missing Tags fail closed", async (t) => {
+test("tampered hashes, unknown genes and missing Tags fail closed", async (t) => {
   const h = harness(t)
   await writeFactoryGeneText(h.env, { symbol: "MFNG", text: "A fringe modifier.", tags: "fringe" })
   const source = await resolveCanonicalGenerationSource(h.env, { geneSymbol: "MFNG" })
@@ -260,7 +256,7 @@ test("tampered hashes, inactive genes and missing Tags fail closed", async (t) =
     resolveCanonicalGenerationSource(h.env, { geneSymbol: "NOTAGENE" }),
     "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
   )
-  await rejects(validateExactGenerationSource({}, source), "AUTHORING_DATABASE_UNAVAILABLE")
+  await rejects(validateExactGenerationSource({}, source), "TEXT_DATABASE_UNAVAILABLE")
 
   // A text saved without Tags serves prose prompts and refuses Tags prompts.
   await writeFactoryGeneText(h.env, { symbol: "WDR87", text: "A quiet repeat protein." })
@@ -277,13 +273,6 @@ test("tampered hashes, inactive genes and missing Tags fail closed", async (t) =
   assert.equal(proseRead.prose, "A quiet repeat protein.")
   assert.equal(proseRead.tags, "")
   assert.equal(proseRead.tags_fields_json, null)
-
-  h.run("UPDATE icono_gene_identities SET status = 'retired' WHERE canonical_symbol = 'MFNG'")
-  await rejects(validateExactGenerationSource(h.env, source), "GENERATION_SOURCE_GENE_INACTIVE")
-  await rejects(
-    resolveCanonicalGenerationSource(h.env, { geneSymbol: "MFNG" }),
-    "GENERATION_SOURCE_GENE_INACTIVE",
-  )
 })
 
 test("the primary migration leaves history unbound and accepts an exact receipt", async () => {
