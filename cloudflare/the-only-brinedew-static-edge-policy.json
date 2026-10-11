@@ -7,8 +7,10 @@
   "pagesCustomDomains": ["brinedew.bio", "geneguessr.brinedew.bio"],
   "dnsCnames": [
     { "name": "brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true },
-    { "name": "geneguessr.brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true }
+    { "name": "geneguessr.brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true },
+    { "name": "img.brinedew.bio", "content": "iconoplasmportraits.b-cdn.net", "proxied": true }
   ],
+  "imageHostPurpose": "B-1087: readers fetch portraits, blots and the stable card objects through img.brinedew.bio, a proxied name for the Bunny pull zone. Cloudflare's free cache serves the repeats, so Bunny bills only cache misses and its prepaid balance can't run out on a viral day. The pull zone knows the name from bunny/the-only-iconoplasm-pull-zone-policy.json. The origin keeps sending its own Cache-Control (immutable files 30 days, mutable card objects 60 s).",
   "publicEdgeWorker": "the-only-allowed-public-edge-worker-that-must-not-touch-state",
   "publicEdgeRoutes": [
     "brinedew.bio/api/*",
@@ -65,6 +67,21 @@
       "description": "B-858: Cloudflare must not inject its Web Analytics beacon; pages load the consent-gated one themselves",
       "expression": "true",
       "disableRum": true
+    },
+    {
+      "ref": "img_origin_tls_full",
+      "description": "B-1087: img.brinedew.bio's origin is the Bunny pull zone, which presents its own *.b-cdn.net certificate; Full encrypts the hop without matching the name",
+      "expression": "(http.host eq \"img.brinedew.bio\")",
+      "ssl": "full"
+    }
+  ],
+  "cacheRulesetName": "Brinedew static edge cache",
+  "cacheRules": [
+    {
+      "ref": "img_cache_everything",
+      "description": "B-1087: cache every img.brinedew.bio response (JSON is not in Cloudflare's default extension list) for as long as the origin's Cache-Control allows",
+      "expression": "(http.host eq \"img.brinedew.bio\")",
+      "cache": true
     }
   ]
 }
