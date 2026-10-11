@@ -476,7 +476,7 @@ jobs:
       - name: Enforce the Web Analytics consent setting from the static edge policy
         if: steps.migrations.outputs.continuation_required != 'true'
         timeout-minutes: 2
-        run: node scripts/reconcile-brinedew-static-edge-policy.mjs --apply analytics
+        run: node scripts/reconcile-brinedew-static-edge-policy.mjs --apply rules
 
       - name: Smoke test production host ownership and browser bootstraps
         if: steps.migrations.outputs.continuation_required != 'true'
