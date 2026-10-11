@@ -416,7 +416,7 @@ For homepage bugs, validate the actual DOM on `https://iconoplasm.brinedew.bio/`
 
 Public UI says **sample**, not manifestation. A sample is the generated character-description text for a gene. The workstation code uses the internal name `manifestation`, but public copy, public API fields, and user-facing docs should use `sample`.
 
-Sample labels such as `TTN-1` and `TTN-2` belong to the sample text record, not to the gene and not to the image order. A blot records which sample produced it. Users do not pick a sample when requesting a blot; generation uses the gene's selected canonical version (see "Exact generation contract" in `docs/CARETAKER_MANIFESTATION_AUTHORITY.md`).
+Sample labels such as `TTN-1` and `TTN-2` belong to the sample text record, not to the gene and not to the image order. A blot records which sample produced it. Users do not pick a sample when requesting a blot; generation uses the gene's selected canonical version (see "Images use exact sources" in `docs/CARETAKER_MANIFESTATION_AUTHORITY.md`).
 
 Pipeline:
 

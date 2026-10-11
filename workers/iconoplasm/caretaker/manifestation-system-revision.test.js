@@ -145,62 +145,6 @@ test("1, 3, 4: a regeneration of the canonical system text becomes canonical, wi
   assert.deepEqual(counts(context), written)
 })
 
-test("2, 5: a caretaker's canonical version keeps winning, and a stale request writes nothing", async (t) => {
-  const bunny = installBunnyFake(t)
-  const context = await bootstrap(t, "8302", bunny)
-  const env = bodyEnvironment({ withKey: false })
-  const human = humanHandler(context, env)
-  const workstation = workstationHandler(context, env)
-  const path = `/api/iconoplasm/authority/genes/${context.geneId}/system-revisions`
-
-  // 5. The workstation read the gene, then something moved it.
-  const stale = await regeneration(context, "service_system_stale_8302", {
-    expected_head_version: head(context).head_version + 7,
-  })
-  const untouched = counts(context)
-  const refused = await workstation(serviceRequest(path, stale))
-  assert.equal(refused.status, 409)
-  assert.deepEqual(counts(context), untouched)
-
-  // 2. The caretaker's version is canonical; the regeneration only joins History.
-  // Only a save with Tags makes the caretaker's version canonical.
-  const caretakerSave = await human(
-    browserRequest("/api/iconoplasm/caretaker/genes/P8302/saves", {
-      command_id: "browser_caretaker_8302",
-      prose: "The caretaker's own words.",
-      tags_text: "linen coat",
-      fields_json: { outfit: ["linen coat"] },
-      expected_assignment_version: 2,
-      expected_manifestation_version: 0,
-      expected_head_version: head(context).head_version,
-      expected_canonical_revision_id: head(context).canonical_revision_id,
-    }),
-  )
-  assert.ok([200, 202].includes(caretakerSave.status), `caretaker save ${caretakerSave.status}`)
-  assert.notEqual(head(context).canonical_manifestation_id, systemLineage(context).manifestation_id)
-  const caretakerHead = row(
-    context.db,
-    `SELECT h.canonical_revision_id FROM icono_manifestation_heads h WHERE h.gene_id = ?`,
-    context.geneId,
-  )
-  const canonicalBefore = head(context)
-  const result = await readJson(
-    await workstation(serviceRequest(path, await regeneration(context, "service_system_8302"))),
-  )
-  assert.equal(result.canonical_changed, false)
-  const after = head(context)
-  assert.equal(after.canonical_revision_id, canonicalBefore.canonical_revision_id)
-  assert.equal(after.canonical_revision_id, caretakerHead.canonical_revision_id)
-  assert.equal(after.head_version, canonicalBefore.head_version)
-  assert.equal(after.gene_revision, geneRevision(context))
-  assert.equal(
-    systemLineage(context).manifestation_head_revision_id,
-    result.manifestation_revision_id,
-  )
-})
-
-// The service bearer check is the shared requireAuthorityBearer of every
-// /authority/ route; the test handler authorizes any bearer by design.
 test("6: a browser session cannot reach the system revision route", async (t) => {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, "8303", bunny)
