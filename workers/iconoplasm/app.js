@@ -23,6 +23,7 @@ import {
 } from "../lib/cloudflare-availability.js"
 import {
   BATCH_GATE,
+  BATCH_PRICES,
   admitBatchWork,
   assertEveryAdminRoutePriced,
   batchSpendNow,
@@ -257,6 +258,10 @@ export function createIconoplasmApp({
   // write share stayed at 70% after the tier table moved to 85%). No D1 read.
   // With ?from=&to= (ISO instants, at most a day apart) it answers the account's
   // D1 rows in that window instead: what a publication cost (B-1059).
+  // Both answers carry the site's measured price of one portrait, so the Drain's
+  // forecast charges its own work that price and learns everyone else's spend
+  // (readers, votes, other jobs) as background, instead of dividing the whole
+  // account's window by its portraits.
   app.get("/api/iconoplasm/admin/d1-usage", factoryAuth, async (c) => {
     c.header("Cache-Control", "no-store")
     const from = c.req.query("from")
@@ -277,6 +282,7 @@ export function createIconoplasmApp({
       const usage = await windowUsage(c.env, window).catch(() => null)
       return c.json({
         ok: usage !== null,
+        prices: { portrait: BATCH_PRICES.portrait },
         window: {
           ...window,
           rows_read: usage?.rows_read ?? null,
@@ -301,6 +307,7 @@ export function createIconoplasmApp({
       ok: usage !== null,
       reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
       meter_counted_before: usage?.meter_counted_before ?? null,
+      prices: { portrait: BATCH_PRICES.portrait },
       meters: Object.fromEntries(
         ["rows_read", "rows_written"].map((meter) => [
           meter,

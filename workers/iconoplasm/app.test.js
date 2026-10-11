@@ -8,6 +8,7 @@ import {
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } from "./app.js"
 import { readD1WindowUsage } from "./operation-cost-account-usage.js"
+import { BATCH_PRICES } from "./batch-admission.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
 // Drizzle, the D1 schema of every production migration and the real card
@@ -383,6 +384,7 @@ test("the usage route reports what the shedding sees, and an unread meter as nul
     },
   })
   assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/)
+  assert.deepEqual(body.prices, { portrait: BATCH_PRICES.portrait })
   assert.equal(h.legacyCalls.length, 0)
 
   const blind = await read(
@@ -430,6 +432,7 @@ test("the usage route answers a window's D1 rows from Cloudflare's analytics", a
   assert.equal(status, 200)
   assert.deepEqual(body, {
     ok: true,
+    prices: { portrait: BATCH_PRICES.portrait },
     window: {
       from: "2026-10-10T00:00:00.000Z",
       to: "2026-10-10T00:10:00.000Z",
