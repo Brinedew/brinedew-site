@@ -594,6 +594,14 @@ export const EXEMPT_COLUMNS = Object.freeze({
   "icono_caretaker_supervote_projection.caretaker_account_id": "opaque account id, retained",
   "icono_caretaker_vote_assignment_projection.caretaker_account_id": "opaque account id, retained",
   "icono_manifestation_projection_authority.changed_by_account_id": "opaque account id, retained",
+  // B-1065 B2b: caretaking in the main database. A caretaker's texts and roles stay under
+  // the anonymous label, like their supervotes and the authoring copies they came from.
+  "icono_caretaker_text_versions.account_id":
+    "opaque account id; the version's author, retained under the anonymous label",
+  "icono_caretaker_assignments.account_id":
+    "opaque account id; the role's holder, retained like the authoring copy",
+  "icono_caretaker_assignments.invited_by_account_id": "opaque account id, retained",
+  "icono_caretaker_assignments.ended_by_account_id": "opaque account id, retained",
   // Administrator and workstation provenance: the owner's own id or a constant, never an ordinary
   // signed-in person's (checked in the callers on 3 Oct 2026).
   "icono_artist_blacklist_submissions.requested_by":

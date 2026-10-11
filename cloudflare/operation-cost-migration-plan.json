@@ -15,26 +15,10 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0124_global_vote_budget_dropped.sql": {
+    "iconoplasm/0125_plain_caretaking.sql": {
       "online": true,
       "prediction": {
         "rows_read": 100,
-        "rows_written": 100,
-        "requests": 1
-      }
-    },
-    "iconoplasm-authoring/0024_plain_gene_texts.sql": {
-      "online": true,
-      "prediction": {
-        "rows_read": 100,
-        "rows_written": 100,
-        "requests": 1
-      }
-    },
-    "iconoplasm-authoring/0025_caretaker_chosen_text_index.sql": {
-      "online": true,
-      "prediction": {
-        "rows_read": 25000,
         "rows_written": 100,
         "requests": 1
       }
