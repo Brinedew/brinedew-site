@@ -293,3 +293,78 @@ test("a malformed edge rule is a 400 with no Bunny call", async () => {
   }
   assert.equal(h.calls.length, 0)
 })
+
+// B-1087: the zone learns each policy hostname, so a Cloudflare-proxied name
+// reaches it (Bunny answers 403 for a name it was not given). Failure modes
+// written before the code:
+// 12. a policy hostname missing on the zone -> one addHostname with that name;
+// 13. a hostname the zone already has (any case) -> no addHostname;
+// 14. a refused addHostname -> 502 naming the hostname;
+// 15. a hostname that is not a DNS name -> 400 with no Bunny call.
+function hostnameHarness({ existing = [], refuse = false } = {}) {
+  const calls = []
+  const zone = {
+    Id: 42,
+    Name: "iconoplasmportraits",
+    EnableAccessControlOriginHeader: true,
+    AccessControlOriginHeaderExtensions: ["webp"],
+    Hostnames: existing.map((Value) => ({ Value })),
+  }
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url, method: init.method || "GET", body: init.body })
+    if (url === "https://api.bunny.net/pullzone") return Response.json([zone])
+    if (url === "https://api.bunny.net/pullzone/42/addHostname")
+      return new Response(null, { status: refuse ? 400 : 204 })
+    return new Response(null, { status: 404 })
+  }
+  const handlers = createIconoplasmAdminPullZoneHandlers({
+    isAdmin: async () => true,
+    json: (body, status = 200) => Response.json(body, { status }),
+    fetchImpl,
+  })
+  const call = (hostnames) =>
+    handlers["admin_publication.pull_zone_reconcile"]({
+      env: { BUNNY_ACCOUNT_API_KEY: "bunny-key" },
+      done: (_name, response) => response,
+      request: new Request("https://iconoplasm.brinedew.bio/reconcile", {
+        method: "POST",
+        body: JSON.stringify({
+          ...POLICY,
+          ensureAccessControlOriginHeaderExtensions: ["webp"],
+          hostnames,
+        }),
+      }),
+    })
+  const adds = () =>
+    calls.filter((c) => c.url.endsWith("/addHostname")).map((c) => JSON.parse(c.body).Hostname)
+  return { call, calls, adds }
+}
+
+test("a missing hostname is added to the zone once", async () => {
+  const h = hostnameHarness({ existing: ["iconoplasmportraits.b-cdn.net"] })
+  const response = await h.call(["img.brinedew.bio"])
+  assert.equal(response.status, 200)
+  assert.deepEqual(h.adds(), ["img.brinedew.bio"])
+  assert.deepEqual((await response.json()).hostnames_added, ["img.brinedew.bio"])
+})
+
+test("a hostname the zone already has is not added again", async () => {
+  const h = hostnameHarness({ existing: ["IMG.brinedew.bio"] })
+  assert.equal((await h.call(["img.brinedew.bio"])).status, 200)
+  assert.deepEqual(h.adds(), [])
+})
+
+test("a refused hostname is a 502 naming it", async () => {
+  const h = hostnameHarness({ refuse: true })
+  const response = await h.call(["img.brinedew.bio"])
+  assert.equal(response.status, 502)
+  assert.equal((await response.json()).hostname, "img.brinedew.bio")
+})
+
+test("a hostname that is not a DNS name is a 400 with no Bunny call", async () => {
+  const h = hostnameHarness()
+  for (const bad of [["img.brinedew.bio/x"], ["IMG.BRINEDEW.BIO"], [""], "img.brinedew.bio"]) {
+    assert.equal((await h.call(bad)).status, 400)
+  }
+  assert.equal(h.calls.length, 0)
+})
