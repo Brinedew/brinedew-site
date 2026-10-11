@@ -5,6 +5,8 @@
 // supporter sees the "become a supporter" card; guests keep the login card and
 // cost no request.
 
+import { getFullSlug } from "../../util/path"
+
 const SESSION_HINT = "brinedew_session_present=1"
 
 function hasSessionHint(): boolean {
@@ -40,10 +42,10 @@ async function applyDraftGate() {
   body.classList.remove("draft-unlocked")
   if (body.dataset.pageDraft !== "true" || !hasSessionHint()) return
 
-  const slug = body.dataset.slug
+  const slug = getFullSlug(window)
   const reader = await fetchReader()
   // A slower response must not unlock a page the reader has already left.
-  if (!reader || body.dataset.slug !== slug) return
+  if (!reader || getFullSlug(window) !== slug) return
 
   if (reader.is_admin || reader.is_guild_member) {
     body.classList.add("draft-unlocked")
@@ -56,5 +58,3 @@ async function applyDraftGate() {
 document.addEventListener("nav", () => {
   void applyDraftGate()
 })
-
-export {}
