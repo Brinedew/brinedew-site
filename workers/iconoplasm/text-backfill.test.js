@@ -150,9 +150,12 @@ test("a factory text and its Tags copy byte for byte, and a rerun reads nothing"
   assert.equal(rerun.body.written, 0)
   assert.equal(h.bunny.count("GET"), 0)
 
+  // Even forced, a gene that has a plain row keeps its text: only the flags are
+  // written again (failure mode 9 below).
   const forced = await h.backfill({ kind: "factory", force: true })
   assert.equal(forced.body.written, 1)
-  assert.equal(h.bunny.count("GET"), 2)
+  assert.equal(h.bunny.count("GET"), 0)
+  assert.equal(h.rows("SELECT text FROM icono_gene_texts")[0].text, copied.text)
 })
 
 test("caretaker versions copy with their flags, and the gene keeps the caretaker's choice", async (t) => {
@@ -332,4 +335,25 @@ test("one gene's text copies on its event, and a newer saved text keeps winning"
   assert.equal(after.text_id, saved.text_id)
   assert.equal(after.version, 2)
   assert.equal(after.readers_see, 1)
+})
+
+// 9. A gene whose first plain row came from the PUT (version 1, never backfilled)
+//    gets the old authority's text back on its next event. Live on 2026-10-11:
+//    about 5,600 genes were first written by the workstation's PUT.
+test("a text the PUT wrote first is never replaced by the old authority's", async (t) => {
+  const h = await harness(t, "9105")
+  const { context } = h
+  const saved = await writeFactoryGeneText(h.env, {
+    symbol: "P9105",
+    text: "The full factory text.",
+  })
+  assert.equal(saved.version, 1)
+  h.bunny.clearLog()
+  await copyGeneTextFromAuthority(h.env, context.geneId)
+  assert.equal(h.bunny.count("GET"), 0)
+  const [after] = h.rows("SELECT text, text_id, version FROM icono_gene_texts")
+  assert.deepEqual(
+    { ...after },
+    { text: "The full factory text.", text_id: saved.text_id, version: 1 },
+  )
 })
