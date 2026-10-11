@@ -627,7 +627,7 @@ function buildContentSecurityPolicy(request) {
     ? "frame-src 'self' https://brinedew.bio https://*.brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com"
     : "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com"
 
-  return `default-src 'self'; base-uri 'self'; object-src 'none'; ${frameAncestors}; img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; ${styleSrc}; ${scriptSrc}; ${connectSrc}; ${frameSrc}; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
+  return `default-src 'self'; base-uri 'self'; object-src 'none'; ${frameAncestors}; img-src 'self' data: blob: https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; ${styleSrc}; ${scriptSrc}; ${connectSrc}; ${frameSrc}; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
 
 function crossOriginResourcePolicyForRequest(request) {

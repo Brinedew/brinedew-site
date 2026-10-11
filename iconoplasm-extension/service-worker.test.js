@@ -29,7 +29,7 @@ const portraitDeliveryPolicy = {
   canonical_origin: "https://iconoplasm.brinedew.bio",
   accelerator: {
     id: "bunny",
-    origin: "https://iconoplasmportraits.b-cdn.net",
+    origin: "https://img.brinedew.bio",
     enabled: true,
   },
   probe_timeout_ms: 2500,
