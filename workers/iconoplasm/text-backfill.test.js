@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -21,6 +20,8 @@ import {
 } from "./caretaker/manifestation-plaintext-test-support.js"
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
 import { createIconoplasmApp } from "./app.js"
+import { writeFactoryGeneText } from "./gene-text-write.js"
+import { copyGeneTextFromAuthority } from "./text-backfill.js"
 
 // B-1065: every gene's text leaves the old authority (rows pointing at
 // encrypted or plain Bunny objects) for the plain tables of migration 0024,
@@ -36,17 +37,14 @@ import { createIconoplasmApp } from "./app.js"
 // 4. a rerun reads Bunny again or rewrites rows it already copied (it runs
 //    about 1,000 pages over the free plan's write wall);
 // 5. a missing object stops the page, or is copied as an empty text;
-// 6. a caller without the factory's token runs it.
+// 6. a caller without the factory's token runs it;
+// 7. a copied text is dated the day it was copied, so it looks newer than the
+//    workstation's own text and wins over it.
 const TOKEN = "factory-token-0000000000000000000000001"
-const PLAIN_TABLES = readFileSync(
-  new URL("../../migrations-iconoplasm-authoring/0024_plain_gene_texts.sql", import.meta.url),
-  "utf8",
-)
 
 async function harness(t, suffix) {
   const bunny = installBunnyFake(t)
   const context = await bootstrap(t, suffix, bunny)
-  context.db.raw.exec(PLAIN_TABLES)
   const env = {
     ...bodyEnvironment(),
     ICONOPLASM_AUTHORING_DB: context.db,
@@ -138,6 +136,13 @@ test("a factory text and its Tags copy byte for byte, and a rerun reads nothing"
   assert.deepEqual(JSON.parse(copied.fields_json), FIELDS)
   assert.equal(copied.readers_see, 0)
   assert.equal(copied.chosen_caretaker_version_id, null)
+  // The text keeps the date it was written; the workstation compares it with
+  // its own texts' dates.
+  const written = h.rows(
+    "SELECT created_at FROM icono_manifestation_revisions WHERE manifestation_revision_id = ?",
+    context.seedRevisionId,
+  )[0].created_at
+  assert.equal(copied.updated_at, written)
 
   h.bunny.clearLog()
   const rerun = await h.backfill({ kind: "factory" })
@@ -289,4 +294,42 @@ test("a missing object is reported and copies nothing, and the rerun picks it up
   assert.equal(rerun.body.ok, true)
   assert.equal(rerun.body.written, 1)
   assert.equal(h.rows("SELECT tags FROM icono_gene_texts")[0].tags, null)
+})
+
+// The write-through the authority's projection runs for every accepted event,
+// until the writers move onto the plain tables. Failure modes:
+// 7. it copies nothing, so a card waits for the next backfill;
+// 8. a newer text the factory saved through the new route is overwritten by the
+//    old authority's older one, while the gene's flags must still follow.
+test("one gene's text copies on its event, and a newer saved text keeps winning", async (t) => {
+  const h = await harness(t, "9104")
+  const { context } = h
+  assert.deepEqual(await copyGeneTextFromAuthority(h.env, "gene_nobody"), { written: 0 })
+  assert.deepEqual(await copyGeneTextFromAuthority(h.env, context.geneId), { written: 1 })
+  const [copied] = h.rows("SELECT * FROM icono_gene_texts")
+  assert.equal(copied.gene_id, context.geneId)
+  assert.equal(copied.text, "The importer's seed manifestation for gene 9104.")
+
+  h.bunny.clearLog()
+  assert.deepEqual(await copyGeneTextFromAuthority(h.env, context.geneId), { written: 0 })
+  assert.equal(h.bunny.count("GET"), 0)
+
+  const saved = await writeFactoryGeneText(h.env, {
+    symbol: "P9104",
+    text: "A newer factory text.",
+  })
+  assert.equal(saved.version, 2)
+  context.db.raw
+    .prepare(
+      "UPDATE icono_manifestations SET public_page_visible = 1 WHERE gene_id = ? AND origin = 'system_seed'",
+    )
+    .run(context.geneId)
+  h.bunny.clearLog()
+  assert.deepEqual(await copyGeneTextFromAuthority(h.env, context.geneId), { written: 1 })
+  assert.equal(h.bunny.count("GET"), 0)
+  const [after] = h.rows("SELECT * FROM icono_gene_texts")
+  assert.equal(after.text, "A newer factory text.")
+  assert.equal(after.text_id, saved.text_id)
+  assert.equal(after.version, 2)
+  assert.equal(after.readers_see, 1)
 })

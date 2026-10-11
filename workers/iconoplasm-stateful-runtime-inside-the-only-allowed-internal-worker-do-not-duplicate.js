@@ -160,7 +160,8 @@ import {
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
 import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
-import { hydratePublicCanonicalGeneRecords } from "./iconoplasm-public-canonical-runtime.js"
+import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
+import { copyGeneTextFromAuthority } from "./iconoplasm/text-backfill.js"
 import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
 import {
   caretakerSupervoteRequestSha256,
@@ -21456,16 +21457,9 @@ const GENE_CARD_ESSENCE_COLUMNS = [
   "family_feature",
 ]
 
+// B-1065: the gene's text from the plain table, one D1 read and no Bunny.
 async function readPublicManifestationFact(env, symbol) {
-  try {
-    const [record] = await hydratePublicCanonicalGeneRecords(env, [
-      { symbol, canonical_symbol: symbol },
-    ])
-    return record?.canonical_manifestation ?? null
-  } catch (error) {
-    if (error?.code === "PUBLIC_CANONICAL_PROJECTION_NOT_FOUND") return null
-    throw error
-  }
+  return publicGeneText(await readGeneText(env.ICONOPLASM_AUTHORING_DB, symbol))
 }
 
 function geneCardPortraitContent(row) {
@@ -25006,6 +25000,9 @@ export async function drainIconoplasmManifestationAuthorityProjection(
       }
       return projected
     },
+    // B-1065 write-through: the plain text tables follow every accepted text until
+    // the writers move onto them (PR C deletes this with the old authority).
+    projectGeneText: (event) => copyGeneTextFromAuthority(env, event.gene_id),
     projectPublicMaterialEvent: (event) =>
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
         authorityEventId: event.event_id,
