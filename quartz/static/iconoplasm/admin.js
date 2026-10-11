@@ -649,7 +649,10 @@
   function requestErrorMessage(err, fallback) {
     if (err && err.code === "TIMEOUT")
       return String(err.message || fallback || "Request timed out.")
-    if (err && err.response && err.response.error) return String(err.response.error)
+    var serverError = err && err.response && err.response.error
+    if (serverError && typeof serverError === "object" && serverError.message)
+      return String(serverError.message)
+    if (serverError && typeof serverError !== "object") return String(serverError)
     if (err && err.message) return String(err.message)
     return String(fallback || err || "Request failed")
   }
