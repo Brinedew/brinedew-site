@@ -305,7 +305,7 @@
    * Editorial rhythm contract. Keep these values explicit: inline furniture
    * must not be able to renegotiate the height or spacing of a prose block.
   */
-    --essay-leading: 1.6rem;
+    --essay-leading: 1.85rem;
     --essay-block-gap: 0.7em;
     --essay-caption-gap: 0.35em;
     display: flex;
@@ -358,6 +358,40 @@
 
   .markdown-preview-view.markdown-rendered sup {
     top: -0.42em;
+  }
+
+  /*
+ * Inline KaTeX renders at 1.21em with explicit-height struts, so every line
+ * holding a formula grew by 2-5 px and the leading jumped from line to line.
+ * Bring math closer to Crimson Pro's size and drop the struts so a formula
+ * sits on the baseline without enlarging its line box. Display math ($$) is
+ * a block and keeps KaTeX's own sizing.
+ */
+  .markdown-preview-view.markdown-rendered :is(p, li) .katex {
+    font-size: 1.08em;
+    line-height: 0;
+  }
+
+  .markdown-preview-view.markdown-rendered :is(p, li) .katex .base {
+    vertical-align: baseline;
+  }
+
+  .markdown-preview-view.markdown-rendered :is(p, li) .katex .strut {
+    display: none;
+  }
+
+  /*
+ * Wiki citations: adjacent footnote markers otherwise read as one number
+ * ("4", "5", "6" -> "456"). Bracket each one, as encyclopedias do: [4][5][6].
+ * CSS cannot tell adjacent markers from ones separated by text, so commas
+ * are not an option. Essays keep bare markers.
+ */
+  body[data-slug^="wiki/"] .markdown-preview-view.markdown-rendered a[data-footnote-ref]::before {
+    content: "[";
+  }
+
+  body[data-slug^="wiki/"] .markdown-preview-view.markdown-rendered a[data-footnote-ref]::after {
+    content: "]";
   }
 
   .markdown-preview-view.markdown-rendered sub {
