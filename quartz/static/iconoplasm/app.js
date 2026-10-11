@@ -10,7 +10,7 @@ import {
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
 import { createRequestInbox } from "./request-inbox.js?v=ead3daaa304d2208"
-import { portraitDelivery } from "./portrait-delivery.js?v=ff977190616ab7ee"
+import { portraitDelivery } from "./portrait-delivery.js?v=ddc5bcac14a8c601"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
@@ -52,8 +52,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=d263e2574295eafb"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=d43e030ec3f6f3b3"
+} from "./diagram-studio.js?v=757dd027db36f911"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=2e729bf6f00c8c8a"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -7428,7 +7428,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // for it. The API answers only favourites the page lacks. If the CDN
       // cannot be reached (a resolver that cannot see Bunny, 27 Sep 2026), the
       // API's full answer stands in: one Worker request, only on that failure.
-      var REQUEST_PICKER_URL = "https://iconoplasmportraits.b-cdn.net/picker/v1/styles.json"
+      var REQUEST_PICKER_URL = "https://img.brinedew.bio/picker/v1/styles.json"
 
       function fetchRequestPickerObject() {
         var controller = typeof AbortController === "function" ? new AbortController() : null

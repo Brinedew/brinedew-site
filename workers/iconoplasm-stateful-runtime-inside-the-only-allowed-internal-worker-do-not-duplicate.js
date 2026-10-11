@@ -3314,7 +3314,7 @@ function portraitDeliveryPolicy(url, env) {
     canonical_origin: ICONOPLASM_CANONICAL_ORIGIN,
     accelerator: {
       id: "bunny",
-      origin: acceleratorOrigin || "https://iconoplasmportraits.b-cdn.net",
+      origin: acceleratorOrigin || "https://img.brinedew.bio",
       enabled: Boolean(acceleratorOrigin),
     },
     probe_timeout_ms: 2500,

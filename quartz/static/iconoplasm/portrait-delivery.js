@@ -1,7 +1,7 @@
 import {
   createPortraitDeliverySession,
   normalizePortraitDeliveryPolicy,
-} from "./generated/portrait-delivery-core.js?v=03c1bb31bbe5f918"
+} from "./generated/portrait-delivery-core.js?v=4f980e10980a25b5"
 
 const SESSION_KEY = "iconoplasm.portrait-delivery.v2"
 
