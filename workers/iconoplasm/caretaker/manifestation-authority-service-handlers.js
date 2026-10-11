@@ -25,7 +25,7 @@ import { plainStorageDescriptor } from "./manifestation-storage-contract.js"
 import { prepareManifestationProse } from "../../lib/iconoplasm-manifestation-prose.js"
 import { appendSystemRevisionWithTags } from "./manifestation-write-commands.js"
 import { registerGeneIdentity } from "./caretaker-assignment-commands.js"
-import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
+import { catalogueGeneId } from "../gene-text-write.js"
 import {
   prepareManifestationTagsPayload,
   splitManifestationTagsPayload,
@@ -457,16 +457,6 @@ export function createManifestationAuthorityServiceHandler({
       return safeErrorResponse(error)
     }
   }
-}
-
-// B-1031: a gene new to the catalogue has no identity here until its first system
-// text arrives. Its ID is derived from its symbol, so the workstation and the site
-// agree on it without a round trip, and no caller can register an arbitrary ID.
-export async function catalogueGeneId(symbol) {
-  const normalized = String(symbol || "")
-    .trim()
-    .toUpperCase()
-  return `gene_${(await sha256Hex(`iconoplasm-gene:${normalized}`)).slice(0, 48)}`
 }
 
 async function registerNewCatalogueGene(db, geneId, canonicalSymbol) {

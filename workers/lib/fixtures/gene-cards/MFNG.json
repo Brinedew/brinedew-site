@@ -17,19 +17,11 @@
   "candidate_count": 23,
   "canonical_key": "symbol",
   "canonical_manifestation": {
-    "authority_event_id": "event_d4c4a5688e334db3b909f745274692b2",
-    "authority_event_sequence": 58577,
-    "body_bytes": 2045,
     "body_sha256": "e14343c19b5f0ee05461ea1c86e723385998778a44456efb0e334f44e474827e",
-    "canonical_selection_id": "selection_5fb405b0e4554163a58b61192674e5c4",
     "gene_id": "gene_b8b0b8e2257c897e980aa4a88d5f693be0dd59b580cb0bc9",
-    "gene_revision": 18,
-    "head_version": 15,
-    "manifestation_id": "manifestation_f623fbcfcc4745928586cf85c6123292",
     "manifestation_revision_id": "revision_692ceb99ca004bfdb300b81c1a73d5dd",
     "prose": null,
-    "public_page_visible": false,
-    "schema_version": 1
+    "public_page_visible": false
   },
   "canonical_symbol": "MFNG",
   "color": "#5d8479",

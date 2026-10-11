@@ -48,6 +48,8 @@ import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.
 import { rowFromCard } from "../scripts/publish-iconoplasm-catalog.mjs"
 import { writeIconoplasmGenePages } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { publishIconoplasmGeneStableObject } from "../workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { TestD1 } from "../workers/iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { writeFactoryGeneText } from "../workers/iconoplasm/gene-text-write.js"
 import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
@@ -188,8 +190,22 @@ function buildCatalogObject(stable) {
   return { schema: 3, generated_at: "2026-10-03T00:00:00.000Z", watermark_event_id: 1, genes: rows }
 }
 
+// B-1065: each gene's factory text, saved through the real write into the real
+// authoring schema. Readers aren't allowed to see it, so the canary must stay
+// off every public object.
+async function seedAuthoring() {
+  const authoring = new TestD1()
+  for (const gene of GENES)
+    await writeFactoryGeneText(
+      { ICONOPLASM_AUTHORING_DB: authoring },
+      { symbol: gene.symbol, text: sampleProse(gene.symbol), tags: "canary, tags" },
+    )
+  return authoring
+}
+
 // The Worker's per-gene publisher, with the object store replaced by a capture.
 async function publishStableObjects(db) {
+  const authoring = await seedAuthoring()
   const objects = new Map()
   const store = {
     async writeStable(key, value) {
@@ -198,10 +214,13 @@ async function publishStableObjects(db) {
     },
   }
   for (const gene of GENES) {
-    await publishIconoplasmGeneStableObject({ ICONOPLASM_DB: db }, gene.symbol, {
-      objects: store,
-    })
+    await publishIconoplasmGeneStableObject(
+      { ICONOPLASM_DB: db, ICONOPLASM_AUTHORING_DB: authoring },
+      gene.symbol,
+      { objects: store },
+    )
   }
+  authoring.close()
   return objects
 }
 

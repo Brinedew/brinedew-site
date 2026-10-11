@@ -17,19 +17,11 @@
   "candidate_count": 2,
   "canonical_key": "symbol",
   "canonical_manifestation": {
-    "authority_event_id": "event_03dccff7e54b32368264c9b40c638be0ff242b19b1911b43",
-    "authority_event_sequence": 50709,
-    "body_bytes": 4000,
     "body_sha256": "9ab0cf2071075b1a1f4f1351320a469dffc1b4ff30ad400db35bf70d70f958c8",
-    "canonical_selection_id": "selection_748a280d4cfd0a6eff6362dc1d60cf78f42a7c2f61eee529",
     "gene_id": "gene_8696bcecf18537597c5f0c1ef0b00a5a19eb78f24f806455",
-    "gene_revision": 3,
-    "head_version": 1,
-    "manifestation_id": "manifestation_d30050f816653731afe0b850894a7e810470f3e20a76fb01",
     "manifestation_revision_id": "revision_a454a7d9a97648f13fe05a70c1acfcb0f1039991e5d96eb9",
     "prose": null,
-    "public_page_visible": false,
-    "schema_version": 1
+    "public_page_visible": false
   },
   "canonical_symbol": "WEE1",
   "color": "#352f35",

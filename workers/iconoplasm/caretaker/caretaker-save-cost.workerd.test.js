@@ -49,7 +49,8 @@ import {
   seedSystemManifestation,
   transitionCaretakerAssignment,
 } from "./manifestation-authority.js"
-import { catalogueGeneId } from "./manifestation-authority-service-handlers.js"
+import { catalogueGeneId } from "../gene-text-write.js"
+import { plainBodyObject } from "../../lib/iconoplasm-body-object-test-support.js"
 import { command, sha, storage } from "./manifestation-authority-test-support.js"
 import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.js"
 
@@ -57,10 +58,15 @@ import { canonicalManifestationFieldsJson } from "./manifestation-tags-payload.j
 // already exists, summed over the POST and the projection it wakes. Measured
 // 2026-10-05: 117 + 34 as four commands (#508), 66 + 18 as one (B-859 step 3).
 // 2026-10-08: 43 + 18 without the upload reservation and its adoption (B-859).
-const MAX_SAVE_ROWS_AUTHORING = 43
+// 2026-10-10: +5 authoring rows while B-1065's write-through copies each save
+// into the plain text tables (the new version, the old head's flag and the
+// gene's row), and +1 for the caretaker-choice index entry (0025, measured
+// in CI 2026-10-10: 49 and 54). PR C deletes the write-through but keeps the
+// index: put 44 and 49 back then.
+const MAX_SAVE_ROWS_AUTHORING = 49
 const MAX_SAVE_ROWS_PRIMARY = 18
 // The first save of a caretaker's lineage also inserts the lineage row.
-const MAX_FIRST_SAVE_ROWS_AUTHORING = 48
+const MAX_FIRST_SAVE_ROWS_AUTHORING = 54
 const MAX_FIRST_SAVE_ROWS_PRIMARY = 18
 
 const ADMIN = "account_admin_b859cost"
@@ -181,8 +187,10 @@ function installMemoryBodyStorage(t) {
   // Only Bunny's private body host is faked; anything else (Miniflare's own
   // loopback to workerd) goes through the real fetch.
   globalThis.fetch = async (url, init = {}) => {
-    const key = String(url?.url || url)
-    if (!key.includes(`/${STORAGE_ZONE}/`)) return originalFetch(url, init)
+    const address = String(url?.url || url)
+    const prefix = `/${STORAGE_ZONE}/`
+    if (!address.includes(prefix)) return originalFetch(url, init)
+    const key = address.slice(address.indexOf(prefix) + prefix.length)
     const method = String(init.method || "GET").toUpperCase()
     if (method === "PUT") {
       objects.set(key, Uint8Array.from(init.body))
@@ -197,6 +205,15 @@ function installMemoryBodyStorage(t) {
       ? new Response(bytes, { status: 200, headers: { etag: '"test-etag"' } })
       : new Response(null, { status: 404 })
   }
+  return objects
+}
+
+// A system seed whose body really exists in the memory zone: the projection
+// copies every accepted text into the plain tables (B-1065 write-through).
+async function seededBody(objects, sequence, text) {
+  const body = { ...storage(sequence), ...(await plainBodyObject(text)) }
+  objects.set(body.object_key, body.bytes)
+  return body
 }
 
 function base64(bytes) {
@@ -219,7 +236,7 @@ test(
   "one ordinary caretaker save writes no more D1 rows than B-859's measured ceiling",
   { timeout: 240000 },
   async (t) => {
-    installMemoryBodyStorage(t)
+    const bodies = installMemoryBodyStorage(t)
     const require = createRequire(import.meta.url)
     const { Miniflare, convertV4MiniflareOptions } = createRequire(
       require.resolve("wrangler/package.json"),
@@ -269,7 +286,7 @@ test(
         createdByAccountId: ADMIN,
       })
       await registerGeneIdentity(authoring, { geneId: GENE, canonicalSymbol: SYMBOL, now })
-      const seedStorage = storage(1)
+      const seedStorage = await seededBody(bodies, 1, "The factory text for B859COST.")
       await seedSystemManifestation(authoring, {
         geneId: GENE,
         storage: seedStorage,
@@ -289,7 +306,7 @@ test(
       })
       await seedSystemManifestation(authoring, {
         geneId: SYSTEM_GENE,
-        storage: storage(3),
+        storage: await seededBody(bodies, 3, "The factory text for B859SYS."),
         expectedHeadVersion: 0,
         expectedCanonicalRevisionId: null,
         manifestationId: "manifestation_seed_b859sys",
@@ -338,6 +355,8 @@ test(
             ICONOPLASM_DB: primary,
             ICONOPLASM_AUTHORING_DB: authoring,
             ICONOPLASM_CARD_PUBLICATION: coordinator,
+            ICONOPLASM_AUTHORING_STORAGE_ZONE: STORAGE_ZONE,
+            ICONOPLASM_AUTHORING_STORAGE_PASSWORD: "b859-cost-password",
           },
           25,
         )
@@ -585,21 +604,23 @@ test(
       for (const receipt of receipts.filter((item) => item.phase.endsWith("(reload)")))
         assert.equal(receipt.rows_written, 0, `a dossier read wrote: ${receipt.sql}`)
 
+      const measured = `first save ${first.byDatabase.authoring} + ${first.byDatabase.primary}, ordinary save ${second.byDatabase.authoring} + ${second.byDatabase.primary} (authoring + primary rows)`
+      t.diagnostic(`B859_SAVE_COST measured ${measured}`)
       assert.ok(
         first.byDatabase.authoring <= MAX_FIRST_SAVE_ROWS_AUTHORING,
-        `first save wrote ${first.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_AUTHORING}`,
+        `first save wrote ${first.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_AUTHORING}; ${measured}`,
       )
       assert.ok(
         first.byDatabase.primary <= MAX_FIRST_SAVE_ROWS_PRIMARY,
-        `first save wrote ${first.byDatabase.primary} primary rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_PRIMARY}`,
+        `first save wrote ${first.byDatabase.primary} primary rows; B-859 ceiling ${MAX_FIRST_SAVE_ROWS_PRIMARY}; ${measured}`,
       )
       assert.ok(
         second.byDatabase.authoring <= MAX_SAVE_ROWS_AUTHORING,
-        `a save wrote ${second.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_SAVE_ROWS_AUTHORING}`,
+        `a save wrote ${second.byDatabase.authoring} authoring rows; B-859 ceiling ${MAX_SAVE_ROWS_AUTHORING}; ${measured}`,
       )
       assert.ok(
         second.byDatabase.primary <= MAX_SAVE_ROWS_PRIMARY,
-        `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}`,
+        `a save wrote ${second.byDatabase.primary} primary rows; B-859 ceiling ${MAX_SAVE_ROWS_PRIMARY}; ${measured}`,
       )
       // The regeneration route reserves SYSTEM_REVISION_APPEND_ROWS per call on the
       // laptop lane. The constant is the worst call measured here, in both

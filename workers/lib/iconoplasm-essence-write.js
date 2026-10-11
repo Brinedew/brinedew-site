@@ -23,10 +23,11 @@ const FIELDS = [
   "family_surname",
   "family_members",
   "family_feature",
-  "sample_label",
-  "sample_number",
-  "sample_text_hash",
 ]
+
+// B-1065: the essence's sample_label/number/text_hash columns are not written.
+// Nothing on the site reads them (a portrait carries its own sample record), and
+// each text change used to rewrite them, their index and the gene's card.
 
 const SQL = `INSERT INTO icono_gene_essence (
   ${FIELDS.join(", ")}, source, updated_by, updated_at

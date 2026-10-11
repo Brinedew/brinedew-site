@@ -290,25 +290,17 @@ function readyBlot(card, blots) {
   }
 }
 
-// The canonical text's public record: an allowlist, so private fields (the
-// tags the caretaker panel promises to keep private, B-859) can't reach a card
-// whatever the fact reader hands over. The prose itself only when the
-// caretaker made it visible.
+// The gene's text as readers may see it (workers/lib/iconoplasm-gene-text.js):
+// an allowlist, so the Tags the caretaker panel promises to keep private (B-859)
+// can't reach a card whatever the fact reader hands over. The text itself only
+// when readers are meant to see it.
 function publicManifestation(record) {
   if (!record || typeof record !== "object") return null
   const visible = record.public_page_visible === true
   return {
-    schema_version: record.schema_version ?? null,
     gene_id: record.gene_id ?? null,
-    manifestation_id: record.manifestation_id ?? null,
     manifestation_revision_id: record.manifestation_revision_id ?? null,
-    canonical_selection_id: record.canonical_selection_id ?? null,
-    head_version: record.head_version ?? null,
-    gene_revision: record.gene_revision ?? null,
-    authority_event_id: record.authority_event_id ?? null,
-    authority_event_sequence: record.authority_event_sequence ?? null,
     body_sha256: record.body_sha256 ?? null,
-    body_bytes: record.body_bytes ?? null,
     public_page_visible: visible,
     prose: visible ? (record.prose ?? null) : null,
   }
