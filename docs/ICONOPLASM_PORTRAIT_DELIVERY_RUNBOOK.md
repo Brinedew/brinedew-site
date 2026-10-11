@@ -53,10 +53,9 @@ whose portrait SHA matches that same object. Public media, page metadata and
 structured data expose the blot, while the raw portrait is
 explicitly subordinate.
 
-For both portraits and blots, Bunny is the accelerator on any working network,
-including a Vietnamese ISP or VPN that can reach it. A failed probe selects the
-canonical first-party route for that tab. There is no country-based exclusion.
-That choice changes only byte delivery, never identity.
+Portraits and blots load from `img.brinedew.bio` on every network (see
+"Protected image behavior" below). The delivery host changes only how bytes
+arrive, never identity.
 
 Labelled gene-card PNGs are a separate derived asset class under
 `gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
@@ -156,105 +155,34 @@ Rules for any public cache in front of Iconoplasm:
 
 ### Protected image behavior
 
-**ARCHITECTURE FENCE [IPD-001]** — Bunny is not a disposable mirror. It is the
-healthy-path delivery layer chosen so browser portrait reads go directly to the
-CDN instead of consuming a Cloudflare Worker request for every image. The
-canonical first-party route is the correctness fallback and stable public
-identity, not the normal delivery path for healthy tabs.
+**ARCHITECTURE FENCE [IPD-001]** — readers load portraits, card images and
+the published objects from `https://img.brinedew.bio`, a Cloudflare-proxied
+CNAME for the Bunny pull zone (B-1087). Cloudflare's free cache answers repeat
+views, so a view costs neither a Worker request nor Bunny bandwidth; Bunny
+bills only cache misses. The zone records live in
+`cloudflare/the-only-brinedew-static-edge-policy.json`, and the hostname in
+`bunny/the-only-iconoplasm-pull-zone-policy.json`.
 
-An `ERR_NAME_NOT_RESOLVED` from one browser or ISP is evidence for that tab to
-select canonical delivery. It is not evidence that Bunny Storage, the Bunny
-pull zone, or Bunny globally is unhealthy. Do not disable the accelerator from
-one regional probe.
+The website rewrites every delivered image URL onto that host
+(`quartz/static/iconoplasm/portrait-delivery.js`). Cards name an image by its
+canonical first-party URL, or by `iconoplasmportraits.b-cdn.net` if they were
+published before the switch; both are rewritten. There is no probe and no
+Worker fallback. Those existed because some ISP resolvers could not resolve
+`*.b-cdn.net`, and `img.brinedew.bio` resolves through Cloudflare like the site
+itself. A fallback would only have moved images onto metered Worker requests.
+The canonical first-party URL stays the image's identity.
 
-The inverse black swan is equally important: one successful VPN or region does
-not prove the first-party fallback works elsewhere. For any regional portrait
-incident, test the same immutable key through (1) the affected browser's Bunny
-URL, (2) the affected browser's first-party URL, (3) a contrasting VPN region,
-and (4) both server-side Bunny views. Record each observation separately before
-changing delivery policy. Never collapse client DNS, Storage API visibility,
-CDN replica visibility, and first-party Worker behavior into one “Bunny works”
-or “Bunny is down” claim.
+`GET /api/public/v1/metadata` and `GET /api/public/v1/catalog/manifest` still
+publish `PortraitDeliveryPolicyV1`, with `img.brinedew.bio` as the accelerator.
+Installed extensions read it: until its next store release the extension runs
+the probe-and-fallback state machine in
+`shared/iconoplasm-portrait/portrait-delivery-core.js`, bundled as
+`iconoplasm-extension/generated/portrait-delivery-core.js`. That release
+deletes it.
 
-Retiring or replacing Bunny is allowed only as an explicit architecture
-migration. Update `architecture-fences.json`, this runbook, both policy decision
-sites, production and staging configuration, behavioral tests, and the
-deploy-blocking guard together.
-
-`GET /api/public/v1/metadata` and
-`GET /api/public/v1/catalog/manifest` publish `PortraitDeliveryPolicyV1`:
-
-```json
-{
-  "version": 1,
-  "canonical_origin": "https://iconoplasm.brinedew.bio",
-  "accelerator": {
-    "id": "bunny",
-    "origin": "https://iconoplasmportraits.b-cdn.net",
-    "enabled": true
-  },
-  "probe_timeout_ms": 2500,
-  "fallback_hedge_delay_ms": 350,
-  "decision_scope": "tab"
-}
-```
-
-The website and extension use the same state machine from
-`shared/iconoplasm-portrait/portrait-delivery-core.js`. Its states are
-`undecided`, `accelerator`, `canonical`, and `terminal_failure`.
-
-The website caches module URLs immutably. `sync:iconoplasm-shared` hashes the
-generated core, updates the adapter import, then hashes that adapter and updates
-its consumers. The HTML's per-build entrypoint URL completes this chain. Never
-freeze a dated import URL while changing the module bytes behind it; a returning
-browser would otherwise keep the old routing code despite a successful deploy.
-
-- The extension reads the gene's stable object, then resolves its portrait
-  through the tab decision. The background runtime first looks up
-  immutable bytes in extension-origin IndexedDB, independent of the host
-  website. Only a miss fetches a portrait. If Bunny is unresolved after 350 ms,
-  it starts the canonical URL in a second bounded lane. The first successful
-  byte source selects the tab; the renderer decodes those supplied bytes locally.
-  The 2.5 s timeout remains a per-source ceiling, not a serial pre-fallback wait.
-- Requested labelled-card thumbnails bind to this same decision. A Bunny DNS
-  failure must never leave broken alt text in the crawlable archive.
-- Simultaneous portraits share the tab's source decision. Requests already
-  started before a decision settles can each have a bounded hedge; this is not
-  a promise of exactly one DNS attempt across concurrent initial images.
-- Any later portrait, including a newly generated edit result, is resolved
-  through the current tab decision before it is assigned.
-- Healthy Bunny requests retain the 350 ms head start; selecting Bunny never
-  changes that delay to zero. The canonical hedge starts only if Bunny stalls
-  or fails. Once canonical succeeds, later images use it alone; their alternate
-  can start only if canonical itself fails. `hedgeDelayMs: null` means no timer,
-  not a zero-delay race.
-- A month-long regional DNS block is not a brief outage. A definitive probe
-  failure (DNS error, HTTP error, `onerror`) has no timed CDN recovery policy,
-  30-second probe, or per-image CDN retry while canonical works. The existing
-  tab decision survives ordinary reloads. A new tab has a new decision; a
-  browser's DNS/VPN change is not reliably detectable and must not be inferred
-  from elapsed time or fluctuating connection-speed estimates.
-- A probe **timeout** is a different signal. Cold Bunny objects take 0.4 to
-  1.7 s on a healthy network against the 2.5 s ceiling, and a permanent fallback
-  would turn every later image in that tab into a metered Worker request. A
-  timeout therefore selects canonical now and arms one re-probe after
-  `accelerator_retry_after_ms` (default 60 s, server-configurable 5 s to 10 min).
-  Inside the window nothing re-probes and there is no hedge. A second timeout
-  re-arms the window; a definitive failure afterwards makes the block permanent;
-  a canonical failure while the CDN is only timed out tries the CDN again
-  instead of going terminal. Cost on a truly black-holed network: one 2.5 s
-  probe per minute per tab, no Worker requests.
-- Native completion carries its decision identity. A late result from a former
-  decision (or a former worker instance) cannot overwrite a newer route choice.
-- A selected source failure switches once to the other source.
-- A late URL from a source already known to have failed is rebound to the
-  selected source without changing global state.
-- After both sources fail, the state is terminal and does not oscillate.
-
-The website adapter owns explicit DOM image bindings. The extension background
-owns tab-scoped source persistence, the bounded hedge and cross-site byte reuse.
-The renderer receives a data URL and decodes it without another HTTPS request.
-Neither adapter owns source-selection rules.
+The website caches module URLs immutably. `sync:iconoplasm-shared` and the
+restamp script update each importer's `?v=` hash when module bytes change.
+Never freeze a dated import URL while changing the bytes behind it.
 
 ### Extension byte cache
 

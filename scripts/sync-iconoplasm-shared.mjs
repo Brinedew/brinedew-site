@@ -167,20 +167,6 @@ const bundledTargets = [
   {
     source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
     outputs: [
-      path.join(
-        repoRoot,
-        "quartz",
-        "static",
-        "iconoplasm",
-        "generated",
-        "portrait-delivery-core.js",
-      ),
-    ],
-    format: "esm",
-  },
-  {
-    source: path.join(repoRoot, "shared", "iconoplasm-portrait", "portrait-delivery-core.js"),
-    outputs: [
       path.join(repoRoot, "iconoplasm-extension", "generated", "portrait-delivery-core.js"),
     ],
     format: "iife",
@@ -303,9 +289,6 @@ if (!extensionOnly) {
     "iconoplasm/app.js",
     "geneguessr/app.js",
     "site-settings/app.js",
-  ])
-  await syncStaticImportVersions(staticRoot, "iconoplasm/generated/portrait-delivery-core.js", [
-    "iconoplasm/portrait-delivery.js",
   ])
   await syncStaticImportVersions(staticRoot, "iconoplasm/portrait-delivery.js", [
     "iconoplasm/app.js",
