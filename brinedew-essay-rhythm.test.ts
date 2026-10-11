@@ -13,7 +13,7 @@ function rule(selector: string): string {
 
 test("essay rhythm has explicit leading and parent-owned block gaps", () => {
   const essay = rule(".markdown-preview-view.markdown-rendered")
-  assert.match(essay, /--essay-leading:\s*1\.6rem;/)
+  assert.match(essay, /--essay-leading:\s*1\.85rem;/)
   assert.match(essay, /--essay-block-gap:\s*0\.7em;/)
   assert.match(essay, /--essay-caption-gap:\s*0\.35em;/)
   assert.match(essay, /gap:\s*var\(--essay-block-gap\);/)
@@ -37,6 +37,16 @@ test("raised and lowered inline annotations cannot enlarge a prose line box", ()
   )
   assert.match(rule(".markdown-preview-view.markdown-rendered sup"), /top:\s*-0\.42em;/)
   assert.match(rule(".markdown-preview-view.markdown-rendered sub"), /bottom:\s*-0\.2em;/)
+
+  // Inline KaTeX struts would otherwise stretch every line that holds a formula.
+  assert.match(
+    rule(".markdown-preview-view.markdown-rendered :is(p, li) .katex"),
+    /line-height:\s*0;/,
+  )
+  assert.match(
+    rule(".markdown-preview-view.markdown-rendered :is(p, li) .katex .strut"),
+    /display:\s*none;/,
+  )
 })
 
 test("figures own centered media and caption geometry", () => {
