@@ -55,6 +55,25 @@ test("legacy GeneGuessr redirects cannot loop with the document rewrite", async 
   }
 })
 
+// B-1087: a proxied name for the Bunny pull zone works only if the pull zone
+// knows the name (Bunny answers 403 for any hostname it was not given).
+test("every name pointed at the pull zone is a hostname of the pull zone", async () => {
+  const [policy, pullZone] = await Promise.all([
+    loadStaticEdgePolicy(),
+    read("../bunny/the-only-iconoplasm-pull-zone-policy.json").then(JSON.parse),
+  ])
+  const pointed = policy.dnsCnames
+    .filter((record) => record.content === `${pullZone.pullZoneName}.b-cdn.net`)
+    .map((record) => record.name)
+  assert.deepEqual(pointed, ["img.brinedew.bio"])
+  assert.deepEqual(pullZone.hostnames, pointed)
+  for (const name of pointed) {
+    const host = `(http.host eq "${name}")`
+    assert.ok(policy.configRules.some((rule) => rule.expression === host && rule.ssl === "full"))
+    assert.ok(policy.cacheRules.some((rule) => rule.expression === host && rule.cache === true))
+  }
+})
+
 test("rules serialize to the Cloudflare ruleset shape", async () => {
   const policy = await loadStaticEdgePolicy()
   const www = desiredRedirectRule(policy.redirectRules[0])
@@ -68,7 +87,7 @@ test("rules serialize to the Cloudflare ruleset shape", async () => {
 // B-858. Ways the consent setting could silently fail, written first:
 // 1. the Web Analytics site is not matched, and the reconciler reports "fine";
 // 2. auto_install stays on after an apply;
-// 3. the release never runs the analytics stage at all.
+// 3. the release never runs the rules stage at all.
 function analyticsCloudflare(sites) {
   const writes = []
   const fetchImpl = async (url, init = {}) => {
@@ -77,7 +96,7 @@ function analyticsCloudflare(sites) {
       return Response.json({ success: true, result: [{ id: "z", name: "brinedew.bio" }] })
     if (path.endsWith("/rum/site_info/list")) return Response.json({ success: true, result: sites })
     if (
-      path.endsWith("/rulesets/phases/http_config_settings/entrypoint") &&
+      /\/rulesets\/phases\/http_(config_settings|request_cache_settings)\/entrypoint$/.test(path) &&
       (init.method || "GET") === "GET"
     ) {
       return new Response(JSON.stringify({ success: false }), { status: 404 })
@@ -99,13 +118,13 @@ test("an unmatched Web Analytics site is drift, and apply refuses", async () => 
   const { fetchImpl } = analyticsCloudflare([
     { site_tag: "t", host: "elsewhere.example", site_token: "x" },
   ])
-  const options = { apiToken: "t", accountId: "a", stage: "analytics", fetchImpl, log: () => {} }
-  // Two drifts: the missing configuration rule and the unmatched site.
-  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 2 })
+  const options = { apiToken: "t", accountId: "a", stage: "rules", fetchImpl, log: () => {} }
+  // Four drifts: the two missing configuration rules, the missing cache rule and the unmatched site.
+  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 4 })
   await assert.rejects(reconcileStaticEdgePolicy({ ...options, mode: "apply" }), /not found/)
 })
 
-test("the analytics stage turns Cloudflare's beacon injection off by configuration rule and site setting", async () => {
+test("the rules stage writes the configuration and cache rules and turns Cloudflare's beacon injection off", async () => {
   const policy = await loadStaticEdgePolicy()
   assert.equal(policy.webAnalyticsAutoInstall, false)
   const { fetchImpl, writes } = analyticsCloudflare([
@@ -120,7 +139,7 @@ test("the analytics stage turns Cloudflare's beacon injection off by configurati
     apiToken: "t",
     accountId: "a",
     mode: "apply",
-    stage: "analytics",
+    stage: "rules",
     fetchImpl,
     log: () => {},
   })
@@ -140,6 +159,32 @@ test("the analytics stage turns Cloudflare's beacon injection off by configurati
             action_parameters: { disable_rum: true },
             enabled: true,
           },
+          {
+            ref: "img_origin_tls_full",
+            description: policy.configRules[1].description,
+            expression: '(http.host eq "img.brinedew.bio")',
+            action: "set_config",
+            action_parameters: { ssl: "full" },
+            enabled: true,
+          },
+        ],
+      },
+    },
+    {
+      path: "/zones/z/rulesets",
+      body: {
+        name: policy.cacheRulesetName,
+        kind: "zone",
+        phase: "http_request_cache_settings",
+        rules: [
+          {
+            ref: "img_cache_everything",
+            description: policy.cacheRules[0].description,
+            expression: '(http.host eq "img.brinedew.bio")',
+            action: "set_cache_settings",
+            action_parameters: { cache: true },
+            enabled: true,
+          },
         ],
       },
     },
@@ -149,5 +194,5 @@ test("the analytics stage turns Cloudflare's beacon injection off by configurati
     },
   ])
   const workflow = await read("../.github/workflows/deploy-quartz.yml")
-  assert.match(workflow, /reconcile-brinedew-static-edge-policy\.mjs --apply analytics/)
+  assert.match(workflow, /reconcile-brinedew-static-edge-policy\.mjs --apply rules/)
 })

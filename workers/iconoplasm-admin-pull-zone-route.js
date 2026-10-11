@@ -8,6 +8,7 @@ const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const REQUIRED_SERVICES = Object.freeze(["isAdmin", "json"])
 
 const PURGE_PATH = /^[a-z0-9][a-z0-9/_.*-]{0,120}$/
+const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 const isInt = (value) => Number.isInteger(value) && value >= 0
 
 function validEdgeRule(rule) {
@@ -90,7 +91,10 @@ function validPolicy(value) {
       (ext) => typeof ext === "string" && /^[a-z0-9]{1,16}$/.test(ext),
     ) &&
     (value.edgeRules === undefined ||
-      (Array.isArray(value.edgeRules) && value.edgeRules.every(validEdgeRule)))
+      (Array.isArray(value.edgeRules) && value.edgeRules.every(validEdgeRule))) &&
+    (value.hostnames === undefined ||
+      (Array.isArray(value.hostnames) &&
+        value.hostnames.every((name) => typeof name === "string" && HOSTNAME.test(name))))
   )
 }
 
@@ -179,6 +183,30 @@ export function createIconoplasmAdminPullZoneHandlers(services) {
         )
       }
     }
+    // B-1087: hostnames are only ever added. A name the policy drops stays on the
+    // zone until someone removes it there, so no reader is cut off by a typo.
+    const knownHostnames = new Set(
+      (Array.isArray(zone.Hostnames) ? zone.Hostnames : []).map((item) =>
+        String(item?.Value || "").toLowerCase(),
+      ),
+    )
+    const hostnamesAdded = []
+    for (const hostname of Array.isArray(policy.hostnames) ? policy.hostnames : []) {
+      if (knownHostnames.has(hostname)) continue
+      const added = await fetchImpl(`${BUNNY_API}/pullzone/${Number(zone.Id)}/addHostname`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ Hostname: hostname }),
+      })
+      await added.body?.cancel().catch(() => {})
+      if (!added.ok) {
+        return done(
+          "admin_publication_pull_zone_502",
+          json({ error: `Bunny add hostname failed (${added.status})`, hostname }, 502, NO_STORE),
+        )
+      }
+      hostnamesAdded.push(hostname)
+    }
     // Edge rules: each policy rule is created or updated by description, and a
     // rule that changed purges the paths it covers once, because copies cached
     // before the change keep the expiry they were cached with.
@@ -233,7 +261,15 @@ export function createIconoplasmAdminPullZoneHandlers(services) {
     return done(
       "admin_publication_pull_zone",
       json(
-        { ok: true, pull_zone_id: Number(zone.Id), changed, before, after, edge_rules: edgeRules },
+        {
+          ok: true,
+          pull_zone_id: Number(zone.Id),
+          changed,
+          before,
+          after,
+          hostnames_added: hostnamesAdded,
+          edge_rules: edgeRules,
+        },
         200,
         NO_STORE,
       ),

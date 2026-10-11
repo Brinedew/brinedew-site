@@ -7,13 +7,13 @@
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --check
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply prepare
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply cutover
-//   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply analytics
+//   node scripts/reconcile-brinedew-static-edge-policy.mjs --apply rules
 //
-// `prepare` is safe while the broad Worker routes still exist (Pages domains,
-// DNS targets, redirect rules). `cutover` must run right after the deploy that
-// narrows wrangler.toml routes: it adds the GeneGuessr URL rewrites (which
-// would confuse the old Worker), deletes retired routes, and turns off Web
-// Analytics auto-injection (the page now loads the beacon after consent).
+// `prepare` writes Pages domains, DNS targets and redirect rules. `cutover`
+// adds the GeneGuessr URL rewrites and deletes retired Worker routes, then
+// runs `rules`. `rules` (run by every deploy) writes the configuration and
+// cache rules and keeps Web Analytics auto-injection off (the page loads the
+// beacon after consent).
 import { readFile } from "node:fs/promises"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -82,13 +82,30 @@ export function desiredRewriteRule(rule) {
 // B-858: a configuration rule turns Cloudflare's own Web Analytics injection
 // off for every matching request, whatever the Web Analytics site settings say
 // ("Configuration rules have precedence over any Web Analytics rules").
+// B-1087: one also sets the origin TLS mode for a single host.
 export function desiredConfigRule(rule) {
+  const parameters = {}
+  if (rule.disableRum !== undefined) parameters.disable_rum = rule.disableRum === true
+  if (rule.ssl) parameters.ssl = rule.ssl
   return {
     ref: rule.ref,
     description: rule.description,
     expression: rule.expression,
     action: "set_config",
-    action_parameters: { disable_rum: rule.disableRum === true },
+    action_parameters: parameters,
+    enabled: true,
+  }
+}
+
+// B-1087: a cache rule makes a host's responses eligible for Cloudflare's
+// cache; the origin's Cache-Control still decides for how long.
+export function desiredCacheRule(rule) {
+  return {
+    ref: rule.ref,
+    description: rule.description,
+    expression: rule.expression,
+    action: "set_cache_settings",
+    action_parameters: { cache: rule.cache === true },
     enabled: true,
   }
 }
@@ -165,7 +182,7 @@ export async function reconcileStaticEdgePolicy({
   const apply = mode === "apply"
   const doPrepare = stage === "prepare" || stage === "all"
   const doCutover = stage === "cutover" || stage === "all"
-  const doAnalytics = doCutover || stage === "analytics"
+  const doRules = doCutover || stage === "rules"
   const policy = await loadStaticEdgePolicy()
   const call = client({ apiToken, fetchImpl })
   const zones = await call(`/zones?name=${encodeURIComponent(policy.zoneName)}`)
@@ -294,11 +311,7 @@ export async function reconcileStaticEdgePolicy({
     )
   }
 
-  if (doAnalytics) {
-    // B-858: with auto_install on, Cloudflare injects its own beacon into every
-    // HTML page before any consent check, and our consent-gated snippet then
-    // sees an existing beacon and stands down. A site we cannot find is drift,
-    // never a silent pass.
+  if (doRules) {
     drift += await reconcilePhase(
       call,
       zoneId,
@@ -307,6 +320,18 @@ export async function reconcileStaticEdgePolicy({
       (policy.configRules || []).map(desiredConfigRule),
       { apply, log },
     )
+    drift += await reconcilePhase(
+      call,
+      zoneId,
+      "http_request_cache_settings",
+      policy.cacheRulesetName,
+      (policy.cacheRules || []).map(desiredCacheRule),
+      { apply, log },
+    )
+    // B-858: with auto_install on, Cloudflare injects its own beacon into every
+    // HTML page before any consent check, and our consent-gated snippet then
+    // sees an existing beacon and stands down. A site we cannot find is drift,
+    // never a silent pass.
     const sites = await call(`/accounts/${accountId}/rum/site_info/list`)
     for (const entry of sites || []) {
       log(
@@ -349,8 +374,7 @@ export async function reconcileStaticEdgePolicy({
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2)
   const mode = args.includes("--apply") ? "apply" : "check"
-  const stage =
-    args.find((arg) => ["prepare", "cutover", "analytics", "all"].includes(arg)) || "all"
+  const stage = args.find((arg) => ["prepare", "cutover", "rules", "all"].includes(arg)) || "all"
   const { drift } = await reconcileStaticEdgePolicy({
     apiToken: process.env.CLOUDFLARE_API_TOKEN,
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,

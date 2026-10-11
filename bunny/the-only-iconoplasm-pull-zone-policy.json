@@ -6,6 +6,8 @@
     "EnableAccessControlOriginHeader": true
   },
   "ensureAccessControlOriginHeaderExtensions": ["json", "webp"],
+  "hostnamesWhy": "B-1087: img.brinedew.bio is a Cloudflare-proxied CNAME for this zone (cloudflare/the-only-brinedew-static-edge-policy.json), so Cloudflare's free cache serves repeat reads and Bunny bills only misses. Bunny answers 403 for a hostname the zone was not given, so the reconciler adds each one. No certificate is needed: Cloudflare reaches the zone in Full mode, which accepts the zone's own *.b-cdn.net certificate.",
+  "hostnames": ["img.brinedew.bio"],
   "edgeRules": [
     {
       "description": "Mutable stable objects: 60 s edge cache",
