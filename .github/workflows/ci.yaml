@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      actions: read
     steps:
       # Bump actions/checkout @v6 -> @v7 and actions/cache @v5 -> @v6 (2026
       # current majors). setup-node @v6 is already the latest. Dependabot
@@ -28,6 +29,36 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # Notes fast path: a change that only edits notes (content/, except the
+      # Iconoplasm app pages in content/apps/) on top of a commit whose own run
+      # passed changes no code, so the code has already passed the full suite.
+      # It still type-checks and builds the whole site, which is what a note
+      # can break, and skips the ~15 minutes of repository and browser tests.
+      # Since 2026-10-03 those tests had doubled the owner's save-to-live time
+      # (Obsidian Git push to deploy) from about 10 to about 20 minutes.
+      # Requiring the base run's success keeps the release gate whole: a notes
+      # commit on top of a failing code commit runs everything.
+      - name: Decide whether this change touches only notes
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes_only=false
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ -n "$BASE_SHA" ] && ! printf '%s' "$BASE_SHA" | grep -qE '^0+$'; then
+            changed="$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA" || true)"
+            outside_notes="$(printf '%s\n' "$changed" | grep -vE '^content/' | grep -vE '^$' || true)"
+            app_pages="$(printf '%s\n' "$changed" | grep -E '^content/apps/' || true)"
+            if [ -n "$changed" ] && [ -z "$outside_notes" ] && [ -z "$app_pages" ]; then
+              passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?head_sha=$BASE_SHA&status=success&per_page=1" --jq '.total_count' || echo 0)"
+              if [ "${passed:-0}" -gt 0 ]; then notes_only=true; fi
+            fi
+          fi
+          echo "notes_only=$notes_only" >> "$GITHUB_OUTPUT"
+          echo "Notes-only change on a passing base: $notes_only (base $BASE_SHA)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -88,6 +119,7 @@ jobs:
 
       - name: Test
         id: tests
+        if: ${{ steps.scope.outputs.notes_only != 'true' }}
         shell: bash
         run: |
           set +e
@@ -114,11 +146,12 @@ jobs:
       # minutes together). No --test-timeout: Node applies it to each whole
       # file too, and geneguessr-direct-structures alone runs about 310 s.
       - name: Caretaker dialog geometry (browser E2E)
+        if: ${{ steps.scope.outputs.notes_only != 'true' }}
         timeout-minutes: 15
         run: node --test e2e/*.e2e.mjs
 
       - name: Upload E2E screenshots and measurements
-        if: ${{ always() }}
+        if: ${{ always() && steps.scope.outputs.notes_only != 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: e2e-${{ github.sha }}
