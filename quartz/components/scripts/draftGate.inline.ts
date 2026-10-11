@@ -56,3 +56,5 @@ async function applyDraftGate() {
 document.addEventListener("nav", () => {
   void applyDraftGate()
 })
+
+export {}
