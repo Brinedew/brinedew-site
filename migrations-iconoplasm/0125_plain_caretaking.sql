@@ -11,9 +11,12 @@
 
 -- One row per gene: the factory's current text and its Tags, and which
 -- caretaker version the gene uses instead. `text_id` is what a portrait request
--- records as the text it was drawn from.
+-- records as the text it was drawn from, next to the gene's `gene_id`: the ID
+-- every stored request and card already carries (a new gene's is derived from
+-- its symbol, catalogueGeneId).
 CREATE TABLE icono_gene_texts (
   gene_symbol TEXT PRIMARY KEY,
+  gene_id TEXT NOT NULL UNIQUE,
   text_id TEXT NOT NULL,
   version INTEGER NOT NULL CHECK (version >= 1),
   text TEXT NOT NULL CHECK (length(CAST(text AS BLOB)) BETWEEN 1 AND 16384),

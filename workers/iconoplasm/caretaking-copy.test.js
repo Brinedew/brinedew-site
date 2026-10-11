@@ -190,7 +190,7 @@ test("1, 2, 5, 6: every text, version and role arrives under its symbol, once", 
 
   const source = h.authoring.raw
     .prepare(
-      `SELECT i.canonical_symbol AS gene_symbol, t.text_id, t.version, t.text, t.text_sha256,
+      `SELECT i.canonical_symbol AS gene_symbol, t.gene_id, t.text_id, t.version, t.text, t.text_sha256,
               t.tags, t.fields_json, t.readers_see, t.chosen_caretaker_version_id, t.updated_at
          FROM icono_gene_texts t JOIN icono_gene_identities i USING (gene_id)
         ORDER BY gene_symbol`,

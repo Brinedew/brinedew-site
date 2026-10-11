@@ -20,7 +20,8 @@ const PAGE_ROWS = 50
 const PAGE_JSON_BYTES = 1_000_000
 
 const SOURCE_SQL = {
-  texts: `SELECT t.gene_id AS cursor, i.canonical_symbol AS gene_symbol, t.text_id, t.version,
+  texts: `SELECT t.gene_id AS cursor, i.canonical_symbol AS gene_symbol, t.gene_id, t.text_id,
+                 t.version,
                  t.text, t.text_sha256, t.tags, t.fields_json, t.readers_see,
                  t.chosen_caretaker_version_id, t.updated_at
             FROM icono_gene_texts t
@@ -52,6 +53,7 @@ const fields = (names) => names.map(field).join(", ")
 
 const TEXT_COLUMNS = [
   "gene_symbol",
+  "gene_id",
   "text_id",
   "version",
   "text",
