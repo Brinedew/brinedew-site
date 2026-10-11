@@ -6,6 +6,7 @@ import { QuartzEmitterPlugin } from "../types"
 import spaRouterScript from "../../components/scripts/spa.inline"
 // @ts-ignore
 import popoverScript from "../../components/scripts/popover.inline"
+// @ts-ignore
 import draftGateScript from "../../components/scripts/draftGate.inline"
 import baseStyles from "../../styles/base.scss"
 import customStyles from "../../styles/custom.scss"
