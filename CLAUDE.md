@@ -493,7 +493,7 @@ If you encounter components with inline CSS/JS (legacy code), don't copy those p
 
 ## quartz draft system patterns
 
-**Drafts are published with a curtain.** A `draft: true` page is built and served like any other, with an "Unpublished draft" badge. The build (`renderPage.tsx`) wraps everything after the preview in `.draft-locked`, which CSS hides; the preview ends at the first top-level `---`, else at the end of the lead (first `##`), else after three blocks. `quartz/components/scripts/draftGate.inline.ts` asks `/api/auth/me` (only when the session-presence cookie exists) and adds `body.draft-unlocked` for the admin and Discord guild members; signed-in non-supporters get the "become a supporter" card. The curtain is soft: pages are static, so the hidden text is in the HTML source.
+**Drafts are published with a curtain.** A `draft: true` page is built and served like any other, with an "Unpublished draft" badge. The build (`renderPage.tsx`) wraps everything after the preview in `.draft-locked`, which CSS hides; the preview ends at the first top-level `---`, else at the end of the lead (first `##` after some text) or after three blocks of text, whichever comes first; headings and the date line are not text. `quartz/components/scripts/draftGate.inline.ts` asks `/api/auth/me` (only when the session-presence cookie exists) and adds `body.draft-unlocked` for the admin and Discord guild members; signed-in non-supporters get the "become a supporter" card. The curtain is soft: pages are static, so the hidden text is in the HTML source.
 
 **Draft property vs status tags:** Use frontmatter `draft: true/false` instead of `status/published` tags. Integrates with Quartz's built-in filtering and follows static site conventions.
 

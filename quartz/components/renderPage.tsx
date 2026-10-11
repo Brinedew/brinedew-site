@@ -339,22 +339,31 @@ export function renderPage(
   // Draft handling: everything after the preview goes in .draft-locked, which
   // stays hidden until draftGate.inline.ts opens it for a supporter or the admin.
   // The preview ends at the author's first top-level <hr>; without one, at the end
-  // of the lead (the first <h2> that follows some text); without that, after the
-  // third block.
+  // of the lead (the first <h2> that follows some text) or after three blocks of
+  // text, whichever comes first. Headings and the page's own date line
+  // (p.content-meta) are not text: a draft that opens with "## 1." would
+  // otherwise preview nothing but its title.
   function draftPreviewEnd(draftRoot: Root): number {
-    const blocks = draftRoot.children.flatMap((child, index) =>
-      child.type === "element" ? [{ tag: child.tagName, index }] : [],
-    )
+    const blocks = draftRoot.children.flatMap((child, index) => {
+      if (child.type !== "element") return []
+      const className = child.properties?.className
+      const classes = Array.isArray(className) ? className.map(String) : [String(className ?? "")]
+      const isText = !/^h[1-6]$/.test(child.tagName) && !classes.includes("content-meta")
+      return [{ tag: child.tagName, index, isText }]
+    })
     const hr = blocks.find((block) => block.tag === "hr")
     if (hr) return hr.index
 
-    const isHeading = (tag: string) => /^h[1-6]$/.test(tag)
-    const firstText = blocks.findIndex((block) => !isHeading(block.tag))
-    const leadEnd = blocks.find((block, i) => block.tag === "h2" && firstText >= 0 && i > firstText)
-    if (leadEnd) return leadEnd.index
-
-    const fourthText = blocks.filter((block) => !isHeading(block.tag))[3]
-    return fourthText ? fourthText.index : -1
+    const textBlocks = blocks.filter((block) => block.isText)
+    const firstText = textBlocks[0]
+    const leadEnd = firstText
+      ? blocks.find((block) => block.tag === "h2" && block.index > firstText.index)
+      : undefined
+    const fourthText = textBlocks[3]
+    const ends = [leadEnd?.index, fourthText?.index].filter(
+      (end): end is number => end !== undefined,
+    )
+    return ends.length > 0 ? Math.min(...ends) : -1
   }
 
   function transformDraftTree(draftRoot: Root): void {
