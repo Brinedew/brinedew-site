@@ -99,13 +99,13 @@ export async function preflightOperationCostRelease({
     pendingMigrations.length ? RELEASE_CONTROL_REQUESTS : RELEASE_CONTROL_REQUESTS_NO_MIGRATIONS,
   )
   const steps = [
-    ...["geneguessr", "iconoplasm", "iconoplasm-authoring"].map((resource) => ({
+    ...["geneguessr", "iconoplasm"].map((resource) => ({
       adapter_id: `${resource}-migration-inventory`,
       resource,
       prediction: { rows_read: 2050, rows_written: 0, requests: 1 },
       arguments: { statements: [{ query_id: "schema-objects", arguments: {} }] },
     })),
-    ...["geneguessr", "iconoplasm", "iconoplasm-authoring"].map((resource) => ({
+    ...["geneguessr", "iconoplasm"].map((resource) => ({
       adapter_id: `${resource}-migration-inventory`,
       resource,
       prediction: manifest.inventory_prediction,
@@ -247,7 +247,7 @@ export async function chooseReleaseAdmission({
       throw error
     const { bound } = await adapters.get(first.adapter_id).prepare(first.arguments)
     const maximum = { ...bound, requests: RELEASE_CONTROL_REQUESTS }
-    for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
+    for (const resource of ["geneguessr", "iconoplasm"]) {
       const inventory = adapters.get(`${resource}-migration-inventory`)
       const prepared = await inventory.prepare({
         statements: [

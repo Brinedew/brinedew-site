@@ -45,7 +45,7 @@ const manifest = {
 
 const files = {
   iconoplasm: ["0109_old.sql", "0110_drop.sql", "0111_shelf.sql"],
-  "iconoplasm-authoring": ["0001_a.sql"],
+  geneguessr: ["0001_a.sql"],
 }
 
 test("reviewed online migrations are planned in file order across databases", () => {
@@ -54,7 +54,7 @@ test("reviewed online migrations are planned in file order across databases", ()
     files,
     applied: {
       iconoplasm: new Set(["0109_old.sql"]),
-      "iconoplasm-authoring": new Set(["0001_a.sql"]),
+      geneguessr: new Set(["0001_a.sql"]),
     },
   })
   assert.deepEqual(
@@ -81,9 +81,9 @@ test("an unreviewed or maintenance-only pending migration refuses before anythin
         manifest,
         files: {
           iconoplasm: ["0110_drop.sql"],
-          "iconoplasm-authoring": ["0112_rebuild.sql"],
+          geneguessr: ["0112_rebuild.sql"],
         },
-        applied: { iconoplasm: new Set(), "iconoplasm-authoring": new Set() },
+        applied: { iconoplasm: new Set(), geneguessr: new Set() },
       }),
     /COST_MIGRATION_NOT_REVIEWED/,
   )

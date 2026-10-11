@@ -71,7 +71,6 @@ test("static Worker SQL compiles against migrated D1 schemas before release", (t
     for (const directories of [
       ["migrations", "workers/benchmark/migrations"],
       ["migrations-iconoplasm"],
-      ["migrations-iconoplasm-authoring"],
     ])
       databases.push(migratedDatabase(directories))
     const failures = []

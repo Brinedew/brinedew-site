@@ -19,7 +19,7 @@ const TOKEN = "factory-token-0000000000000000000000085"
 const MINUTE = 60_000
 const minuteStart = (at) => Math.floor(at / MINUTE) * MINUTE
 
-function harness(t, { meter, authoringRows = 0 }) {
+function harness(t, { meter }) {
   const db = iconoplasmDatabase()
   t.after(() => db.database.close())
   // What batch work really spent, at the instant it ran.
@@ -34,14 +34,7 @@ function harness(t, { meter, authoringRows = 0 }) {
     accountUsage: async () => meter(spent),
     windowUsage: async () => null,
   })
-  const env = {
-    ICONOPLASM_DB: db,
-    ICONOPLASM_ADMIN_TOKEN: TOKEN,
-    // The copy's source: only its size matters before the copy is let in.
-    ICONOPLASM_AUTHORING_DB: {
-      prepare: () => ({ first: async () => ({ n: authoringRows }) }),
-    },
-  }
+  const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const post = async (path, body) => {
     const response = await app.request(
       path,
@@ -71,16 +64,18 @@ const laggingMeter =
     }
   }
 
-test("a copy the day can't hold is refused before its first write", async (t) => {
+test("a job the day can't hold is refused before its first write", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-11T10:40:00.000Z") })
-  // 2026-10-11: 72,000 rows written when the copy of 20,155 texts started.
-  const h = harness(t, { meter: laggingMeter({ before: 72_000 }), authoringRows: 20_155 })
-  const refused = await h.post("/api/iconoplasm/admin/caretaking/copy", { table: "texts" })
+  // 84,600 rows written: eight cards (480 rows) no longer fit under the 85,000 stop.
+  const h = harness(t, { meter: laggingMeter({ before: 84_600 }) })
+  const genes = ["A1BG", "A2M", "AAAS", "AACS", "AAGAB", "AAK1", "AAMP", "AANAT"]
+  const refused = await h.post("/api/iconoplasm/admin/publication/republish", { symbols: genes })
   assert.equal(refused.status, 503)
   assert.equal(refused.body.code, "D1_BATCH_SHARE_SPENT")
   assert.equal(refused.body.meter, "rows_written")
-  assert.ok(refused.body.price > 80_000, `the whole copy is priced: ${refused.body.price}`)
-  assert.match(refused.body.error.message, /^This job costs/)
+  assert.equal(refused.body.price, 480 + 1, "the whole job and its own admission row are priced")
+  assert.match(refused.body.error.message, /^This batch request costs 481 D1 rows written/)
+  assert.equal(h.spent.length, 0, "no card was built")
   assert.equal(
     h.db.database.prepare("SELECT COUNT(*) AS n FROM icono_batch_admissions").get().n,
     0,
@@ -89,7 +84,7 @@ test("a copy the day can't hold is refused before its first write", async (t) =>
 
   // The same question asked of the usage route first, as a script should.
   const quote = await h.app.request(
-    "/api/iconoplasm/admin/d1-usage?quote_written=80620&quote_read=70540",
+    "/api/iconoplasm/admin/d1-usage?quote_written=480&quote_read=2400",
     { headers: { Authorization: `Bearer ${TOKEN}` } },
     h.env,
   )

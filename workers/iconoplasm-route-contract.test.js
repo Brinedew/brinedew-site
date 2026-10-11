@@ -160,19 +160,6 @@ test("authority routes declare one least-privilege bearer audience", () => {
       "authority_generation_lease_fail",
       "authority_generation_lease_complete",
     ],
-    "authority-replica-bearer": [
-      "authority_events",
-      "authority_events_ack",
-      "authority_snapshots_create",
-      "authority_snapshot_status",
-      "authority_snapshot_parts",
-      "authority_snapshot_complete",
-      "authority_revision_body",
-      "authority_derivative_body",
-      "authority_system_revision_append",
-      "authority_tags_derivative_submit",
-      "authority_tags_derivative_select",
-    ],
   }
   const authorityRoutes = ICONOPLASM_ROUTE_CONTRACTS.filter((route) =>
     route.id.startsWith("authority_"),
@@ -288,9 +275,9 @@ test("catalog state rejects HEAD because state comparison requires an explicit P
   assert.equal(response.status, 404)
 })
 
-// B-831 / IPD-012: the encrypted authoring authority owns manifestation prose and
-// Tags. The workstation's old plaintext upsert and hash-verification routes
-// were a second writer into primary D1 and must not return.
+// B-831: caretaker prose and Tags have one writer, the caretaking routes. The
+// workstation's old plaintext upsert and hash-verification routes were a second
+// writer and must not return.
 test("no route writes or verifies legacy manifestation plaintext", () => {
   for (const method of ["GET", "POST", "PUT", "PATCH"]) {
     assert.equal(

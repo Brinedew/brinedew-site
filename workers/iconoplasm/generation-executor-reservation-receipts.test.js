@@ -20,7 +20,6 @@ import {
 } from "../iconoplasm-request-notifications.js"
 import { requireExactGenerationProvenance } from "../lib/iconoplasm-generation-provenance.js"
 import { ICONOPLASM_ROUTE_CONTRACTS } from "../iconoplasm-route-contract.js"
-import { isReplicaCostRoute } from "./operation-cost-replica-adapter.js"
 import {
   GENERATION_COMPLETION_MAX_REQUESTS,
   GENERATION_COMPLETION_FIXED_ROWS,
@@ -66,17 +65,11 @@ import {
 // Each test below drives the real functions against real D1 receipts.
 
 let database
-// An authoring database with the complete schema and no rows: every exact
-// source a request names is then permanently gone, which is what a claim
-// quarantines.
-let authoring
 before(async () => {
   database = await openMigratedD1()
-  authoring = await openMigratedD1("../../migrations-iconoplasm-authoring/")
 })
 after(async () => {
   await database?.dispose()
-  await authoring?.dispose()
 })
 
 const quiet = (t) => {
@@ -89,7 +82,6 @@ const quiet = (t) => {
 
 const OWNER = "workstation_receipts_0001"
 const GENERATION_TOKEN = "generation-secret"
-const REPLICA_TOKEN = "replica-secret"
 const sha = (character) => String(character).repeat(64)
 const hexSha = (number) => number.toString(16).padStart(64, "0")
 let counter = 0
@@ -863,9 +855,7 @@ function gatewayFixture(t, providerRowsWritten = 0) {
   const spy = spyOnLedger(ledger)
   const env = {
     ICONOPLASM_DB: meter.db,
-    ICONOPLASM_AUTHORING_DB: authoring.db,
     ICONOPLASM_AUTHORITY_GENERATION_TOKEN: GENERATION_TOKEN,
-    ICONOPLASM_AUTHORITY_REPLICA_TOKEN: REPLICA_TOKEN,
     ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: spy.namespace,
   }
@@ -892,7 +882,7 @@ const claimBody = (limit = 50) => ({ lease_owner_id: OWNER, limit, lease_seconds
 
 test("an anonymous request touches neither the laptop lane nor the ledger", async (t) => {
   quiet(t)
-  for (const token of [null, "wrong-token", REPLICA_TOKEN]) {
+  for (const token of [null, "wrong-token", "admin-secret"]) {
     const fixture = gatewayFixture(t)
     const response = await fixture.call(CLAIM, claimBody(50), token)
     assert.equal(response.status, 401, `token ${token}`)
@@ -1150,24 +1140,9 @@ const SAMPLE_PATHS = {
     GENERATION_TOKEN,
     { publication_id: "publication-guard-0001", items: [{ request_ids: [1] }] },
   ],
-  authority_system_revision_append: [
-    "/api/iconoplasm/authority/genes/gene_0001/system-revisions",
-    REPLICA_TOKEN,
-    { command_id: "command_guard_0003", prose: "A regenerated text." },
-  ],
-  authority_tags_derivative_submit: [
-    "/api/iconoplasm/authority/revisions/revision_0001/tags-derivatives",
-    REPLICA_TOKEN,
-    { command_id: "command_guard_0001", status: "failed" },
-  ],
-  authority_tags_derivative_select: [
-    "/api/iconoplasm/authority/revisions/revision_0001/tags-derivative-head",
-    REPLICA_TOKEN,
-    { command_id: "command_guard_0002", manifestation_derivative_id: "derivative_guard_0001" },
-  ],
 }
 
-test("every route classed workstation_sync_write is metered and sized, or admitted by the operation-cost authority", async (t) => {
+test("every route classed workstation_sync_write is metered and sized", async (t) => {
   quiet(t)
   const classed = ICONOPLASM_ROUTE_CONTRACTS.filter(
     (route) =>
@@ -1178,13 +1153,7 @@ test("every route classed workstation_sync_write is metered and sized, or admitt
     Object.keys(SAMPLE_PATHS).sort(),
     "a route was added or removed: give it a sample here and a sizing in the write-bounds module",
   )
-  // The head selection is answered by the operation-cost authority before the
-  // budget wrapper (its own declared bound), so the laptop lane never sees it.
-  const operationCost = classed.filter((routeId) =>
-    isReplicaCostRoute("POST", SAMPLE_PATHS[routeId][0]),
-  )
-  assert.deepEqual(operationCost, ["authority_tags_derivative_select"])
-  const sized = classed.filter((routeId) => !operationCost.includes(routeId))
+  const sized = classed
   assert.deepEqual([...LAPTOP_RESERVATION_ROUTE_IDS].sort(), [...sized].sort())
   for (const routeId of sized) {
     const [path, token, body] = SAMPLE_PATHS[routeId]

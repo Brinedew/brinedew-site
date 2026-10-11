@@ -16,8 +16,6 @@ const MIGRATION_BINDINGS = Object.freeze({
   migrations: "DB",
   "workers/benchmark/migrations": "DB",
   "migrations-iconoplasm": "ICONOPLASM_DB",
-  "migrations-iconoplasm-authoring": "ICONOPLASM_AUTHORING_DB",
-  "migrations-iconoplasm-event-archive": "ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB",
 })
 
 function migrationBinding(path) {
@@ -145,8 +143,10 @@ async function main() {
         stdio: "ignore",
       }).status === 0
     : false
+  // Deleted files are left out: removing a migration file changes no data, and
+  // PR C (B-1065) deletes the retired authoring database's whole directory.
   const changedPaths = ancestor
-    ? execFileSync("git", ["diff", "--name-only", `${installed}..${headSha}`], {
+    ? execFileSync("git", ["diff", "--name-only", "--diff-filter=d", `${installed}..${headSha}`], {
         encoding: "utf8",
       })
         .split(/\r?\n/)

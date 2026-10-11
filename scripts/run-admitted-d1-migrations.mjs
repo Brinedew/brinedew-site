@@ -14,7 +14,6 @@ const DATABASES = {
   // Benchmark owns two tables in the same database and migration journal.
   geneguessr: ["migrations", "workers/benchmark/migrations"],
   iconoplasm: ["migrations-iconoplasm"],
-  "iconoplasm-authoring": ["migrations-iconoplasm-authoring"],
 }
 
 function isReviewedHistoricalMigration(resource, name, applied) {

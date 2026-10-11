@@ -22,12 +22,21 @@ const statefulConfig = toml.parse(
   ),
 )
 
-// Every terms version a migration seeded, plus the current one in the
+// Every terms version a caretaker ever accepted, plus the current one in the
 // checked-in registry (B-864), must have a served plain-text copy whose
 // SHA-256 matches, and the public page must show the registry's version. One
-// generic check instead of one hand-written test per version (B-860).
+// generic check instead of one hand-written test per version (B-860). The past
+// versions were seeded by the retired authoring database's migrations (deleted
+// in B-1065); their ids and hashes are history and never change.
+const PAST_CARETAKER_TERMS = [
+  ["terms_2026_08_30_v1", "06b27f697c0c9a9fcaaa3ae01014c008aa6d149eed1279afbb75f9d924ed1aa5"],
+  ["terms_2026_09_01_v2", "c018e15debeddad5b4ea88805e291a249fc7048ccc3d5c56fa09e990edf0d1ed"],
+  ["terms_2026_09_02_v1", "b02d297f1f745a27328a3a273a63c31c7427393577812d255ce8cdbd0b1021c5"],
+  ["terms_2026_09_02_v2", "ee68c8a63efa3f4e31d6fbf310903def19db5bbbf8d2e9716c534b3e48019521"],
+  ["terms_2026_09_02_v3", "0f87f17b93b0103e92f0503ab4ecfc000ed76280eb9197eaa09d977c2cbb1f76"],
+]
+
 test("every caretaker terms version has a hash-matching public copy", () => {
-  const migrationsDir = new URL("../migrations-iconoplasm-authoring/", import.meta.url)
   const staticDir = new URL("../quartz/static/iconoplasm/", import.meta.url)
   const copies = new Map(
     readdirSync(staticDir)
@@ -38,15 +47,7 @@ test("every caretaker terms version has a hash-matching public copy", () => {
         return [version, { name, sha: createHash("sha256").update(bytes).digest("hex") }]
       }),
   )
-  const seeded = readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort()
-    .flatMap((name) => {
-      const sql = readFileSync(new URL(name, migrationsDir), "utf8")
-      const row = /VALUES \(\s*'(terms_[^']+)',\s*'([0-9a-f]{64})'/.exec(sql)
-      return row ? [{ version: row[1], sha: row[2] }] : []
-    })
-  assert.ok(seeded.length >= 5)
+  const seeded = PAST_CARETAKER_TERMS.map(([version, sha]) => ({ version, sha }))
   const newest = {
     version: CURRENT_CARETAKER_TERMS.terms_version_id,
     sha: CURRENT_CARETAKER_TERMS.terms_sha256,

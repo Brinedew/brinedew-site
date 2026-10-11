@@ -5,7 +5,6 @@ import { createOperationCostD1Adapter } from "./operation-cost-d1-adapter.js"
 import { createOperationCostQueryRegistry } from "./operation-cost-query-registry.js"
 import { createOperationCostAccountUsageReader } from "./operation-cost-account-usage.js"
 import { createMigrationOperationCostAdapters } from "./operation-cost-migration-adapters.js"
-import { createReplicaOperationCostAdapter } from "./operation-cost-replica-adapter.js"
 import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
 import { createCatalogInitializationCostAdapter } from "./operation-cost-catalog-initialization-adapter.js"
 
@@ -98,14 +97,6 @@ export function createOperationCostAuthority(storage, env, options = {}) {
         ...OPERATION_COST_IDENTITIES,
       }),
     ],
-    [
-      "authority-replica",
-      createReplicaOperationCostAdapter({
-        env,
-        ...OPERATION_COST_IDENTITIES,
-        onAuthorityEvent: options.onAuthorityEvent,
-      }),
-    ],
     ...createMigrationOperationCostAdapters(env, OPERATION_COST_IDENTITIES),
     [
       "iconoplasm-d1",
@@ -134,8 +125,7 @@ export function createOperationCostAuthority(storage, env, options = {}) {
         // This header is set by the authenticated Worker, never trusted from
         // its external request. Missing attribution fails closed on the DO.
         const principal = request.headers.get(OPERATION_COST_PRINCIPAL_HEADER)
-        if (!["admin", "replica"].includes(principal))
-          throw new OperationCostError("COST_PRINCIPAL_REQUIRED")
+        if (principal !== "admin") throw new OperationCostError("COST_PRINCIPAL_REQUIRED")
         const allowed = (adapter) => (adapter?.audiences || ["admin"]).includes(principal)
         const pathname = new URL(request.url).pathname
         if (

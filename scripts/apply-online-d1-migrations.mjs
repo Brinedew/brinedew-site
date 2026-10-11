@@ -22,7 +22,6 @@ const CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplic
 // Databases whose wrangler migrations_dir is exactly one reviewed directory.
 export const ONLINE_MIGRATION_DATABASES = Object.freeze({
   iconoplasm: "migrations-iconoplasm",
-  "iconoplasm-authoring": "migrations-iconoplasm-authoring",
 })
 // One daily allowance for all operator work (B-1035): migrations are admitted against
 // the same numbers as the operator ledger and its B-1026 tiers, so no path has a
