@@ -29,7 +29,6 @@ function harness(t) {
     publishGene: async () => ({}),
     refreshSummaries: async () => {},
     accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
-    windowUsage: async () => null,
   })
   const save = async (symbol, body, { token = TOKEN } = {}) => {
     const response = await app.request(

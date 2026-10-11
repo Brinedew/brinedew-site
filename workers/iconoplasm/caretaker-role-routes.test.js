@@ -75,7 +75,6 @@ function harness(t, { aiReply = modelReply({ outfit: ["red_coat"] }), env: extra
     publishGene: async () => ({}),
     refreshSummaries: async () => {},
     accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
-    windowUsage: async () => null,
     caretakerSession: async (request) => ({
       account_id: request.headers.get("x-test-account"),
       user_id: `discord_${request.headers.get("x-test-account")}`,

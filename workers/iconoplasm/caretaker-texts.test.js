@@ -70,7 +70,6 @@ async function harness(t, { accounts = null } = {}) {
     },
     refreshSummaries: async () => {},
     accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
-    windowUsage: async () => null,
     caretakerSession: async (request) => ({ account_id: request.headers.get("x-test-account") }),
   })
   await writeFactoryGeneText(env, {

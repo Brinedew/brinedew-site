@@ -370,7 +370,7 @@ import {
   settleGeneAfterVote,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
-import { accountD1Usage, readD1WindowUsage } from "./iconoplasm/operation-cost-account-usage.js"
+import { accountD1Usage } from "./iconoplasm/operation-cost-account-usage.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -1804,13 +1804,6 @@ const app = createIconoplasmApp({
   accountUsage: accountD1Usage,
   // The owner's session or the admin token, checked before an admin route is priced.
   isAdmin: isIconoplasmAdmin,
-  // The account's D1 rows in one window (B-1059): one analytics request per ask.
-  windowUsage: (env, window) =>
-    readD1WindowUsage({
-      accountId: env.CLOUDFLARE_ACCOUNT_ID,
-      token: env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
-      ...window,
-    }),
 })
 
 export default {

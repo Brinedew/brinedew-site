@@ -33,7 +33,6 @@ function harness(t, { meter }) {
     },
     refreshSummaries: async () => {},
     accountUsage: async () => meter(spent),
-    windowUsage: async () => null,
   })
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const post = async (path, body) => {

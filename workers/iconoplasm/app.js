@@ -197,7 +197,6 @@ export function createIconoplasmApp({
   publishGene,
   refreshSummaries,
   accountUsage,
-  windowUsage,
   caretakerSession,
   settleGene,
   isAdmin,
@@ -255,41 +254,16 @@ export function createIconoplasmApp({
   // What the shedding above sees: today's account-wide D1 use from Cloudflare's
   // own meter, each wall, and where batch work stops. The Drain's forecast plans
   // from this answer instead of keeping copies of the numbers (its copy of the
-  // write share stayed at 70% after the tier table moved to 85%). No D1 read.
-  // With ?from=&to= (ISO instants, at most a day apart) it answers the account's
-  // D1 rows in that window instead: what a publication cost (B-1059).
-  // Both answers carry the site's measured price of one portrait, so the Drain's
-  // forecast charges its own work that price and learns everyone else's spend
-  // (readers, votes, other jobs) as background, instead of dividing the whole
-  // account's window by its portraits.
+  // write share stayed at 70% after the tier table moved to 85%). Its one D1
+  // read is today's unseen batch admissions.
+  // It carries the site's price of one portrait, and the Drain charges its own
+  // work that price (B-1059). Chesterton's fence, the 2026-10-11 forecast miss:
+  // never answer the account's D1 spend over a publication's window for the
+  // Drain to divide by its portraits. That spend is everyone's, readers and
+  // other jobs included, and it read as 852.7 writes a portrait against a
+  // measured 54.
   app.get("/api/iconoplasm/admin/d1-usage", factoryAuth, async (c) => {
     c.header("Cache-Control", "no-store")
-    const from = c.req.query("from")
-    const to = c.req.query("to")
-    if (from !== undefined || to !== undefined) {
-      const start = Date.parse(from ?? "")
-      const end = Date.parse(to ?? "")
-      if (!(start < end && end <= Date.now() && end - start <= 86_400_000))
-        return c.json(
-          {
-            ok: false,
-            error:
-              "from and to must be ISO instants, from before to, at most a day apart, not in the future",
-          },
-          400,
-        )
-      const window = { from: new Date(start).toISOString(), to: new Date(end).toISOString() }
-      const usage = await windowUsage(c.env, window).catch(() => null)
-      return c.json({
-        ok: usage !== null,
-        prices: { portrait: BATCH_PRICES.portrait },
-        window: {
-          ...window,
-          rows_read: usage?.rows_read ?? null,
-          rows_written: usage?.rows_written ?? null,
-        },
-      })
-    }
     const usage = await accountUsage(c.env).catch(() => null)
     const spend = await batchSpendNow(c.env.ICONOPLASM_DB, usage)
     const retryAfter = secondsUntilCloudflareDailyReset()
