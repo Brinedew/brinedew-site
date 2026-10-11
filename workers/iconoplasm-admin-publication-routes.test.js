@@ -339,11 +339,22 @@ test("essence upsert uses quota-reserved bounded transactions and can defer read
 
 test("catalog reconcile removes explicit symbols and records each removal, even of a row already gone", async () => {
   const db = iconoplasmDatabase()
-  db.database
-    .prepare(
-      "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
-    )
-    .run()
+  db.database.exec(`
+    INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES
+      ('TP53', 'tumor protein p53'), ('KDM6B', 'lysine demethylase 6B');
+    INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256) VALUES
+      ('TP53', '${"a".repeat(64)}'), ('KDM6B', '${"b".repeat(64)}'),
+      ('ADGRE4P', '${"c".repeat(64)}');
+  `)
+  const counts = () =>
+    db.database
+      .prepare(
+        "SELECT published_live_portraits AS all_genes, catalog_published_live_portraits AS catalogued FROM icono_asset_summary_counts",
+      )
+      .get()
+  // ADGRE4P is the 747-row residue of B-1088: removed from the catalogue on
+  // 10-08 while its "current portrait" row stayed.
+  assert.deepEqual({ ...counts() }, { all_genes: 3, catalogued: 2 })
   const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
   const calls = db.calls
   const response = await responseFrom(handlers["admin_publication.catalog_reconcile"], {
@@ -353,7 +364,23 @@ test("catalog reconcile removes explicit symbols and records each removal, even 
 
   assert.equal(response.status, 200)
   assert.equal((await response.json()).deleted, 2)
-  assert.equal(db.database.prepare("SELECT COUNT(*) AS n FROM icono_gene_catalog").get().n, 0)
+  assert.deepEqual(
+    db.database
+      .prepare("SELECT gene_symbol FROM icono_gene_catalog")
+      .all()
+      .map((row) => row.gene_symbol),
+    ["KDM6B"],
+  )
+  // B-1088: the removed genes' "current portrait" rows went with them, the
+  // kept gene's stayed, and both counters agree with a recount.
+  assert.deepEqual(
+    db.database
+      .prepare("SELECT gene_symbol FROM icono_publish_state")
+      .all()
+      .map((row) => row.gene_symbol),
+    ["KDM6B"],
+  )
+  assert.deepEqual({ ...counts() }, { all_genes: 1, catalogued: 1 })
   // ADGRE4P's row went on 10-08 while its page stayed: the resend still takes the page down.
   assert.deepEqual(catalogEvents(db), [
     ["TP53", "catalog_removed"],

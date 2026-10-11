@@ -9,6 +9,11 @@ const ESSENCE_ROWS_WRITTEN_PER_CHANGE = 5
 // 2026-10-08; 725 changed rows wrote 2,175 on 10-09; 1,193 rows, about 600 of
 // them new, wrote 7,887 on 10-07. An update costs 3 + 4; a new gene is the worst case.
 const CATALOG_ROWS_WRITTEN_PER_CHANGE = 14
+// A removal, counted from the production schema (nightly copy, 2026-10-11): the
+// catalogue row and its three indexes (4) with its two counter triggers (2), the
+// event (4, measured above), and the gene's publish_state row with its two
+// indexes and its counter trigger (4).
+const CATALOG_ROWS_WRITTEN_PER_REMOVAL = 14
 // B-1055: a catalogue change is a publication change. Until 2026-10-09 neither
 // catalogue route wrote an event, so the Actions publisher never rebuilt the
 // gene: 600 genes added on 10-07 had no page, and 613 removed on 10-08 kept
@@ -274,15 +279,22 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     // triggers, and the event that has the publisher take the gene's page down.
     // The event is written even when the row is already gone, so a resend
     // finishes a removal whose page outlived it.
+    // B-1088: the gene's "current portrait" row goes with it. Until 2026-10-11
+    // removal left it behind, and 747 removed genes (readthroughs, retired
+    // symbols) still looked published to anything reading icono_publish_state.
+    // The portrait assets stay, dissociated.
     for (const symbol of explicitDeleteSymbols) {
       await env.ICONOPLASM_DB.batch(
         [
           env.ICONOPLASM_DB.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol=?").bind(
             symbol,
           ),
+          env.ICONOPLASM_DB.prepare("DELETE FROM icono_publish_state WHERE gene_symbol=?").bind(
+            symbol,
+          ),
           env.ICONOPLASM_DB.prepare(CATALOG_REMOVED_EVENT_SQL).bind(symbol, actorId),
         ],
-        { maxRowsWritten: CATALOG_ROWS_WRITTEN_PER_CHANGE },
+        { maxRowsWritten: CATALOG_ROWS_WRITTEN_PER_REMOVAL },
       )
     }
     if (!deferReadModels) {
