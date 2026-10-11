@@ -4,20 +4,21 @@
 manifestation, or a second command authority in code or UI. Storage and key plumbing live in
 the IPD-012 fence in `AGENTS.md`; this page holds the rules a caretaker feels.
 
-The Website is the only command authority for tenure, prose revisions, lifecycle, accepted Tags
-derivatives and each gene's canonical manifestation. The workstation keeps an exact replica,
-offline drafts and an idempotent outgoing command ledger. It may generate Tags and images from
-an exact revision, but it cannot act as a caretaker or choose canon. The public catalog and the
-primary D1 are projections; a projection that lags never rolls back an accepted command.
+Each gene's text lives in two plain tables in the authoring D1, behind
+`workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the factory text and Tags the
+workstation writes (`PUT /api/iconoplasm/admin/texts`), and which caretaker version the gene uses.
+`icono_caretaker_text_versions` holds every version a caretaker saved. The gene's text is the
+chosen caretaker version unless it was withdrawn, and the factory text otherwise
+(`readGeneText`); the workstation reads it back through `GET /api/iconoplasm/admin/texts`.
+Claiming a gene, offers and tenure still run on the older caretaker commands until B-1065's B2b
+moves them into the main database.
 
 ## The caretaker stewards the gene; the writer owns nothing
 
 - No one owns a manifestation. The active caretaker of a gene may edit, show or hide, withdraw,
-  restore and select any lineage on it, whoever wrote it. History names each version's writer.
+  restore any line on it, whoever wrote it. History names each version's writer.
 - A former caretaker has no say over text they left, and a stranger has none: both are refused
-  (`403 ACTIVE_ASSIGNMENT_REQUIRED` on withdraw and restore) and nothing changes. Leaving always
-  keeps what was written.
-- The system seed is the gene's first lineage. It cannot be withdrawn and is the last fallback.
+  and nothing changes. Leaving always keeps what was written.
 - Any active Brinedew account signed in through Discord may claim an available gene (server
   membership is no gate); an account holds one active or suspended gene and a gene has one
   caretaker. An administrator may offer a gene instead, and the account accepts or declines.
@@ -27,34 +28,36 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
   gene-page comment queues a Discord DM to the active caretaker; a Discord failure never rolls
   the comment back, and nobody is told of their own comment.
 
-## History is append-only; rollback selects an older version
+## History is append-only; a save with Tags becomes the gene's text
 
-- Saving appends an immutable revision and advances the lineage head; nothing edits old prose.
-- Selecting canonical appends an immutable selection and advances the gene head. Selecting an
-  older active revision is the rollback. The revision and manifestation must be active, belong to
-  the gene and have a verified body, and the actor needs a current active assignment on it.
-- Withdrawing hides a lineage from public view and canonical eligibility; restoring brings it
-  back. Withdrawal is not a purge and does not touch backups. An erasure request arrives by
-  email and the operator runs the account erase command in `docs/ICONOPLASM_OPERATIONS.md`.
-- If the canonical lineage is withdrawn, canon walks the selection history back to the latest
-  explicit selection that is still eligible and outside that lineage; the seed ends the walk. If
-  nothing is eligible the command fails before changing anything.
-- Prose shows under the gene card only while its manifestation is shown on the page (hidden by
-  default) and renders as text under CSP, never as markup. Tags are never published; the
-  caretaker's editor and the workstation's replica read them through authenticated routes.
+- A caretaker's saves form a line, numbered 1, 2, 3 and so on; nothing edits an old version.
+  Writing after a withdrawal starts a new line.
+- A save with Tags becomes the version new images are drawn from. A prose-only save is kept in
+  History but changes nothing else.
+- Withdrawing a line hides all its versions. The gene falls back to the newest tagged version
+  still standing, then to the factory text. Restoring brings back the versions withdrawn with the
+  line's newest one and makes the line's newest tagged version the gene's text again. Withdrawal
+  is not a purge and does not touch backups. An erasure request arrives by email and the operator
+  runs the account erase command in `docs/ICONOPLASM_OPERATIONS.md`; erasure and an
+  administrator's "end and withdraw" withdraw that tenure's lines in the same batch.
+- The factory line cannot be withdrawn and is the last fallback.
+- Prose shows under the gene card only while its line is shown on the page (hidden by default)
+  and renders as text under CSP, never as markup. The card is rebuilt only when the prose readers
+  see changes; if that rebuild fails, the reply says `projection_pending` and the next publish
+  catches up. Tags are never published; the caretaker's editor reads them through an
+  authenticated route.
 
-## Conflicts are compare-and-swap; the actor comes from the session
+## Retries save once; the actor comes from the session
 
-- Every command carries the versions it saw: assignment, lineage head, gene head and canonical
-  revision. A mismatch is `409 STALE_AUTHORITY_STATE` and writes nothing. The loser keeps their
-  text, sees the current head and rebases by hand; nothing merges silently. Two accounts claiming
-  one gene, or one account claiming two, commit one and conflict the other.
-- A command ID is an idempotency key: the same ID and bytes return the original response, and the
-  same ID with different bytes is refused (`409 IDEMPOTENCY_KEY_REUSED`). A receipt lives as long as
-  the authoring database.
-- A user command takes its actor from the authenticated session; an actor ID in a body is ignored
-  or refused, and a cross-origin or ambiguous browser mutation is refused before parsing. A
-  disabled or erased account is refused on every mutation, even with an old session.
+- A command ID is an idempotency key: the version ID is derived from the account and the command
+  ID, so a retried autosave returns the version it already saved instead of saving twice.
+- Two saves racing on one line both read the next number; the database's unique (line, version)
+  key lets one in and answers the other `409 TEXT_VERSION_CONFLICT`. The panel keeps the text and
+  the retry saves it as the next version, so the later save wins and both stay in History.
+- A user command takes its actor from the authenticated session; an actor ID in a body is ignored.
+  A cross-site or non-JSON mutation is refused before parsing, and a body is at most 96 KiB. Only
+  the gene's active caretaker may write; a past caretaker and a stranger get `404`, and a
+  suspended tenure gets `409 ASSIGNMENT_NOT_ACTIVE`.
 - `account_id` and `gene_id` are permanent. Symbols are aliases that can be renamed or merged, and
   tenure and history follow the gene ID. An erased author shows as a stable anonymous name.
 
@@ -64,21 +67,16 @@ primary D1 are projections; a projection that lags never rolls back an accepted 
   `icono_gene_essence.manifestation` column. That column had been written through a 4,000-character
   cut since June, so about 6,900 seeds are the first 4,000 characters of a longer text (B-977).
 - The full original texts are in the workstation's `D:\Coding\Datasets\iconoplasm\prompts.db`
-  (`manifestations` table). It is a frozen archive: nothing has written to it since 2026-08-30, and
-  the workstation reads prose only from this authority.
-- No route writes seed text. Prose changes only through a caretaker's save; the workstation's
-  essence upload carries no prose (B-831, B-949).
+  (`manifestations` table), where its description batches still write; each finished text goes to
+  the Website through the route below.
+- Factory text changes only through the workstation's `PUT /api/iconoplasm/admin/texts`; a
+  caretaker's prose changes only through their own save (B-831, B-949).
 
 ## The size limit
 
-Prose is at most 10,000 code points and 16 KiB, checked the same way in the browser and in the
-authority. 99.9% of the original texts fit (measured on `prompts.db`, B-977). A caretaker's lineage holds at most 256 revisions, 512 Tags derivatives and 2 MiB of
-bodies, and the store admits at most 350 MB of bodies in all. Admission counts every byte before
-metadata commits, so a refused save keeps the draft. An upload that starts and never finishes
-(a phone losing signal mid-save) keeps its reservation only until its lease ends. The same
-caretaker's next upload releases it, and so does the background tick that drains the authority
-projection every twelve minutes (three at most per run): the reserved bytes return and the stored
-body is deleted.
+Prose is at most 10,000 code points and 16 KiB, checked the same way in the browser and on the
+Website (`workers/lib/iconoplasm-manifestation-prose.js`). 99.9% of the original texts fit
+(measured on `prompts.db`, B-977).
 
 ## The Tags helper only suggests
 
@@ -86,7 +84,7 @@ The editor's "Auto-extract tags from prose" and "Auto-correct prose from tags" b
 `POST /api/iconoplasm/caretaker/genes/<gene>/taggerize`
 (`workers/iconoplasm/caretaker/taggerizer.js`). The route answers with a suggestion and
 saves nothing; the editor fills it in, marks it unsaved and waits for the caretaker's
-Save, which uses the ordinary revision and Tags-derivative commands. For prose, the
+Save, which is the ordinary save with Tags. For prose, the
 editor also sends the Tags last saved with it; the model is told only what changed and
 returns find/replace edits, which the route applies, so text no edit touches stays
 exactly as the caretaker wrote it. Only the gene's
@@ -95,7 +93,7 @@ the module header) on the free plan's 10,000 Neurons a day, so each caretaker ge
 calls per UTC day (`icono_taggerizer_daily_calls`, one upsert per call) and
 `ICONOPLASM_TAGGERIZER_DISABLED = "1"` switches the route off and hides the buttons.
 
-## Images and the replica use exact sources, and releases are proven in a browser
+## Images use exact sources, and releases are proven in a browser
 
 A caretaker can go from a candidate image to the saved version that made it. Each candidate on
 the gene page shows "Made from version N", which opens that version in History, including after
@@ -103,11 +101,8 @@ later edits. The link comes from the stored source of the image and appears only
 caretaker's own dossier (`candidate_sources`), never in the public gene object. An image from
 before sources were recorded shows no link, and nothing is guessed for it.
 
-An image request captures its source at acceptance: gene, canonical selection, manifestation and
-revision IDs, plaintext SHA-256 and length, accepted Tags derivative, recipe and model. A later
-canonical change, departure or new revision does not alter it, and a withdrawn source fails closed;
-no newest-row fallback exists. Replication is at-least-once and idempotent; a gap or expired cursor
-forces a validated snapshot swap. Offline edits stay drafts, resubmit with their command ID and
-expected versions, and on conflict keep the draft beside the remote head. Deployment is not
-proof: fresh logged-in browser tests cover edit, rollback, a handover (hide and restore the
+An image request captures its source at acceptance: the gene's text ID (`readGeneText`), its
+SHA-256 and length, recipe and model (`workers/lib/iconoplasm-generation-provenance.js`). A later
+save, departure or withdrawal does not alter it, and a source that can no longer be read fails
+closed; no newest-row fallback exists. Deployment is not proof: fresh logged-in browser tests cover edit, rollback, a handover (hide and restore the
 predecessor's text), leaving, an exact image source and a conflict retry, on two genes.
