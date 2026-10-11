@@ -20,7 +20,7 @@ import { createIconoplasmPublicationReader } from "./publication-reader.js"
 // 8. a brick batch is answered from the catalog rows; unknown symbols are
 //    simply absent.
 const CANONICAL = "https://iconoplasm.brinedew.bio"
-const BUNNY = "https://iconoplasmportraits.b-cdn.net"
+const BUNNY = "https://img.brinedew.bio"
 
 function stableGeneFixture() {
   return {

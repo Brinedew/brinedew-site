@@ -172,7 +172,7 @@ const CSP = publicContentSecurityPolicy({ geneguessrGame: true }).replace(
 const PROVIDER_HOSTS = ["models.rcsb.org", "alphafold.ebi.ac.uk", "swissmodel.expasy.org"]
 // The CDN the "Top Streaks" object is published to and read from, Bunny Storage behind the
 // Worker's own writes, and Discord's CDN behind its avatar fetches: all fixtures here.
-const CDN_HOST = "iconoplasmportraits.b-cdn.net"
+const CDN_HOST = "img.brinedew.bio"
 const STORAGE_ZONE = "e2e-zone"
 const BUNNY_ENV = {
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,

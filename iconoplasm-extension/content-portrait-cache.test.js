@@ -32,6 +32,9 @@ function deliveryRuntime() {
   return sandbox.IconoplasmContentPortraitCache
 }
 
+const ACCELERATOR = "https://img.brinedew.bio/"
+const CANONICAL = "https://iconoplasm.brinedew.bio/"
+
 for (const blocked of [false, true]) {
   test(`source-plan loading remembers the working route without duplicate races (blocked=${blocked})`, async () => {
     const session = createPortraitDeliverySession()
@@ -39,7 +42,7 @@ for (const blocked of [false, true]) {
     const { loadPlannedSource } = deliveryRuntime()
     const load = async (url) => {
       starts.push(url)
-      if (blocked && url.includes("b-cdn.net")) throw new Error("DNS unavailable")
+      if (blocked && url.startsWith(ACCELERATOR)) throw new Error("DNS unavailable")
       return url
     }
     for (let index = 0; index < 10; index++) {
@@ -48,8 +51,8 @@ for (const blocked of [false, true]) {
       const winner = await loadPlannedSource(plan, load)
       session.reportSuccess(winner, plan.decisionId)
     }
-    assert.equal(starts.filter((url) => url.includes("b-cdn.net")).length, blocked ? 1 : 10)
-    assert.equal(starts.filter((url) => url.includes("brinedew.bio")).length, blocked ? 10 : 0)
+    assert.equal(starts.filter((url) => url.startsWith(ACCELERATOR)).length, blocked ? 1 : 10)
+    assert.equal(starts.filter((url) => url.startsWith(CANONICAL)).length, blocked ? 10 : 0)
   })
 }
 

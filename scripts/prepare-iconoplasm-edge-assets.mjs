@@ -36,11 +36,11 @@ const iconoplasmCsp = [
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "img-src 'self' data: blob: https://cdn.discordapp.com https://iconoplasmportraits.b-cdn.net",
+  "img-src 'self' data: blob: https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com",
-  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com",
+  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com",
   "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com",
   "worker-src 'self' blob:",
   "form-action 'self'",
@@ -207,7 +207,7 @@ export const ICONOPLASM_REDIRECTS = `${[
 // the normal app and no Worker request is spent. The shell itself is ~340 KB
 // (inline font bootstrap), so copying it per gene would be ~6.5 GB.
 const ICONOPLASM_ORIGIN = "https://iconoplasm.brinedew.bio"
-const PUBLICATION_CDN = "https://iconoplasmportraits.b-cdn.net"
+const PUBLICATION_CDN = "https://img.brinedew.bio"
 
 function escapeHtml(value) {
   return String(value ?? "")

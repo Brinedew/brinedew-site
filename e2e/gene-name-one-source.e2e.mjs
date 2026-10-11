@@ -53,7 +53,7 @@ import { writeFactoryGeneText } from "../workers/iconoplasm/gene-text-write.js"
 import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
-const CDN = "https://iconoplasmportraits.b-cdn.net"
+const CDN = "https://img.brinedew.bio"
 const TINY_WEBP = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64")
 
 // What each gene is called by the two authorities. `catalog` is

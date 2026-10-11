@@ -1,4 +1,4 @@
-const CDN = "https://iconoplasmportraits.b-cdn.net"
+const CDN = "https://img.brinedew.bio"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 // Bunny answers a warm object in well under a second; a hung connection is the
 // case this bounds, not a slow body.

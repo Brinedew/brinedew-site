@@ -4988,7 +4988,7 @@ https://geneguessr.brinedew.bio/`
   // Worker request for the box or its pictures. The Worker route answers the same shape and is the
   // fallback for a network that cannot reach the CDN and for the minutes before the first publish,
   // and the read after the visitor changes their own visibility, which should show at once.
-  const LEADERBOARD_OBJECT_URL = "https://iconoplasmportraits.b-cdn.net/leaderboard/v1/top.json"
+  const LEADERBOARD_OBJECT_URL = "https://img.brinedew.bio/leaderboard/v1/top.json"
   const LEADERBOARD_OBJECT_TIMEOUT_MS = 4000
 
   async function fetchLeaderboardObject() {

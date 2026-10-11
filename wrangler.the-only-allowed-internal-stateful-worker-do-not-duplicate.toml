@@ -249,7 +249,7 @@ ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 # origin. Regional DNS failure belongs to the one-probe canonical fallback;
 # removing this value shifts all portrait reads onto the Worker budget.
 # Extension Cache Storage reuses bytes across websites; misses retain this provider.
-ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://img.brinedew.bio"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 # ARCHITECTURE FENCE [IPD-012]: authoring reads use authenticated Storage only.
@@ -456,7 +456,7 @@ ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 # ARCHITECTURE FENCE [IPD-001]: staging must exercise the same Bunny-primary,
 # canonical-fallback policy as production instead of hiding delivery drift.
 # Client cross-site cache migration adds no server binding or paid storage dependency.
-ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://iconoplasmportraits.b-cdn.net"
+ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://img.brinedew.bio"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
 ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"

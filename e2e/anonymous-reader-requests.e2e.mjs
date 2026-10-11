@@ -42,7 +42,7 @@ import {
   startSite,
 } from "./harness.mjs"
 
-const CDN_HOST = "iconoplasmportraits.b-cdn.net"
+const CDN_HOST = "img.brinedew.bio"
 const BEACON_HOST = "static.cloudflareinsights.com"
 const CONSENT_COOKIE = "brinedew_analytics_consent"
 

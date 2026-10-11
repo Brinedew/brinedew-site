@@ -162,9 +162,7 @@ export function iconoplasmGeneCardObjectKey(symbolValue, fingerprintValue) {
 }
 
 export function iconoplasmGeneCardCdnUrl(env, objectKey) {
-  const base = String(
-    env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "https://iconoplasmportraits.b-cdn.net",
-  )
+  const base = String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "https://img.brinedew.bio")
     .trim()
     .replace(/\/+$/, "")
   const key = String(objectKey || "").replace(/^\/+/, "")

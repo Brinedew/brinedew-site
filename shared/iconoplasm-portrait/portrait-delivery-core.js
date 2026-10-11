@@ -12,7 +12,7 @@ export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
   canonical_origin: "https://iconoplasm.brinedew.bio",
   accelerator: Object.freeze({
     id: "bunny",
-    origin: "https://iconoplasmportraits.b-cdn.net",
+    origin: "https://img.brinedew.bio",
     enabled: true,
   }),
   probe_timeout_ms: 2500,
@@ -28,6 +28,9 @@ export const DEFAULT_PORTRAIT_DELIVERY_POLICY = Object.freeze({
 const SOURCES = new Set(["accelerator", "canonical"])
 const STATES = new Set(["undecided", "accelerator", "canonical", "terminal_failure"])
 const DELIVERED_IMAGE_PATH_PREFIXES = Object.freeze(["/portraits/", "/gene-cards/"])
+// B-1087: cards published before the switch name Bunny's own host. Their images
+// move onto the accelerator, so a reader never pays Bunny for a repeat view.
+const FORMER_ACCELERATOR_ORIGINS = Object.freeze(["https://iconoplasmportraits.b-cdn.net"])
 
 function normalizedOrigin(raw, fallback = "") {
   try {
@@ -138,6 +141,7 @@ export function portraitPath(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY_POLICY) 
     const parsed = new URL(value, normalizedPolicy.canonical_origin)
     const allowedOrigins = new Set([normalizedPolicy.canonical_origin])
     if (normalizedPolicy.accelerator.origin) allowedOrigins.add(normalizedPolicy.accelerator.origin)
+    for (const origin of FORMER_ACCELERATOR_ORIGINS) allowedOrigins.add(origin)
     if (
       !allowedOrigins.has(parsed.origin) ||
       !DELIVERED_IMAGE_PATH_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))
@@ -157,6 +161,7 @@ export function portraitSourceFromUrl(rawUrl, policy = DEFAULT_PORTRAIT_DELIVERY
     const origin = new URL(String(rawUrl || ""), normalizedPolicy.canonical_origin).origin
     if (origin === normalizedPolicy.canonical_origin) return "canonical"
     if (origin === normalizedPolicy.accelerator.origin) return "accelerator"
+    if (FORMER_ACCELERATOR_ORIGINS.includes(origin)) return "accelerator"
   } catch (_error) {}
   return ""
 }
