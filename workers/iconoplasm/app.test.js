@@ -313,8 +313,8 @@ test("a full registration writes all its rows with two statements", async () => 
 
 // B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
 // whole D1 write wall. Batch work stops at the tier table's 85% of a wall,
-// measured on Cloudflare's own meter; a reader's own request runs to the wall;
-// an unreadable meter stops nothing.
+// measured on Cloudflare's own meter; a reader's own request runs to the wall.
+// What a lagging meter and an unreadable one do is batch-admission.test.js (B-1085).
 test("batch registrations and rebuilds stop at 85% of a D1 wall, a reader's session does not", async () => {
   const spent = async () => ({ rows_read: 1_000_000, rows_written: 85_000 })
   const h = harness({ usage: spent })
@@ -357,9 +357,23 @@ test("the usage route reports what the shedding sees, and an unread meter as nul
   assert.equal((await read(h, null)).status, 401)
   const { status, body } = await read(h)
   assert.equal(status, 200)
+  // The sample doesn't say where the meter's knowledge ends, so every batch
+  // minute of the day counts as unseen; there are none yet.
   assert.deepEqual(body.meters, {
-    rows_read: { used: 1_234_567, wall: 5_000_000, batch_limit: 4_250_000 },
-    rows_written: { used: 85_000, wall: 100_000, batch_limit: 85_000 },
+    rows_read: {
+      used: 1_234_567,
+      unseen_batch: 0,
+      projected: 1_234_567,
+      wall: 5_000_000,
+      batch_limit: 4_250_000,
+    },
+    rows_written: {
+      used: 85_000,
+      unseen_batch: 0,
+      projected: 85_000,
+      wall: 100_000,
+      batch_limit: 85_000,
+    },
   })
   assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/)
   assert.equal(h.legacyCalls.length, 0)
@@ -433,12 +447,20 @@ test("the usage route answers a window's D1 rows from Cloudflare's analytics", a
   assert.equal(blind.body.window.rows_written, null, "unreadable is null, never zero")
 })
 
-test("a usage meter that can't be read stops no registration", async () => {
+// B-1085 reversed this: an unreadable meter used to let batch work through,
+// trusting Cloudflare's own wall, which lags too (134,189 written against the
+// 100,000 wall on 2026-10-11). Now batch work waits and a reader's own
+// registration still runs.
+test("a usage meter that can't be read stops a batch registration, not a reader's", async () => {
   const h = harness({
     usage: async () => {
       throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
     },
   })
-  const result = await h.register({ created_by: "drain:local", portraits: [portrait("TP53", "a")] })
-  assert.equal(result.status, 200, JSON.stringify(result.body))
+  const body = { created_by: "drain:local", portraits: [portrait("TP53", "a")] }
+  const batch = await h.register(body)
+  assert.equal(batch.status, 503)
+  assert.equal(batch.body.code, "D1_METER_UNAVAILABLE")
+  const reader = await h.register({ ...body, criticality: "critical" })
+  assert.equal(reader.status, 200, JSON.stringify(reader.body))
 })

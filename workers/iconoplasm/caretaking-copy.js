@@ -40,6 +40,23 @@ const SUPERVOTE_SQL = `UPDATE icono_caretaker_assignments
 // 1 MB of JSON.
 const PAGE_ROWS = 50
 const PAGE_JSON_BYTES = 1_000_000
+// Every role goes in one page (below), so a copy's pages are this long.
+export const COPY_PAGE_ROWS = { texts: PAGE_ROWS, versions: PAGE_ROWS, assignments: 1000 }
+
+const SOURCE_TABLES = {
+  texts: "icono_gene_texts",
+  versions: "icono_caretaker_text_versions",
+  assignments: "icono_caretaker_assignments",
+}
+
+// How many rows a whole copy of a table moves: its price, asked on its first
+// page (B-1085). One read per source row.
+export async function copyJobRows(env, table) {
+  const row = await env.ICONOPLASM_AUTHORING_DB.prepare(
+    `SELECT COUNT(*) AS n FROM ${SOURCE_TABLES[table]}`,
+  ).first()
+  return Number(row?.n || 0)
+}
 
 const SOURCE_SQL = {
   texts: `SELECT t.gene_id AS cursor, i.canonical_symbol AS gene_symbol, t.gene_id, t.text_id,

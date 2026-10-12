@@ -53,11 +53,21 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
   0.05–0.15 ms of CPU each, and a free-plan request is stopped near 10 ms:
   on 2026-10-09 a 96-portrait registration (192 statements) was killed at
   60 ms. Drizzle stays right for reads and single-row writes.
-- **A route that does batch work sheds it** with `shedBatchWork` in
-  `workers/iconoplasm/app.js`: it reads Cloudflare's own D1 meter and answers
-  503 `D1_BATCH_SHARE_SPENT` at the tier table's 85% of a wall, so readers keep
-  the rest. A reader's own action runs to the wall. On 2026-10-09 step 1's new
-  route had no shedding, and a batch spent the whole 100,000-row write wall.
+- **ARCHITECTURE FENCE [IPD-013]: every admin route names its D1 price** with
+  `shedBatchWork(criticality, price)` in `workers/iconoplasm/app.js`, and is let
+  in only when Cloudflare's meter + the batch work let in since the meter's
+  newest minute + its price fit under the tier table's 85% stop
+  (`workers/iconoplasm/batch-admission.js`). A job of many pages prices the
+  whole job on its first page. An unreadable meter stops batch work; a reader's
+  own action runs to the wall. The app refuses to build when an admin route has
+  no price, so nobody has to remember. Two incidents put this here: on
+  2026-10-09 a new route had no shedding and a batch spent the 100,000-row
+  write wall; on 2026-10-11 a copy wrote 62,000 rows in four minutes past a
+  stop that only read the meter, which runs one to two minutes late, and
+  readers lost their votes for the day (B-1085). Before a bulk job, ask
+  `GET /api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M`. Registry:
+  `architecture-fences.json`; runbook:
+  `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 - **Attach auth to each route**, never to a path prefix. The legacy admin
   routes behind the fall-through keep their own check: an admin session, or
   the admin token. The admin token has one spelling everywhere, a standard

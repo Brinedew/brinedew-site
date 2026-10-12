@@ -32,9 +32,12 @@ function payload(reads = 10) {
 }
 
 test("account admission sums every database and rejects ambiguous or truncated telemetry", () => {
+  // No minute in the last ten (B-1085's `recent` probe): a quiet account, whose
+  // meter has counted everything before the probe's window.
   assert.deepEqual(parseOperationCostAccountUsage(payload(), day, time), {
     day,
     measured_at: time,
+    meter_counted_before: "2026-09-06T11:50:00.000Z",
     rows_read: 30,
     rows_written: 7,
     requests: 2,
