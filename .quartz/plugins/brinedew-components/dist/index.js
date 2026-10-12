@@ -2560,6 +2560,14 @@ function isPhrasingOnly(nodes) {
     return isPhrasingOnly(child.children);
   });
 }
+var isBlock = (node) => isElement2(node) && !PHRASING_OK.has(node.tagName);
+function trimEdges(children) {
+  let start = 0;
+  let end = children.length;
+  while (start < end && isWhitespaceText2(children[start])) start++;
+  while (end > start && isWhitespaceText2(children[end - 1])) end--;
+  return children.slice(start, end);
+}
 function stripBreaks(children) {
   const next = [];
   for (let i3 = 0; i3 < children.length; i3++) {
@@ -2599,7 +2607,7 @@ function normalizeStructure(tree) {
           parent.children.splice(index, 1);
           return;
         }
-        node.children = stripBreaks(meaningful);
+        node.children = trimEdges(stripBreaks(node.children));
         if (parent.type === "element" && parent.tagName === "li" && isPhrasingOnly(node.children)) {
           parent.children.splice(index, 1, ...node.children);
           return;
@@ -2609,7 +2617,13 @@ function normalizeStructure(tree) {
         node.children = stripBreaks(node.children);
       }
       if (isElement2(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
-        node.children = node.children.filter((child) => !isWhitespaceText2(child));
+        const children = node.children;
+        node.children = children.filter((child, i3) => {
+          if (!isWhitespaceText2(child)) return true;
+          const prev = children[i3 - 1];
+          const next = children[i3 + 1];
+          return !!prev && !!next && !isBlock(prev) && !isBlock(next);
+        });
       }
     }
   );
