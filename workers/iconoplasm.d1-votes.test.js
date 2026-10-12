@@ -10,7 +10,8 @@
 //  3. A vote names an asset of another gene and is stored against this gene.
 //  4. A caretaker supervote weighs anything but exactly 10 (+ or -), or moves
 //     with a stale assignment/supervote version, from a non-owner, onto an
-//     ineligible candidate, or twice for one command id.
+//     ineligible candidate, or twice for one command id; or it keeps counting
+//     after the caretaker's role ends.
 //  5. A failed stable-object publish turns a committed vote into an error.
 //  6. A snapshot or vote statement scans a vote table instead of seeking an
 //     index, or the statement count grows with the item count.
@@ -74,12 +75,11 @@ import {
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
 import {
-  caretakerSupervoteRequestSha256,
-  invalidateCaretakerSupervoteInD1,
-  projectCaretakerAssignmentInD1,
-  readCaretakerSupervoteFromD1,
-  setCaretakerSupervoteInD1,
+  invalidateCaretakerSupervote,
+  readCaretakerSupervote,
+  setCaretakerSupervote,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
+import { changeRole } from "./iconoplasm/caretaker-roles.js"
 import {
   IMAGE_EDIT_INHERITED_UPVOTE_LIMIT,
   VOTE_DAILY_BUDGET_EXHAUSTED,
@@ -114,9 +114,7 @@ const VOTE_TABLES = [
   "icono_vote_asset_summary",
   "icono_portrait_assets",
   "icono_publish_events",
-  "icono_caretaker_supervote_projection",
-  "icono_caretaker_vote_assignment_projection",
-  "icono_caretaker_candidate_eligibility_projection",
+  "icono_caretaker_assignments",
   "icono_gene_vote_version",
   "icono_vote_person_day",
 ]
@@ -490,35 +488,22 @@ test("3: a vote on another gene's asset is refused and writes nothing", async ()
 
 // --- 4 ------------------------------------------------------------------
 
-async function seedCaretaker(db, symbol, account = "acct_owner") {
-  await projectCaretakerAssignmentInD1(db, {
-    event_id: `evt-${symbol}-1`,
-    event_sequence: 1,
-    gene: { gene_id: `gene-${symbol}`, canonical_symbol: symbol },
-    assignment: {
-      caretaker_assignment_id: `assign-${symbol}`,
-      account_id: account,
-      status: "active",
-      assignment_version: 1,
-    },
-  })
+// The gene's caretaker role, as a claim leaves it (caretaker-roles.js).
+function seedCaretaker(db, symbol, account = "acct_owner") {
+  db.exec(
+    `INSERT INTO icono_caretaker_assignments
+       (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+        relinquish_policy, invited_by_account_id, started_at)
+     VALUES (?, ?, ?, 'active', '2026-10-01', 'retain', ?, '2026-10-01')`,
+    `assign-${symbol}`,
+    symbol,
+    account,
+    account,
+  )
 }
 
-async function supervote(db, symbol, fields) {
-  const command = {
-    command_id: fields.commandId,
-    gene_symbol: symbol,
-    caretaker_account_id: fields.accountId,
-    asset_sha256: fields.assetSha256 ?? null,
-    direction: fields.assetSha256 ? fields.direction : null,
-    expected_assignment_version: fields.expectedAssignmentVersion,
-    expected_supervote_version: fields.expectedSupervoteVersion,
-  }
-  return setCaretakerSupervoteInD1(db, {
-    symbol,
-    ...fields,
-    requestSha256: fields.requestSha256 || (await caretakerSupervoteRequestSha256(command)),
-  })
+function supervote(db, symbol, fields) {
+  return setCaretakerSupervote(db, { symbol, ...fields })
 }
 
 test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule", async () => {
@@ -527,7 +512,7 @@ test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule"
   seedAsset(db, "EGFR", sha("b"), { createdAt: "2026-01-01 00:00:00" })
   seedPublished(db, "EGFR", sha("a"))
   for (let index = 0; index < 9; index += 1) await vote(db, "EGFR", sha("a"), `u${index}`, 1)
-  await seedCaretaker(db, "EGFR")
+  seedCaretaker(db, "EGFR")
 
   const set = await supervote(db, "EGFR", {
     accountId: "acct_owner",
@@ -552,28 +537,21 @@ test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule"
   election = await readGeneElection(db, "EGFR")
   assert.equal(election.winner.asset_sha256, sha("a"))
 
-  // An identical retry replays the receipt; the same id with another request
-  // is refused.
-  const replay = await supervote(db, "EGFR", {
-    accountId: "acct_owner",
-    assetSha256: sha("b"),
-    direction: 1,
-    commandId: "cmd_1",
-    expectedAssignmentVersion: 1,
-    expectedSupervoteVersion: 0,
-  })
-  assert.equal(replay.replayed, true)
-  await assert.rejects(
-    supervote(db, "EGFR", {
+  // A retry of the last command replays it, whatever the retry carries: a
+  // command ID names one click.
+  for (const assetSha256 of [sha("b"), sha("a")]) {
+    const replay = await supervote(db, "EGFR", {
       accountId: "acct_owner",
-      assetSha256: sha("a"),
+      assetSha256,
       direction: 1,
       commandId: "cmd_1",
       expectedAssignmentVersion: 1,
-      expectedSupervoteVersion: 1,
-    }),
-    { code: "COMMAND_ID_CONFLICT" },
-  )
+      expectedSupervoteVersion: 0,
+    })
+    assert.equal(replay.replayed, true)
+    assert.equal(replay.supervote.asset_sha256, sha("b"))
+    assert.equal(replay.supervote.supervote_version, 1)
+  }
   for (const [fields, code] of [
     [{ accountId: "acct_owner", expectedSupervoteVersion: 0 }, "STALE_SUPERVOTE_STATE"],
     [{ accountId: "acct_owner", expectedAssignmentVersion: 2 }, "STALE_ASSIGNMENT_STATE"],
@@ -626,48 +604,48 @@ test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule"
     "UPDATE icono_portrait_assets SET status = 'rejected' WHERE gene_symbol = 'EGFR' AND asset_sha256 = ?",
     sha("a"),
   )
-  const cleared = await invalidateCaretakerSupervoteInD1(db, {
+  const cleared = await invalidateCaretakerSupervote(db, {
     symbol: "EGFR",
     assetSha256: sha("a"),
+    invalidationId: "invalidate_a",
   })
   assert.equal(cleared.selection_cleared, true)
-  const after = await readCaretakerSupervoteFromD1(db, "EGFR", "acct_owner")
+  const after = await readCaretakerSupervote(db, "EGFR", "acct_owner")
   assert.equal(after.snapshot.active, false)
   assert.equal(after.snapshot.supervote_version, 3)
 
-  // Ending the assignment clears any supervote and is projected once.
+  // A supervote decides the gene; then the role ends. The supervote stops
+  // counting with nothing to clear, and the gene's vote version moves, so the
+  // next election cannot be one computed before the end.
+  seedAsset(db, "EGFR", sha("c"))
+  seedAsset(db, "EGFR", sha("d"))
+  for (const user of ["v1", "v2", "v3"]) await vote(db, "EGFR", sha("d"), user, 1)
   await supervote(db, "EGFR", {
     accountId: "acct_owner",
-    commandId: "cmd_clear",
+    assetSha256: sha("c"),
+    direction: 1,
+    commandId: "cmd_c",
     expectedAssignmentVersion: 1,
     expectedSupervoteVersion: 3,
   })
-  const ended = await projectCaretakerAssignmentInD1(db, {
-    event_id: "evt-EGFR-2",
-    event_sequence: 2,
-    gene: { gene_id: "gene-EGFR", canonical_symbol: "EGFR" },
-    assignment: {
-      caretaker_assignment_id: "assign-EGFR",
-      account_id: "acct_owner",
-      status: "ended",
-      assignment_version: 2,
-    },
+  assert.equal((await readGeneElection(db, "EGFR")).winner.asset_sha256, sha("c"))
+  const versionBefore = (await readGeneElection(db, "EGFR")).version
+  const ended = await changeRole(db, {
+    roleId: "assign-EGFR",
+    action: "end",
+    expectedVersion: 1,
+    actorAccountId: "acct_owner",
+    ownerAccountId: "acct_owner",
+    now: "2026-10-11T00:00:00.000Z",
+    reason: "caretaker_resigned",
+    policy: "retain",
   })
   assert.equal(ended.changed, true)
-  await assert.rejects(
-    projectCaretakerAssignmentInD1(db, {
-      event_id: "evt-EGFR-0",
-      event_sequence: 1,
-      gene: { gene_id: "gene-EGFR", canonical_symbol: "EGFR" },
-      assignment: {
-        caretaker_assignment_id: "assign-EGFR",
-        account_id: "acct_owner",
-        status: "active",
-        assignment_version: 1,
-      },
-    }),
-    { code: "STALE_ASSIGNMENT_EVENT" },
-  )
+  assert.deepEqual(ended.reElect, ["EGFR"])
+  election = await readGeneElection(db, "EGFR")
+  assert.equal(election.winner.asset_sha256, sha("d"))
+  assert.ok(election.version > versionBefore, "the end moved the gene's vote version")
+  assert.equal((await readCaretakerSupervote(db, "EGFR")).role, null)
 })
 
 test("4: the supervote route answers with the supervote and re-elects the gene", async () => {
@@ -675,7 +653,7 @@ test("4: the supervote route answers with the supervote and re-elects the gene",
   seedAsset(db, "BRCA1", sha("a"), { createdAt: "2026-01-02 00:00:00" })
   seedAsset(db, "BRCA1", sha("b"), { createdAt: "2026-01-01 00:00:00" })
   seedPublished(db, "BRCA1", sha("a"))
-  await seedCaretaker(db, "BRCA1")
+  seedCaretaker(db, "BRCA1")
   const user = { user_id: "reader-1", account_id: "acct_owner" }
   const ctx = waitUntilRecorder()
   const response = await handleApi(
@@ -1099,9 +1077,7 @@ const BUDGETED_TABLES = [
   "icono_vote_asset_summary",
   "icono_gene_vote_version",
   "icono_vote_person_day",
-  "icono_caretaker_supervote_projection",
-  "icono_caretaker_supervote_events",
-  "icono_caretaker_supervote_command_receipts",
+  "icono_caretaker_assignments",
   "icono_publish_state",
   "icono_publish_events",
 ]
@@ -1389,7 +1365,7 @@ test("19: an import whose election fails answers non-2xx with the failed symbols
   }))
   // KRAS's election read fails; the vote writes and TP53's election do not.
   db.failOn = {
-    test: (sql, args) => /icono_caretaker_supervote_projection/.test(sql) && args[0] === "KRAS",
+    test: (sql, args) => /icono_caretaker_assignments/.test(sql) && args[0] === "KRAS",
   }
   const failed = await importRoute(db, items)
   assert.equal(failed.status, 502, JSON.stringify(failed.payload))

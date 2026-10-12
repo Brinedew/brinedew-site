@@ -1,37 +1,42 @@
-// B-1065: the text a gene uses now, from the plain tables of authoring migration
-// 0024. The gene uses the caretaker version it chose when there is one and it is
+// B-1065: the text a gene uses now, from the plain tables of main migration
+// 0125. The gene uses the caretaker version it chose when there is one and it is
 // not withdrawn; otherwise the factory's text. One D1 read, no Bunny.
 //
 // The answer carries the text's Tags, which stay private (B-859): card builders
 // take only what publicGeneText returns.
 const GENE_TEXT_SQL = `
-SELECT g.gene_id, g.canonical_symbol, g.status AS gene_status,
+SELECT t.gene_symbol, t.gene_id,
        t.text_id, t.version, t.text, t.text_sha256, t.tags, t.fields_json, t.readers_see,
        v.version_id AS ct_version_id, v.line_id AS ct_line_id, v.version AS ct_version,
        v.text AS ct_text, v.text_sha256 AS ct_text_sha256, v.tags AS ct_tags,
        v.fields_json AS ct_fields_json, v.readers_see AS ct_readers_see
-  FROM icono_gene_identities g
-  JOIN icono_gene_texts t ON t.gene_id = g.gene_id
+  FROM icono_gene_texts t
   LEFT JOIN icono_caretaker_text_versions v
     ON v.version_id = t.chosen_caretaker_version_id
-   AND v.gene_id = t.gene_id
+   AND v.gene_symbol = t.gene_symbol
    AND v.withdrawn_at IS NULL
- WHERE g.canonical_symbol = ? COLLATE NOCASE
- LIMIT 1`
+ WHERE t.gene_symbol = ?`
 
-export async function readGeneText(db, symbol) {
-  if (!db?.prepare) throw new Error("ICONOPLASM_AUTHORING_DB binding missing")
-  const normalized = String(symbol || "")
+function requireDb(db) {
+  if (!db?.prepare) throw new Error("ICONOPLASM_DB binding missing")
+}
+
+export function geneSymbol(raw) {
+  return String(raw || "")
     .trim()
     .toUpperCase()
+}
+
+export async function readGeneText(db, symbol) {
+  requireDb(db)
+  const normalized = geneSymbol(symbol)
   if (!normalized) return null
   const row = await db.prepare(GENE_TEXT_SQL).bind(normalized).first()
   if (!row) return null
   if (row.ct_version_id) {
     return Object.freeze({
       gene_id: row.gene_id,
-      symbol: row.canonical_symbol,
-      gene_status: row.gene_status,
+      symbol: row.gene_symbol,
       origin: "caretaker",
       text_id: row.ct_version_id,
       line_id: row.ct_line_id,
@@ -45,8 +50,7 @@ export async function readGeneText(db, symbol) {
   }
   return Object.freeze({
     gene_id: row.gene_id,
-    symbol: row.canonical_symbol,
-    gene_status: row.gene_status,
+    symbol: row.gene_symbol,
     origin: "factory",
     text_id: row.text_id,
     line_id: null,
@@ -62,31 +66,30 @@ export async function readGeneText(db, symbol) {
 // One text of a gene by its ID, for a generation request made from it: the
 // gene's factory text while it is still the current one, or any caretaker
 // version that was not withdrawn. The factory row keeps only its current text,
-// so an older factory text is gone and the answer is null.
+// so an older factory text is gone and the answer is null. Requests name the
+// gene by the ID they stored, so the lookup goes through the gene_id index.
 const GENE_TEXT_VERSION_SQL = `
-SELECT g.gene_id, g.canonical_symbol, g.status AS gene_status, 'factory' AS origin,
+SELECT t.gene_symbol, t.gene_id, 'factory' AS origin,
        t.text_id, NULL AS line_id, t.version, t.text, t.text_sha256, t.tags,
        t.fields_json, t.readers_see
-  FROM icono_gene_identities g
-  JOIN icono_gene_texts t ON t.gene_id = g.gene_id
- WHERE g.gene_id = ? AND t.text_id = ?
+  FROM icono_gene_texts t
+ WHERE t.gene_id = ? AND t.text_id = ?
 UNION ALL
-SELECT g.gene_id, g.canonical_symbol, g.status AS gene_status, 'caretaker' AS origin,
+SELECT t.gene_symbol, t.gene_id, 'caretaker' AS origin,
        v.version_id, v.line_id, v.version, v.text, v.text_sha256, v.tags,
        v.fields_json, v.readers_see
-  FROM icono_gene_identities g
-  JOIN icono_caretaker_text_versions v ON v.gene_id = g.gene_id
- WHERE g.gene_id = ? AND v.version_id = ? AND v.withdrawn_at IS NULL
+  FROM icono_gene_texts t
+  JOIN icono_caretaker_text_versions v ON v.gene_symbol = t.gene_symbol
+ WHERE t.gene_id = ? AND v.version_id = ? AND v.withdrawn_at IS NULL
  LIMIT 1`
 
 export async function readGeneTextVersion(db, geneId, textId) {
-  if (!db?.prepare) throw new Error("ICONOPLASM_AUTHORING_DB binding missing")
+  requireDb(db)
   const row = await db.prepare(GENE_TEXT_VERSION_SQL).bind(geneId, textId, geneId, textId).first()
   if (!row) return null
   return Object.freeze({
     gene_id: row.gene_id,
-    symbol: row.canonical_symbol,
-    gene_status: row.gene_status,
+    symbol: row.gene_symbol,
     origin: row.origin,
     text_id: row.text_id,
     line_id: row.line_id ?? null,

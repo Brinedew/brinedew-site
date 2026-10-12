@@ -14,7 +14,9 @@ export const CARETAKER_SUPERVOTE_DIRECTIONS = Object.freeze([-1, 1])
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/
 const SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
-const ASSIGNMENT_STATUSES = new Set(["pending_acceptance", "active", "suspended", "ended"])
+// The candidates an election counts (gene-votes.js); a supervote may only name one.
+const ELIGIBLE_CANDIDATE_SQL =
+  "lower(pa.status) <> 'rejected' AND pa.autopick_eligible = 1 AND pa.is_stale = 0"
 
 export class CaretakerSupervoteError extends Error {
   constructor(code, message, status = 400) {
@@ -62,16 +64,6 @@ function normalizeVersion(value, field, { minimum = 0 } = {}) {
   return normalized
 }
 
-function normalizeRequestSha256(value) {
-  const normalized = String(value || "")
-    .trim()
-    .toLowerCase()
-  if (!SHA256_PATTERN.test(normalized)) {
-    fail("INVALID_SUPERVOTE_INPUT", "request_sha256 is invalid")
-  }
-  return normalized
-}
-
 function normalizeDirection(value, { optional = false } = {}) {
   if (optional && (value == null || value === "")) return null
   const normalized = Number(value)
@@ -79,126 +71,6 @@ function normalizeDirection(value, { optional = false } = {}) {
     fail("INVALID_SUPERVOTE_INPUT", "direction must be -1 or 1")
   }
   return normalized
-}
-
-function parseJson(value, fallback = null) {
-  try {
-    return JSON.parse(String(value || ""))
-  } catch {
-    return fallback
-  }
-}
-
-function normalizeAssignmentEvent(rawEvent) {
-  const event = rawEvent && typeof rawEvent === "object" ? rawEvent : {}
-  const gene = event.gene && typeof event.gene === "object" ? event.gene : {}
-  const assignment =
-    event.assignment && typeof event.assignment === "object" ? event.assignment : {}
-  const status = String(assignment.status || event.assignment_status || "")
-    .trim()
-    .toLowerCase()
-  if (!ASSIGNMENT_STATUSES.has(status)) {
-    fail("INVALID_ASSIGNMENT_PROJECTION", "Assignment status is invalid")
-  }
-  return {
-    event_id: normalizeId(event.event_id || event.event_uuid, "event_id"),
-    event_sequence: normalizeVersion(event.event_sequence, "event_sequence", { minimum: 1 }),
-    gene_id: normalizeId(gene.gene_id || event.gene_id, "gene_id"),
-    gene_symbol: normalizeSymbol(
-      gene.canonical_symbol || gene.symbol || event.canonical_symbol || event.gene_symbol,
-    ),
-    caretaker_assignment_id: normalizeId(
-      assignment.caretaker_assignment_id || event.caretaker_assignment_id,
-      "caretaker_assignment_id",
-    ),
-    caretaker_account_id: normalizeId(
-      assignment.account_id || event.caretaker_account_id || event.account_id,
-      "caretaker_account_id",
-    ),
-    status,
-    assignment_version: normalizeVersion(
-      assignment.assignment_version ?? event.assignment_version,
-      "assignment_version",
-      { minimum: 1 },
-    ),
-  }
-}
-
-function assignmentEventType(previousStatus, nextStatus) {
-  if (nextStatus === "ended") return "assignment_ended"
-  if (nextStatus === "suspended") return "assignment_suspended"
-  if (previousStatus === "suspended" && nextStatus === "active") return "assignment_resumed"
-  return "assignment_projected"
-}
-
-function activeSelection(assignment, head) {
-  return Boolean(
-    head?.asset_sha256 &&
-    CARETAKER_SUPERVOTE_DIRECTIONS.includes(Number(head?.direction)) &&
-    assignment &&
-    ["active", "suspended"].includes(String(assignment.status || "")),
-  )
-}
-
-function assignmentSnapshot(row) {
-  if (!row) return null
-  return {
-    gene_id: String(row.gene_id),
-    gene_symbol: String(row.gene_symbol),
-    caretaker_assignment_id: String(row.caretaker_assignment_id),
-    caretaker_account_id: String(row.caretaker_account_id),
-    status: String(row.status),
-    assignment_version: Number(row.assignment_version),
-    authority_event_id: String(row.authority_event_id),
-    authority_event_sequence: Number(row.authority_event_sequence),
-  }
-}
-
-function supervoteSnapshot(assignment, head, viewerAccountId = "") {
-  const selected = activeSelection(assignment, head)
-  const accountId = String(viewerAccountId || "").trim()
-  return {
-    schema_version: 2,
-    assignment: assignmentSnapshot(assignment),
-    assignment_status: assignment ? String(assignment.status) : null,
-    assignment_version: Number(assignment?.assignment_version || 0),
-    accepted_event_sequence: Number(assignment?.authority_event_sequence || 0),
-    supervote_version: Number(head?.supervote_version || 0),
-    asset_sha256: selected ? String(head.asset_sha256) : null,
-    direction: selected ? Number(head.direction) : null,
-    active: selected,
-    suspended: String(assignment?.status || "") === "suspended",
-    weight: CARETAKER_SUPERVOTE_WEIGHT,
-    can_mutate: Boolean(
-      assignment && assignment.status === "active" && accountId === assignment.caretaker_account_id,
-    ),
-  }
-}
-
-export async function caretakerSupervoteRequestSha256(fields) {
-  const source = fields && typeof fields === "object" ? fields : {}
-  const canonical = JSON.stringify({
-    command_id: String(source.command_id || ""),
-    gene_symbol: normalizeSymbol(source.gene_symbol),
-    caretaker_account_id: normalizeId(source.caretaker_account_id, "caretaker_account_id"),
-    asset_sha256: normalizeSha256(source.asset_sha256, { optional: true }),
-    direction: normalizeDirection(source.direction, {
-      optional: !normalizeSha256(source.asset_sha256, { optional: true }),
-    }),
-    expected_assignment_version: normalizeVersion(
-      source.expected_assignment_version,
-      "expected_assignment_version",
-      { minimum: 1 },
-    ),
-    expected_supervote_version: normalizeVersion(
-      source.expected_supervote_version,
-      "expected_supervote_version",
-    ),
-  })
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical))
-  return Array.from(new Uint8Array(digest))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("")
 }
 
 export function caretakerWeightedScore(row) {
@@ -222,152 +94,96 @@ export function compareCaretakerWeightedCandidates(left, right, fallback = () =>
   )
 }
 
-// B-898 Stage 2: the caretaker supervote lives in D1 alone. The assignment
-// projection (one row per gene), the supervote head (one row per gene, with
-// its compare-and-set version), the audit events and the idempotency receipts
-// are the D1 tables migration 0085 created; candidate eligibility is the
-// trigger-maintained projection from migration 0088. Each write batch is
-// guarded so a concurrent command can only make it a no-op, never a torn
-// write.
+// B-1065 B2b: the caretaker's signed 10x vote is three columns of their role
+// (icono_caretaker_assignments, migration 0126). It counts while the role is
+// active or suspended and stops when the role ends, with no copy to clear.
+// Until now it lived in a per-gene head, an audit log, a receipt table, a copy
+// of the role, and a trigger-maintained copy of every candidate's eligibility.
+//
+// The open-role filter repeats the partial unique index's own condition, so
+// the lookup uses that index.
+const OPEN_ROLE_SQL = `status IN ('pending_acceptance', 'active', 'suspended')`
 
-const STATE_SQL = `SELECT a.gene_id, a.gene_symbol, a.caretaker_assignment_id, a.caretaker_account_id,
-       a.status, a.assignment_version, a.authority_event_id, a.authority_event_sequence,
-       s.asset_sha256 AS head_asset_sha256, s.direction AS head_direction,
-       s.active AS head_active, s.supervote_version AS head_supervote_version
-  FROM icono_caretaker_vote_assignment_projection a
-  LEFT JOIN icono_caretaker_supervote_projection s ON s.gene_symbol = a.gene_symbol
- WHERE a.gene_symbol = ?1
- LIMIT 1`
+// The election input for one gene, as election readers select it:
+// asset_sha256, direction, active (1 while the supervote counts) and the
+// role's status. `symbolSql` is the SQL that names the gene (a parameter or a
+// column).
+// Every open role's supervote, for a join on gene_symbol.
+export const CARETAKER_SUPERVOTES_SQL = `SELECT supervote_asset_sha256 AS asset_sha256,
+         supervote_direction AS direction,
+         CASE WHEN supervote_asset_sha256 IS NOT NULL
+               AND status IN ('active', 'suspended') THEN 1 ELSE 0 END AS active,
+         status AS assignment_status, gene_symbol
+    FROM icono_caretaker_assignments
+   WHERE ${OPEN_ROLE_SQL}`
 
-function stateFromRow(row) {
-  if (!row) return { assignment: null, head: { supervote_version: 0, asset_sha256: null } }
-  const active = Number(row.head_active) === 1
+export function caretakerSupervoteOfGeneSql(symbolSql) {
+  return `${CARETAKER_SUPERVOTES_SQL} AND gene_symbol = ${symbolSql}`
+}
+
+const ROLE_SQL = `SELECT caretaker_assignment_id, gene_symbol, account_id, status,
+                         assignment_version, supervote_asset_sha256, supervote_direction,
+                         supervote_version, supervote_command_id
+                    FROM icono_caretaker_assignments
+                   WHERE gene_symbol = ?1 AND ${OPEN_ROLE_SQL}
+                   LIMIT 1`
+
+function supervoteSnapshot(role, viewerAccountId = "") {
+  const counting = Boolean(
+    role?.supervote_asset_sha256 &&
+    CARETAKER_SUPERVOTE_DIRECTIONS.includes(Number(role.supervote_direction)) &&
+    ["active", "suspended"].includes(String(role.status || "")),
+  )
+  const accountId = String(viewerAccountId || "").trim()
   return {
-    assignment: {
-      gene_id: row.gene_id,
-      gene_symbol: row.gene_symbol,
-      caretaker_assignment_id: row.caretaker_assignment_id,
-      caretaker_account_id: row.caretaker_account_id,
-      status: row.status,
-      assignment_version: Number(row.assignment_version),
-      authority_event_id: row.authority_event_id,
-      authority_event_sequence: Number(row.authority_event_sequence),
-    },
-    head: {
-      asset_sha256: active ? row.head_asset_sha256 : null,
-      direction: active ? Number(row.head_direction) : null,
-      supervote_version: Number(row.head_supervote_version || 0),
-    },
+    schema_version: 2,
+    assignment: role
+      ? {
+          gene_symbol: String(role.gene_symbol),
+          caretaker_assignment_id: String(role.caretaker_assignment_id),
+          caretaker_account_id: String(role.account_id),
+          status: String(role.status),
+          assignment_version: Number(role.assignment_version),
+        }
+      : null,
+    assignment_status: role ? String(role.status) : null,
+    assignment_version: Number(role?.assignment_version || 0),
+    accepted_event_sequence: 0,
+    supervote_version: Number(role?.supervote_version || 0),
+    asset_sha256: counting ? String(role.supervote_asset_sha256) : null,
+    direction: counting ? Number(role.supervote_direction) : null,
+    active: counting,
+    suspended: String(role?.status || "") === "suspended",
+    weight: CARETAKER_SUPERVOTE_WEIGHT,
+    can_mutate: Boolean(role && role.status === "active" && accountId === role.account_id),
   }
 }
 
-export async function readCaretakerSupervoteFromD1(db, symbol, viewerAccountId = "") {
-  const geneSymbol = normalizeSymbol(symbol)
-  const state = stateFromRow(await db.prepare(STATE_SQL).bind(geneSymbol).first())
-  return {
-    ...state,
-    snapshot: supervoteSnapshot(state.assignment, state.head, viewerAccountId),
-  }
+export async function readCaretakerSupervote(db, symbol, viewerAccountId = "") {
+  const role = await db.prepare(ROLE_SQL).bind(normalizeSymbol(symbol)).first()
+  return { role: role || null, snapshot: supervoteSnapshot(role, viewerAccountId) }
 }
 
-function supervoteProjectionUpsert(db, values) {
-  return db
-    .prepare(
-      `INSERT INTO icono_caretaker_supervote_projection (
-         gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-         asset_sha256, direction, active, weight, supervote_version,
-         last_mutation_id, updated_at, deactivated_at
-       )
-       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, 10, ?8, ?9, CURRENT_TIMESTAMP,
-              CASE WHEN ?7 = 1 THEN NULL ELSE CURRENT_TIMESTAMP END
-        WHERE ${values.guardSql}
-       ON CONFLICT(gene_symbol) DO UPDATE SET
-         gene_id = excluded.gene_id,
-         caretaker_assignment_id = excluded.caretaker_assignment_id,
-         caretaker_account_id = excluded.caretaker_account_id,
-         asset_sha256 = excluded.asset_sha256,
-         direction = excluded.direction,
-         active = excluded.active,
-         weight = 10,
-         supervote_version = excluded.supervote_version,
-         last_mutation_id = excluded.last_mutation_id,
-         updated_at = CURRENT_TIMESTAMP,
-         deactivated_at = excluded.deactivated_at`,
-    )
-    .bind(
-      values.symbol,
-      values.geneId,
-      values.assignmentId,
-      values.accountId,
-      values.asset,
-      values.direction,
-      values.asset ? 1 : 0,
-      values.version,
-      values.mutationId,
-      ...values.guardArgs,
-    )
-}
-
-function supervoteEventInsert(db, values) {
-  return db
-    .prepare(
-      `INSERT INTO icono_caretaker_supervote_events (
-         mutation_id, event_type, command_id, request_sha256,
-         gene_id, gene_symbol, caretaker_assignment_id, caretaker_account_id,
-         assignment_status, assignment_version, from_asset_sha256,
-         to_asset_sha256, from_direction, to_direction,
-         supervote_version, authority_event_id, authority_event_sequence, created_at
-       )
-       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-              CURRENT_TIMESTAMP
-        WHERE EXISTS (
-          SELECT 1 FROM icono_caretaker_supervote_projection
-           WHERE gene_symbol = ?6 AND last_mutation_id = ?1
-        )
-       ON CONFLICT(mutation_id) DO NOTHING`,
-    )
-    .bind(
-      values.mutationId,
-      values.eventType,
-      values.commandId || null,
-      values.requestSha256 || null,
-      values.assignment.gene_id,
-      values.symbol,
-      values.assignment.caretaker_assignment_id,
-      values.assignment.caretaker_account_id,
-      values.assignment.status,
-      values.assignment.assignment_version,
-      values.fromAsset,
-      values.toAsset,
-      values.fromDirection,
-      values.toDirection,
-      values.version,
-      values.assignment.authority_event_id,
-      values.assignment.authority_event_sequence,
-    )
-}
-
-function appliedMutationGuard(db, symbol, mutationId) {
+function appliedCommandBump(db, symbol, commandId) {
   return geneVoteVersionBumpStatement(db, symbol, {
-    whenSql:
-      "EXISTS (SELECT 1 FROM icono_caretaker_supervote_projection WHERE gene_symbol = ?1 AND last_mutation_id = ?2)",
-    whenArgs: [mutationId],
+    whenSql: `EXISTS (SELECT 1 FROM icono_caretaker_assignments
+                       WHERE gene_symbol = ?1 AND ${OPEN_ROLE_SQL} AND supervote_command_id = ?2)`,
+    whenArgs: [commandId],
   })
 }
 
 /**
- * The caretaker's signed 10x vote: move, confirm or clear it. Compare-and-set
- * on the assignment version and the supervote version the caller last saw;
- * every accepted command advances the supervote version and leaves a receipt,
- * so an identical retry replays the receipt and a reused command id with a
- * different request is refused. A target must be an eligible candidate of
- * this gene in the trigger-maintained eligibility projection.
+ * The caretaker's signed 10x vote: move, confirm or clear it. One guarded
+ * UPDATE of the caretaker's own role, applied only from the role and supervote
+ * versions the page saw, and only onto a candidate the election counts. The
+ * role remembers the last command, so a retry after a lost answer replays.
  *
- * A supervote spends one unit of the daily vote budget it shares with reader
- * votes (vote-guards.js). Once the day is spent the write batch is refused
- * whole, nothing is written, and the caller gets a 429.
+ * A supervote spends one unit of the caretaker's own daily allowance
+ * (vote-guards.js, counted apart from their reader votes). Once the day is
+ * spent the write batch is refused whole, nothing is written, and the caller
+ * gets a 429.
  */
-export async function setCaretakerSupervoteInD1(
+export async function setCaretakerSupervote(
   db,
   {
     symbol,
@@ -375,18 +191,16 @@ export async function setCaretakerSupervoteInD1(
     assetSha256 = null,
     direction = null,
     commandId,
-    requestSha256,
     expectedAssignmentVersion,
     expectedSupervoteVersion,
   } = {},
-  { attempt = 1, dailyVoteLimit = VOTE_PERSON_DAILY_LIMIT } = {},
+  { dailyVoteLimit = VOTE_PERSON_DAILY_LIMIT } = {},
 ) {
   const geneSymbol = normalizeSymbol(symbol)
   const account = normalizeId(accountId, "caretaker_account_id")
   const targetAsset = normalizeSha256(assetSha256, { optional: true })
   const targetDirection = targetAsset ? normalizeDirection(direction) : null
   const command = normalizeId(commandId, "command_id")
-  const requestHash = normalizeRequestSha256(requestSha256)
   const expectedAssignment = normalizeVersion(
     expectedAssignmentVersion,
     "expected_assignment_version",
@@ -394,145 +208,59 @@ export async function setCaretakerSupervoteInD1(
   )
   const expectedSupervote = normalizeVersion(expectedSupervoteVersion, "expected_supervote_version")
 
-  const reads = [
-    db
-      .prepare(
-        `SELECT request_sha256, response_json FROM icono_caretaker_supervote_command_receipts
-          WHERE command_id = ?1 LIMIT 1`,
-      )
-      .bind(command),
-    db.prepare(STATE_SQL).bind(geneSymbol),
-  ]
-  if (targetAsset) {
-    reads.push(
-      db
-        .prepare(
-          `SELECT eligible FROM icono_caretaker_candidate_eligibility_projection
-            WHERE gene_symbol = ?1 AND asset_sha256 = ?2 LIMIT 1`,
-        )
-        .bind(geneSymbol, targetAsset),
-    )
-  }
-  const [receiptRead, stateRead, eligibilityRead] = await db.batch(reads)
-  if (targetAsset && Number(eligibilityRead?.results?.[0]?.eligible) !== 1) {
-    fail(
-      "SUPERVOTE_TARGET_INELIGIBLE",
-      "Caretaker supervotes require an eligible, current candidate blot",
-      409,
-    )
-  }
-  const receipt = receiptRead?.results?.[0] || null
-  if (receipt) {
-    if (receipt.request_sha256 !== requestHash) {
-      fail("COMMAND_ID_CONFLICT", "command_id was already used for another request", 409)
-    }
-    return { ...parseJson(receipt.response_json, {}), replayed: true }
-  }
-  const { assignment, head } = stateFromRow(stateRead?.results?.[0])
-  if (!assignment) fail("CARETAKER_ASSIGNMENT_REQUIRED", "Caretaker assignment is missing", 403)
-  if (assignment.status === "suspended") {
-    fail("CARETAKER_ASSIGNMENT_SUSPENDED", "Suspended caretakers cannot move the supervote", 409)
-  }
-  if (assignment.status !== "active") {
-    fail("CARETAKER_ASSIGNMENT_INACTIVE", "An active caretaker assignment is required", 403)
-  }
-  if (assignment.caretaker_account_id !== account) {
-    fail("CARETAKER_ASSIGNMENT_NOT_OWNED", "Only this gene's caretaker can move the supervote", 403)
-  }
-  if (Number(assignment.assignment_version) !== expectedAssignment) {
-    fail("STALE_ASSIGNMENT_STATE", "Caretaker assignment changed", 409)
-  }
-  if (Number(head.supervote_version || 0) !== expectedSupervote) {
-    fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
-  }
-
-  const previousAsset = head.asset_sha256 || null
-  const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
-  const changed = previousAsset !== targetAsset || previousDirection !== targetDirection
-  // Every accepted command advances the CAS token, so a receipt that leaves
-  // the replay horizon can never execute its command a second time.
-  const nextVersion = Number(head.supervote_version || 0) + 1
-  const eventType = targetAsset
-    ? previousAsset
-      ? changed
-        ? "supervote_moved"
-        : "supervote_confirmed"
-      : "supervote_set"
-    : "supervote_cleared"
-  const mutationId = `caretaker-supervote:${command}`
-  const nextHead = {
-    asset_sha256: targetAsset,
-    direction: targetDirection,
-    supervote_version: nextVersion,
-  }
-  const response = {
+  const { role } = await readCaretakerSupervote(db, geneSymbol)
+  const respond = (current, { changed, replayed }) => ({
     ok: true,
     changed,
-    replayed: false,
-    mutation_id: mutationId,
-    accepted_event_sequence: Number(assignment.authority_event_sequence),
-    supervote: supervoteSnapshot(assignment, nextHead, account),
-  }
+    replayed,
+    mutation_id: `caretaker-supervote:${command}`,
+    accepted_event_sequence: 0,
+    supervote: supervoteSnapshot(current, account),
+  })
+  if (role?.account_id === account && role.supervote_command_id === command)
+    return respond(role, { changed: false, replayed: true })
+  if (!role) fail("CARETAKER_ASSIGNMENT_REQUIRED", "Caretaker assignment is missing", 403)
+  if (role.status === "suspended")
+    fail("CARETAKER_ASSIGNMENT_SUSPENDED", "Suspended caretakers cannot move the supervote", 409)
+  if (role.status !== "active")
+    fail("CARETAKER_ASSIGNMENT_INACTIVE", "An active caretaker assignment is required", 403)
+  if (role.account_id !== account)
+    fail("CARETAKER_ASSIGNMENT_NOT_OWNED", "Only this gene's caretaker can move the supervote", 403)
+  if (Number(role.assignment_version) !== expectedAssignment)
+    fail("STALE_ASSIGNMENT_STATE", "Caretaker assignment changed", 409)
+  if (Number(role.supervote_version || 0) !== expectedSupervote)
+    fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
+
+  const changed =
+    (role.supervote_asset_sha256 || null) !== targetAsset ||
+    (role.supervote_asset_sha256 ? Number(role.supervote_direction) : null) !== targetDirection
   let results
   try {
     results = await db.batch([
-      // The caretaker's own allowance (B-1065), counted apart from their reader votes.
       voteAllowanceStatement(db, `caretaker:${account}`, 1, dailyVoteLimit),
-      supervoteProjectionUpsert(db, {
-        symbol: geneSymbol,
-        geneId: assignment.gene_id,
-        assignmentId: assignment.caretaker_assignment_id,
-        accountId: account,
-        asset: targetAsset,
-        direction: targetDirection,
-        version: nextVersion,
-        mutationId,
-        guardSql: `EXISTS (
-          SELECT 1 FROM icono_caretaker_vote_assignment_projection
-           WHERE gene_symbol = ?1 AND caretaker_assignment_id = ?3 AND caretaker_account_id = ?4
-             AND status = 'active' AND assignment_version = ?10
-        )
-        AND COALESCE((SELECT supervote_version FROM icono_caretaker_supervote_projection
-                       WHERE gene_symbol = ?1), 0) = ?11
-        AND NOT EXISTS (
-          SELECT 1 FROM icono_caretaker_supervote_command_receipts WHERE command_id = ?12
-        )`,
-        guardArgs: [expectedAssignment, expectedSupervote, command],
-      }),
-      supervoteEventInsert(db, {
-        mutationId,
-        eventType,
-        commandId: command,
-        requestSha256: requestHash,
-        symbol: geneSymbol,
-        assignment,
-        fromAsset: previousAsset,
-        toAsset: targetAsset,
-        fromDirection: previousDirection,
-        toDirection: targetDirection,
-        version: nextVersion,
-      }),
+      // The role's updated_at stays: it dates the role's own changes.
       db
         .prepare(
-          `INSERT INTO icono_caretaker_supervote_command_receipts (
-           command_id, request_sha256, mutation_id, response_json,
-           accepted_event_sequence, created_at
-         )
-         SELECT ?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP
-          WHERE EXISTS (
-            SELECT 1 FROM icono_caretaker_supervote_projection
-             WHERE gene_symbol = ?6 AND last_mutation_id = ?3
-          )`,
+          `UPDATE icono_caretaker_assignments
+              SET supervote_asset_sha256 = ?1, supervote_direction = ?2,
+                  supervote_version = supervote_version + 1, supervote_command_id = ?3
+            WHERE caretaker_assignment_id = ?4 AND account_id = ?5 AND status = 'active'
+              AND assignment_version = ?6 AND supervote_version = ?7
+              AND (?1 IS NULL OR EXISTS (
+                SELECT 1 FROM icono_portrait_assets pa
+                 WHERE pa.gene_symbol = ?8 AND pa.asset_sha256 = ?1 AND ${ELIGIBLE_CANDIDATE_SQL}))`,
         )
         .bind(
+          targetAsset,
+          targetDirection,
           command,
-          requestHash,
-          mutationId,
-          JSON.stringify(response),
-          Number(assignment.authority_event_sequence),
+          role.caretaker_assignment_id,
+          account,
+          expectedAssignment,
+          expectedSupervote,
           geneSymbol,
         ),
-      appliedMutationGuard(db, geneSymbol, mutationId),
+      appliedCommandBump(db, geneSymbol, command),
       // Last, so the results above keep their positions.
       voteAllowanceCleanupStatement(db, `caretaker:${account}`),
     ])
@@ -541,246 +269,45 @@ export async function setCaretakerSupervoteInD1(
       fail(VOTE_DAILY_BUDGET_EXHAUSTED, voteDailyBudgetMessage(), 429)
     throw error
   }
-  if (Number(results?.[1]?.meta?.changes || 0) > 0) return response
-  // A concurrent command won the compare-and-set between the read and the
-  // write. Re-read once: an identical command replays its receipt, anything
-  // else reports the state that changed.
-  if (attempt < 2) {
-    return setCaretakerSupervoteInD1(
-      db,
-      {
-        symbol: geneSymbol,
-        accountId: account,
-        assetSha256: targetAsset,
-        direction: targetDirection,
-        commandId: command,
-        requestSha256: requestHash,
-        expectedAssignmentVersion: expectedAssignment,
-        expectedSupervoteVersion: expectedSupervote,
-      },
-      { attempt: attempt + 1, dailyVoteLimit },
+  const { role: after } = await readCaretakerSupervote(db, geneSymbol)
+  if (Number(results?.[1]?.meta?.changes || 0) === 1)
+    return respond(after, { changed, replayed: false })
+  if (after?.account_id === account && after.supervote_command_id === command)
+    return respond(after, { changed: false, replayed: true })
+  if (
+    targetAsset &&
+    Number(after?.assignment_version) === expectedAssignment &&
+    Number(after?.supervote_version || 0) === expectedSupervote
+  )
+    fail(
+      "SUPERVOTE_TARGET_INELIGIBLE",
+      "Caretaker supervotes require an eligible, current candidate blot",
+      409,
     )
-  }
   fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)
 }
 
 /**
- * Projects one accepted caretaker assignment event (from the manifestation
- * authority outbox) into D1. Sequence and version may only move forward; a
- * different assignment replaces only an ended one. Ending or replacing the
- * assignment clears its supervote. Returns whether the supervote changed, so
- * the caller can re-run the gene's election.
+ * A candidate is about to stop being eligible (rejected, marked legacy,
+ * removed, purged): the supervote that names it is cleared, so the
+ * caretaker's page stops showing a vote for an image that is gone. The
+ * election would ignore it anyway; clearing it advances the gene's vote
+ * version, so the next election runs.
  */
-export async function projectCaretakerAssignmentInD1(db, rawEvent) {
-  const event = normalizeAssignmentEvent(rawEvent)
-  const { assignment: current, head } = stateFromRow(
-    await db.prepare(STATE_SQL).bind(event.gene_symbol).first(),
-  )
-  if (current) {
-    const currentSequence = Number(current.authority_event_sequence)
-    if (event.event_sequence === currentSequence) {
-      if (event.event_id !== current.authority_event_id) {
-        fail("ASSIGNMENT_EVENT_CONFLICT", "Event sequence already has another event", 409)
-      }
-      return { ok: true, changed: false, replayed: true, supervote_changed: false }
-    }
-    if (event.event_sequence < currentSequence) {
-      fail("STALE_ASSIGNMENT_EVENT", "Assignment projection cannot move backward", 409)
-    }
-    if (event.gene_id !== current.gene_id) {
-      fail("ASSIGNMENT_GENE_MISMATCH", "Stable gene identity changed", 409)
-    }
-    if (
-      event.caretaker_assignment_id === current.caretaker_assignment_id &&
-      event.assignment_version === Number(current.assignment_version)
-    ) {
-      if (
-        event.caretaker_account_id !== current.caretaker_account_id ||
-        event.status !== current.status ||
-        event.gene_symbol !== String(current.gene_symbol || "").toUpperCase()
-      ) {
-        fail(
-          "ASSIGNMENT_SNAPSHOT_CONFLICT",
-          "Assignment version already represents different authority state",
-          409,
-        )
-      }
-      return { ok: true, changed: false, replayed: true, supervote_changed: false }
-    }
-    if (
-      event.caretaker_assignment_id === current.caretaker_assignment_id &&
-      event.assignment_version < Number(current.assignment_version)
-    ) {
-      fail("STALE_ASSIGNMENT_EVENT", "Assignment version cannot move backward", 409)
-    }
-    if (
-      event.caretaker_assignment_id !== current.caretaker_assignment_id &&
-      current.status !== "ended"
-    ) {
-      fail("ASSIGNMENT_REPLACEMENT_CONFLICT", "Open assignment must end before replacement", 409)
-    }
-  }
-
-  const previousAsset = head.asset_sha256 || null
-  const previousDirection = previousAsset ? normalizeDirection(head.direction ?? 1) : null
-  const assignmentChanged = Boolean(
-    current && event.caretaker_assignment_id !== current.caretaker_assignment_id,
-  )
-  const mustDeactivate = event.status === "ended" || assignmentChanged
-  const nextAsset = mustDeactivate ? null : previousAsset
-  const nextDirection = mustDeactivate ? null : previousDirection
-  const supervoteChanged = Boolean(previousAsset && mustDeactivate)
-  const nextVersion = Number(head.supervote_version || 0) + Number(supervoteChanged)
-  const mutationId = `caretaker-assignment:${event.event_id}`
-  const nextAssignment = {
-    gene_id: event.gene_id,
-    gene_symbol: event.gene_symbol,
-    caretaker_assignment_id: event.caretaker_assignment_id,
-    caretaker_account_id: event.caretaker_account_id,
-    status: event.status,
-    assignment_version: event.assignment_version,
-    authority_event_id: event.event_id,
-    authority_event_sequence: event.event_sequence,
-  }
-  const statements = [
-    db
-      .prepare(
-        `INSERT INTO icono_caretaker_vote_assignment_projection (
-           gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-           status, assignment_version, authority_event_id,
-           authority_event_sequence, projected_at
-         )
-         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP
-          WHERE COALESCE((SELECT authority_event_sequence
-                            FROM icono_caretaker_vote_assignment_projection
-                           WHERE gene_symbol = ?1), 0) = ?9
-         ON CONFLICT(gene_symbol) DO UPDATE SET
-           gene_id = excluded.gene_id,
-           caretaker_assignment_id = excluded.caretaker_assignment_id,
-           caretaker_account_id = excluded.caretaker_account_id,
-           status = excluded.status,
-           assignment_version = excluded.assignment_version,
-           authority_event_id = excluded.authority_event_id,
-           authority_event_sequence = excluded.authority_event_sequence,
-           projected_at = CURRENT_TIMESTAMP`,
-      )
-      .bind(
-        event.gene_symbol,
-        event.gene_id,
-        event.caretaker_assignment_id,
-        event.caretaker_account_id,
-        event.status,
-        event.assignment_version,
-        event.event_id,
-        event.event_sequence,
-        Number(current?.authority_event_sequence || 0),
-      ),
-    supervoteProjectionUpsert(db, {
-      symbol: event.gene_symbol,
-      geneId: event.gene_id,
-      assignmentId: event.caretaker_assignment_id,
-      accountId: event.caretaker_account_id,
-      asset: nextAsset,
-      direction: nextDirection,
-      version: nextVersion,
-      mutationId,
-      guardSql: `EXISTS (
-          SELECT 1 FROM icono_caretaker_vote_assignment_projection
-           WHERE gene_symbol = ?1 AND authority_event_id = ?10
-        )`,
-      guardArgs: [event.event_id],
-    }),
-    supervoteEventInsert(db, {
-      mutationId,
-      eventType: assignmentEventType(String(current?.status || ""), event.status),
-      symbol: event.gene_symbol,
-      assignment: nextAssignment,
-      fromAsset: previousAsset,
-      toAsset: nextAsset,
-      fromDirection: previousDirection,
-      toDirection: nextDirection,
-      version: nextVersion,
-    }),
-  ]
-  if (supervoteChanged) statements.push(appliedMutationGuard(db, event.gene_symbol, mutationId))
-  const results = await db.batch(statements)
-  const changed = Number(results?.[0]?.meta?.changes || 0) > 0
-  if (!changed) fail("STALE_ASSIGNMENT_EVENT", "Assignment projection moved concurrently", 409)
-  return {
-    ok: true,
-    changed: true,
-    replayed: false,
-    symbol: event.gene_symbol,
-    supervote_changed: supervoteChanged,
-  }
-}
-
-/**
- * A candidate stopped being eligible (rejected, marked legacy, purged): a
- * supervote that names it is cleared. The eligibility
- * projection is maintained by D1 triggers on every candidate write; if the
- * supervote names this asset and the projection does not say ineligible, the
- * trigger chain is broken and the call fails loudly instead of guessing.
- */
-export async function invalidateCaretakerSupervoteInD1(db, { symbol, assetSha256 } = {}) {
+export async function invalidateCaretakerSupervote(db, { symbol, assetSha256, invalidationId }) {
   const geneSymbol = normalizeSymbol(symbol)
   const asset = normalizeSha256(assetSha256)
-  const [stateRead, eligibilityRead] = await db.batch([
-    db.prepare(STATE_SQL).bind(geneSymbol),
+  const mutationId = normalizeId(invalidationId, "invalidation_id")
+  const results = await db.batch([
     db
       .prepare(
-        `SELECT eligible, source_event_sequence
-           FROM icono_caretaker_candidate_eligibility_projection
-          WHERE gene_symbol = ?1 AND asset_sha256 = ?2 LIMIT 1`,
+        `UPDATE icono_caretaker_assignments
+            SET supervote_asset_sha256 = NULL, supervote_direction = NULL,
+                supervote_version = supervote_version + 1, supervote_command_id = ?3
+          WHERE gene_symbol = ?1 AND ${OPEN_ROLE_SQL} AND supervote_asset_sha256 = ?2`,
       )
-      .bind(geneSymbol, asset),
-  ])
-  const { assignment, head } = stateFromRow(stateRead?.results?.[0])
-  if (!assignment || head.asset_sha256 !== asset) {
-    return { ok: true, selection_cleared: false }
-  }
-  const eligibility = eligibilityRead?.results?.[0] || null
-  if (!eligibility || Number(eligibility.eligible) !== 0) {
-    fail(
-      "CANDIDATE_INELIGIBILITY_PROJECTION_MISSING",
-      "Candidate mutation did not produce an exact ineligible projection",
-      503,
-    )
-  }
-  const mutationId = `caretaker-supervote-eligibility:candidate-eligibility:${Number(
-    eligibility.source_event_sequence,
-  )}`
-  const nextVersion = Number(head.supervote_version || 0) + 1
-  const previousDirection = normalizeDirection(head.direction ?? 1)
-  const results = await db.batch([
-    supervoteProjectionUpsert(db, {
-      symbol: geneSymbol,
-      geneId: assignment.gene_id,
-      assignmentId: assignment.caretaker_assignment_id,
-      accountId: assignment.caretaker_account_id,
-      asset: null,
-      direction: null,
-      version: nextVersion,
-      mutationId,
-      guardSql: `EXISTS (
-          SELECT 1 FROM icono_caretaker_supervote_projection
-           WHERE gene_symbol = ?1 AND active = 1 AND asset_sha256 = ?10
-             AND supervote_version = ?11
-        )`,
-      guardArgs: [asset, Number(head.supervote_version || 0)],
-    }),
-    supervoteEventInsert(db, {
-      mutationId,
-      eventType: "supervote_asset_invalidated",
-      symbol: geneSymbol,
-      assignment,
-      fromAsset: asset,
-      toAsset: null,
-      fromDirection: previousDirection,
-      toDirection: null,
-      version: nextVersion,
-    }),
-    appliedMutationGuard(db, geneSymbol, mutationId),
+      .bind(geneSymbol, asset, mutationId),
+    appliedCommandBump(db, geneSymbol, mutationId),
   ])
   return {
     ok: true,
@@ -788,5 +315,3 @@ export async function invalidateCaretakerSupervoteInD1(db, { symbol, assetSha256
     mutation_id: mutationId,
   }
 }
-
-export { normalizeAssignmentEvent }

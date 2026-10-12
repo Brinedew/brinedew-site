@@ -1,5 +1,4 @@
 import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
-import { withdrawCaretakerTextStatements } from "../caretaker-texts.js"
 import {
   authorityError,
   createId,
@@ -442,17 +441,6 @@ export async function projectAuthorityAccountStatus(db, rawInput = {}) {
         timestamp,
         manifestation.manifestation_id,
       ),
-    )
-  }
-  // B-1065 B2a: an erased account that chose "withdraw" takes its plain caretaker
-  // versions out of use too; the old tables no longer hold its newer texts.
-  if (input.status === "erasure_pending" && policy === "withdraw") {
-    statements.push(
-      ...withdrawCaretakerTextStatements(db, {
-        geneId: gene.gene_id,
-        assignmentId: assignment.caretaker_assignment_id,
-        at: timestamp,
-      }),
     )
   }
   if (canonicalWithdraw) {

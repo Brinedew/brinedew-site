@@ -1,4 +1,3 @@
-import { withdrawCaretakerTextStatements } from "../caretaker-texts.js"
 import {
   authorityError,
   createId,
@@ -210,17 +209,6 @@ export async function endCaretakerAssignment(
         timestamp,
         manifestation.manifestation_id,
       ),
-    )
-  }
-  // B-1065 B2a: caretaker texts are plain rows now; the "withdraw" leave policy
-  // takes every version this role wrote out of use, whatever the old tables say.
-  if (policy === "withdraw") {
-    assignmentStatements.push(
-      ...withdrawCaretakerTextStatements(db, {
-        geneId: gene.gene_id,
-        assignmentId: assignment.caretaker_assignment_id,
-        at: timestamp,
-      }),
     )
   }
   const statements = []

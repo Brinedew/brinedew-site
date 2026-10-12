@@ -55,11 +55,11 @@ export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSym
     chunks(symbols).map((symbolChunk) =>
       iconoplasmDb
         .prepare(
-          `SELECT canonical_symbol, account_id, authority_event_sequence
-             FROM icono_caretaker_assignment_notifications
-            WHERE canonical_symbol IN (${symbolChunk.map(() => "?").join(", ")})
-              AND assignment_status IN ('${CURRENT_CARETAKER_STATUSES.join("', '")}')
-            ORDER BY authority_event_sequence DESC`,
+          // The open-role filter matches the partial unique index on gene_symbol.
+          `SELECT gene_symbol AS canonical_symbol, account_id, status
+             FROM icono_caretaker_assignments
+            WHERE gene_symbol IN (${symbolChunk.map(() => "?").join(", ")})
+              AND status IN ('pending_acceptance', 'active', 'suspended')`,
         )
         .bind(...symbolChunk)
         .all(),
@@ -71,6 +71,7 @@ export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSym
     for (const row of rowsFrom(assignmentResult)) {
       const symbol = normalizedSymbol(row?.canonical_symbol)
       const accountId = String(row?.account_id || "").trim()
+      if (!CURRENT_CARETAKER_STATUSES.includes(row?.status)) continue
       if (symbol && accountId && !accountBySymbol.has(symbol)) {
         accountBySymbol.set(symbol, accountId)
       }

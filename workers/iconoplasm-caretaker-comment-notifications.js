@@ -54,14 +54,14 @@ export async function resolveCaretakerCommentRecipient(env, { symbol, authorAcco
   const author = bounded(authorAccountId, 192)
   if (!gene || !author || !env?.ICONOPLASM_DB?.prepare || !env?.DB?.prepare) return null
   const assignment = await env.ICONOPLASM_DB.prepare(
-    `SELECT caretaker_assignment_id, account_id
-       FROM icono_caretaker_assignment_notifications
-      WHERE canonical_symbol = ? AND assignment_status = 'active'
-      ORDER BY authority_event_sequence DESC LIMIT 1`,
+    `SELECT caretaker_assignment_id, account_id, status
+       FROM icono_caretaker_assignments
+      WHERE gene_symbol = ? AND status IN ('pending_acceptance', 'active', 'suspended')
+      LIMIT 1`,
   )
     .bind(gene)
     .first()
-  if (!assignment || assignment.account_id === author) return null
+  if (assignment?.status !== "active" || assignment.account_id === author) return null
   const identity = await env.DB.prepare(
     `SELECT provider_subject
        FROM brinedew_account_identities
@@ -147,8 +147,8 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
     const claim = await db
       .prepare(
         `WITH eligible AS MATERIALIZED (
-           SELECT 1 FROM icono_caretaker_assignment_notifications
-            WHERE caretaker_assignment_id = ? AND account_id = ? AND assignment_status = 'active'
+           SELECT 1 FROM icono_caretaker_assignments
+            WHERE caretaker_assignment_id = ? AND account_id = ? AND status = 'active'
          )
          UPDATE icono_caretaker_comment_notifications
             SET discord_status = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN 'sending' ELSE 'suppressed' END,
@@ -296,21 +296,18 @@ export async function deliverPendingCaretakerSupervoteNotifications(
       .prepare(
         `WITH eligible AS MATERIALIZED (
          SELECT 1
-           FROM icono_caretaker_supervote_projection supervote
-           JOIN icono_caretaker_assignment_notifications assignment
-             ON assignment.caretaker_assignment_id = supervote.caretaker_assignment_id
-            AND assignment.account_id = supervote.caretaker_account_id
-          WHERE supervote.caretaker_assignment_id = ?
-            AND supervote.caretaker_account_id = ?
-            AND supervote.gene_symbol = ?
-            AND supervote.active = 1 AND supervote.direction = 1
-            AND supervote.asset_sha256 = ?
-            AND supervote.supervote_version = ?
-            AND assignment.assignment_status IN ('active', 'suspended')
+           FROM icono_caretaker_assignments role
+          WHERE role.caretaker_assignment_id = ?
+            AND role.account_id = ?
+            AND role.gene_symbol = ?
+            AND role.status IN ('active', 'suspended')
+            AND role.supervote_direction = 1
+            AND role.supervote_asset_sha256 = ?
+            AND role.supervote_version = ?
             AND EXISTS (
               SELECT 1 FROM icono_publish_state publish
-               WHERE publish.gene_symbol = supervote.gene_symbol
-                 AND publish.current_asset_sha256 IS NOT supervote.asset_sha256
+               WHERE publish.gene_symbol = role.gene_symbol
+                 AND publish.current_asset_sha256 IS NOT role.supervote_asset_sha256
             )
          )
          UPDATE icono_caretaker_supervote_notifications

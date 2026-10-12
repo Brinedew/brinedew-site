@@ -1,14 +1,14 @@
 // B-1065: the factory saves a gene's text and its Tags as one plain row
-// (icono_gene_texts, migration 0024). It replaces the old system-revision path:
-// two encrypted Bunny uploads, an event log, a replica and an outbox, for what is
-// one overwrite of one row.
+// (icono_gene_texts, main migration 0125). It replaces the old system-revision
+// path: two encrypted Bunny uploads, an event log, a replica and an outbox, for
+// what is one overwrite of one row.
 //
-// A gene is named by its symbol. A symbol new to the catalogue gets the identity
-// derived from it (catalogueGeneId), so the workstation never needs to know a
-// gene ID. Saving the same text and Tags again changes nothing, so a retry after
-// a lost answer costs one read.
+// A gene is named by its symbol. A symbol new to the site gets the gene ID
+// derived from it (catalogueGeneId), the ID generation requests record, so the
+// workstation never needs to know one. Saving the same text and Tags again
+// changes nothing, so a retry after a lost answer costs one read.
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
-import { registerGeneIdentity } from "./caretaker/caretaker-assignment-commands.js"
+import { geneSymbol } from "../lib/iconoplasm-gene-text.js"
 import { normalizeManifestationProse } from "../lib/iconoplasm-manifestation-prose.js"
 import { normalizeManifestationTags } from "../lib/iconoplasm-manifestation-tags.js"
 import { sha256Hex } from "../lib/iconoplasm-sha256.js"
@@ -52,9 +52,9 @@ function normalizeInput({ text, tags, fields }) {
   return { prose, tags: normalizedTags, fieldsJson }
 }
 
-// B-1031: a gene new to the catalogue has no identity until its first text
-// arrives. Its ID is derived from its symbol, so the workstation and the site
-// agree on it without a round trip, and no caller can register an arbitrary ID.
+// B-1031: a gene new to the site has no ID until its first text arrives. Its
+// ID is derived from its symbol, so the workstation and the site agree on it
+// without a round trip, and no caller can register an arbitrary ID.
 export async function catalogueGeneId(symbol) {
   const normalized = String(symbol || "")
     .trim()
@@ -62,31 +62,20 @@ export async function catalogueGeneId(symbol) {
   return `gene_${(await sha256Hex(`iconoplasm-gene:${normalized}`)).slice(0, 48)}`
 }
 
-async function geneIdFor(db, symbol) {
-  const known = await db
-    .prepare("SELECT gene_id FROM icono_gene_identities WHERE canonical_symbol = ? COLLATE NOCASE")
-    .bind(symbol)
-    .first()
-  if (known) return { geneId: known.gene_id, registered: false }
-  const geneId = await catalogueGeneId(symbol)
-  await registerGeneIdentity(db, { geneId, canonicalSymbol: symbol })
-  return { geneId, registered: true }
-}
-
-export async function writeFactoryGeneText(env, { symbol, text, tags, fields }) {
-  const db = env?.ICONOPLASM_AUTHORING_DB
-  if (!db)
-    throw new GeneTextError("AUTHORING_DB_MISSING", "ICONOPLASM_AUTHORING_DB is not bound", 503)
+export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags, fields }) {
+  const db = env?.ICONOPLASM_DB
+  if (!db) throw new GeneTextError("TEXT_DB_MISSING", "ICONOPLASM_DB is not bound", 503)
+  const symbol = geneSymbol(rawSymbol)
   const input = normalizeInput({ text, tags, fields })
   const textSha256 = await sha256Hex(input.prose.bytes)
-  const { geneId, registered } = await geneIdFor(db, symbol)
   const current = await db
     .prepare(
-      `SELECT text_id, version, text_sha256, tags, fields_json
-         FROM icono_gene_texts WHERE gene_id = ?`,
+      `SELECT gene_id, text_id, version, text_sha256, tags, fields_json
+         FROM icono_gene_texts WHERE gene_symbol = ?`,
     )
-    .bind(geneId)
+    .bind(symbol)
     .first()
+  const geneId = current?.gene_id || (await catalogueGeneId(symbol))
   if (
     current &&
     current.text_sha256 === textSha256 &&
@@ -109,15 +98,16 @@ export async function writeFactoryGeneText(env, { symbol, text, tags, fields }) 
   const result = await db
     .prepare(
       `INSERT INTO icono_gene_texts
-         (gene_id, text_id, version, text, text_sha256, tags, fields_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT (gene_id) DO UPDATE SET
+         (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT (gene_symbol) DO UPDATE SET
          text_id = excluded.text_id, version = excluded.version, text = excluded.text,
          text_sha256 = excluded.text_sha256, tags = excluded.tags,
          fields_json = excluded.fields_json, updated_at = CURRENT_TIMESTAMP
        WHERE icono_gene_texts.version = ?`,
     )
     .bind(
+      symbol,
       geneId,
       textId,
       version,
@@ -142,37 +132,35 @@ export async function writeFactoryGeneText(env, { symbol, text, tags, fields }) 
     version,
     text_sha256: textSha256,
     changed: true,
-    ...(registered ? { registered: true } : {}),
+    ...(current ? {} : { registered: true }),
   }
 }
 
 export const GENE_TEXT_PAGE_SIZE = 200
 
-// B-1065: the workstation reads the site's texts back in pages ordered by gene ID.
-// `chosen: "factory"` lists every gene's factory text (the workstation's first
-// run fills prompts.db from it); `chosen: "caretaker"` lists only the genes whose
-// caretaker choice replaces it, with the chosen version's text, so the
-// workstation draws those portraits from what the caretaker picked.
+// B-1065: the workstation reads the site's texts back in pages ordered by gene
+// symbol (`next_after` is opaque to it). `chosen: "factory"` lists every gene's
+// factory text (the workstation's first run fills prompts.db from it);
+// `chosen: "caretaker"` lists only the genes whose caretaker choice replaces it,
+// with the chosen version's text, so the workstation draws those portraits from
+// what the caretaker picked.
 export async function listGeneTexts(env, { chosen = "factory", after = null } = {}) {
-  const db = env?.ICONOPLASM_AUTHORING_DB
-  if (!db)
-    throw new GeneTextError("AUTHORING_DB_MISSING", "ICONOPLASM_AUTHORING_DB is not bound", 503)
+  const db = env?.ICONOPLASM_DB
+  if (!db) throw new GeneTextError("TEXT_DB_MISSING", "ICONOPLASM_DB is not bound", 503)
   const sql =
     chosen === "caretaker"
-      ? `SELECT g.gene_id, i.canonical_symbol AS symbol, v.version_id, v.version,
+      ? `SELECT g.gene_id, g.gene_symbol AS symbol, v.version_id, v.version,
                 v.text, v.text_sha256, v.tags, v.fields_json, v.created_at AS updated_at
            FROM icono_gene_texts g
-           JOIN icono_gene_identities i ON i.gene_id = g.gene_id
            JOIN icono_caretaker_text_versions v
              ON v.version_id = g.chosen_caretaker_version_id AND v.withdrawn_at IS NULL
-          WHERE g.chosen_caretaker_version_id IS NOT NULL AND g.gene_id > ?
-          ORDER BY g.gene_id LIMIT ?`
-      : `SELECT g.gene_id, i.canonical_symbol AS symbol, g.text_id, g.version,
+          WHERE g.chosen_caretaker_version_id IS NOT NULL AND g.gene_symbol > ?
+          ORDER BY g.gene_symbol LIMIT ?`
+      : `SELECT g.gene_id, g.gene_symbol AS symbol, g.text_id, g.version,
                 g.text, g.text_sha256, g.tags, g.fields_json, g.updated_at
            FROM icono_gene_texts g
-           JOIN icono_gene_identities i ON i.gene_id = g.gene_id
-          WHERE g.gene_id > ?
-          ORDER BY g.gene_id LIMIT ?`
+          WHERE g.gene_symbol > ?
+          ORDER BY g.gene_symbol LIMIT ?`
   const { results = [] } = await db
     .prepare(sql)
     .bind(after || "", GENE_TEXT_PAGE_SIZE + 1)
@@ -187,6 +175,6 @@ export async function listGeneTexts(env, { chosen = "factory", after = null } = 
     ok: true,
     chosen,
     texts: page,
-    next_after: results.length > GENE_TEXT_PAGE_SIZE ? page.at(-1).gene_id : null,
+    next_after: results.length > GENE_TEXT_PAGE_SIZE ? page.at(-1).symbol : null,
   }
 }

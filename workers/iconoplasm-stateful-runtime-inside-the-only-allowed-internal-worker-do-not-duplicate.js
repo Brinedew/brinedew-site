@@ -163,11 +163,11 @@ import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.
 import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
 import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
 import {
-  caretakerSupervoteRequestSha256,
-  invalidateCaretakerSupervoteInD1,
-  projectCaretakerAssignmentInD1,
-  readCaretakerSupervoteFromD1,
-  setCaretakerSupervoteInD1,
+  CARETAKER_SUPERVOTES_SQL,
+  caretakerSupervoteOfGeneSql,
+  invalidateCaretakerSupervote,
+  readCaretakerSupervote,
+  setCaretakerSupervote,
 } from "./iconoplasm/caretaker/caretaker-supervote.js"
 import {
   GENE_VOTE_ELECTION_ACTOR,
@@ -203,10 +203,7 @@ import { createIconoplasmAdminGalleryHandlers } from "./iconoplasm-admin-gallery
 import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-publication-routes.js"
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
-import {
-  createIconoplasmCaretakerNotificationHandlers,
-  projectCaretakerAssignmentNotification,
-} from "./iconoplasm-caretaker-notifications.js"
+import { createIconoplasmCaretakerNotificationHandlers } from "./iconoplasm-caretaker-notifications.js"
 import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
 import {
   caretakerCommentOutboxStatement,
@@ -230,14 +227,8 @@ import {
   readBrinedewAccount,
 } from "./lib/brinedew-account-identity.js"
 import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
-import {
-  drainBrinedewAuthorityAccountProjectionOutbox,
-  synchronizeActiveBrinedewAccountToManifestationAuthority,
-} from "./lib/brinedew-authority-account-projection.js"
-import {
-  drainManifestationAuthorityProjectionOutbox,
-  requireManifestationAuthorityWriteMode,
-} from "./lib/iconoplasm-manifestation-authority-projection.js"
+import { drainBrinedewAuthorityAccountProjectionOutbox } from "./lib/brinedew-authority-account-projection.js"
+import { drainManifestationAuthorityProjectionOutbox } from "./lib/iconoplasm-manifestation-authority-projection.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { FREE_DAILY_LIMITS, readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
@@ -15554,15 +15545,19 @@ async function actor(request, env) {
   }
 }
 
-// A candidate stopped being eligible: clear a caretaker supervote that names
-// it (caretaker-supervote.js, D1 alone).
-async function iconoplasmCaretakerSupervoteInvalidate(env, { symbol, assetSha256 } = {}) {
+// A candidate stops being eligible: clear a caretaker supervote that names it
+// (caretaker-supervote.js).
+async function iconoplasmCaretakerSupervoteInvalidate(
+  env,
+  { symbol, assetSha256, invalidationId } = {},
+) {
   const safeSymbol = normalizeSymbol(symbol)
   const safeAssetSha = normalizeSha256(assetSha256 || "")
   if (!env?.ICONOPLASM_DB || !safeSymbol || !safeAssetSha) return null
-  return invalidateCaretakerSupervoteInD1(env.ICONOPLASM_DB, {
+  return invalidateCaretakerSupervote(env.ICONOPLASM_DB, {
     symbol: safeSymbol,
     assetSha256: safeAssetSha,
+    invalidationId,
   })
 }
 
@@ -16684,7 +16679,7 @@ async function electGeneAfterVote(env, symbol, { reason } = {}) {
   }
 }
 
-async function settleGeneAfterVote(env, ctx, symbol, { reason } = {}) {
+export async function settleGeneAfterVote(env, ctx, symbol, { reason } = {}) {
   const projection = await electGeneAfterVote(env, symbol, { reason })
   republishGeneAfterResponse(env, ctx, symbol)
   return projection
@@ -17250,7 +17245,7 @@ export async function rebuildGeneRollupForSymbols(env, rawSymbols) {
        LEFT JOIN icono_vote_asset_summary vs
          ON vs.gene_symbol = pa.gene_symbol
         AND vs.asset_sha256 = pa.asset_sha256
-       LEFT JOIN icono_caretaker_supervote_projection caretaker
+       LEFT JOIN (${CARETAKER_SUPERVOTES_SQL}) caretaker
          ON caretaker.gene_symbol = pa.gene_symbol
      ),
      asset_counts AS (
@@ -21458,7 +21453,7 @@ const GENE_CARD_ESSENCE_COLUMNS = [
 
 // B-1065: the gene's text from the plain table, one D1 read and no Bunny.
 async function readPublicManifestationFact(env, symbol) {
-  return publicGeneText(await readGeneText(env.ICONOPLASM_AUTHORING_DB, symbol))
+  return publicGeneText(await readGeneText(env.ICONOPLASM_DB, symbol))
 }
 
 function geneCardPortraitContent(row) {
@@ -21521,15 +21516,7 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
            FROM icono_vote_asset_summary WHERE gene_symbol = ?1`,
       )
       .bind(symbol),
-    db
-      .prepare(
-        `SELECT s.asset_sha256, s.direction, s.active, a.status AS assignment_status
-           FROM icono_caretaker_supervote_projection s
-           LEFT JOIN icono_caretaker_vote_assignment_projection a ON a.gene_symbol = s.gene_symbol
-          WHERE s.gene_symbol = ?1
-          LIMIT 1`,
-      )
-      .bind(symbol),
+    db.prepare(`${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`).bind(symbol),
     db
       .prepare(
         `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
@@ -24984,21 +24971,9 @@ export async function drainIconoplasmManifestationAuthorityProjection(
     limit,
     priorityEventId,
     invocationBudget,
-    projectAssignmentEvent: async (event) => {
-      await projectCaretakerAssignmentNotification(env.ICONOPLASM_DB, event)
-      const projected = await projectCaretakerAssignmentInD1(env.ICONOPLASM_DB, event)
-      // Ending or replacing an assignment clears its supervote, an election
-      // input; the projection already advanced the gene's vote version.
-      if (projected.supervote_changed) {
-        await autoPromoteTopVotedPortrait(env, {
-          symbol: projected.symbol,
-          actorId: "caretaker_assignment",
-          reason: "caretaker_assignment_supervote_cleared",
-          inputsChanged: false,
-        })
-      }
-      return projected
-    },
+    // B-1065 B2b: roles live in the main database now (caretaker-roles.js), so
+    // an old role event has nothing left to copy.
+    projectAssignmentEvent: async () => ({ ok: true, changed: false, skipped: true }),
     projectPublicMaterialEvent: (event) =>
       drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
         authorityEventId: event.event_id,
@@ -25032,7 +25007,7 @@ export async function resolveActiveCaretakerAccountSession(request, env) {
   if (!accountId) {
     throw authorityError("AUTHENTICATION_REQUIRED", "Active Brinedew account session required", 401)
   }
-  if (!env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
+  if (!env?.DB || !env?.ICONOPLASM_DB) {
     throw authorityError(
       "AUTHORITY_UNAVAILABLE",
       "Caretaker tools are temporarily unavailable",
@@ -25043,18 +25018,6 @@ export async function resolveActiveCaretakerAccountSession(request, env) {
   if (!account || account.status !== "active") {
     throw authorityError("ACCOUNT_NOT_ACTIVE", "This Brinedew account is not active", 403)
   }
-  await requireManifestationAuthorityWriteMode(env.ICONOPLASM_DB)
-  await synchronizeActiveBrinedewAccountToManifestationAuthority({
-    primaryDb: env.DB,
-    authoringDb: env.ICONOPLASM_AUTHORING_DB,
-    accountId,
-    wakeManifestationProjection: (event) => {
-      if (!event?.event_id) throw new Error("Accepted account projection event is missing")
-      return drainIconoplasmManifestationAuthorityProjection(env, 1, {
-        priorityEventId: event.event_id,
-      })
-    },
-  })
   // user_id lets the caretaker routes recognise the site admin (B-1021: the
   // admin account is exempt from the gene switch cooldown).
   return Object.freeze({ account_id: accountId, user_id: String(session?.user_id || "") })
@@ -25105,16 +25068,13 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
   // sent again until `erasure.complete` is true (workers/iconoplasm/account-erasure). The
   // account projection outbox carries the result into the caretaker authority (assignments end,
   // credit shows the anonymous label) on its scheduled drain.
-  "admin_account.erase": async ({ request, env, done }) => {
+  "admin_account.erase": async ({ request, env, ctx, done }) => {
     if (!(await isIconoplasmAdmin(request, env)))
       return done("admin_account_erase_403", json({ error: "Unauthorized" }, 403))
-    if (!env.DB || !env.ICONOPLASM_DB || !env.ICONOPLASM_AUTHORING_DB || !env.GAME_SESSIONS)
+    if (!env.DB || !env.ICONOPLASM_DB || !env.GAME_SESSIONS)
       return done(
         "admin_account_erase_503",
-        json(
-          { error: "Account, Iconoplasm, caretaker authority or game session storage unavailable" },
-          503,
-        ),
+        json({ error: "Account, Iconoplasm or game session storage unavailable" }, 503),
       )
     const payload = await request.json().catch(() => ({}))
     try {
@@ -25127,7 +25087,12 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
           maxRowsWritten: payload?.max_rows_written,
           skipDiscordMirror: payload?.skip_discord_mirror === true,
         },
-        { geneCommentsCacheKey, userKvKeyScopes: iconoplasmUserKvKeyScopes },
+        {
+          geneCommentsCacheKey,
+          userKvKeyScopes: iconoplasmUserKvKeyScopes,
+          settleGene: (scopedEnv, symbol) =>
+            settleGeneAfterVote(scopedEnv, ctx, symbol, { reason: "caretaker_role_erased" }),
+        },
       )
       return done(
         "admin_account_erase",
@@ -25255,12 +25220,8 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     isAdmin: isIconoplasmAdmin,
     json,
     resolveActiveAccount: resolveActiveCaretakerAccountSession,
-    wakeAuthorityProjection: (env, event) => {
-      if (!event?.event_id) throw new Error("Accepted authority mutation event is missing")
-      return drainIconoplasmManifestationAuthorityProjection(env, 1, {
-        priorityEventId: event.event_id,
-      })
-    },
+    settleGene: (env, ctx, symbol) =>
+      settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_admin_role_change" }),
   }),
   ...createIconoplasmCaretakerNotificationHandlers({
     json,
@@ -28370,11 +28331,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
       try {
         if (request.method === "GET" || request.method === "HEAD") {
-          const { snapshot } = await readCaretakerSupervoteFromD1(
-            env.ICONOPLASM_DB,
-            symbol,
-            accountId,
-          )
+          const { snapshot } = await readCaretakerSupervote(env.ICONOPLASM_DB, symbol, accountId)
           return done(
             "caretaker_supervote",
             json(
@@ -28437,22 +28394,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
-        const requestSha256 = await caretakerSupervoteRequestSha256({
-          command_id: commandId,
-          gene_symbol: symbol,
-          caretaker_account_id: accountId,
-          asset_sha256: assetSha,
-          direction,
-          expected_assignment_version: expectedAssignmentVersion,
-          expected_supervote_version: expectedSupervoteVersion,
-        })
-        const result = await setCaretakerSupervoteInD1(env.ICONOPLASM_DB, {
+        const result = await setCaretakerSupervote(env.ICONOPLASM_DB, {
           symbol,
           accountId,
           assetSha256: assetSha,
           direction,
           commandId,
-          requestSha256,
           expectedAssignmentVersion,
           expectedSupervoteVersion,
         })

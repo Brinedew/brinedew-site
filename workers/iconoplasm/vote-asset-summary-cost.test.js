@@ -9,11 +9,7 @@ import {
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./votes/gene-votes.js"
-import {
-  caretakerSupervoteRequestSha256,
-  projectCaretakerAssignmentInD1,
-  setCaretakerSupervoteInD1,
-} from "./caretaker/caretaker-supervote.js"
+import { setCaretakerSupervote } from "./caretaker/caretaker-supervote.js"
 import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, VOTE_PERSON_DAILY_LIMIT } from "./votes/vote-guards.js"
 import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
 
@@ -162,35 +158,22 @@ test(
       assert.equal(retry.actual.rows_written, 0)
       assert.ok(retry.actual.rows_read <= 2, JSON.stringify(retry.actual))
 
-      await projectCaretakerAssignmentInD1(db, {
-        event_id: "evt-TP53-1",
-        event_sequence: 1,
-        gene: { gene_id: "gene-TP53", canonical_symbol: "TP53" },
-        assignment: {
-          caretaker_assignment_id: "assign-TP53",
-          account_id: "acct_owner",
-          status: "active",
-          assignment_version: 1,
-        },
-      })
-      const command = {
-        command_id: "cmd_cost",
-        gene_symbol: "TP53",
-        caretaker_account_id: "acct_owner",
-        asset_sha256: asset(3),
-        direction: 1,
-        expected_assignment_version: 1,
-        expected_supervote_version: 0,
-      }
-      const requestSha256 = await caretakerSupervoteRequestSha256(command)
+      await db
+        .prepare(
+          `INSERT INTO icono_caretaker_assignments
+             (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+              relinquish_policy, invited_by_account_id, started_at)
+           VALUES ('assign-TP53', 'TP53', 'acct_owner', 'active', '2026-10-01', 'retain',
+                   'acct_owner', '2026-10-01')`,
+        )
+        .run()
       const supervote = await measure("caretaker supervote", (metered) =>
-        setCaretakerSupervoteInD1(metered, {
+        setCaretakerSupervote(metered, {
           symbol: "TP53",
           accountId: "acct_owner",
           assetSha256: asset(3),
           direction: 1,
           commandId: "cmd_cost",
-          requestSha256,
           expectedAssignmentVersion: 1,
           expectedSupervoteVersion: 0,
         }),

@@ -6,19 +6,10 @@ import {
 
 const NO_STORE = Object.freeze({ "Cache-Control": "private, no-store" })
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,191}$/
-const ASSIGNMENT_STATUSES = new Set(["pending_acceptance", "active", "suspended", "ended"])
 
 function requiredId(value, field) {
   const normalized = String(value || "").trim()
   if (!ID_PATTERN.test(normalized)) {
-    throw authorityError("INVALID_CARETAKER_NOTIFICATION", `${field} is invalid`, 400)
-  }
-  return normalized
-}
-
-function positiveVersion(value, field) {
-  const normalized = Number(value)
-  if (!Number.isSafeInteger(normalized) || normalized < 1) {
     throw authorityError("INVALID_CARETAKER_NOTIFICATION", `${field} is invalid`, 400)
   }
   return normalized
@@ -31,114 +22,31 @@ function requirePrimaryDb(db) {
   return db
 }
 
-export async function projectCaretakerAssignmentNotification(primaryDb, event) {
-  const db = requirePrimaryDb(primaryDb)
-  const assignment = event?.assignment
-  const gene = event?.gene
-  if (!assignment || !gene) return Object.freeze({ ok: true, skipped: true })
-  const assignmentId = requiredId(assignment.caretaker_assignment_id, "caretaker_assignment_id")
-  const accountId = requiredId(assignment.account_id, "account_id")
-  const geneId = requiredId(event?.gene_id || gene.gene_id, "gene_id")
-  const canonicalSymbol = String(gene.canonical_symbol || "")
-    .trim()
-    .toUpperCase()
-  if (!/^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(canonicalSymbol)) {
-    throw authorityError("INVALID_CARETAKER_NOTIFICATION", "canonical_symbol is invalid", 400)
-  }
-  const assignmentStatus = String(assignment.status || "").trim()
-  if (!ASSIGNMENT_STATUSES.has(assignmentStatus)) {
-    throw authorityError("INVALID_CARETAKER_NOTIFICATION", "assignment status is invalid", 400)
-  }
-  const assignmentVersion = positiveVersion(assignment.assignment_version, "assignment_version")
-  const eventId = requiredId(event?.event_id, "event_id")
-  const eventSequence = positiveVersion(event?.event_sequence, "event_sequence")
-  const pending = assignmentStatus === "pending_acceptance"
-
-  const write = await db
-    .prepare(
-      `INSERT INTO icono_caretaker_assignment_notifications (
-         caretaker_assignment_id, account_id, gene_id, canonical_symbol,
-         assignment_status, assignment_version, notification_state,
-         authority_event_id, authority_event_sequence, resolved_at,
-         comments_read_through_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? THEN NULL ELSE CURRENT_TIMESTAMP END,
-         CASE WHEN ? THEN 0 ELSE COALESCE((SELECT MAX(id) FROM icono_gene_comments
-                                           WHERE gene_symbol = ? AND status = 'visible'), 0) END)
-       ON CONFLICT(caretaker_assignment_id) DO UPDATE SET
-         canonical_symbol = excluded.canonical_symbol,
-         assignment_status = excluded.assignment_status,
-         assignment_version = excluded.assignment_version,
-         notification_state = excluded.notification_state,
-         authority_event_id = excluded.authority_event_id,
-         authority_event_sequence = excluded.authority_event_sequence,
-         updated_at = CURRENT_TIMESTAMP,
-         resolved_at = CASE
-           WHEN excluded.notification_state = 'resolved'
-             THEN COALESCE(icono_caretaker_assignment_notifications.resolved_at, CURRENT_TIMESTAMP)
-           ELSE NULL
-         END
-       WHERE excluded.authority_event_sequence > authority_event_sequence`,
-    )
-    .bind(
-      assignmentId,
-      accountId,
-      geneId,
-      canonicalSymbol,
-      assignmentStatus,
-      assignmentVersion,
-      pending ? "pending" : "resolved",
-      eventId,
-      eventSequence,
-      pending ? 1 : 0,
-      pending ? 1 : 0,
-      canonicalSymbol,
-    )
-    .run()
-
-  const row = await db
-    .prepare(
-      `SELECT caretaker_assignment_id, account_id, gene_id, canonical_symbol,
-              assignment_status, assignment_version, notification_state,
-              authority_event_id, authority_event_sequence, read_at, resolved_at
-         FROM icono_caretaker_assignment_notifications
-        WHERE caretaker_assignment_id = ?`,
-    )
-    .bind(assignmentId)
-    .first()
-  return Object.freeze({
-    ok: true,
-    skipped: false,
-    replayed: Number(write?.meta?.changes || 0) === 0,
-    caretaker_assignment_id: row.caretaker_assignment_id,
-    notification_state: row.notification_state,
-    authority_event_sequence: Number(row.authority_event_sequence),
-  })
-}
-
+// B-1065 B2b: a caretaker's own role, its unread gene comments and its
+// supervote, read from the role row (icono_caretaker_assignments) in the main
+// database. Until now they came from a copy of every role made by an event
+// replay.
 export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
   const db = requirePrimaryDb(primaryDb)
   const stableAccountId = requiredId(accountId, "account_id")
   const row = await db
     .prepare(
-      `SELECT assignment.caretaker_assignment_id, assignment.gene_id,
-              assignment.canonical_symbol, assignment.assignment_status,
-              assignment.assignment_version, assignment.authority_event_sequence,
-              assignment.comments_read_through_id,
-              COALESCE(supervote.active, 0) AS supervote_active,
-              supervote.direction AS supervote_direction,
-              supervote.supervote_version AS supervote_version
-         FROM icono_caretaker_assignment_notifications assignment
-         LEFT JOIN icono_caretaker_supervote_projection supervote
-           ON supervote.gene_symbol = assignment.canonical_symbol
-          AND supervote.caretaker_assignment_id = assignment.caretaker_assignment_id
-          AND supervote.caretaker_account_id = assignment.account_id
-        WHERE assignment.account_id = ?
-          AND assignment.assignment_status IN ('active', 'suspended')
-        ORDER BY assignment.authority_event_sequence DESC LIMIT 1`,
+      `SELECT role.caretaker_assignment_id, texts.gene_id,
+              role.gene_symbol AS canonical_symbol, role.status AS assignment_status,
+              role.assignment_version, role.comments_read_through_id,
+              CASE WHEN role.supervote_asset_sha256 IS NOT NULL THEN 1 ELSE 0 END
+                AS supervote_active,
+              role.supervote_direction, role.supervote_version
+         FROM icono_caretaker_assignments role
+         LEFT JOIN icono_gene_texts texts ON texts.gene_symbol = role.gene_symbol
+        WHERE role.account_id = ?
+          AND role.status IN ('pending_acceptance', 'active', 'suspended')
+        LIMIT 1`,
     )
     .bind(stableAccountId)
     .first()
-  if (!row) return Object.freeze({ ok: true, caretaker: null })
+  if (!row || row.assignment_status === "pending_acceptance")
+    return Object.freeze({ ok: true, caretaker: null })
   const commentState = await db
     .prepare(
       `SELECT COUNT(*) AS unread_count, COALESCE(MAX(id), 0) AS latest_comment_id
@@ -182,15 +90,15 @@ export async function markCaretakerCommentsRead(
   }
   const result = await db
     .prepare(
-      `UPDATE icono_caretaker_assignment_notifications
+      `UPDATE icono_caretaker_assignments
           SET comments_read_through_id = MAX(
                 comments_read_through_id,
-                MIN(?, COALESCE((SELECT MAX(id) FROM icono_gene_comments
-                                  WHERE gene_symbol = canonical_symbol AND status = 'visible'), 0))
-              ),
-              updated_at = CURRENT_TIMESTAMP
+                MIN(?, COALESCE((SELECT MAX(c.id) FROM icono_gene_comments c
+                                  WHERE c.gene_symbol = icono_caretaker_assignments.gene_symbol
+                                    AND c.status = 'visible'), 0))
+              )
         WHERE caretaker_assignment_id = ? AND account_id = ?
-          AND assignment_status IN ('active', 'suspended')`,
+          AND status IN ('active', 'suspended')`,
     )
     .bind(stableThroughCommentId, stableAssignmentId, stableAccountId)
     .run()

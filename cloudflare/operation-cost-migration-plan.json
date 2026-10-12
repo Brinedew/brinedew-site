@@ -15,10 +15,10 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0125_plain_caretaking.sql": {
+    "iconoplasm/0126_supervote_on_the_role.sql": {
       "online": true,
       "prediction": {
-        "rows_read": 100,
+        "rows_read": 400,
         "rows_written": 100,
         "requests": 1
       }
