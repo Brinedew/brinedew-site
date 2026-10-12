@@ -108,6 +108,146 @@ Because $a$ is an extrapolation to an age at which nobody follows the law, it is
 
 The Gompertz curves fitted to American data for 2023 place $M$ at about 85 years for men and 90 for women. The ages at which most deaths actually occur in the 2023 table are 87 and 89; the fitted values differ because the curve is fitted to ages 35 to 85 and the real hazard steepens above that range.
 
+```vega-lite
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Figure 3. The Gompertz law against the death rates of American women in 2023, on a logarithmic scale, and against the share of women alive at 20 who are still alive at each age. The sliders set the law's two parameters in its modal-age form: the modal age at death M and the doubling time, ln 2 / b. They start at the fit in Figure 1.",
+  "params": [
+    {
+      "name": "M",
+      "value": 90,
+      "bind": {"input": "range", "min": 60, "max": 110, "step": 1, "name": "Modal age at death, M"}
+    },
+    {
+      "name": "T",
+      "value": 8.5,
+      "bind": {"input": "range", "min": 4, "max": 16, "step": 0.5, "name": "Doubling time, years"}
+    }
+  ],
+  "hconcat": [
+    {
+      "width": 290,
+      "height": 230,
+      "layer": [
+        {
+          "data": {"url": "/attachments/us-life-table-2023.csv"},
+          "transform": [{"filter": "datum.sex == 'women' && datum.age >= 20 && datum.age <= 105"}],
+          "mark": {"type": "circle", "style": "observed", "size": 16},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        },
+        {
+          "data": {"sequence": {"start": 20, "stop": 110.5, "step": 0.5, "as": "age"}},
+          "transform": [
+            {"calculate": "log(2) / T", "as": "b"},
+            {"calculate": "datum.b * exp(datum.b * (datum.age - M))", "as": "hazard"}
+          ],
+          "mark": {"type": "line", "style": "model", "clip": true},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        },
+        {
+          "data": {
+            "values": [
+              {"age": 22, "age2": 26, "hazard": 0.45, "label": "US women, 2023", "kind": "observed"},
+              {"age": 22, "age2": 26, "hazard": 0.17, "label": "Gompertz law", "kind": "model"}
+            ]
+          },
+          "layer": [
+            {
+              "transform": [{"filter": "datum.kind == 'observed'"}],
+              "mark": {"type": "circle", "style": "observed", "size": 30},
+              "encoding": {"x": {"datum": 24.0, "type": "quantitative"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'model'"}],
+              "mark": {"type": "rule", "style": "model"},
+              "encoding": {"x2": {"field": "age2"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'observed'"}],
+              "mark": {"type": "text", "style": "observed-label", "align": "left", "dx": 6},
+              "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'model'"}],
+              "mark": {"type": "text", "style": "model-label", "align": "left", "dx": 6},
+              "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+            }
+          ],
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        }
+      ],
+      "encoding": {
+        "x": {
+          "type": "quantitative",
+          "scale": {"domain": [20, 110], "nice": false},
+          "axis": {"title": "Age", "values": [20, 40, 60, 80, 100]}
+        },
+        "y": {
+          "type": "quantitative",
+          "scale": {"type": "log", "domain": [0.0001, 1], "nice": false},
+          "axis": {
+            "title": "Yearly death rate",
+            "values": [0.0001, 0.001, 0.01, 0.1],
+            "labelExpr": "'1 in ' + format(1 / datum.value, ',')"
+          }
+        }
+      }
+    },
+    {
+      "width": 290,
+      "height": 230,
+      "layer": [
+        {
+          "data": {"url": "/attachments/us-life-table-2023.csv"},
+          "transform": [{"filter": "datum.sex == 'women' && datum.age >= 20 && datum.age <= 110"}],
+          "mark": {"type": "circle", "style": "observed", "size": 16},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "alive", "type": "quantitative"}}
+        },
+        {
+          "data": {"sequence": {"start": 20, "stop": 110.5, "step": 0.5, "as": "age"}},
+          "transform": [
+            {"calculate": "log(2) / T", "as": "b"},
+            {"calculate": "0.9911 * exp(-(exp(datum.b * (datum.age - M)) - exp(datum.b * (20 - M))))", "as": "alive"}
+          ],
+          "mark": {"type": "line", "style": "model"},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "alive", "type": "quantitative"}}
+        },
+        {
+          "data": {"values": [{}]},
+          "transform": [
+            {"calculate": "log(2) / T", "as": "b"},
+            {"calculate": "M + log(exp(datum.b * (20 - M)) + log(2 * 0.9911)) / datum.b", "as": "age"},
+            {"calculate": "0.5", "as": "alive"},
+            {"calculate": "'half by ' + format(datum.age, '.0f')", "as": "label"}
+          ],
+          "layer": [
+            {"mark": {"type": "rule", "style": "guide"}, "encoding": {"y": {"field": "alive", "type": "quantitative"}}},
+            {"mark": {"type": "circle", "style": "model-point", "size": 60}},
+            {
+              "mark": {"type": "text", "style": "model-label", "align": "right", "dx": -8, "dy": -10},
+              "encoding": {"text": {"field": "label"}}
+            }
+          ],
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "alive", "type": "quantitative"}}
+        }
+      ],
+      "encoding": {
+        "x": {
+          "type": "quantitative",
+          "scale": {"domain": [20, 110], "nice": false},
+          "axis": {"title": "Age", "values": [20, 40, 60, 80, 100]}
+        },
+        "y": {
+          "type": "quantitative",
+          "scale": {"domain": [0, 1]},
+          "axis": {"title": "Still alive", "format": "%", "values": [0, 0.25, 0.5, 0.75, 1]}
+        }
+      }
+    }
+  ]
+}
+```
+
 The Gompertz law describes adult mortality in people and in many laboratory animals with two parameters. Its weaknesses are just as clear. It cannot represent the decline of mortality in childhood or the young-adult hump, and it predicts a hazard that grows without limit. Whether that unbounded growth is real at the highest ages is the subject of the [plateau debate](#late-life-deceleration-and-the-plateau-debate).
 
 ### Gompertz–Makeham law
@@ -119,6 +259,126 @@ $$
 $$
 
 The constant represents deaths whose risk does not depend on age, which he attributed to chance.[^makeham1860] Adding it lets the law follow mortality down into the late teens, where senescent risk is negligible but deaths are not. Fitted to American men aged 15 to 100 in 2023, $c$ is about 0.0009 per year (Figure 2A). In modern low-mortality populations the constant is small and hard to estimate. It also absorbs part of the young-adult hump, so it should not be read as a pure measure of "extrinsic" mortality; the division of deaths into senescent and background components is itself a simplification.[^horiuchi1998]
+
+```vega-lite
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Figure 4. Makeham's constant added to a Gompertz curve, against the death rates of American men in 2023 on a logarithmic scale. The Gompertz term is fixed at its fit to ages 15 to 100 (modal age 84, doubling time 7.8 years); the slider sets the constant c, in deaths per year. It starts at the fitted value.",
+  "params": [
+    {
+      "name": "c",
+      "value": 0.0009,
+      "bind": {"input": "range", "min": 0, "max": 0.003, "step": 0.0001, "name": "Makeham's constant, c"}
+    }
+  ],
+  "width": 560,
+  "height": 260,
+  "layer": [
+    {
+      "data": {"url": "/attachments/us-life-table-2023.csv"},
+      "transform": [{"filter": "datum.sex == 'men' && datum.age >= 15 && datum.age <= 100"}],
+      "mark": {"type": "circle", "style": "observed", "size": 16},
+      "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+    },
+    {
+      "data": {"sequence": {"start": 15, "stop": 100.5, "step": 0.5, "as": "age"}},
+      "transform": [
+        {"calculate": "log(2) / 7.8", "as": "b"},
+        {"calculate": "datum.b * exp(datum.b * (datum.age - 84))", "as": "gompertz"},
+        {"calculate": "c + datum.gompertz", "as": "hazard"}
+      ],
+      "layer": [
+        {
+          "mark": {"type": "line", "style": "alt", "clip": true},
+          "encoding": {"y": {"field": "gompertz", "type": "quantitative"}}
+        },
+        {
+          "mark": {"type": "line", "style": "model", "clip": true},
+          "encoding": {"y": {"field": "hazard", "type": "quantitative"}}
+        }
+      ],
+      "encoding": {"x": {"field": "age", "type": "quantitative"}}
+    },
+    {
+      "data": {"values": [{}]},
+      "transform": [{"filter": "c > 0"}, {"calculate": "c", "as": "hazard"}],
+      "layer": [
+        {
+          "mark": {"type": "rule", "style": "guide", "clip": true},
+          "encoding": {"y": {"field": "hazard", "type": "quantitative"}}
+        },
+        {
+          "transform": [{"calculate": "100", "as": "age"}, {"calculate": "'c: 1 in ' + format(1 / c, ',.0f')", "as": "label"}],
+          "mark": {"type": "text", "style": "observed-label", "align": "right", "dy": -9},
+          "encoding": {
+            "x": {"field": "age", "type": "quantitative"},
+            "y": {"field": "hazard", "type": "quantitative"},
+            "text": {"field": "label"}
+          }
+        }
+      ]
+    },
+    {
+      "data": {
+        "values": [
+          {"age": 17, "age2": 20, "hazard": 0.5, "label": "US men, 2023", "kind": "observed"},
+          {"age": 17, "age2": 20, "hazard": 0.22, "label": "Gompertz–Makeham", "kind": "model"},
+          {"age": 17, "age2": 20, "hazard": 0.1, "label": "Gompertz term alone", "kind": "alt"}
+        ]
+      },
+      "layer": [
+        {
+          "transform": [{"filter": "datum.kind == 'observed'"}],
+          "mark": {"type": "circle", "style": "observed", "size": 30},
+          "encoding": {"x": {"datum": 18.5, "type": "quantitative"}}
+        },
+        {
+          "transform": [{"filter": "datum.kind == 'model'"}],
+          "mark": {"type": "rule", "style": "model"},
+          "encoding": {"x2": {"field": "age2"}}
+        },
+        {
+          "transform": [{"filter": "datum.kind == 'alt'"}],
+          "mark": {"type": "rule", "style": "alt"},
+          "encoding": {"x2": {"field": "age2"}}
+        },
+        {
+          "transform": [{"filter": "datum.kind == 'observed'"}],
+          "mark": {"type": "text", "style": "observed-label", "align": "left", "dx": 6},
+          "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+        },
+        {
+          "transform": [{"filter": "datum.kind == 'model'"}],
+          "mark": {"type": "text", "style": "model-label", "align": "left", "dx": 6},
+          "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+        },
+        {
+          "transform": [{"filter": "datum.kind == 'alt'"}],
+          "mark": {"type": "text", "style": "alt-label", "align": "left", "dx": 6},
+          "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+        }
+      ],
+      "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+    }
+  ],
+  "encoding": {
+    "x": {
+      "type": "quantitative",
+      "scale": {"domain": [15, 100], "nice": false},
+      "axis": {"title": "Age", "values": [20, 40, 60, 80, 100]}
+    },
+    "y": {
+      "type": "quantitative",
+      "scale": {"type": "log", "domain": [0.0001, 1], "nice": false},
+      "axis": {
+        "title": "Yearly death rate",
+        "values": [0.0001, 0.001, 0.01, 0.1],
+        "labelExpr": "'1 in ' + format(1 / datum.value, ',')"
+      }
+    }
+  }
+}
+```
 
 ### Weibull model
 
@@ -161,6 +421,188 @@ $$
   Adding Makeham's constant outside the frailty term gives the gamma-Gompertz–Makeham model, which Beard derived in 1959.[^beard1959]
 
 Logistic models have no term for childhood or the young-adult hump. They are applied to adult and old-age mortality, where they usually fit at least as well as the Gompertz law and extrapolate more conservatively.[^thatcher1998]
+
+```vega-lite
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Figure 5. The gamma-Gompertz model with a movable ceiling, against the death rates of American women aged 60 to 100 in 2023, and the number of women alive at each age out of a million alive at 60. Both vertical axes are logarithmic. The slider sets the ceiling b/γ, in deaths per year. Each curve, like the Gompertz curve shown for comparison, passes through the observed rates at ages 75 and 95.",
+  "params": [{"name": "L", "value": 0.7, "bind": {"input": "range", "min": 0.3, "max": 3, "step": 0.05, "name": "Ceiling, b/γ"}}],
+  "hconcat": [
+    {
+      "width": 290,
+      "height": 240,
+      "layer": [
+        {
+          "data": {"url": "/attachments/us-life-table-2023.csv"},
+          "transform": [{"filter": "datum.sex == 'women' && datum.age >= 60 && datum.age <= 100"}],
+          "mark": {"type": "circle", "style": "observed", "size": 16},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        },
+        {
+          "data": {"sequence": {"start": 60, "stop": 120.5, "step": 0.5, "as": "age"}},
+          "transform": [
+            {"calculate": "log(0.244426 / 0.0241349) / 20", "as": "bG"},
+            {"calculate": "0.0241349 * exp(datum.bG * (datum.age - 75))", "as": "gompertz"},
+            {"calculate": "1 / (1 / 0.0241349 - 1 / L)", "as": "g75"},
+            {"calculate": "1 / (1 / 0.244426 - 1 / L)", "as": "g95"},
+            {"calculate": "log(datum.g95 / datum.g75) / 20", "as": "b"},
+            {"calculate": "datum.g75 * exp(datum.b * (datum.age - 75))", "as": "g"},
+            {"calculate": "1 / (1 / datum.g + 1 / L)", "as": "hazard"}
+          ],
+          "layer": [
+            {
+              "mark": {"type": "line", "style": "alt", "clip": true},
+              "encoding": {"y": {"field": "gompertz", "type": "quantitative"}}
+            },
+            {
+              "mark": {"type": "line", "style": "model", "clip": true},
+              "encoding": {"y": {"field": "hazard", "type": "quantitative"}}
+            }
+          ],
+          "encoding": {"x": {"field": "age", "type": "quantitative"}}
+        },
+        {
+          "data": {"values": [{}]},
+          "layer": [
+            {
+              "mark": {"type": "rule", "style": "guide"},
+              "encoding": {"y": {"datum": {"expr": "L"}, "type": "quantitative"}}
+            },
+            {
+              "mark": {"type": "text", "style": "model-label", "align": "left", "dy": -7},
+              "encoding": {
+                "x": {"datum": 61, "type": "quantitative"},
+                "y": {"datum": {"expr": "L"}, "type": "quantitative"},
+                "text": {"field": "label"}
+              },
+              "transform": [{"calculate": "'ceiling ' + format(L, '.2~f')", "as": "label"}]
+            }
+          ]
+        },
+        {
+          "data": {
+            "values": [
+              {"age": 104, "age2": 107, "hazard": 0.032, "label": "Gamma-Gompertz", "kind": "model"},
+              {"age": 104, "age2": 107, "hazard": 0.018, "label": "Gompertz", "kind": "alt"},
+              {"age": 104, "age2": 107, "hazard": 0.0102, "label": "US women, 2023", "kind": "observed"}
+            ]
+          },
+          "layer": [
+            {
+              "transform": [{"filter": "datum.kind == 'observed'"}],
+              "mark": {"type": "circle", "style": "observed", "size": 30},
+              "encoding": {"x": {"datum": 105.5, "type": "quantitative"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'model'"}],
+              "mark": {"type": "rule", "style": "model"},
+              "encoding": {"x2": {"field": "age2"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'alt'"}],
+              "mark": {"type": "rule", "style": "alt"},
+              "encoding": {"x2": {"field": "age2"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'observed'"}],
+              "mark": {"type": "text", "style": "observed-label", "align": "left", "dx": 6},
+              "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'model'"}],
+              "mark": {"type": "text", "style": "model-label", "align": "left", "dx": 6},
+              "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+            },
+            {
+              "transform": [{"filter": "datum.kind == 'alt'"}],
+              "mark": {"type": "text", "style": "alt-label", "align": "left", "dx": 6},
+              "encoding": {"x": {"field": "age2", "type": "quantitative"}, "text": {"field": "label"}}
+            }
+          ],
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        }
+      ],
+      "encoding": {
+        "x": {
+          "type": "quantitative",
+          "scale": {"domain": [60, 120], "nice": false},
+          "axis": {"title": "Age", "values": [60, 70, 80, 90, 100, 110, 120]}
+        },
+        "y": {
+          "type": "quantitative",
+          "scale": {"type": "log", "domain": [0.005, 3], "nice": false},
+          "axis": {"title": "Yearly death rate", "values": [0.01, 0.03, 0.1, 0.3, 1, 3]}
+        }
+      }
+    },
+    {
+      "width": 290,
+      "height": 240,
+      "layer": [
+        {
+          "data": {"url": "/attachments/us-life-table-2023.csv"},
+          "transform": [
+            {"filter": "datum.sex == 'women' && datum.age >= 60 && datum.age <= 100"},
+            {"calculate": "datum.alive / 0.9108 * 1e6", "as": "survivors"}
+          ],
+          "mark": {"type": "circle", "style": "observed", "size": 16},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "survivors", "type": "quantitative"}}
+        },
+        {
+          "data": {"sequence": {"start": 60, "stop": 120.5, "step": 0.5, "as": "age"}},
+          "transform": [
+            {"calculate": "log(0.244426 / 0.0241349) / 20", "as": "bG"},
+            {"calculate": "0.0241349 * exp(datum.bG * (datum.age - 75))", "as": "gompertz"},
+            {"calculate": "0.0241349 * exp(datum.bG * (60 - 75))", "as": "gompertz60"},
+            {"calculate": "1e6 * exp(-(datum.gompertz - datum.gompertz60) / datum.bG)", "as": "gompertzSurvivors"},
+            {"calculate": "1 / (1 / 0.0241349 - 1 / L)", "as": "g75"},
+            {"calculate": "1 / (1 / 0.244426 - 1 / L)", "as": "g95"},
+            {"calculate": "log(datum.g95 / datum.g75) / 20", "as": "b"},
+            {"calculate": "datum.g75 * exp(datum.b * (datum.age - 75))", "as": "g"},
+            {"calculate": "datum.g75 * exp(datum.b * (60 - 75))", "as": "g60"},
+            {"calculate": "1e6 * pow((L + datum.g60) / (L + datum.g), L / datum.b)", "as": "survivors"}
+          ],
+          "layer": [
+            {
+              "mark": {"type": "line", "style": "alt", "clip": true},
+              "encoding": {"y": {"field": "gompertzSurvivors", "type": "quantitative"}}
+            },
+            {
+              "mark": {"type": "line", "style": "model", "clip": true},
+              "encoding": {"y": {"field": "survivors", "type": "quantitative"}}
+            },
+            {
+              "transform": [{"filter": "datum.age == 110"}],
+              "layer": [
+                {"mark": {"type": "circle", "style": "model-point", "size": 60}},
+                {
+                  "mark": {"type": "text", "style": "model-label", "align": "left", "dx": 8, "dy": -10},
+                  "encoding": {"text": {"field": "label"}},
+                  "transform": [{"calculate": "format(datum.survivors, ',.0f') + ' at 110'", "as": "label"}]
+                }
+              ],
+              "encoding": {"y": {"field": "survivors", "type": "quantitative"}}
+            }
+          ],
+          "encoding": {"x": {"field": "age", "type": "quantitative"}}
+        }
+      ],
+      "encoding": {
+        "x": {
+          "type": "quantitative",
+          "scale": {"domain": [60, 120], "nice": false},
+          "axis": {"title": "Age", "values": [60, 70, 80, 90, 100, 110, 120]}
+        },
+        "y": {
+          "type": "quantitative",
+          "scale": {"type": "log", "domain": [0.1, 1000000], "nice": false},
+          "axis": {"title": "Alive, per million at 60", "values": [1, 100, 10000, 1000000], "format": ","}
+        }
+      }
+    }
+  ]
+}
+```
 
 ### Multi-component models
 
@@ -253,7 +695,7 @@ In the nematode *Caenorhabditis elegans*, Nicholas Stroustrup and colleagues col
 
 ## Late-life deceleration and the plateau debate
 
-![[mortality-late-life-shapes.png|Figure 3. Three models that agree on the data and disagree beyond it. Each curve is fitted to American women aged 60 to 100 in 2023 and extended to 120. Within the data the three are almost indistinguishable; at age 110 they predict annual hazards of 1.1 (Gompertz), 0.6 (Kannisto) and 0.5 (gamma-Gompertz with its ceiling set at 0.7). The dashed line marks the plateau estimated for Italians aged 105 and over.]]
+![[mortality-late-life-shapes.png|Figure 6. Three models that agree on the data and disagree beyond it. Each curve is fitted to American women aged 60 to 100 in 2023 and extended to 120. Within the data the three are almost indistinguishable; at age 110 they predict annual hazards of 1.1 (Gompertz), 0.6 (Kannisto) and 0.5 (gamma-Gompertz with its ceiling set at 0.7). The dashed line marks the plateau estimated for Italians aged 105 and over.]]
 
 If the Gompertz law held at all ages, the hazard would keep doubling every eight years or so and survival beyond about 120 would become vanishingly rare. A *mortality plateau* would instead leave a constant, if high, annual risk of death and no fixed maximum age.
 
@@ -273,7 +715,7 @@ Two lines of evidence point the other way:
 - **Single-year cohorts.** Studying single-year American birth cohorts in the Social Security Death Master File, the Gavrilovs found that mortality follows the Gompertz law up to ages 102 to 105 without noticeable deceleration.[^gavrilov2011] They argued that earlier reports of deceleration below age 100 were artefacts of mixing birth cohorts with different mortality levels, of using cross-sectional data, and of age exaggeration.
 - **Error models.** Saul Newman showed that age-estimation and cohort-blending errors at rates below 1 in 10,000 are enough to produce late-life deceleration and plateaus. Correcting for such errors removed the plateaus in his analysis, and he concluded that human ageing does not slow at old ages. The Italian estimates, by contrast, rest on individually validated ages.[^newman2018][^barbi2018]
 
-The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 3 illustrates the problem. Fitted to American women aged 60 to 100, the Gompertz, Kannisto and gamma-Gompertz curves differ by less than their typical error. At age 110 they differ by a factor of two. In the 2023 American period table there is no sign of deceleration up to age 100. If anything the slope steepens: women's death rates double every 8.0 years between ages 60 and 80 and every 6.0 years between 80 and 100. Rates at these ages in a national period table depend partly on how the producing agency smooths sparse data, so this is weak evidence either way. The behaviour of mortality above 105 must therefore be measured, not extrapolated, and such measurements rest on a few thousand deaths in which small age errors matter. As of the mid-2020s the existence of a human plateau remains contested. It bears on whether human lifespan has a fixed limit, a question argued in the same years from trends in maximum reported age at death.[^dong2016][^lenart2017]
+The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 6 illustrates the problem. Fitted to American women aged 60 to 100, the Gompertz, Kannisto and gamma-Gompertz curves differ by less than their typical error. At age 110 they differ by a factor of two. In the 2023 American period table there is no sign of deceleration up to age 100. If anything the slope steepens: women's death rates double every 8.0 years between ages 60 and 80 and every 6.0 years between 80 and 100. Rates at these ages in a national period table depend partly on how the producing agency smooths sparse data, so this is weak evidence either way. The behaviour of mortality above 105 must therefore be measured, not extrapolated, and such measurements rest on a few thousand deaths in which small age errors matter. As of the mid-2020s the existence of a human plateau remains contested. It bears on whether human lifespan has a fixed limit, a question argued in the same years from trends in maximum reported age at death.[^dong2016][^lenart2017]
 
 ## Mortality across species
 
@@ -330,7 +772,7 @@ Mortality models are fitted to counts of deaths $D_x$ and *exposures* $E_x$ by a
 > D_x \sim \operatorname{Poisson}\!\big(E_x\,\mu(x + \tfrac{1}{2})\big), \qquad \ln L = \sum_x \big[D_x \ln \mu(x + \tfrac{1}{2}) - E_x\,\mu(x + \tfrac{1}{2})\big] + \text{const}.
 > $$
 
-The Human Mortality Database uses exactly this approach to fit the Kannisto model at ages above 80.[^hmd2025] An older and still common shortcut is least squares on the logarithm of observed rates. It is simple, but it handles ages with zero deaths poorly and weights noisy old-age estimates as heavily as precise middle-age ones. (The fits in Figures 2 and 3 use least squares on log rates because a published life table supplies rates, not deaths and exposures.)
+The Human Mortality Database uses exactly this approach to fit the Kannisto model at ages above 80.[^hmd2025] An older and still common shortcut is least squares on the logarithm of observed rates. It is simple, but it handles ages with zero deaths poorly and weights noisy old-age estimates as heavily as precise middle-age ones. (The fits in Figures 2 and 6 use least squares on log rates because a published life table supplies rates, not deaths and exposures.)
 
 For laboratory cohorts, Scott Pletcher's WinModest software uses maximum likelihood to fit Gompertz, Gompertz–Makeham, logistic and logistic–Makeham models. Each of these is a special case of the next, so likelihood-ratio tests can ask whether an extra parameter is justified.[^pletcher1999] For wild animals, whose ages at death are usually known only through incomplete capture–recapture records, the BaSTA package estimates Gompertz, Weibull, logistic and Siler models by Bayesian inference.[^colchero2012] Tiffany Tai and Andrew Noymer compared methods of estimating the Gompertz slope from empirical data.[^tai2018]
 
@@ -382,7 +824,7 @@ Ronald Lee and Lawrence Carter's 1992 model shifted attention from the age patte
 
 ## Data and figures
 
-Figures 1 to 3 were drawn for this article from the Social Security Administration's [Period Life Table, 2023](https://www.ssa.gov/oact/STATS/table4c6.html), as used in the 2026 Trustees Report. Hazards were computed as $\mu = -\ln(1 - q_x)$ and placed at mid-year. The fitted curves minimise squared error in log hazard. The "typical miss" in Figure 2 is the root-mean-square error on the log scale, converted to a percentage, $e^{\text{RMSE}} - 1$. The portrait of Gompertz is in the public domain ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Gompertz.png)).
+Figures 1 to 6 were drawn for this article from the Social Security Administration's [Period Life Table, 2023](https://www.ssa.gov/oact/STATS/table4c6.html), as used in the 2026 Trustees Report. Hazards were computed as $\mu = -\ln(1 - q_x)$ and placed at mid-year. Except in Figure 5, the fitted curves minimise squared error in log hazard. The "typical miss" in Figure 2 is the root-mean-square error on the log scale, converted to a percentage, $e^{\text{RMSE}} - 1$. The portrait of Gompertz is in the public domain ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Gompertz.png)).
 
 [^gompertz1825]: Gompertz B (1825). "On the nature of the function expressive of the law of human mortality, and on a new mode of determining the value of life contingencies". *Philosophical Transactions of the Royal Society of London*. 115: 513–583. [doi:10.1098/rstl.1825.0026](https://doi.org/10.1098/rstl.1825.0026)
 
