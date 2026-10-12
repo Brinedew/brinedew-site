@@ -1409,9 +1409,15 @@
   padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   font-weight: 700;
   text-align: left;
+}
+
+.icono-label-print-copy-request[aria-disabled="true"] {
+  cursor: default;
 }
 
 .icono-label-print-copy-request:focus-visible {

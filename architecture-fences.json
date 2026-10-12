@@ -88,10 +88,10 @@
     },
     {
       "id": "IPD-004",
-      "title": "Queue wakeups follow durable due times",
-      "decision": "Automatic messages wake durable due work; they are not polling tokens. Repeated dirty work is coalesced. Batch work is let in by its price before it spends shared capacity (IPD-013).",
+      "title": "Scheduled wakeups follow durable due times",
+      "decision": "Scheduled wakeups run durable due work; they are not polling tokens. Repeated dirty work is coalesced. Batch work is let in by its price before it spends shared capacity (IPD-013).",
       "reason": "Blind retries and one-message-per-event designs can exhaust queues and databases without producing user value.",
-      "change_control": "A replacement must preserve durable intent, idempotency and bounded idle cost. Queue topology, batch sizes and schedules may change.",
+      "change_control": "A replacement must preserve durable intent, idempotency and bounded idle cost. Schedules and batch sizes may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -108,7 +108,7 @@
         },
         {
           "category": "source",
-          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+          "file": "workers/iconoplasm-background-schedule.js",
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
