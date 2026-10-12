@@ -573,3 +573,33 @@ test("B-764 locks the applied compact-discovery migration bytes", () => {
     "0106 was already applied; add a new migration instead of editing history",
   )
 })
+
+// ARCHITECTURE FENCE [IPD-013]
+// B-1085, the 2026-10-11 vote outage: a copy ran past a stop that only read
+// Cloudflare's lagging meter. Fails if an admin route can be added without a
+// price, or if the gate drifts back to reading the meter alone or to letting
+// an unreadable meter through.
+test("IPD-013 lets batch work in by its price, and an unpriced admin route can't be built", async () => {
+  const fence = registry.fences.find((entry) => entry.id === "IPD-013")
+  assert.ok(fence, "IPD-013 must remain registered")
+  const { Hono } = await import("hono")
+  const { BATCH_GATE, assertEveryAdminRoutePriced } =
+    await import("../workers/iconoplasm/batch-admission.js")
+  const gate = Object.assign(async (c, next) => next(), { [BATCH_GATE]: true })
+  const priced = new Hono()
+  priced.post("/api/iconoplasm/admin/thing", gate, (c) => c.json({}))
+  priced.post("/api/iconoplasm/caretaker/genes/:gene/saves", (c) => c.json({}))
+  assert.doesNotThrow(() => assertEveryAdminRoutePriced(priced))
+  const forgotten = new Hono()
+  forgotten.post("/api/iconoplasm/admin/new-sweep", (c) => c.json({}))
+  assert.throws(
+    () => assertEveryAdminRoutePriced(forgotten),
+    /POST \/api\/iconoplasm\/admin\/new-sweep must name its D1 price/,
+  )
+
+  const app = readRepositoryFile("workers/iconoplasm/app.js")
+  const admission = readRepositoryFile("workers/iconoplasm/batch-admission.js")
+  assert.match(app, /assertEveryAdminRoutePriced\(app,/)
+  assert.match(admission, /D1_METER_UNAVAILABLE/)
+  assert.match(admission, /FROM icono_batch_admissions WHERE minute >= \?/)
+})

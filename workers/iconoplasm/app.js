@@ -21,11 +21,18 @@ import {
   d1DailyRowLimitResponse,
   secondsUntilCloudflareDailyReset,
 } from "../lib/cloudflare-availability.js"
+import {
+  BATCH_GATE,
+  admitBatchWork,
+  assertEveryAdminRoutePriced,
+  batchSpendNow,
+  priceOf,
+} from "./batch-admission.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
 import { registerCaretakerRoleRoutes } from "./caretaker-role-routes.js"
 import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
-import { COPY_TABLES, copyCaretakingPage } from "./caretaking-copy.js"
+import { COPY_PAGE_ROWS, COPY_TABLES, copyCaretakingPage, copyJobRows } from "./caretaking-copy.js"
 
 // A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
 // allows one request (the canonical text's body, the card's PUT and its
@@ -194,44 +201,33 @@ export function createIconoplasmApp({
 }) {
   const app = new Hono()
 
-  // B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
-  // whole 100,000-row D1 write wall by 21:00 UTC, because taking publication out
-  // of the budget referee also took it out of the tier rule (batch work stops at
-  // 85% of a wall, a reader's own action runs to it; shared/iconoplasm-d1-budget-policy.js).
-  // The factory routes now apply that rule themselves, against Cloudflare's own
-  // usage meter, so no caller (the Drain, a sweep script, the catalogue run, a
-  // future agent) can spend readers' share. A meter that can't be read never
-  // stops work: Cloudflare's own wall still does.
-  const shedBatchWork = (criticalityOf) => async (c, next) => {
-    const criticality = criticalityOf(c)
-    if (criticality === "critical") return next()
-    const usage = await accountUsage(c.env).catch(() => null)
-    for (const meter of ["rows_read", "rows_written"]) {
-      const limit = criticalityShareLimit(FREE_PLAN_DAILY_LIMITS[meter], criticality)
-      const used = Number(usage?.[meter] || 0)
-      if (used < limit) continue
-      const retryAfter = secondsUntilCloudflareDailyReset()
-      c.header("Retry-After", String(retryAfter))
-      c.header("Cache-Control", "no-store")
-      return c.json(
-        {
-          ok: false,
-          code: "D1_BATCH_SHARE_SPENT",
-          error: {
-            code: "D1_BATCH_SHARE_SPENT",
-            message: `Batch work stops at ${limit.toLocaleString("en-US")} D1 ${meter.replace("_", " ")} a day (${used.toLocaleString("en-US")} used); readers keep the rest until 00:00 UTC.`,
-          },
-          meter,
-          used,
-          limit,
-          retry_after_seconds: retryAfter,
-          reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
-        },
-        503,
-      )
-    }
-    return next()
-  }
+  // Batch work stops at 85% of a wall and a reader's own action runs to it
+  // (shared/iconoplasm-d1-budget-policy.js), so no caller (the Drain, a sweep
+  // script, the catalogue run, a copy pass, a future agent) can spend readers'
+  // share. Each route names its price and is let in by it before it runs
+  // (B-1085, batch-admission.js): on 2026-10-11 a gate that only read Cloudflare's
+  // meter, which runs one to two minutes late, let a copy write 62,000 rows past
+  // the stop and readers lost their votes for the day. A meter that can't be read
+  // stops batch work. ARCHITECTURE FENCE [IPD-013]: every admin route carries
+  // this gate; the app won't build without it (assertEveryAdminRoutePriced).
+  const shedBatchWork = (criticalityOf, priceOf) =>
+    Object.assign(
+      async (c, next) => {
+        const criticality = criticalityOf(c)
+        if (criticality === "critical") return next()
+        const usage = await accountUsage(c.env).catch(() => null)
+        const admitted = await admitBatchWork(c.env.ICONOPLASM_DB, {
+          usage,
+          criticality,
+          ...(await priceOf(c)),
+        })
+        if (admitted.ok) return next()
+        c.header("Retry-After", String(admitted.retryAfter))
+        c.header("Cache-Control", "no-store")
+        return c.json(admitted.body, admitted.status)
+      },
+      { [BATCH_GATE]: true },
+    )
   // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
   // thrown error leaves the app as it is: the Worker's error reporting
   // (withErrorReporting, B-832) sends it to Sentry with its stack, as it did
@@ -279,20 +275,46 @@ export function createIconoplasmApp({
       })
     }
     const usage = await accountUsage(c.env).catch(() => null)
+    const spend = await batchSpendNow(c.env.ICONOPLASM_DB, usage)
     const retryAfter = secondsUntilCloudflareDailyReset()
+    // ?quote_written=&quote_read= asks whether a job of that price fits today,
+    // before it starts (B-1085): the price a script or agent states first.
+    const quote = ["quote_written", "quote_read"].some((key) => c.req.query(key) !== undefined)
+      ? {
+          rows_written: Number(c.req.query("quote_written") || 0),
+          rows_read: Number(c.req.query("quote_read") || 0),
+        }
+      : null
+    if (quote && !Object.values(quote).every((value) => Number.isSafeInteger(value) && value >= 0))
+      return c.json({ ok: false, error: "quote_written and quote_read must be row counts" }, 400)
     return c.json({
       ok: usage !== null,
       reset_at: new Date(Date.now() + retryAfter * 1000).toISOString(),
+      meter_counted_before: usage?.meter_counted_before ?? null,
       meters: Object.fromEntries(
         ["rows_read", "rows_written"].map((meter) => [
           meter,
           {
-            used: usage === null ? null : Number(usage[meter] || 0),
+            used: spend?.[meter].used ?? null,
+            unseen_batch: spend?.[meter].unseen_batch ?? null,
+            projected: spend?.[meter].projected ?? null,
             wall: FREE_PLAN_DAILY_LIMITS[meter],
             batch_limit: criticalityShareLimit(FREE_PLAN_DAILY_LIMITS[meter], "sheddable_plus"),
           },
         ]),
       ),
+      ...(quote
+        ? {
+            quote: {
+              ...quote,
+              fits:
+                spend !== null &&
+                ["rows_read", "rows_written"].every(
+                  (meter) => spend[meter].projected + quote[meter] <= spend[meter].stop,
+                ),
+            },
+          }
+        : {}),
     })
   })
 
@@ -313,7 +335,10 @@ export function createIconoplasmApp({
     factoryAuth,
     outsideMaintenance,
     zValidator("json", registerSchema),
-    shedBatchWork((c) => c.req.valid("json").criticality),
+    shedBatchWork(
+      (c) => c.req.valid("json").criticality,
+      (c) => ({ price: priceOf("portrait", c.req.valid("json").portraits.length) }),
+    ),
     async (c) => {
       const { created_by: createdBy, portraits: sent } = c.req.valid("json")
       const db = drizzle(c.env.ICONOPLASM_DB)
@@ -396,7 +421,10 @@ export function createIconoplasmApp({
         symbols: z.array(symbolSchema).check(z.minLength(1), z.maxLength(MAX_GENES_PER_REQUEST)),
       }),
     ),
-    shedBatchWork(() => "sheddable_plus"),
+    shedBatchWork(
+      () => "sheddable_plus",
+      (c) => ({ price: priceOf("card", new Set(c.req.valid("json").symbols).size) }),
+    ),
     async (c) => {
       const symbols = [...new Set(c.req.valid("json").symbols)]
       const results = []
@@ -435,7 +463,10 @@ export function createIconoplasmApp({
         fields: z.nullish(z.record(z.string(), z.unknown())),
       }),
     ),
-    shedBatchWork(() => "sheddable_plus"),
+    shedBatchWork(
+      () => "sheddable_plus",
+      () => ({ price: priceOf("gene_text") }),
+    ),
     async (c) => {
       c.header("Cache-Control", "no-store")
       try {
@@ -466,7 +497,10 @@ export function createIconoplasmApp({
         after: z.optional(z.string().check(z.maxLength(128))),
       }),
     ),
-    shedBatchWork(() => "sheddable_plus"),
+    shedBatchWork(
+      () => "sheddable_plus",
+      () => ({ price: priceOf("text_page") }),
+    ),
     async (c) => {
       c.header("Cache-Control", "no-store")
       try {
@@ -481,7 +515,9 @@ export function createIconoplasmApp({
   /**
    * B-1065 B2b: copies one page of caretaking (texts, caretaker versions or
    * roles) from the authoring database into the main one
-   * (workers/iconoplasm/caretaking-copy.js). Batch work: it stops at the 85% tier.
+   * (workers/iconoplasm/caretaking-copy.js). Batch work: a page is let in by its
+   * rows' price, and a table's first page also by the whole table's, so a copy
+   * the day can't hold is refused before its first write.
    */
   app.post(
     "/api/iconoplasm/admin/caretaking/copy",
@@ -494,7 +530,19 @@ export function createIconoplasmApp({
         after: z.nullish(z.string().check(z.maxLength(128))),
       }),
     ),
-    shedBatchWork(() => "sheddable_plus"),
+    shedBatchWork(
+      () => "sheddable_plus",
+      async (c) => {
+        const { table, after } = c.req.valid("json")
+        if (table === "supervotes") return { price: priceOf("supervote_move") }
+        if (after) return { price: priceOf("gene_text", COPY_PAGE_ROWS[table]) }
+        const rows = await copyJobRows(c.env, table)
+        return {
+          price: priceOf("gene_text", Math.min(rows, COPY_PAGE_ROWS[table])),
+          job: priceOf("gene_text", rows),
+        }
+      },
+    ),
     async (c) => {
       c.header("Cache-Control", "no-store")
       return c.json({ ok: true, ...(await copyCaretakingPage(c.env, c.req.valid("json"))) })
@@ -504,6 +552,11 @@ export function createIconoplasmApp({
   // B-1065: the caretaker panel and role routes, on the main database.
   registerCaretakerTextRoutes(app, { caretakerSession, publishGene })
   registerCaretakerRoleRoutes(app, { caretakerSession, settleGene })
+
+  assertEveryAdminRoutePriced(app, {
+    "GET /api/iconoplasm/admin/d1-usage":
+      "the meter itself: it reads Cloudflare's analytics and a few admission minutes, and is how a script asks a job's price first",
+  })
 
   app.all("*", (c) => legacy(c.req.raw, c.env, executionContext(c)))
   return app

@@ -50,6 +50,20 @@ step must never silently fall back to rebuilding the corpus.
 The Website is the command authority for caretaker and manifestation state. The
 workstation is a version-bound replica and executor, not a second writer.
 
+<!-- ARCHITECTURE FENCE [IPD-013] -->
+
+Batch work is let in by its price, before it runs. Cloudflare's D1 meter shows
+a minute one to two minutes late, so a gate that only reads it lets a fast
+writer run past the 85% stop: on 2026-10-11 a copy wrote 62,000 rows in four
+minutes that way and readers lost their votes until 00:00 UTC (B-1085). Every
+admin route names its price; the gate adds the meter's total, what batch work
+was let in since the meter's newest minute (`icono_batch_admissions`, one row a
+minute) and the price, and refuses past the stop. A multi-page job prices its
+whole length on its first page. A meter that can't be read stops batch work.
+Before starting a bulk job by hand, ask
+`/api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M` and start only on
+`"fits": true`.
+
 These are durable boundaries. Batch sizes, schemas, schedules, cache lifetimes,
 retry counts, and provider-operation estimates are implementation choices and
 belong in code and tests.

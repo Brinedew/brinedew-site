@@ -22,6 +22,14 @@
         "rows_written": 100,
         "requests": 1
       }
+    },
+    "iconoplasm/0127_batch_admissions.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 10,
+        "rows_written": 10,
+        "requests": 1
+      }
     }
   }
 }

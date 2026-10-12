@@ -64,6 +64,7 @@ import path from "node:path"
 import test from "node:test"
 
 import { MAX_GENES_PER_REQUEST, createIconoplasmApp } from "../workers/iconoplasm/app.js"
+import { iconoplasmDatabase } from "../workers/test-helpers/account-erasure-fixture.js"
 import {
   DEFAULT_BATCH_SYMBOLS,
   RETRY_DELAYS_MS,
@@ -99,6 +100,8 @@ function routePoster({
 } = {}) {
   const published = []
   const calls = []
+  // The batch gate records each admitted request in the real schema (B-1085).
+  const db = iconoplasmDatabase()
   const app = createIconoplasmApp({
     legacy: async () => new Response("legacy", { status: 404 }),
     publishGene: async (_env, symbol) => {
@@ -125,7 +128,7 @@ function routePoster({
         headers: { Authorization: "Bearer test-token", "Content-Type": "application/json" },
         body: JSON.stringify({ symbols }),
       },
-      { ICONOPLASM_ADMIN_TOKEN: "test-token" },
+      { ICONOPLASM_ADMIN_TOKEN: "test-token", ICONOPLASM_DB: db },
     )
     return { status: response.status, body: await response.json() }
   }

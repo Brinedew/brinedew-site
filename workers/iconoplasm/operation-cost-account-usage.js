@@ -1,11 +1,17 @@
 import { OperationCostError } from "../lib/operation-cost-ledger.js"
 import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
 
-const QUERY = `query OperationCostAdmission($accountTag: string, $day: Date) {
+// B-1085: `recent` is the newest minute the meter has shown. The meter runs one
+// to two minutes behind (measured 2026-10-11: at 10:44:58 UTC the newest minute
+// was 10:43), so everything after that minute is spend it hasn't counted yet.
+const QUERY = `query OperationCostAdmission($accountTag: string, $day: Date, $since: Time) {
   viewer { accounts(filter: { accountTag: $accountTag }) {
     workersInvocationsAdaptive(limit: 10000, filter: { date_geq: $day, date_leq: $day }) { sum { requests } }
     d1AnalyticsAdaptiveGroups(limit: 1000, filter: { date_geq: $day, date_leq: $day }) {
       dimensions { date databaseId } sum { rowsRead rowsWritten }
+    }
+    recent: d1AnalyticsAdaptiveGroups(limit: 1, filter: { datetimeMinute_geq: $since }, orderBy: [datetimeMinute_DESC]) {
+      dimensions { datetimeMinute }
     }
   } }
 }`
@@ -26,6 +32,10 @@ const WINDOW_QUERY = `query D1Window($accountTag: string, $from: Time, $to: Time
 }`
 
 const unavailable = () => new OperationCostError("COST_ACCOUNT_USAGE_UNAVAILABLE")
+
+// How far back the newest-minute probe looks. A quiet account shows no minute in
+// it, and then everything older is in the day total.
+const RECENT_WINDOW_MS = 10 * 60_000
 
 // B-1059: the whole account's D1 rows between two instants, from Cloudflare's own
 // analytics. The Drain asks for a publication's window once the analytics have
@@ -78,7 +88,22 @@ export function parseOperationCostAccountUsage(
     databases.length >= 1000
   )
     throw unavailable()
-  const usage = { day, measured_at: measuredAt, rows_read: 0, rows_written: 0, requests: 0 }
+  // Callers with a query of their own (scripts/lib/cloudflare-account-budget.mjs)
+  // ask no newest minute; theirs counts from the start of the window.
+  const recent = account?.recent ?? []
+  if (!Array.isArray(recent) || recent.length > 1) throw unavailable()
+  const newest = recent.length ? Date.parse(recent[0]?.dimensions?.datetimeMinute) : null
+  if (newest !== null && !Number.isFinite(newest)) throw unavailable()
+  const usage = {
+    day,
+    measured_at: measuredAt,
+    // The first minute the meter may not have counted in full: its newest minute
+    // (still filling), or the start of the window when it shows none.
+    meter_counted_before: new Date(newest ?? measuredAt - RECENT_WINDOW_MS).toISOString(),
+    rows_read: 0,
+    rows_written: 0,
+    requests: 0,
+  }
   const add = (meter, value) => {
     if (!Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(usage[meter] + value))
       throw unavailable()
@@ -148,7 +173,11 @@ export function createOperationCostAccountUsageReader({
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               query: queryKv ? KV_QUERY : QUERY,
-              variables: { accountTag: accountId, day },
+              variables: {
+                accountTag: accountId,
+                day,
+                since: new Date(started - RECENT_WINDOW_MS).toISOString(),
+              },
             }),
             signal: AbortSignal.timeout(10_000),
           })
