@@ -262,6 +262,10 @@ new MutationObserver(tryInit).observe(document.documentElement, { childList: tru
 
 This survives Quartz's dynamic navigation and won't get nuked by migration scripts.
 
+## interactive charts in notes
+
+A ` ```vega-lite ` code block in a note becomes an interactive chart on the site, while Obsidian shows its source. Write the chart as a [Vega-Lite](https://vega.github.io/vega-lite/) spec. Sliders are `params` bound to `{"input": "range"}`. Data is a CSV in `content/Attachments/`, fetched as `/attachments/<lowercased name>`. The top-level `description` becomes the figure caption. Colour comes from the theme through mark styles (`observed`, `model`, `alt`, `guide` and their `-label` and `-point` forms), never hex values. Side-by-side panels (`hconcat`) stack on phones. `quartz/static/charts/vega-charts.js` does the work, and loads the vendored Vega builds in `quartz/static/vendor/vega/` only on pages that have a chart. The first charts are in `wiki/Mortality rate models.md`.
+
 ## things to not touch
 
 - `quartz.config.yaml` core configuration (themes, plugins)
