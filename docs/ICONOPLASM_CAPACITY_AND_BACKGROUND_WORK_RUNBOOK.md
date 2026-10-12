@@ -15,7 +15,7 @@ revision, and a verified user operation are separate facts.
 
 <!-- ARCHITECTURE FENCE [IPD-004] -->
 
-Queue messages wake durable work. They are not polling tokens. Repeated work for
+Scheduled jobs wake durable work. They are not polling tokens. Repeated work for
 the same durable object is coalesced, and a future retry waits for its durable
 due time.
 

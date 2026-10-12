@@ -39,7 +39,7 @@ Portrait selection happens before delivery policy. D1 owns authoring, vote,
 rich-detail, and candidate state and may legitimately name a newer leader while
 publication is pending. The stable gene object `genes/v3/<SYMBOL>.json` is
 the sole published source-portrait selection used by signed-in and anonymous
-cards, gene detail, extension cards, and print-copy inputs. A missing stable
+cards, gene detail, extension cards, and the print copy. A missing stable
 object fails closed; there is no D1 or gene-detail portrait fallback.
 
 The source portrait is not Iconoplasm's canonical public/search image. That role
@@ -57,18 +57,13 @@ Portraits and blots load from `img.brinedew.bio` on every network (see
 "Protected image behavior" below). The delivery host changes only how bytes
 arrive, never identity.
 
-Labelled gene-card PNGs are a separate derived asset class under
-`gene-cards/v1/<prefix>/<card-fingerprint>/<SYMBOL>-iconoplasm-gene-card.png`.
-Their fingerprint comes from the gene's stable-object card payload and the
-renderer revision, including the selected portrait identity. They never choose
-or reconstruct a portrait independently. Public downloads go through the
-first-party print-copy route and set the same gene-specific filename in
-`Content-Disposition`.
-The renderer verifies the PNG IHDR is exactly 1536×2048 before upload and the
-ledger publishes those dimensions only after that check; portrait-source
-dimensions must not silently redefine the print artifact size.
-After a labelled-card PUT, the worker retries authenticated Storage HEAD across
-a bounded five-second replication window before declaring verification failed.
+The print copy is painted in the reader's own browser from the published
+portrait and the published card (`genes/v3/<SYMBOL>.json`). The browser copies
+the portrait's pixels 1:1 and bakes the card's label into them, so the print
+size is the portrait's own size. No server renders, stores or serves a print
+copy, and no D1 row or Worker request is spent on one; the reader's click
+downloads a file the browser already holds. The print copy never chooses or
+reconstructs a portrait independently of the stable object.
 It never treats an unverified upload as ready.
 
 ## Storage and serving

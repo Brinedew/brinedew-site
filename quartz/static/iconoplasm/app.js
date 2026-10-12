@@ -1146,41 +1146,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return portraitDelivery.resolve(rawPublishedPortraitUrl(genePayload, preferredSize))
   }
 
-  function canonicalGeneBlotMarkup(genePayload) {
-    var symbol = normalizedSymbol(genePayload && genePayload.symbol)
-    if (!symbol) return ""
-    // The exact-card blot is rendered by the workstation, so a freshly won vote
-    // or canonical selection can be live before its blot exists. Always point the
-    // print-copy surface at the stable semantic blot route and decide
-    // image-vs-placeholder at load time: the route resolves the exact published
-    // card's blot, so this never trusts a possibly stale card blot field and
-    // never leaves the surface blank.
-    var semanticUrl = "/blot/" + encodeURIComponent(symbol) + ".webp"
-    var fullName = String(
-      (genePayload && (genePayload.full_name || genePayload.name)) || symbol,
-    ).trim()
-    var alt = symbol + " Iconoplasm gene blot — " + fullName
-    return (
-      '<figure class="icono-canonical-gene-blot" data-icono-canonical-gene-blot hidden data-icono-blot-state="pending">' +
-      '<div class="icono-canonical-gene-blot-pending" role="status">' +
-      '<span class="icono-canonical-gene-blot-pending-mark" aria-hidden="true"></span>' +
-      '<p class="icono-canonical-gene-blot-pending-title">print copy still developing</p>' +
-      '<p class="icono-canonical-gene-blot-pending-note">the ' +
-      esc(symbol) +
-      " canvas is being matched for this card. a fresh print can take from about ten minutes up to a day to render — check back soon.</p>" +
-      "</div>" +
-      '<img class="icono-canonical-gene-blot-image" src="' +
-      esc(semanticUrl) +
-      '" data-iconoplasm-role="canonical-blot" data-gene-symbol="' +
-      esc(symbol) +
-      '" data-iconoplasm-canonical-image-src="' +
-      esc(semanticUrl) +
-      '" width="768" height="1024" loading="lazy" decoding="async" fetchpriority="low" alt="' +
-      esc(alt) +
-      '"></figure>'
-    )
-  }
-
   function rawCandidatePortraitUrl(candidate, preferredSize) {
     var item = candidate || {}
     var fullUrl = String(item.full_url || "").trim()
@@ -1502,17 +1467,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     installIconoplasmLightbox(document)
   }
 
+  // B-1068: the print copy is painted in the reader's own browser: the published
+  // portrait at its own pixels with the card's name, symbol and shading baked in.
+  // No server, no queue, no D1.
   var printCopyRequestState = Object.create(null)
-  var turnstileScriptPromise = null
-  var PRINT_COPY_STATUS_DELAYS_MS = [5000, 10000, 20000, 40000, 45000]
-
-  function printCopyCurrentAssetSha(genePayload) {
-    var portrait = genePayload && genePayload.portrait
-    var assetSha = String((portrait && portrait.asset_sha256) || "")
-      .trim()
-      .toLowerCase()
-    return /^[a-f0-9]{64}$/.test(assetSha) ? assetSha : ""
-  }
+  var printCopyCards = Object.create(null)
 
   function normalizedAssetSha(value) {
     var assetSha = String(value || "")
@@ -1528,143 +1487,31 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return Array.prototype.slice.call(document.querySelectorAll(selector))
   }
 
-  function setPrintCopyTriggerState(symbol, state, payload) {
+  function setPrintCopyTriggerState(symbol, state) {
     var key = normalizedSymbol(symbol)
     if (!key) return
     printCopyRequestState[key] = state
-    var buttons = printCopyTriggers(key)
-    buttons.forEach(function (button) {
+    printCopyTriggers(key).forEach(function (button) {
       button.setAttribute("data-icono-print-copy-state", state)
       button.removeAttribute("aria-disabled")
-      if (state === "ready" && payload && payload.download_url) {
-        button.setAttribute("data-icono-print-copy-ready", "true")
-        button.setAttribute("href", payload.download_url)
-        button.setAttribute("target", "_blank")
-        button.setAttribute("rel", "noopener")
-        button.textContent = "download " + key + " print copy"
-        return
-      }
-      button.removeAttribute("data-icono-print-copy-ready")
-      button.removeAttribute("href")
-      button.removeAttribute("target")
-      button.removeAttribute("rel")
-      // "waiting": the page stopped polling and the render is still queued (B-997: at most 8
-      // renders a day, so a busy day parks a request until the next one). Say so plainly.
+      if (state === "painting") button.setAttribute("aria-busy", "true")
+      else button.removeAttribute("aria-busy")
       button.textContent =
-        state === "queued"
+        state === "painting"
           ? "preparing " + key + " print copy…"
-          : state === "waiting"
-            ? key + " print copy queued, check back later"
-            : state === "failed"
-              ? "retry " + key + " print copy"
-              : "request print copy"
+          : state === "failed"
+            ? "retry " + key + " print copy"
+            : "download " + key + " print copy"
     })
   }
 
-  function beginPrintCopyDownload(payload) {
-    if (!payload || !payload.download_url) return
-    var link = document.createElement("a")
-    link.href = payload.download_url
-    link.download = payload.filename || "iconoplasm-gene-card.png"
-    link.hidden = true
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-  }
-
-  function loadTurnstileScript() {
-    if (window.turnstile && typeof window.turnstile.render === "function") {
-      return Promise.resolve(window.turnstile)
-    }
-    if (turnstileScriptPromise) return turnstileScriptPromise
-    turnstileScriptPromise = new Promise(function (resolve, reject) {
-      var script = document.createElement("script")
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-      script.async = true
-      script.defer = true
-      script.onload = function () {
-        if (window.turnstile && typeof window.turnstile.render === "function") {
-          resolve(window.turnstile)
-        } else {
-          reject(new Error("Bot check did not initialize"))
-        }
-      }
-      script.onerror = function () {
-        reject(new Error("Bot check could not be loaded"))
-      }
-      document.head.appendChild(script)
-    })
-    return turnstileScriptPromise
-  }
-
-  function requestPrintCopyTurnstile(trigger, symbol, siteKey) {
-    if (!siteKey) return Promise.reject(new Error("Bot check is unavailable"))
-    return loadTurnstileScript().then(function (turnstile) {
-      return new Promise(function (resolve, reject) {
-        var host = document.createElement("div")
-        host.className = "icono-print-copy-turnstile"
-        trigger.insertAdjacentElement("afterend", host)
-        turnstile.render(host, {
-          sitekey: siteKey,
-          theme: "auto",
-          action: "gene_card_request",
-          callback: function (token) {
-            host.remove()
-            resolve(token)
-          },
-          "error-callback": function () {
-            host.remove()
-            reject(new Error("Bot check failed"))
-          },
-          "expired-callback": function () {
-            host.remove()
-            reject(new Error("Bot check expired"))
-          },
-        })
-      })
-    })
-  }
-
-  function fetchPrintCopyStatus(symbol) {
-    return fetchJSON("/api/iconoplasm/print-copy-status/" + encodeURIComponent(symbol), {
-      cache: "no-store",
-    })
-  }
-
-  function waitForPrintCopy(symbol, attempt) {
-    return fetchPrintCopyStatus(symbol).then(function (payload) {
-      if (payload.status === "ready") return payload
-      if (payload.status === "failed") throw new Error(payload.last_error || "Print copy failed")
-      var delay = PRINT_COPY_STATUS_DELAYS_MS[attempt]
-      if (!delay) return payload
-      return new Promise(function (resolve) {
-        window.setTimeout(resolve, delay)
-      }).then(function () {
-        return waitForPrintCopy(symbol, attempt + 1)
-      })
-    })
-  }
-
-  function postPrintCopyRequest(symbol, turnstileToken) {
-    return fetch("/api/iconoplasm/print-copy-requests/" + encodeURIComponent(symbol), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(turnstileToken ? { turnstile_token: turnstileToken } : {}),
-    }).then(function (response) {
-      return response
-        .json()
-        .catch(function () {
-          return {}
-        })
-        .then(function (payload) {
-          if (!response.ok) {
-            var error = new Error(payload.error || "Print-copy request failed")
-            error.payload = payload
-            throw error
-          }
-          return payload
-        })
+  function loadPrintCopyPainter() {
+    var painterUrl = new URL(
+      "./generated/print-copy-painter.js?v=f63dc141376bc788",
+      import.meta.url,
+    ).href
+    return loadScriptOnce(painterUrl, function () {
+      return !!(window.IconoplasmPrintCopy && window.IconoplasmPrintCopy.paint)
     })
   }
 
@@ -1675,17 +1522,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var symbol =
         String(button.getAttribute("data-icono-print-copy-symbol") || "").trim() ||
         String(genePayload && genePayload.symbol ? genePayload.symbol : "").trim()
-      if (!symbol || button.getAttribute("data-icono-print-copy-wired") === "true") return
+      var key = normalizedSymbol(symbol)
+      if (!key || button.getAttribute("data-icono-print-copy-wired") === "true") return
       button.setAttribute("data-icono-print-copy-wired", "true")
-      var printCopy = genePayload && genePayload.print_copy
-      if (printCopy && printCopy.status === "ready") {
-        setPrintCopyTriggerState(symbol, "ready", {
-          download_url:
-            "/api/iconoplasm/print-copy/" + encodeURIComponent(normalizedSymbol(symbol)) + ".png",
-          filename: printCopy.filename,
-        })
-      } else {
-        setPrintCopyTriggerState(symbol, "idle")
+      if (genePayload && rawPublishedPortraitUrl(genePayload, "full")) {
+        printCopyCards[key] = genePayload
+        setPrintCopyTriggerState(key, "idle")
       }
     })
   }
@@ -1698,74 +1540,41 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       String(trigger.getAttribute("data-icono-print-copy-symbol") || "").trim() ||
       String(sourceCard.getAttribute("data-icono-symbol") || "").trim()
     var key = normalizedSymbol(symbol)
-    if (!key || printCopyRequestState[key] === "queued") return
-    revealCanonicalGeneBlot(trigger, key)
-    setPrintCopyTriggerState(key, "queued")
-    void postPrintCopyRequest(key)
+    var card = key ? printCopyCards[key] : null
+    if (!card || printCopyRequestState[key] === "painting") return
+    setPrintCopyTriggerState(key, "painting")
+    loadPrintCopyPainter()
+      .then(function () {
+        return window.IconoplasmPrintCopy.paint(card, {
+          portraitUrl: publishedPortraitUrl(card, "full"),
+        })
+      })
+      .then(function (canvas) {
+        return new Promise(function (resolve, reject) {
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob)
+            else reject(new Error("The print copy could not be encoded"))
+          }, "image/png")
+        })
+      })
+      .then(function (blob) {
+        var href = URL.createObjectURL(blob)
+        var link = document.createElement("a")
+        link.href = href
+        link.download = key + "-iconoplasm-print-copy.png"
+        link.hidden = true
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.setTimeout(function () {
+          URL.revokeObjectURL(href)
+        }, 60000)
+        setPrintCopyTriggerState(key, "idle")
+      })
       .catch(function (error) {
-        var payload = error && error.payload
-        if (payload && payload.code === "TURNSTILE_REQUIRED") {
-          return requestPrintCopyTurnstile(trigger, key, payload.turnstile_site_key).then(
-            function (token) {
-              return postPrintCopyRequest(key, token)
-            },
-          )
-        }
-        throw error
-      })
-      .then(function (payload) {
-        if (payload.status === "ready") return payload
-        return waitForPrintCopy(key, 0)
-      })
-      .then(function (payload) {
-        if (payload.status === "ready") {
-          setPrintCopyTriggerState(key, "ready", payload)
-          beginPrintCopyDownload(payload)
-        } else {
-          setPrintCopyTriggerState(key, "waiting")
-        }
-      })
-      .catch(function (error) {
-        console.error("[Iconoplasm] print-copy request failed:", error)
+        console.error("[Iconoplasm] print copy failed:", error)
         setPrintCopyTriggerState(key, "failed")
       })
-  }
-
-  function revealCanonicalGeneBlot(trigger, symbol) {
-    var key = normalizedSymbol(symbol)
-    if (!key) return
-    var geneContent = trigger && trigger.closest ? trigger.closest("#icono-gene-content") : null
-    var scope = geneContent || document
-    var blot = scope.querySelector("[data-icono-canonical-gene-blot]")
-    if (!blot) return
-    var image = blot.querySelector(".icono-canonical-gene-blot-image")
-    if (image && image.getAttribute("data-icono-blot-wired") !== "true") {
-      image.setAttribute("data-icono-blot-wired", "true")
-      var settle = function (state) {
-        blot.setAttribute("data-icono-blot-state", state)
-      }
-      if (image.complete && image.naturalWidth > 0) {
-        settle("ready")
-      } else if (image.complete) {
-        settle("pending")
-      } else {
-        image.addEventListener(
-          "load",
-          function () {
-            settle("ready")
-          },
-          { once: true },
-        )
-        image.addEventListener(
-          "error",
-          function () {
-            settle("pending")
-          },
-          { once: true },
-        )
-      }
-    }
-    blot.removeAttribute("hidden")
   }
 
   function isCompleteGeneDetailPayload(payload, symbol) {
@@ -10305,8 +10114,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function renderGeneContent(container, g) {
-    var html =
-      '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g) + canonicalGeneBlotMarkup(g)
+    var html = '<section class="icono-gene-lead">' + buildGeneLeadCardMarkup(g)
 
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
@@ -11058,15 +10866,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var printCopyTrigger =
       e.target && e.target.closest ? e.target.closest("[data-icono-print-copy]") : null
     if (printCopyTrigger) {
-      revealCanonicalGeneBlot(
-        printCopyTrigger,
-        printCopyTrigger.getAttribute("data-icono-print-copy-symbol"),
-      )
-      if (printCopyTrigger.getAttribute("href")) {
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation()
-        else e.stopPropagation()
-        return
-      }
       e.preventDefault()
       if (e.stopImmediatePropagation) e.stopImmediatePropagation()
       else e.stopPropagation()

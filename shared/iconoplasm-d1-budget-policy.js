@@ -23,16 +23,11 @@ export const FREE_PLAN_DAILY_LIMITS = Object.freeze({
   queue_operations: 10_000,
 })
 // Free-plan meters the CI account watcher doesn't sample, so they stay out of the table
-// above, whose every key it checks. Cloudflare's pricing pages, read 2026-10-06: Browser
-// Rendering "10 minutes per day"; Workers Logs "200,000 per day".
+// above, whose every key it checks. Cloudflare's pricing pages, read 2026-10-06: Workers
+// Logs "200,000 per day".
 export const FREE_PLAN_UNSAMPLED_DAILY_LIMITS = Object.freeze({
-  browser_rendering_seconds: 600,
   workers_log_events: 200_000,
 })
-
-// The gene-card materializer's share of browser time: 8 of the 10 minutes, so a manual
-// render from the dashboard still has two.
-export const BROWSER_RENDERING_OPERATOR_DAILY_SECONDS = 480
 
 export const FREE_D1_DAILY_LIMITS = Object.freeze({
   reads: FREE_PLAN_DAILY_LIMITS.rows_read,

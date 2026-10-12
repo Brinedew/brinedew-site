@@ -192,26 +192,7 @@ import {
 // signed-in shelf by popularity locally, and the published catalog has none.
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "../quartz/static/iconoplasm/wiki-pageviews.js"
 import {
-  ICONOPLASM_GENE_CARD_HEIGHT,
-  ICONOPLASM_GENE_CARD_QUEUE_KIND,
-  ICONOPLASM_GENE_CARD_RENDERER_REVISION,
-  ICONOPLASM_GENE_CARD_WIDTH,
-  advanceEnrolledIconoplasmGeneCardMaterialization,
-  claimDueIconoplasmGeneCardMaterialization,
-  completeIconoplasmGeneCardMaterialization,
-  deferIconoplasmGeneCardMaterialization,
-  enqueueIconoplasmGeneCardWakeup,
-  enrollIconoplasmGeneCardMaterialization,
-  failIconoplasmGeneCardMaterialization,
   iconoplasmGeneCardCdnUrl,
-  iconoplasmGeneCardDownloadFilename,
-  iconoplasmGeneCardFingerprint,
-  iconoplasmGeneCardObjectKey,
-  iconoplasmGeneCardPngDimensions,
-  readIconoplasmGeneCardMaterialization,
-  recordIconoplasmGeneCardBrowserSeconds,
-  recoverDueIconoplasmGeneCardMaterializations,
-  reserveIconoplasmGeneCardBrowserLaunch,
   ICONOPLASM_GENE_BLOT_HEIGHT,
   ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
   ICONOPLASM_GENE_BLOT_WIDTH,
@@ -336,13 +317,8 @@ const SCANNER_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.scanner_contract_revision,
 )
 const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
-const ICONOPLASM_PRINT_COPY_PNG_PREFIX = "/api/iconoplasm/print-copy"
-const ICONOPLASM_PRINT_COPY_RENDER_PREFIX = "/api/iconoplasm/print-copy-render"
-const ICONOPLASM_PRINT_COPY_RENDER_VERSION = "2026-07-25-font-face-fix"
-const ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH = 384
-const ICONOPLASM_PRINT_COPY_CARD_CSS_HEIGHT = 512
-const ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH = ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH
-const ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT = ICONOPLASM_PRINT_COPY_CARD_CSS_HEIGHT
+const ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH = 384
+const ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT = 512
 const ICONOPLASM_BLOT_REQUEST_WIDTH = ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH * 4
 const ICONOPLASM_BLOT_REQUEST_HEIGHT = ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT * 4
 const ICONOPLASM_BLOT_REQUEST_SIZE = `${ICONOPLASM_BLOT_REQUEST_WIDTH}x${ICONOPLASM_BLOT_REQUEST_HEIGHT}`
@@ -1211,14 +1187,6 @@ const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
 const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
 const CANONICAL_RANDOM_ARTIST_VARIANT_RE = /^[a-z0-9-]+-v\d+-\d+$/i
 const WORKFLOW_SUFFIX_RE = /\.(api|ui)$/i
-const TRUSTED_ICONOPLASM_CLIENT_HOSTS = new Set([
-  "iconoplasm.brinedew.bio",
-  "brinedew.bio",
-  "www.brinedew.bio",
-  "staging.brinedew.bio",
-  "localhost",
-  "127.0.0.1",
-])
 
 export function isIconoplasmRequest(host) {
   return host === ICONOPLASM_HOST || host.startsWith("iconoplasm.")
@@ -1627,15 +1595,6 @@ function normalizeCandidateRef(raw, symbol = null, assetSha256 = null) {
 
 function voteAssetIdentity(symbol, assetSha256) {
   return normalizeCandidateRef("", symbol, assetSha256)
-}
-
-function esc(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
 }
 
 function joinUrl(base, key) {
@@ -11394,24 +11353,6 @@ function etagMatches(ifNoneMatchValue, etag) {
   return candidates.some((v) => normalize(v) === target)
 }
 
-function requestHeaderHost(request, headerName) {
-  const raw = String(request.headers.get(headerName) || "").trim()
-  if (!raw) return ""
-  try {
-    return new URL(raw).host.toLowerCase()
-  } catch {
-    return ""
-  }
-}
-
-function hasTrustedIconoplasmBrowserOrigin(request) {
-  const originHost = requestHeaderHost(request, "Origin")
-  const refererHost = requestHeaderHost(request, "Referer")
-  if (originHost && TRUSTED_ICONOPLASM_CLIENT_HOSTS.has(originHost)) return true
-  if (refererHost && TRUSTED_ICONOPLASM_CLIENT_HOSTS.has(refererHost)) return true
-  return false
-}
-
 function publicRichRouteDeniedPayload(url, routeKey) {
   return {
     error:
@@ -14993,200 +14934,6 @@ async function syncAdminReadModels(
   return { symbols: symbolList.length, visions: finalVisionIds.length }
 }
 
-function decodeIconoplasmQueueMessageBody(rawMessage, depth = 0) {
-  if (depth > 4 || rawMessage == null) return {}
-  if (typeof rawMessage === "string") {
-    const trimmed = rawMessage.trim()
-    if (!trimmed) return {}
-    try {
-      return decodeIconoplasmQueueMessageBody(JSON.parse(trimmed), depth + 1)
-    } catch {
-      return {}
-    }
-  }
-  if (typeof rawMessage !== "object") return {}
-  const body = rawMessage
-  const kind = sanitizeText(body.kind || "", 80)
-  if (kind) return body
-  if (Object.hasOwn(body, "body")) {
-    const nested = decodeIconoplasmQueueMessageBody(body.body, depth + 1)
-    if (sanitizeText(nested?.kind || "", 80)) return nested
-  }
-  return body
-}
-
-async function processIconoplasmGeneCardMaterializationMessage(message, env, ctx) {
-  const body = decodeIconoplasmQueueMessageBody(message?.body)
-  const symbol = normalizeSymbol(body?.symbol || "")
-  if (!symbol) {
-    message?.ack?.()
-    return { ok: false, code: "INVALID_SYMBOL" }
-  }
-  const claimed = await claimDueIconoplasmGeneCardMaterialization(env, symbol)
-  if (claimed.kind === "future") {
-    await enqueueIconoplasmGeneCardWakeup(env, symbol, {
-      delaySeconds: claimed.delaySeconds,
-      force: true,
-    })
-    message?.ack?.()
-    return { ok: true, deferred: true }
-  }
-  if (claimed.kind !== "claimed") {
-    message?.ack?.()
-    return { ok: true, duplicate: true }
-  }
-
-  let budgetReservation = null
-  const startedAt = Date.now()
-  try {
-    const request = new Request(
-      `${ICONOPLASM_CANONICAL_ORIGIN}${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/${encodeURIComponent(symbol)}.png`,
-    )
-    const identity = await currentIconoplasmGeneCardMaterializationIdentity(
-      request,
-      env,
-      ctx,
-      symbol,
-    )
-    if (!identity.ok)
-      throw new Error(`Published card unavailable (${identity.response?.status || 503})`)
-    if (identity.cardFingerprint !== claimed.row.desired_card_fingerprint) {
-      await advanceEnrolledIconoplasmGeneCardMaterialization(env, {
-        symbol,
-        cardFingerprint: identity.cardFingerprint,
-        assetSha256: identity.assetSha,
-      })
-      message?.ack?.()
-      return { ok: true, superseded: true }
-    }
-
-    const objectKey = iconoplasmGeneCardObjectKey(symbol, identity.cardFingerprint)
-    const existing = await headPortraitStorageObject(env, objectKey)
-    if (!existing) {
-      budgetReservation = await reserveIconoplasmGeneCardBrowserLaunch(env)
-      if (!budgetReservation.ok) {
-        await deferIconoplasmGeneCardMaterialization(env, {
-          symbol,
-          leaseToken: claimed.leaseToken,
-          delaySeconds: budgetReservation.delaySeconds,
-          error: budgetReservation.reason,
-          // A daily-cap backlog stays in D1 for scheduled recovery. Giving
-          // every waiting gene a next-day Queue message would make demand
-          // spikes pay twice without creating any additional render capacity.
-          enqueue: budgetReservation.reason !== "daily_budget",
-        })
-        message?.ack?.()
-        return { ok: true, deferred: true, reason: budgetReservation.reason }
-      }
-      const pngBytes = await renderIconoplasmPrintCopyPngWithBrowser(
-        env,
-        iconoplasmPrintCopyRenderUrl(request, {
-          symbol,
-          snapshotVersion: identity.snapshotVersion,
-          assetSha: identity.assetSha,
-        }),
-        {
-          width: ICONOPLASM_GENE_CARD_WIDTH,
-          height: ICONOPLASM_GENE_CARD_HEIGHT,
-        },
-      )
-      const pngDimensions = iconoplasmGeneCardPngDimensions(pngBytes)
-      if (
-        pngDimensions?.width !== ICONOPLASM_GENE_CARD_WIDTH ||
-        pngDimensions?.height !== ICONOPLASM_GENE_CARD_HEIGHT
-      ) {
-        throw new Error(
-          `Browser screenshot dimensions were ${pngDimensions?.width || 0}x${pngDimensions?.height || 0}; expected ${ICONOPLASM_GENE_CARD_WIDTH}x${ICONOPLASM_GENE_CARD_HEIGHT}`,
-        )
-      }
-      await putPortraitStorageObject(env, objectKey, pngBytes, {
-        contentType: "image/png",
-        cacheControl: "public, max-age=31536000, immutable",
-        customMetadata: {
-          gene_symbol: symbol,
-          card_fingerprint: identity.cardFingerprint,
-          renderer_revision: ICONOPLASM_GENE_CARD_RENDERER_REVISION,
-        },
-        // The storage adapter owns Bunny's acknowledged-but-unreadable retry
-        // behavior. Queue code supplies the immutable bytes once and does not
-        // reach into the adapter's private consistency helpers.
-        verifyAfterPut: true,
-      })
-    }
-    const completed = await completeIconoplasmGeneCardMaterialization(env, {
-      symbol,
-      leaseToken: claimed.leaseToken,
-      cardFingerprint: identity.cardFingerprint,
-      assetSha256: identity.assetSha,
-      objectKey,
-    })
-    message?.ack?.()
-    return { ok: true, completed, reused: Boolean(existing) }
-  } catch (error) {
-    await failIconoplasmGeneCardMaterialization(env, {
-      symbol,
-      leaseToken: claimed.leaseToken,
-      error,
-    })
-    message?.ack?.()
-    console.error("Iconoplasm gene-card materialization failed", {
-      symbol,
-      error: String(error?.message || error),
-    })
-    return { ok: false, error: String(error?.message || error) }
-  } finally {
-    if (budgetReservation?.ok) {
-      await recordIconoplasmGeneCardBrowserSeconds(
-        env,
-        budgetReservation.day,
-        (Date.now() - startedAt) / 1000,
-      )
-    }
-  }
-}
-
-async function handleIconoplasmGeneCardMaterializationQueue(batch, env, ctx) {
-  const messages = Array.isArray(batch?.messages) ? batch.messages : []
-  const results = []
-  for (const message of messages) {
-    results.push(await processIconoplasmGeneCardMaterializationMessage(message, env, ctx))
-  }
-  return {
-    ok: results.every((result) => result.ok),
-    processed: results.length,
-    results,
-  }
-}
-
-function iconoplasmQueueBatchKind(batch) {
-  const messages = Array.isArray(batch?.messages) ? batch.messages : []
-  for (const message of messages) {
-    const body = decodeIconoplasmQueueMessageBody(message?.body)
-    const kind = sanitizeText(body.kind || "", 80)
-    if (kind) return kind
-  }
-  return ""
-}
-
-export async function handleIconoplasmQueue(batch, env, ctx) {
-  const kind = iconoplasmQueueBatchKind(batch)
-  if (kind === ICONOPLASM_GENE_CARD_QUEUE_KIND) {
-    return handleIconoplasmGeneCardMaterializationQueue(batch, env, ctx)
-  }
-  // The retired sync-finalization queue (B-1067) may still deliver its last
-  // messages; they are acknowledged and dropped. Its consumer goes with the queue.
-  batch.ackAll?.()
-  return {
-    ok: true,
-    processed: 0,
-    dropped: Array.isArray(batch?.messages) ? batch.messages.length : 0,
-  }
-}
-
-export async function recoverDueIconoplasmGeneCardMaterializationsForScheduled(env) {
-  return recoverDueIconoplasmGeneCardMaterializations(env, { limit: 8 })
-}
-
 // Bounded shared-aggregate drain. Four passes per wake keep a day of ordinary
 // batches flowing while never letting one invocation run unbounded.
 export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) {
@@ -17090,7 +16837,7 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
 }
 
 // The card the gene would get now, unwritten: the blot lane fingerprints it
-// before rendering a print copy for a winner that isn't published yet.
+// before rendering a blot for a winner that isn't published yet.
 async function currentGeneCard(env, symbol, options = {}) {
   const inputs = await readGeneCardInputs(env, symbol, options)
   return inputs ? buildGeneCard(inputs.content, inputs.facts) : null
@@ -17175,10 +16922,6 @@ export async function publishIconoplasmGeneStableObject(
     )
     .bind(symbol)
     .run()
-  // B-997: publication does not re-render print copies. The 8 browser launches a day go to
-  // readers who click "request print copy"; the status and PNG routes only ever serve a PNG of
-  // the current card, and a click enrols the current fingerprint, so a stale copy is never
-  // served.
   return {
     symbol,
     withdrawn: false,
@@ -17283,7 +17026,7 @@ function geneBlotServiceError(status, code, message) {
 }
 
 // B-898 Stage 1 (step B): the workstation blot drain learns which genes need a
-// print-copy blot from D1 and the stable gene objects (genes/v3/<SYMBOL>.json)
+// canonical blot from D1 and the stable gene objects (genes/v3/<SYMBOL>.json)
 // alone. No coordinator status, no KV head, no manifest shards, no delta chain:
 // those cost 2-8 s per poll and hung past 35 s on 3 of 15 probes (B-894).
 //
@@ -18742,519 +18485,6 @@ async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
 // The D1 hot-query guard intentionally slices only `handleMobileCardSymbol`;
 // helper functions below may call shared render utilities, but this endpoint
 // itself must stay KV-artifact backed and off D1 composition.
-function iconoplasmPrintCopyPngSymbolFromPath(path) {
-  const prefix = `${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/`
-  if (!String(path || "").startsWith(prefix) || !String(path || "").endsWith(".png")) return ""
-  try {
-    return decodeURIComponent(String(path).slice(prefix.length, -4))
-  } catch {
-    return ""
-  }
-}
-
-function iconoplasmPrintCopyRenderSymbolFromPath(path) {
-  const prefix = `${ICONOPLASM_PRINT_COPY_RENDER_PREFIX}/`
-  if (!String(path || "").startsWith(prefix)) return ""
-  const symbol = String(path).slice(prefix.length)
-  if (!symbol || symbol.includes("/")) return ""
-  try {
-    return decodeURIComponent(symbol)
-  } catch {
-    return ""
-  }
-}
-
-function iconoplasmPrintCopyPublishedPortraitUrl(cardPayload, preferredSize) {
-  const portrait = cardPayload && cardPayload.portrait
-  const flatHeroUrl = String((cardPayload && cardPayload.ph) || "").trim()
-  const flatMediumUrl = String((cardPayload && cardPayload.pt) || "").trim()
-  const isPublished =
-    (portrait && portrait.status === "published") || Boolean(flatHeroUrl || flatMediumUrl)
-  if (!isPublished) return ""
-  const heroUrl = String((portrait && portrait.hero_url) || flatHeroUrl).trim()
-  const mediumUrl = String((portrait && portrait.medium_url) || flatMediumUrl).trim()
-  const thumbUrl = String((portrait && portrait.thumb_url) || "").trim()
-  if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
-  if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
-  return heroUrl || mediumUrl || thumbUrl
-}
-
-function iconoplasmPrintCopyAbsoluteUrl(rawUrl, origin) {
-  const value = String(rawUrl || "").trim()
-  if (!value) return ""
-  try {
-    return new URL(value, origin).toString()
-  } catch {
-    return value
-  }
-}
-
-function iconoplasmPrintCopyDimensions(cardPayload) {
-  const shared = globalThis.IconoplasmCardShared
-  const dims =
-    shared && typeof shared.portraitDimensions === "function"
-      ? shared.portraitDimensions(cardPayload)
-      : { width: 1, height: 1 }
-  const width = Number(dims?.width || 0)
-  const height = Number(dims?.height || 0)
-  return {
-    width: Number.isFinite(width) && width > 1 ? Math.round(width) : 768,
-    height: Number.isFinite(height) && height > 1 ? Math.round(height) : 1024,
-  }
-}
-
-function iconoplasmPrintCopyDeviceScaleFactor(dims) {
-  const widthScale = Number(dims?.width || 0) / ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH
-  const heightScale = Number(dims?.height || 0) / ICONOPLASM_PRINT_COPY_CARD_CSS_HEIGHT
-  const scale = Number.isFinite(widthScale) && widthScale > 0 ? widthScale : heightScale
-  return Math.max(
-    1,
-    Math.min(4, Number((Number.isFinite(scale) && scale > 0 ? scale : 2).toFixed(4))),
-  )
-}
-
-function iconoplasmPrintCopyAssetSha(cardPayload) {
-  return normalizeSha256(cardPayload?.portrait?.asset_sha256 || "")
-}
-
-function iconoplasmPrintCopyRenderUrl(request, { symbol, snapshotVersion, assetSha }) {
-  const url = new URL(request.url)
-  url.pathname = `${ICONOPLASM_PRINT_COPY_RENDER_PREFIX}/${encodeURIComponent(symbol)}`
-  url.search = ""
-  url.searchParams.set("v", snapshotVersion)
-  if (assetSha) url.searchParams.set("asset", assetSha)
-  url.hash = ""
-  return url.toString()
-}
-
-function iconoplasmPrintCopyRequestMatchesCurrent(url, { snapshotVersion, assetSha }) {
-  const requestedVersion = sanitizeText(url.searchParams.get("v") || "", 128)
-  const requestedAsset = normalizeSha256(url.searchParams.get("asset") || "")
-  return requestedVersion === snapshotVersion && (!assetSha || requestedAsset === assetSha)
-}
-
-async function iconoplasmPrintCopyCardFromMobileSymbol(request, env, ctx, symbolFromPath) {
-  const symbol = normalizeSymbol(symbolFromPath)
-  if (!symbol) {
-    return {
-      ok: false,
-      response: json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" }),
-    }
-  }
-  const cardRequestUrl = new URL(request.url)
-  cardRequestUrl.pathname = `/api/iconoplasm/cards/${encodeURIComponent(symbol)}`
-  cardRequestUrl.search = ""
-  cardRequestUrl.hash = ""
-  const cardResponse = await handleMobileCardSymbol(
-    new Request(cardRequestUrl.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    }),
-    env,
-    ctx,
-    symbol,
-  )
-  if (!cardResponse.ok) {
-    return {
-      ok: false,
-      response: new Response(cardResponse.body, {
-        status: cardResponse.status,
-        statusText: cardResponse.statusText,
-        headers: cardResponse.headers,
-      }),
-    }
-  }
-  const mobilePayload = await cardResponse.json()
-  const card = mobilePayload?.card || null
-  const cardPayload = card?.payload || null
-  const resolvedSymbol = normalizeSymbol(card?.symbol || cardPayload?.symbol || symbol)
-  if (!card || !cardPayload || !resolvedSymbol) {
-    return {
-      ok: false,
-      response: json({ error: "Published card not found" }, 404, { "Cache-Control": "no-store" }),
-    }
-  }
-  return {
-    ok: true,
-    card,
-    cardPayload,
-    snapshotVersion: String(mobilePayload?.snapshot_version || ""),
-    symbol: resolvedSymbol,
-  }
-}
-
-async function iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath) {
-  const url = new URL(request.url)
-  const requestedAsset = url.searchParams.get("asset")
-  const requestedAssetSha = normalizeSha256(requestedAsset || "")
-  if (requestedAsset !== null && !requestedAssetSha) {
-    return {
-      ok: false,
-      response: json(
-        {
-          error: "Print-copy asset must be a SHA-256 digest",
-          code: "INVALID_PRINT_COPY_ASSET",
-        },
-        400,
-        { "Cache-Control": "no-store" },
-      ),
-    }
-  }
-  const artifactResolved = await iconoplasmPrintCopyCardFromMobileSymbol(
-    request,
-    env,
-    ctx,
-    symbolFromPath,
-  )
-  if (!artifactResolved.ok) return artifactResolved
-
-  const publishedAssetSha = iconoplasmPrintCopyAssetSha(artifactResolved.cardPayload)
-  if (!publishedAssetSha) {
-    return {
-      ok: false,
-      response: json(
-        {
-          error: "Published card portrait not found",
-          code: "PUBLISHED_CARD_PORTRAIT_NOT_FOUND",
-          snapshot_version: artifactResolved.snapshotVersion,
-        },
-        404,
-        { "Cache-Control": "no-store" },
-      ),
-    }
-  }
-
-  if (requestedAssetSha && requestedAssetSha !== publishedAssetSha) {
-    return {
-      ok: false,
-      response: json(
-        {
-          error: "Requested asset is not the published card portrait",
-          code: "PRINT_COPY_ASSET_MISMATCH",
-          requested_asset_sha256: requestedAssetSha,
-          published_asset_sha256: publishedAssetSha,
-          snapshot_version: artifactResolved.snapshotVersion,
-        },
-        409,
-        { "Cache-Control": "no-store" },
-      ),
-    }
-  }
-
-  return artifactResolved
-}
-
-function iconoplasmPrintCopyRenderHtml({ cardPayload, origin, symbol }) {
-  const shared = globalThis.IconoplasmCardShared
-  if (!shared || typeof shared.renderLabLabelCardHtml !== "function") {
-    throw new Error("Iconoplasm shared card renderer is unavailable")
-  }
-  const dims = iconoplasmPrintCopyDimensions(cardPayload)
-  const portraitUrl = iconoplasmPrintCopyAbsoluteUrl(
-    iconoplasmPrintCopyPublishedPortraitUrl(cardPayload, "full") ||
-      iconoplasmPrintCopyPublishedPortraitUrl(cardPayload, "medium"),
-    origin,
-  )
-  if (!portraitUrl) throw new Error("Published portrait is unavailable")
-  const color = normalizeHexColor(cardPayload?.color || cardPayload?.color_hex || "") || "#888888"
-  const safeSymbol = shared.normalizedSymbol(cardPayload?.symbol || symbol)
-  const cardBody = shared.renderLabLabelCardHtml(cardPayload, {
-    layoutVariant: "image-only",
-    mode: "brick",
-    portraitAlt: `${safeSymbol} blot`,
-    portraitSrc: portraitUrl,
-    titleHref: "",
-    voteHtml: "",
-  })
-  const cssHref = `${origin}/static/iconoplasm/generated/shared-card-label.css?v=${ICONOPLASM_PRINT_COPY_RENDER_VERSION}`
-  const iconHref = `${origin}/static/iconoplasm/icons/icon-512.png`
-  return (
-    '<!doctype html><html lang="en" data-icono-print-copy-render-ready="false">' +
-    "<head>" +
-    '<meta charset="utf-8">' +
-    '<meta name="viewport" content="width=384,initial-scale=1">' +
-    '<meta name="robots" content="noindex,nofollow">' +
-    '<link rel="preload" href="/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2" as="font" type="font/woff2" crossorigin>' +
-    '<link rel="preload" href="/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin>' +
-    '<link rel="preload" href="/static/iconoplasm/fonts/LeagueSpartan-800.woff2" as="font" type="font/woff2" crossorigin>' +
-    '<link rel="preload" href="/static/iconoplasm/fonts/SpecialElite-Regular.woff2" as="font" type="font/woff2" crossorigin>' +
-    '<link rel="preload" href="/static/iconoplasm/fonts/Caveat-400.woff2" as="font" type="font/woff2" crossorigin>' +
-    '<link rel="stylesheet" href="' +
-    esc(cssHref) +
-    '">' +
-    "<style>" +
-    '@font-face{font-family:"IBM Plex Mono";src:url("/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
-    '@font-face{font-family:"IBM Plex Mono";src:url("/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:block}' +
-    '@font-face{font-family:"League Spartan";src:url("/static/iconoplasm/fonts/LeagueSpartan-800.woff2") format("woff2");font-weight:800;font-style:normal;font-display:block}' +
-    '@font-face{font-family:"Special Elite";src:url("/static/iconoplasm/fonts/SpecialElite-Regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
-    '@font-face{font-family:"Caveat";src:url("/static/iconoplasm/fonts/Caveat-400.woff2") format("woff2");font-weight:400;font-style:normal;font-display:block}' +
-    "html,body{margin:0;width:384px;height:512px;overflow:hidden;background:transparent;color-scheme:light;--light:oklch(96% 0.015 75);--dark:oklch(20% 0.035 50);--accent:" +
-    esc(color) +
-    "}" +
-    "body{display:block}" +
-    ".icono-print-copy-stage{width:384px;height:512px;overflow:hidden;background:transparent}" +
-    ".icono-print-copy-stage>.icono-card{width:384px;height:512px;max-width:none;box-sizing:border-box}" +
-    ".icono-image-only-loading-mark{background-image:url('" +
-    esc(iconHref) +
-    "')}" +
-    "</style>" +
-    "</head><body>" +
-    '<main class="icono-print-copy-stage">' +
-    '<article class="icono-card icono-card--brick icono-card--variant-image-only" data-icono-print-copy-card data-icono-card-variant="image-only" data-icono-symbol="' +
-    esc(safeSymbol) +
-    '" style="--width:' +
-    esc(String(dims.width)) +
-    ";--height:" +
-    esc(String(dims.height)) +
-    ";--icono-card-accent:" +
-    esc(color) +
-    '">' +
-    cardBody +
-    "</article>" +
-    "</main>" +
-    "<script>" +
-    "(async function(){function done(v){document.documentElement.setAttribute('data-icono-print-copy-render-ready',v?'true':'error')}try{var img=document.querySelector('.icono-image-only-photo');if(img){if(!img.complete||img.naturalWidth<=0){await new Promise(function(resolve,reject){var t=setTimeout(function(){reject(new Error('portrait image timeout'))},10000);img.addEventListener('load',function(){clearTimeout(t);resolve()},{once:true});img.addEventListener('error',function(){clearTimeout(t);reject(new Error('portrait image failed'))},{once:true})})}if(img.decode)await img.decode().catch(function(){});img.classList.add('icono-image-only-photo--loaded');var stage=img.closest('.icono-image-only-media-stage');if(stage)stage.classList.add('icono-image-only-media-stage--loaded');var link=img.closest('.icono-image-only-link');if(link)link.classList.add('icono-image-only-link--loaded')}if(document.fonts&&document.fonts.ready)await document.fonts.ready;done(true)}catch(error){document.documentElement.setAttribute('data-icono-print-copy-render-error',String(error&&error.message||error));done(false)}})();" +
-    "</script>" +
-    "</body></html>"
-  )
-}
-
-function iconoplasmPrintCopyArrayBuffer(bytes) {
-  if (bytes instanceof ArrayBuffer) return bytes
-  if (ArrayBuffer.isView(bytes)) {
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  }
-  throw new Error("Browser screenshot did not return bytes")
-}
-
-// B-1070: the print-copy browser library (659 KiB of the bundle) loads on the two
-// rendering paths only. As a static import it was evaluated in every cold
-// isolate's start-up, which runs 5-8 times over the free plan's CPU allowance.
-async function launchPrintCopyBrowser(binding) {
-  const { default: puppeteer } = await import("@cloudflare/puppeteer")
-  return puppeteer.launch(binding)
-}
-
-async function renderIconoplasmPrintCopyPngWithBrowser(env, renderUrl, dims) {
-  const binding = env?.ICONOPLASM_PRINT_COPY_BROWSER
-  if (!binding) throw new Error("ICONOPLASM_PRINT_COPY_BROWSER binding is missing")
-  let browser = null
-  try {
-    browser = await launchPrintCopyBrowser(binding)
-    const page = await browser.newPage()
-    await page.setViewport({
-      width: ICONOPLASM_PRINT_COPY_CARD_CSS_WIDTH,
-      height: ICONOPLASM_PRINT_COPY_CARD_CSS_HEIGHT,
-      deviceScaleFactor: iconoplasmPrintCopyDeviceScaleFactor(dims),
-    })
-    const navigation = await page.goto(renderUrl, { waitUntil: "networkidle0", timeout: 30000 })
-    if (!navigation || (typeof navigation.ok === "function" && !navigation.ok())) {
-      throw new Error(
-        `Print-copy render page failed with HTTP ${navigation?.status?.() || "unknown"}`,
-      )
-    }
-    await page.waitForFunction(
-      () => document.documentElement.getAttribute("data-icono-print-copy-render-ready") === "true",
-      { timeout: 15000 },
-    )
-    const element = await page.$("[data-icono-print-copy-card]")
-    if (!element) throw new Error("Print-copy card element was not rendered")
-    return iconoplasmPrintCopyArrayBuffer(
-      await element.screenshot({ type: "png", omitBackground: true }),
-    )
-  } finally {
-    if (browser) await browser.close().catch(() => null)
-  }
-}
-
-async function handleIconoplasmPrintCopyRender(request, env, ctx, symbolFromPath) {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return html("Method not allowed", 405, { "Cache-Control": "no-store" })
-  }
-  const resolved = await iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath)
-  if (!resolved.ok) {
-    const text = await resolved.response.text().catch(() => "Published card not found")
-    return html(esc(text), resolved.response.status, { "Cache-Control": "no-store" })
-  }
-  const assetSha = iconoplasmPrintCopyAssetSha(resolved.cardPayload)
-  const url = new URL(request.url)
-  if (
-    !iconoplasmPrintCopyRequestMatchesCurrent(url, {
-      snapshotVersion: resolved.snapshotVersion,
-      assetSha,
-    })
-  ) {
-    return html("Stale print-copy render request", 409, { "Cache-Control": "no-store" })
-  }
-  const body = iconoplasmPrintCopyRenderHtml({
-    cardPayload: resolved.cardPayload,
-    origin: url.origin,
-    symbol: resolved.symbol,
-  })
-  return asHead(
-    request,
-    html(body, 200, {
-      "Cache-Control": "no-store",
-      "X-Robots-Tag": "noindex, nofollow",
-      "X-Iconoplasm-VM-Version": resolved.snapshotVersion,
-      "X-Iconoplasm-Print-Copy-Renderer": ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-    }),
-  )
-}
-
-async function currentIconoplasmGeneCardMaterializationIdentity(request, env, ctx, symbolFromPath) {
-  const resolved = await iconoplasmPrintCopyCardForRequest(request, env, ctx, symbolFromPath)
-  if (!resolved.ok) return resolved
-  const assetSha = iconoplasmPrintCopyAssetSha(resolved.cardPayload)
-  return {
-    ...resolved,
-    assetSha,
-    cardFingerprint: iconoplasmGeneCardFingerprint(resolved.cardPayload),
-  }
-}
-
-function iconoplasmGeneCardStatusPayload(env, identity, row) {
-  const ready = Boolean(
-    row?.state === "ready" &&
-    row?.ready_card_fingerprint === identity.cardFingerprint &&
-    row?.object_key,
-  )
-  return {
-    ok: true,
-    symbol: identity.symbol,
-    status: ready ? "ready" : row?.state === "failed" ? "failed" : row ? "queued" : "not_requested",
-    requested: Boolean(row),
-    filename: iconoplasmGeneCardDownloadFilename(identity.symbol),
-    ...(ready
-      ? {
-          image_url: iconoplasmGeneCardCdnUrl(env, row.object_key),
-          download_url: `${ICONOPLASM_PRINT_COPY_PNG_PREFIX}/${encodeURIComponent(identity.symbol)}.png?v=${encodeURIComponent(identity.cardFingerprint)}`,
-          width: optionalInt(row.width) || ICONOPLASM_GENE_CARD_WIDTH,
-          height: optionalInt(row.height) || ICONOPLASM_GENE_CARD_HEIGHT,
-        }
-      : {}),
-    ...(row?.last_error ? { last_error: String(row.last_error) } : {}),
-  }
-}
-
-async function handleIconoplasmGeneCardEnrollment(request, env, ctx, symbolFromPath) {
-  if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
-  }
-  if (!hasTrustedIconoplasmBrowserOrigin(request)) {
-    return json({ error: "First-party browser origin required", code: "FIRST_PARTY_ONLY" }, 403, {
-      "Cache-Control": "no-store",
-    })
-  }
-  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
-    request,
-    env,
-    ctx,
-    symbolFromPath,
-  )
-  if (!identity.ok) return identity.response
-  const sessionUser = await iconoplasmSessionUser(request, env)
-  if (!sessionUser?.user_id) {
-    const body = await parseJsonBody(request)
-    const turnstile = await verifyTurnstileSubmission(
-      env,
-      request,
-      body?.turnstile_token || body?.cf_turnstile_response || "",
-    )
-    if (turnstile.configured && (!turnstile.passed || turnstile.action !== "gene_card_request")) {
-      return json(
-        {
-          error: "Please complete the bot check and try again.",
-          code: "TURNSTILE_REQUIRED",
-          turnstile_site_key: sanitizeText(env.ICONOPLASM_TURNSTILE_SITE_KEY || "", 255) || null,
-        },
-        403,
-        { "Cache-Control": "no-store" },
-      )
-    }
-  }
-  const row = await enrollIconoplasmGeneCardMaterialization(env, {
-    symbol: identity.symbol,
-    cardFingerprint: identity.cardFingerprint,
-    assetSha256: identity.assetSha,
-  })
-  return json(iconoplasmGeneCardStatusPayload(env, identity, row), 200, {
-    "Cache-Control": "no-store",
-  })
-}
-
-async function handleIconoplasmGeneCardStatus(request, env, ctx, symbolFromPath) {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
-  }
-  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
-    request,
-    env,
-    ctx,
-    symbolFromPath,
-  )
-  if (!identity.ok) return identity.response
-  const row = await readIconoplasmGeneCardMaterialization(env, identity.symbol)
-  return asHead(
-    request,
-    json(iconoplasmGeneCardStatusPayload(env, identity, row), 200, {
-      "Cache-Control": "no-store",
-    }),
-  )
-}
-
-// GET and HEAD are permanently read-only. A crawler, prefetch, or broken image
-// can never launch Browser Rendering or enroll work.
-async function handleIconoplasmPrintCopyPng(request, env, ctx, symbolFromPath) {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
-  }
-  const identity = await currentIconoplasmGeneCardMaterializationIdentity(
-    request,
-    env,
-    ctx,
-    symbolFromPath,
-  )
-  if (!identity.ok) return identity.response
-  const row = await readIconoplasmGeneCardMaterialization(env, identity.symbol)
-  if (
-    row?.state !== "ready" ||
-    row?.ready_card_fingerprint !== identity.cardFingerprint ||
-    !row?.object_key
-  ) {
-    return json(
-      {
-        error: "Print copy has not been materialized",
-        code: "GENE_CARD_NOT_READY",
-        status_url: `/api/iconoplasm/print-copy-status/${encodeURIComponent(identity.symbol)}`,
-      },
-      404,
-      { "Cache-Control": "no-store" },
-    )
-  }
-  const object = await readPortraitStorageObject(env, row.object_key, {
-    fallbackContentType: "image/png",
-  })
-  if (!object) {
-    return json({ error: "Materialized print copy is unavailable" }, 503, {
-      "Cache-Control": "no-store",
-      "Retry-After": "60",
-    })
-  }
-  return new Response(request.method === "HEAD" ? null : object.body, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Content-Disposition": `attachment; filename="${iconoplasmGeneCardDownloadFilename(identity.symbol)}"`,
-      "Cache-Control": "private, no-store",
-      ETag: object.etag,
-      "X-Iconoplasm-Card-Fingerprint": identity.cardFingerprint,
-      "X-Iconoplasm-Print-Copy-Renderer": ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-      ...(identity.assetSha ? { "X-Iconoplasm-Asset-Sha256": identity.assetSha } : {}),
-    },
-  })
-}
-
 async function handlePublicResolve(request, env) {
   const body = await parseJsonBody(request)
   // Accept every key /images/resolve does. An ignored key used to answer 200
@@ -19585,86 +18815,8 @@ async function handlePublicGeneSearch(request, env) {
   })
 }
 
-// Renders the live gene page and screenshots the horizontal "lit-archival" gene
-// card element (the ACCESSION SHEET card at the top of each gene page). Using the
-// real page guarantees the screenshot matches what users see, and is always the
-// current canonical blot (which changes as people vote).
-async function renderIconoplasmGeneCardImageBytes(env, symbol) {
-  const binding = env?.ICONOPLASM_PRINT_COPY_BROWSER
-  if (!binding) throw new Error("ICONOPLASM_PRINT_COPY_BROWSER binding is missing")
-  const geneUrl = `https://${ICONOPLASM_HOST}/gene/${encodeURIComponent(symbol)}`
-  let browser = null
-  try {
-    browser = await launchPrintCopyBrowser(binding)
-    const page = await browser.newPage()
-    // Desktop viewport so the card lays out horizontally; 2x for a crisp image.
-    await page.setViewport({ width: 1280, height: 1000, deviceScaleFactor: 2 })
-    const nav = await page.goto(geneUrl, { waitUntil: "networkidle0", timeout: 30000 })
-    if (!nav || (typeof nav.ok === "function" && !nav.ok())) {
-      throw new Error(`gene page render failed with HTTP ${nav?.status?.() || "unknown"}`)
-    }
-    await page.waitForSelector(".icono-gene-lead-card", { timeout: 15000 })
-    // Wait for the portrait/blot image inside the card to actually load.
-    await page
-      .waitForFunction(
-        () => {
-          const card = document.querySelector(".icono-gene-lead-card")
-          if (!card) return false
-          const img = card.querySelector("img")
-          if (!img) return true
-          return img.complete && img.naturalWidth > 0
-        },
-        { timeout: 15000 },
-      )
-      .catch(() => {})
-    try {
-      await page.evaluate(async () => {
-        if (document.fonts && document.fonts.ready) await document.fonts.ready
-      })
-    } catch {
-      /* fonts.ready is best-effort */
-    }
-    const element = await page.$(".icono-gene-lead-card")
-    if (!element) throw new Error("gene lead card element was not rendered")
-    return iconoplasmPrintCopyArrayBuffer(await element.screenshot({ type: "png" }))
-  } finally {
-    if (browser) await browser.close().catch(() => null)
-  }
-}
-
-// Returns PNG bytes for a gene's horizontal card, rendering on a cache miss.
-// Cache key includes the published snapshot version + canonical asset sha, so the
-// image refreshes automatically when the blot changes (vote promotion) and is
-// otherwise reused — at most one render per (gene, canonical version).
-async function getIconoplasmGeneCardImageBytes(request, env, ctx, symbol) {
-  const resolved = await iconoplasmPrintCopyCardFromMobileSymbol(request, env, ctx, symbol)
-  if (!resolved.ok) return null
-  const sym = resolved.symbol
-  const assetSha = iconoplasmPrintCopyAssetSha(resolved.cardPayload)
-  const kvKey = [
-    "iconoplasm:gene-card-og-png",
-    ICONOPLASM_PRINT_COPY_RENDER_VERSION,
-    resolved.snapshotVersion || "0",
-    sym,
-    assetSha || "no-asset",
-  ].join(":")
-  if (env.KV) {
-    const cached = await env.KV.get(kvKey, "arrayBuffer")
-    if (cached) return new Uint8Array(cached)
-  }
-  const buf = await renderIconoplasmGeneCardImageBytes(env, sym)
-  if (env.KV) {
-    try {
-      await env.KV.put(kvKey, buf, { expirationTtl: 60 * 60 * 24 * 30 })
-    } catch {
-      /* cache write best-effort */
-    }
-  }
-  return new Uint8Array(buf)
-}
-
 // Posts a freshly-created gene-page comment to the #Iconoplasm Discord channel,
-// attaching a fresh image of the gene card when one is supplied. Best-effort:
+// attaching the gene's published blot (WebP bytes) when one is supplied. Best-effort:
 // never blocks or fails the comment write (call via waitUntil).
 export async function postIconoplasmGeneCommentToDiscord(
   env,
@@ -19680,7 +18832,7 @@ export async function postIconoplasmGeneCommentToDiscord(
     if (!safeSymbol || !rawBody) return
 
     // The header line carries the gene + link (wrapped in <> so Discord renders no
-    // link-preview embed — we attach the actual gene-card image instead), then a
+    // link-preview embed — we attach the gene's blot instead), then a
     // blank line, then the comment with the author's name bolded inline in front.
     // B-992: the account erasure finds this message again by the same shape and
     // swaps the author for the anonymous label, so the shape lives in one module.
@@ -19701,8 +18853,8 @@ export async function postIconoplasmGeneCommentToDiscord(
       form.append("payload_json", payloadJson)
       form.append(
         "files[0]",
-        new Blob([imageBytes], { type: "image/png" }),
-        `${safeSymbol}-card.png`,
+        new Blob([imageBytes], { type: "image/webp" }),
+        `${safeSymbol}-blot.webp`,
       )
       requestBody = form
       requestHeaders = { Authorization: `Bot ${botToken}` }
@@ -19727,14 +18879,18 @@ export async function postIconoplasmGeneCommentToDiscord(
   }
 }
 
-// Orchestrates the comment mirror: best-effort render the gene-card image, then
-// post. A render failure degrades to a text-only post (still mirrors the comment).
-async function mirrorGeneCommentToDiscord(request, env, ctx, { symbol, username, body }) {
+// Orchestrates the comment mirror: best-effort read of the gene's published blot
+// (one Bunny read of an immutable object), then post. A gene without a published
+// blot, or a failed read, degrades to a text-only post that still links the gene page.
+async function mirrorGeneCommentToDiscord(env, { symbol, username, body }) {
   let imageBytes = null
   try {
-    imageBytes = await getIconoplasmGeneCardImageBytes(request, env, ctx, symbol)
+    const blotSymbol = normalizeSymbol(symbol)
+    const card = blotSymbol ? await readStableGeneObject(env, blotSymbol) : null
+    const found = card ? await readPublishedGeneBlotObject(env, card, blotSymbol) : null
+    if (found) imageBytes = new Uint8Array(await new Response(found.object.body).arrayBuffer())
   } catch (err) {
-    console.warn(`[iconoplasm-comment-discord] card render failed for ${symbol}, text-only:`, err)
+    console.warn(`[iconoplasm-comment-discord] blot read failed for ${symbol}, text-only:`, err)
   }
   await postIconoplasmGeneCommentToDiscord(env, { symbol, username, body, imageBytes })
 }
@@ -19781,35 +18937,17 @@ async function readStableGeneObject(env, symbol) {
   return parsed && typeof parsed === "object" ? parsed : null
 }
 
-async function handleSemanticGeneBlot(request, env, symbolValue) {
-  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
-  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
-  let card
-  try {
-    card = await readStableGeneObject(env, symbol)
-  } catch (error) {
-    console.error("Iconoplasm blot stable gene object read failed:", String(error))
-    return json(
-      {
-        ok: false,
-        code: CARD_ARTIFACT_UNAVAILABLE,
-        error: "The published gene object is temporarily unavailable.",
-      },
-      503,
-      { "Cache-Control": "no-store" },
-    )
-  }
+// The blot object a gene's stable object names, or null when the object is another
+// gene's, the gene has no published portrait, or Bunny has no blot for it yet. The
+// stable gene object is the authority: its renderer revision, symbol, name, and
+// portrait SHA deterministically identify the immutable Bunny key, so a blot never
+// needs a second KV catalog publication. Shared by the /blot route and the Discord
+// comment mirror.
+async function readPublishedGeneBlotObject(env, card, symbol) {
   const cardSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
   const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
-  if (cardSymbol !== symbol || portrait?.status !== "published" || !portraitAssetSha) {
-    return json({ error: "Canonical gene blot not found" }, 404, {
-      "Cache-Control": "no-store",
-    })
-  }
-  // The stable gene object is the authority. Its renderer revision, symbol,
-  // name, and portrait SHA deterministically identify the immutable Bunny key.
-  // Blot materialization therefore never needs a second KV catalog publication.
+  if (cardSymbol !== symbol || portrait?.status !== "published" || !portraitAssetSha) return null
   const blotFingerprint = iconoplasmGeneBlotFingerprint(card)
   const objectKey = iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
   let selectedFingerprint = blotFingerprint
@@ -19842,11 +18980,34 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       }
     }
   }
-  if (!object) {
+  return object ? { object, selectedFingerprint, selectedObjectKey } : null
+}
+
+async function handleSemanticGeneBlot(request, env, symbolValue) {
+  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
+  if (!symbol) return json({ error: "Invalid gene symbol" }, 400, { "Cache-Control": "no-store" })
+  let card
+  try {
+    card = await readStableGeneObject(env, symbol)
+  } catch (error) {
+    console.error("Iconoplasm blot stable gene object read failed:", String(error))
+    return json(
+      {
+        ok: false,
+        code: CARD_ARTIFACT_UNAVAILABLE,
+        error: "The published gene object is temporarily unavailable.",
+      },
+      503,
+      { "Cache-Control": "no-store" },
+    )
+  }
+  const found = await readPublishedGeneBlotObject(env, card, symbol)
+  if (!found) {
     return json({ error: "Canonical gene blot not found" }, 404, {
       "Cache-Control": "no-store",
     })
   }
+  const { object, selectedFingerprint, selectedObjectKey } = found
   const etag = `"${selectedFingerprint}"`
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
@@ -19916,29 +19077,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   mobile_card_manifest: ({ request, env }) => handleMobileCardManifest(request, env),
   mobile_card_symbol: ({ match, request, env, ctx }) =>
     handleMobileCardSymbol(request, env, ctx, decodeURIComponent(match.params.symbol || "")),
-  print_copy_png: ({ request, env, ctx, path }) =>
-    handleIconoplasmPrintCopyPng(request, env, ctx, iconoplasmPrintCopyPngSymbolFromPath(path)),
-  print_copy_enrollment: ({ match, request, env, ctx }) =>
-    handleIconoplasmGeneCardEnrollment(
-      request,
-      env,
-      ctx,
-      decodeURIComponent(match.params.symbol || ""),
-    ),
-  print_copy_status: ({ match, request, env, ctx }) =>
-    handleIconoplasmGeneCardStatus(
-      request,
-      env,
-      ctx,
-      decodeURIComponent(match.params.symbol || ""),
-    ),
-  print_copy_render: ({ request, env, ctx, path }) =>
-    handleIconoplasmPrintCopyRender(
-      request,
-      env,
-      ctx,
-      iconoplasmPrintCopyRenderSymbolFromPath(path),
-    ),
   public_gene_denied: ({ request }) =>
     json(publicRichRouteDeniedPayload(new URL(request.url), "gene_detail"), 403, {
       "Cache-Control": "no-store",
@@ -22536,11 +21674,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           ? await env.ICONOPLASM_DB.batch([commentStatement, outboxStatement])
           : [await commentStatement.run()]
         const insertRes = writes[0]
-        // Mirror the new comment into the #Iconoplasm Discord channel, attaching a
-        // fresh render of the gene card. Best-effort and out-of-band: never block
-        // or fail the comment write.
+        // Mirror the new comment into the #Iconoplasm Discord channel, attaching the
+        // gene's published blot. Best-effort and out-of-band: never block or fail
+        // the comment write.
         ctx.waitUntil(
-          mirrorGeneCommentToDiscord(request, env, ctx, {
+          mirrorGeneCommentToDiscord(env, {
             symbol: commentSymbol,
             username,
             body,
