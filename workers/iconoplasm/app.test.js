@@ -7,7 +7,7 @@ import {
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } from "./app.js"
-import { readD1WindowUsage } from "./operation-cost-account-usage.js"
+import { BATCH_PRICES } from "./batch-admission.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
 // Drizzle, the D1 schema of every production migration and the real card
@@ -31,7 +31,7 @@ const sha = (char) => char.repeat(64)
 function harness({
   failOn = null,
   usage = async () => ({ rows_read: 0, rows_written: 0 }),
-  analytics = async () => new Response("{}", { status: 500 }),
+  admin = true,
 } = {}) {
   const db = iconoplasmDatabase()
   for (const [symbol, name] of [
@@ -46,9 +46,12 @@ function harness({
     BEGIN INSERT INTO portrait_writes VALUES (1); END;`)
   const cards = new Map()
   const legacyCalls = []
+  const legacyBodies = []
   const app = createIconoplasmApp({
+    isAdmin: async () => admin,
     legacy: async (request) => {
       legacyCalls.push(`${request.method} ${new URL(request.url).pathname}`)
+      if (request.method === "POST") legacyBodies.push(await request.text())
       return new Response("legacy", { status: 299 })
     },
     publishGene: (env, symbol) => {
@@ -65,8 +68,6 @@ function harness({
     },
     refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
     accountUsage: usage,
-    windowUsage: (env, window) =>
-      readD1WindowUsage({ accountId: "a".repeat(32), token: "t", ...window, fetcher: analytics }),
   })
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const register = async (body, { token = TOKEN } = {}) => {
@@ -85,7 +86,7 @@ function harness({
     return { status: response.status, body: await response.json().catch(() => null) }
   }
   const rows = (sql, ...args) => db.database.prepare(sql).all(...args)
-  return { app, env, db, cards, legacyCalls, register, rows }
+  return { app, env, db, cards, legacyCalls, legacyBodies, register, rows }
 }
 
 const portrait = (symbol, char, extra = {}) => ({
@@ -120,6 +121,7 @@ test("only the factory's token registers, and every other request reaches the le
 
   // An error thrown behind the router reaches the Worker's error reporting as it is.
   const throwing = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => {
       throw new Error("legacy exploded")
     },
@@ -129,6 +131,7 @@ test("only the factory's token registers, and every other request reaches the le
 
   // Cloudflare's own daily read limit answers 503 with the reset, for the factory to wait out.
   const walled = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => {
       throw new Error("D1_ERROR: Exceeded D1's free tier daily row read limit")
     },
@@ -143,6 +146,7 @@ test("only the factory's token registers, and every other request reaches the le
 
   // 2026-10-09: the write wall came back as a 500 and failed a publication.
   const writeWalled = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => {
       throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row write limit.")
     },
@@ -376,6 +380,7 @@ test("the usage route reports what the shedding sees, and an unread meter as nul
     },
   })
   assert.match(body.reset_at, /T00:00:0\d\.\d{3}Z$/)
+  assert.deepEqual(body.prices, { portrait: BATCH_PRICES.portrait })
   assert.equal(h.legacyCalls.length, 0)
 
   const blind = await read(
@@ -389,68 +394,6 @@ test("the usage route reports what the shedding sees, and an unread meter as nul
   assert.equal(blind.body.meters.rows_written.used, null)
 })
 
-// B-1059: the Drain learns a publication's cost from the account's D1 rows in its
-// window. Golden: Cloudflare's answer for 2026-10-10 00:00-00:10 UTC. Failure
-// modes: a bad or future window reaches the analytics API; an unreadable answer
-// reads as zero rows, which would teach the forecast that portraits are free.
-test("the usage route answers a window's D1 rows from Cloudflare's analytics", async () => {
-  const asked = []
-  const h = harness({
-    analytics: async (url, init) => {
-      asked.push(JSON.parse(init.body).variables)
-      return Response.json({
-        data: {
-          viewer: {
-            accounts: [
-              { d1QueriesAdaptiveGroups: [{ sum: { rowsRead: 47760, rowsWritten: 9460 } }] },
-            ],
-          },
-        },
-        errors: null,
-      })
-    },
-  })
-  const read = async (query, app = h) => {
-    const response = await app.app.request(
-      `/api/iconoplasm/admin/d1-usage?${query}`,
-      { headers: { Authorization: `Bearer ${TOKEN}` } },
-      app.env,
-    )
-    return { status: response.status, body: await response.json() }
-  }
-
-  const { status, body } = await read("from=2026-10-10T00:00:00Z&to=2026-10-10T00:10:00Z")
-  assert.equal(status, 200)
-  assert.deepEqual(body, {
-    ok: true,
-    window: {
-      from: "2026-10-10T00:00:00.000Z",
-      to: "2026-10-10T00:10:00.000Z",
-      rows_read: 47760,
-      rows_written: 9460,
-    },
-  })
-  assert.equal(asked[0].from, "2026-10-10T00:00:00.000Z")
-
-  for (const bad of [
-    "from=2026-10-10T00:10:00Z&to=2026-10-10T00:00:00Z",
-    "from=2026-10-08T00:00:00Z&to=2026-10-10T00:00:00Z",
-    `from=2026-10-10T00:00:00Z&to=${new Date(Date.now() + 3_600_000).toISOString()}`,
-    "from=yesterday&to=2026-10-10T00:00:00Z",
-    "to=2026-10-10T00:00:00Z",
-  ])
-    assert.equal((await read(bad)).status, 400, bad)
-  assert.equal(asked.length, 1, "a refused window never reaches the analytics API")
-
-  const blind = await read("from=2026-10-10T00:00:00Z&to=2026-10-10T00:10:00Z", harness())
-  assert.equal(blind.body.ok, false)
-  assert.equal(blind.body.window.rows_written, null, "unreadable is null, never zero")
-})
-
-// B-1085 reversed this: an unreadable meter used to let batch work through,
-// trusting Cloudflare's own wall, which lags too (134,189 written against the
-// 100,000 wall on 2026-10-11). Now batch work waits and a reader's own
-// registration still runs.
 test("a usage meter that can't be read stops a batch registration, not a reader's", async () => {
   const h = harness({
     usage: async () => {
@@ -463,4 +406,88 @@ test("a usage meter that can't be read stops a batch registration, not a reader'
   assert.equal(batch.body.code, "D1_METER_UNAVAILABLE")
   const reader = await h.register({ ...body, criticality: "critical" })
   assert.equal(reader.status, 200, JSON.stringify(reader.body))
+})
+
+// B-1067: the legacy gateway's admin and workstation routes are let in by their
+// entry in batch-route-prices.js, through the real app and the real admission
+// table. Failure modes written before the gate:
+// 1. a priced route runs past the 85% stop because only Hono's routes are gated;
+// 2. a per-item price ignores the body, so a 500-item ingest pays for one;
+// 3. reading the body for its price leaves the handler an empty body;
+// 4. an anonymous caller's request is priced (spending batch work's share) or its
+//    body is read before its route turns it away;
+// 5. the owner's own action, or a reader's route, is refused at 85%;
+// 6. an unreadable meter lets batch work through.
+test("legacy admin routes are let in by their price, read the body once, and never price an anonymous caller", async () => {
+  const items = (n) =>
+    Array.from({ length: n }, (_, i) => ({ symbol: "TP53", asset_sha256: sha(String(i % 10)) }))
+  const ingest = (h, n) =>
+    h.app.request(
+      "/api/iconoplasm/admin/ingest",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ items: items(n) }),
+      },
+      h.env,
+    )
+  // 84,000 written: one portrait (60) fits under the 85,000 stop, 20 (1,200) don't.
+  const near = harness({ usage: async () => ({ rows_read: 0, rows_written: 84_000 }) })
+  const one = await ingest(near, 1)
+  assert.equal(one.status, 299)
+  assert.deepEqual(
+    JSON.parse(near.legacyBodies[0]).items,
+    items(1),
+    "the handler reads the same body",
+  )
+  const twenty = await ingest(near, 20)
+  assert.equal(twenty.status, 503)
+  const refusal = await twenty.json()
+  assert.equal(refusal.code, "D1_BATCH_SHARE_SPENT")
+  assert.ok(Number(twenty.headers.get("Retry-After")) > 0)
+  assert.equal(near.legacyCalls.length, 1, "the refused ingest never reached its handler")
+
+  // The owner's own vote and a reader's page run at 99%.
+  const full = harness({ usage: async () => ({ rows_read: 0, rows_written: 99_000 }) })
+  const vote = await full.app.request(
+    "/api/iconoplasm/admin/votes/set",
+    { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: "{}" },
+    full.env,
+  )
+  assert.equal(vote.status, 299)
+  assert.equal((await full.app.request("/api/iconoplasm/genes/TP53", {}, full.env)).status, 299)
+
+  // An anonymous caller reaches its handler (which turns it away) unpriced, its body untouched.
+  let priced = 0
+  const anonymous = harness({
+    admin: false,
+    usage: async () => {
+      priced++
+      return { rows_read: 0, rows_written: 99_000 }
+    },
+  })
+  assert.equal((await ingest(anonymous, 20)).status, 299)
+  assert.equal(priced, 0)
+  assert.equal(JSON.parse(anonymous.legacyBodies[0]).items.length, 20)
+  assert.equal(
+    anonymous.rows("SELECT COUNT(*) AS n FROM icono_batch_admissions")[0].n,
+    0,
+    "nothing admitted",
+  )
+
+  // A meter that can't be read stops the batch route, not the owner's vote.
+  const blind = harness({
+    usage: async () => {
+      throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
+    },
+  })
+  const blindIngest = await ingest(blind, 1)
+  assert.equal(blindIngest.status, 503)
+  assert.equal((await blindIngest.json()).code, "D1_METER_UNAVAILABLE")
+  const blindVote = await blind.app.request(
+    "/api/iconoplasm/admin/votes/set",
+    { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: "{}" },
+    blind.env,
+  )
+  assert.equal(blindVote.status, 299)
 })

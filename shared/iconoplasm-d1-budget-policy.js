@@ -2,11 +2,12 @@
 // R2 history and the old monthly product budgets are NOT D1 entitlements.
 // Keep the provider's daily wall separate from our optional monthly allocation:
 // unused quota yesterday cannot be borrowed today, even with a burst multiplier.
-// Used by both the runtime governor and the out-of-band cost cockpit generator.
+// Used by batch admission (workers/iconoplasm/batch-admission.js), the release
+// scripts and the out-of-band cost cockpit generator.
 // This calculation creates no per-reader accounting requests or writes.
 // https://developers.cloudflare.com/d1/platform/pricing/
 // The Cloudflare Free plan's daily allowance for every provider meter we watch. Read by
-// the CI account watcher and the operator ledger; nothing else may restate them.
+// the CI account watcher and batch admission; nothing else may restate them.
 export const FREE_PLAN_DAILY_LIMITS = Object.freeze({
   rows_read: 5_000_000,
   rows_written: 100_000,
@@ -62,19 +63,8 @@ export function criticalityShareLimit(limit, criticality) {
   return Math.floor(Number(limit) * share)
 }
 
-// Write reservations (B-897) shed on the same tiers: background and delivery
-// lanes are batch, a person's own action is critical. No other share exists.
-export const D1_BACKGROUND_WRITE_CEILING = criticalityShareLimit(
-  FREE_D1_DAILY_LIMITS.writes,
-  "sheddable_plus",
-)
-export const D1_USER_ACTION_DAILY_WRITE_CEILING = criticalityShareLimit(
-  FREE_D1_DAILY_LIMITS.writes,
-  "critical",
-)
-
-// The operation-cost ledger (replica pulls, releases, migrations) is batch work:
-// it stops when the whole account reaches the batch share of each meter.
+// Releases and their migrations are batch work: they stop when the whole
+// account reaches the batch share of each meter.
 const batchShare = (limit) => criticalityShareLimit(limit, "sheddable_plus")
 export const OPERATOR_ACCOUNT_CEILINGS = Object.freeze({
   rows_read: batchShare(FREE_PLAN_DAILY_LIMITS.rows_read),
@@ -87,83 +77,3 @@ export const KV_ACCOUNT_CEILINGS = Object.freeze({
   kv_deletes: batchShare(FREE_PLAN_DAILY_LIMITS.kv_deletes),
   kv_lists: batchShare(FREE_PLAN_DAILY_LIMITS.kv_lists),
 })
-
-// The account's use of a meter today: the latest provider sample plus our own
-// tally since it, never below our own tally. Without a sample, our own tally.
-export function accountUsage(localUsed, providerSampled, localAtSample) {
-  const local = Math.max(0, Number(localUsed) || 0)
-  const sampled = Number(providerSampled)
-  if (!Number.isFinite(sampled) || sampled < 0) return local
-  const since = Math.max(0, local - Math.max(0, Number(localAtSample) || 0))
-  return Math.max(local, sampled + since)
-}
-
-// The tier is decided by who is waiting for the request, not by who sent it.
-// Readers, votes and caretaker saves never enter this ledger. Inside it, only a
-// player's portrait delivery has someone waiting right now: claiming the lease
-// and completing it. Moderation, publication housekeeping, replication and
-// rewrites can all be redone after the reset.
-const CRITICAL_ROUTE_FAMILIES = new Set(["authority_generation_executor"])
-
-// Admin diagnostics and summaries: a person can press the button again tomorrow.
-const SHEDDABLE_ROUTE_FAMILIES = new Set([
-  "admin_overview",
-  "admin_coverage",
-  "admin_public_stats_audit",
-  "admin_assets",
-  "admin_assets_summary",
-  "admin_assets_storage_audit",
-  "admin_assets_repair_scope",
-  "admin_blots_backlog",
-  "admin_gallery",
-])
-
-// Between claiming and completing a lease, the drain publishes the generated
-// portrait through the same routes a bulk sync uses. Only the caller knows which
-// it is, so the caller declares it, as in Google SRE's design, where criticality
-// travels with the request. Only these steps may be declared critical. The last
-// two are the reconcile and read-model calls the workstation makes during a
-// delivery's publication (it declares every admin call of that publication).
-export const D1_CRITICALITY_DECLARABLE_FAMILIES = Object.freeze(
-  new Set([
-    "admin_ingest",
-    "admin_catalog_upsert",
-    "admin_catalog_reconcile",
-    "admin_finalization_enqueue",
-    "admin_finalization_process",
-    "background_sync_finalization",
-    "admin_reconcile",
-    "admin_read_models",
-    // B-1026 (10-09): every publication reads the site's asset state for its
-    // own genes. Filed with the diagnostics, it stopped every publication at
-    // 60%, a player's delivery included.
-    "admin_assets_state",
-  ]),
-)
-
-// Everything else in the ledger is batch: it retries after the reset.
-export function d1CriticalityOfRouteFamily(routeFamily, declaredCriticality = null) {
-  const family = String(routeFamily || "").trim()
-  if (CRITICAL_ROUTE_FAMILIES.has(family)) return "critical"
-  if (declaredCriticality === "critical" && D1_CRITICALITY_DECLARABLE_FAMILIES.has(family))
-    return "critical"
-  if (SHEDDABLE_ROUTE_FAMILIES.has(family)) return "sheddable"
-  return "sheddable_plus"
-}
-
-// The meter a request of this criticality is refused on, given the day's
-// snapshot, or null while its share has room. The snapshot carries the
-// account's use of each meter and Cloudflare's daily wall for it.
-export function d1CriticalityShedBy(snapshot, criticality) {
-  const share = D1_CRITICALITY_SHARES[criticality] ?? D1_CRITICALITY_SHARES.sheddable_plus
-  if (share >= 1) return null
-  for (const [meter, used, limit] of [
-    ["rows_read", snapshot?.account_rows_read, snapshot?.rows_read_daily_limit],
-    ["rows_written", snapshot?.account_rows_written, snapshot?.rows_written_daily_limit],
-  ]) {
-    const allowance = Number(limit)
-    if (!Number.isFinite(allowance) || allowance <= 0) continue
-    if ((Number(used) || 0) >= Math.floor(allowance * share)) return `${meter}_${criticality}`
-  }
-  return null
-}

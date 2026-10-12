@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { existsSync, readFileSync } from "node:fs"
-import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
+import { readFileSync } from "node:fs"
 
 function DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
   path,
@@ -242,11 +241,6 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.match(
     internalWrangler,
-    /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"[\s\S]*class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
-    "internal stateful worker should bind the hard daily budget durable object because alerts are not a kill switch",
-  )
-  assert.match(
-    internalWrangler,
     /routes = \[\{ pattern = "iconoplasm\.brinedew\.bio\/\*"/,
     "Iconoplasm should route directly to the existing stateful worker instead of paying for a second proxy invocation",
   )
@@ -276,22 +270,25 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     /run_worker_first = \[[\s\S]*"\/portraits\/\*"[\s\S]*\]/,
     "canonical portrait URLs must reach their existing Worker handler",
   )
-  assert.match(
-    internalWrangler,
-    /\[\[migrations\]\][\s\S]*tag = "v1"[\s\S]*new_sqlite_classes = \["GameSession"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v2"[\s\S]*new_sqlite_classes = \["IconoplasmVoteCoordinator"\][\s\S]*\[\[migrations\]\][\s\S]*tag = "v3"[\s\S]*new_sqlite_classes = \["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"\]/,
-    "internal stateful worker should preserve the old durable objects and add the hard daily budget kill switch as its own migration tag",
+  // B-1067: the daily budget referee and the sync governor were deleted by
+  // migration v10, in production and staging. Batch work is let in by its price
+  // (workers/iconoplasm/batch-admission.js) and no Durable Object stands in front
+  // of D1. A binding coming back would bring the referee's per-call DO reads back.
+  assert.equal(
+    internalWrangler.match(
+      /deleted_classes = \["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate", "IconoplasmSyncGovernor"\]/g,
+    )?.length,
+    2,
+    "migration v10 deletes the referee and the governor in production and staging",
   )
-  // B-1026 (10-09), replacing the four monthly-budget assertions that stood here: the
-  // account is on the free plan, whose only wall is Cloudflare's daily allowance, so the
-  // paid-plan monthly caps, billing-cycle day and burst factor are retired. What turns
-  // enforcement on now is the budget object being bound. A leftover monthly variable
-  // would look like a cap while nothing reads it, so none may remain in the config or
-  // be read by the runtime.
-  assert.match(
+  assert.doesNotMatch(
     internalWrangler,
-    /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"\s*\nclass_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
-    "prod internal worker must bind the daily budget object: its binding is what turns D1 enforcement on",
+    /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"|name = "ICONOPLASM_SYNC_GOVERNOR"/,
+    "no Durable Object may be bound in front of D1 again",
   )
+  // B-1026 (10-09): the account is on the free plan, whose only wall is Cloudflare's
+  // daily allowance. A leftover monthly variable would look like a cap while nothing
+  // reads it, so none may remain in the config or be read by the runtime.
   const retiredMonthlyBudgetNames =
     /HARD_MONTHLY_BUDGET|BILLING_CYCLE_DAY_OF_MONTH|DAILY_BURST_MULTIPLIER/
   assert.doesNotMatch(
@@ -365,8 +362,8 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
 
   assert.match(
     workflow,
-    /Stage migration admission[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/run-admitted-d1-migrations\.mjs[\s\S]*?Deploy the stateful Worker after data maintenance/,
-    "admission must be staged in the existing state owner, then schema receipts must succeed before application activation",
+    /Pause the application for maintenance[\s\S]*?ICONOPLASM_SCHEMA_TRANSITION:1[\s\S]*?node scripts\/apply-online-d1-migrations\.mjs --maintenance[\s\S]*?Deploy the stateful Worker after data maintenance/,
+    "the application pauses, reviewed migrations apply by their price, and only then does the application deploy",
   )
   assert.doesNotMatch(
     productionJob,
@@ -409,73 +406,15 @@ test("DO NOT DELETE: production deploy wiring must use the internal stateful wor
   )
 })
 
-test("DO NOT DELETE: cost attribution should name request-picker and admin dashboard routes explicitly", () => {
+// B-1067 deleted the daily budget referee, its per-route cost attribution and
+// the sync finalization queue these tests used to guard; every admin route's
+// price now lives in workers/iconoplasm/batch-route-prices.js, which refuses to
+// load with one missing. Two routing guards outlived them.
+test("DO NOT DELETE: retired routes fail loudly and no /api/iconoplasm path is accepted implicitly", () => {
   const runtime =
     DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
       "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
     )
-
-  for (const routeId of [
-    "gene_request_state_gone",
-    "gene_request_summary",
-    "gene_request_options",
-    "gene_request_submit",
-  ]) {
-    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
-    assert.equal(
-      route?.budgetFamily,
-      routeId,
-      `${routeId} should stay an explicit declarative cost bucket`,
-    )
-  }
-  const mobileManifest = ICONOPLASM_ROUTE_CONTRACTS.find(
-    (route) => route.id === "mobile_card_manifest",
-  )
-  assert.equal(
-    mobileManifest?.budgetFamily,
-    "mobile_card_manifest",
-    "mobile card manifest should have its own named cost bucket",
-  )
-  assert.match(
-    runtime,
-    /family === "mobile_card_manifest"\) return "first_party_read"/,
-    "mobile card manifest should stay in the first-party read budget class",
-  )
-  for (const routeId of ["admin_overview", "admin_coverage"]) {
-    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
-    assert.equal(
-      route?.budgetFamily,
-      routeId,
-      `${routeId} should stay an explicit declarative dashboard cost bucket`,
-    )
-  }
-  for (const routeId of ["admin_requests_open"]) {
-    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
-    assert.equal(route?.budgetFamily, routeId, `${routeId} should not disappear into admin_other`)
-  }
-  for (const routeId of [
-    "authority_generation_lease_claim",
-    "authority_generation_lease_material",
-    "authority_generation_lease_renew",
-    "authority_generation_lease_fail",
-    "authority_generation_lease_complete",
-  ]) {
-    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
-    assert.equal(
-      route?.budgetFamily,
-      "authority_generation_executor",
-      `${routeId} must stay in the workstation executor cost bucket`,
-    )
-    assert.equal(route?.auth, "authority-generation-bearer")
-  }
-  // B-944: the bucket alone metered nothing. The five routes are classed
-  // workstation_sync_write, so the budget wrapper must also list their family,
-  // or they reserve no capacity and write into the daily ledger unseen.
-  assert.match(
-    runtime,
-    /function isIconoplasmAuthorityBudgetedRouteFamily\(routeFamily\) \{[^}]*"authority_generation_executor"/,
-    "the generation executor routes must be metered into the shared daily ledger",
-  )
   assert.match(
     runtime,
     /LEGACY_GENE_REQUEST_ROUTE_REMOVED/,
@@ -483,83 +422,7 @@ test("DO NOT DELETE: cost attribution should name request-picker and admin dashb
   )
   assert.doesNotMatch(
     runtime,
-    /return "admin_other"|return "iconoplasm_other"/,
-    "handled Iconoplasm routes must not disappear into miscellaneous buckets",
-  )
-  assert.match(
-    runtime,
-    /ICONOPLASM_ROUTE_CLASSIFICATION_MISSING/,
-    "missing route classification should fail loudly instead of silently falling back",
-  )
-  assert.doesNotMatch(
-    runtime,
     /if \(path\.startsWith\("\/api\/iconoplasm\/"\)\)\s*\{\s*return true\s*\}/,
     "route handling should not accept every /api/iconoplasm path implicitly",
-  )
-})
-
-test("DO NOT DELETE: Iconoplasm sync finalization must not regain crutch control planes", () => {
-  const runtime =
-    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
-      "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-    )
-  const entrypoint =
-    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
-      "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-    )
-  const deployCredentials =
-    DO_NOT_DELETE_THIS_TEST_UNLESS_YOU_HAVE_BUILT_A_STRICTER_TRIPLICATE_GUARDRAIL_SYSTEM__readUtf8(
-      "../docs/ICONOPLASM_DEPLOY_CREDENTIALS.md",
-    )
-  const queueDiagnosticsWorkflow = new URL(
-    "../.github/workflows/iconoplasm-queue-diagnostics.yml",
-    import.meta.url,
-  )
-
-  assert.equal(
-    existsSync(queueDiagnosticsWorkflow),
-    false,
-    "the old GitHub Actions Queue diagnostics/kick workflow should stay deleted; Cloudflare account auth belongs in the dashboard",
-  )
-
-  assert.match(
-    runtime,
-    /durable D1 ledger rows are advanced by Cloudflare Queue messages of kind\s+\/\/ `drain_finalization_ledger`/,
-    "runtime should document the single Queue finalization path",
-  )
-  assert.match(
-    runtime,
-    /Do not add a GitHub\s+\/\/ Actions Queue kick, workstation drain, direct API processor, or admin-token\s+\/\/ workaround/,
-    "runtime should explicitly reject the crutch paths",
-  )
-  assert.match(
-    runtime,
-    /admin_finalization_process_410/,
-    "direct process route should remain a loud tombstone",
-  )
-  assert.match(
-    entrypoint,
-    /handleIconoplasmQueue/,
-    "the deployed geneguessr-api entrypoint must import the Iconoplasm Queue dispatcher",
-  )
-  assert.doesNotMatch(
-    runtime,
-    /apiPath:\s*["']\/api\/iconoplasm\/admin\/finalization\/process["']|api_path:\s*["']\/api\/iconoplasm\/admin\/finalization\/process["']/,
-    "runtime should not call its own deleted direct finalization processor",
-  )
-  assert.match(
-    deployCredentials,
-    /Do not replace this with a GitHub Actions diagnostic workflow, a repository-secret control plane, or a direct Cloudflare API connector call/,
-    "credential docs should block future dashboard-auth crutches",
-  )
-  assert.match(
-    deployCredentials,
-    /Forbidden paths: workstation-side finalization processing, `\/api\/iconoplasm\/admin\/finalization\/process`, per-symbol Queue message formats, GitHub Actions Queue kicks/,
-    "credential docs should name the forbidden sync finalization paths",
-  )
-  assert.doesNotMatch(
-    runtime,
-    /doFreeTierExhausted|durable_object_rows_written_free_tier[\s\S]{0,1200}fallbackChunk/,
-    "an exhausted Durable Object budget must fail closed instead of enabling a finalization bypass",
   )
 })

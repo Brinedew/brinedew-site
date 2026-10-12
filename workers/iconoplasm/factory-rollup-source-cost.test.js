@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { rebuildGenerationRequestFactoryOptionRollupsBatch } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
 test(
   "factory totals, previews and ranking share one source read beside unrelated growth",

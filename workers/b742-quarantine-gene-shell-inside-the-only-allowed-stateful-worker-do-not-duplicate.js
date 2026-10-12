@@ -1,7 +1,5 @@
 import baseRuntime, {
   GameSession,
-  IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
-  IconoplasmSyncGovernor,
   applySecurityHeaders,
 } from "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { handlePublishedImageAssetRoute } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -10,7 +8,7 @@ import {
   withIconoplasmRateLimitHeaders,
 } from "./iconoplasm-rate-limit.js"
 
-export { GameSession, IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate, IconoplasmSyncGovernor }
+export { GameSession }
 
 const ICONOPLASM_HOST = "iconoplasm.brinedew.bio"
 const READER_RECOVERY_MODE = "reader-recovery"

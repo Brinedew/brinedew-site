@@ -118,7 +118,6 @@ test("DO NOT DELETE: factory belts are registered in the real gateway as private
   const match = matchIconoplasmRouteContract(path, "GET")
   assert.ok(match, "A handler without route registration returns 404 in production")
   assert.equal(match.route.auth, "administrator")
-  assert.equal(match.route.budgetFamily, "admin_factory_recipe")
   const dispatch = (method) =>
     handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
       new Request("https://iconoplasm.brinedew.bio" + path, { method }),

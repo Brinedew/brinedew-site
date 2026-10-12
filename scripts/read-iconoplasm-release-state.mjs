@@ -1,9 +1,10 @@
 import { appendFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
-import { ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-ledger.js"
-import { KV_ACCOUNT_CEILINGS } from "../workers/lib/operation-cost-meters.js"
-import { readReleaseOrigin } from "./operation-cost-release-plan.mjs"
+import {
+  KV_ACCOUNT_CEILINGS,
+  OPERATOR_ACCOUNT_CEILINGS,
+} from "../shared/iconoplasm-d1-budget-policy.js"
 
 // The installed setting is the release state. A working published reader is
 // not evidence that application writes are active, and a failed reader is not
@@ -74,7 +75,7 @@ export function requireReaderRecoveryHeadroom(sample, now = Date.now()) {
   for (const [meter, bound] of Object.entries(maximum)) {
     if (!Number.isSafeInteger(sample[meter]) || sample[meter] < 0)
       throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
-    if (sample[meter] + bound > (ACCOUNT_CEILINGS[meter] ?? KV_ACCOUNT_CEILINGS[meter]))
+    if (sample[meter] + bound > (OPERATOR_ACCOUNT_CEILINGS[meter] ?? KV_ACCOUNT_CEILINGS[meter]))
       throw new Error(`COST_READER_RECOVERY_HEADROOM: ${meter}`)
   }
   return { rows_read: 0, rows_written: 0, kv_writes: 0, ...maximum }
@@ -97,13 +98,6 @@ async function main() {
     process.env.GITHUB_RUN_ID,
     process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
   )
-  await readReleaseOrigin({
-    repository: process.env.GITHUB_REPOSITORY,
-    runId: process.env.GITHUB_RUN_ID,
-    resumeRunId: originRunId,
-    allowMigrationCheckpointOrigin: state.schema_transition,
-    token: process.env.GITHUB_TOKEN,
-  })
   let maximum
   if (state.schema_transition) {
     const reader = createOperationCostAccountUsageReader({
