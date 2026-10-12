@@ -90,7 +90,7 @@ Executioner protease in apoptosis that cleaves many substrates to dismantle the 
 Destructive metabolic processes where complex biomolecules are broken down into the simpler ones, releasing energy.
 
 **Ceiling**
-The mortality rate that a logistic mortality model approaches at the oldest ages, written $L$. In the gamma-Gompertz model $L = \ln 2 / (\gamma T)$, set by the spread of frailty $\gamma$ and the doubling time $T$; the Kannisto model sets $L = 1$ a year.
+The mortality rate that a logistic mortality model approaches at the oldest ages. In the gamma-Gompertz model it is $b/\gamma$, the Gompertz slope divided by the frailty variance; the Kannisto model sets it at 1 a year.
 
 **Cell-autonomous**
 Describes a biological effect that runs inside an affected cell using that cell's own components, such as the internal growth brake a gatekeeper tumor suppressor provides to the cell itself.
@@ -180,7 +180,7 @@ A chemical tag added to DNA bases that usually dampens gene activity and helps s
 Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
 
 **Doubling time**
-The number of years the mortality rate takes to double, written $T$; about eight in adult humans. On a logarithmic plot of mortality rate against age it sets the slope of the line.
+The number of years the mortality rate takes to double; about eight in adult humans. Under the Gompertz law it is $\ln 2 / b$, where $b$ is the Gompertz slope.
 
 **Driver mutation**
 Genetic change to a cell within a tissue that confers it a fitness advantage over its peers and promotes cancer development.
@@ -239,6 +239,9 @@ Specialized cell-cell contact points where cells grip the surrounding matrix and
 **Frailty**
 A fixed multiplier of one person's mortality rate relative to the average person's, in models where people differ in their risk from birth. The frailest die first, so the mortality rate of the survivors rises more slowly than any individual's.
 
+**Frailty variance**
+How widely frailty differs between people, written $\gamma$: the variance of its distribution. The larger it is, the earlier and more strongly the population's mortality rate bends below the average person's.
+
 ## G
 
 **Gene expression**
@@ -254,7 +257,10 @@ Collection of various mutations and chromosomal alterations that drive somatic e
 Immortal lineage of reproductive cells (such as egg and sperm cells) that passes its genetic material from one generation to another (as opposed to mortal soma that forms the rest of the body)
 
 **[[Mortality rate models|Gompertz law]]**
-The finding that the adult mortality rate rises exponentially with age, doubling about every eight years in humans. With the most common age at death $M$ and the doubling time $T$, the Gompertz curve is $G(x) = \frac{\ln 2}{T}\,2^{(x - M)/T}$. Published by the actuary Benjamin Gompertz in 1825.
+The finding that the adult mortality rate rises exponentially with age, $\mu(x) = a\,e^{bx}$, doubling about every eight years in humans. With the most common age at death $M$ it is written $\mu(x) = b\,e^{b(x - M)}$. Published by the actuary Benjamin Gompertz in 1825.
+
+**Gompertz slope**
+How fast the mortality rate rises with age under the Gompertz law, written $b$: about 0.08 a year in humans, a rise of about 8% with each year of age. The doubling time is $\ln 2 / b$.
 
 **Gradient (chemical)**
 Spatial variation in morphogen concentration that cells can sense to bias movement or growth.
@@ -544,9 +550,6 @@ Non-reproductive tissues of the body, cells that won't form a new organism and w
 
 **Somatic mosaicism**
 Presence of genetically different cells within the same person due to mutations that arise after fertilization.
-
-**Spread of frailty**
-The variance of frailty across a population, written $\gamma$. The wider the spread, the earlier and more strongly the population's mortality rate bends below the average person's.
 
 **Stem cell niche**
 Specialized tissue microenvironment, such as the base of intestinal crypts, that maintains stemness and allows stem cells to undergo proliferation and differentiation.
