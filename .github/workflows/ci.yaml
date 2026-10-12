@@ -38,7 +38,9 @@ jobs:
       # Since 2026-10-03 those tests had doubled the owner's save-to-live time
       # (Obsidian Git push to deploy) from about 10 to about 20 minutes.
       # Requiring the base run's success keeps the release gate whole: a notes
-      # commit on top of a failing code commit runs everything.
+      # commit on top of a failing code commit runs everything. If the base run
+      # is still going, the step waits for its verdict instead (2026-10-12: an
+      # Obsidian save two minutes after a code merge re-ran all 17 minutes).
       - name: Decide whether this change touches only notes
         id: scope
         shell: bash
@@ -53,8 +55,18 @@ jobs:
             outside_notes="$(printf '%s\n' "$changed" | grep -vE '^content/' | grep -vE '^$' || true)"
             app_pages="$(printf '%s\n' "$changed" | grep -E '^content/apps/' || true)"
             if [ -n "$changed" ] && [ -z "$outside_notes" ] && [ -z "$app_pages" ]; then
-              passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?head_sha=$BASE_SHA&status=success&per_page=1" --jq '.total_count' || echo 0)"
-              if [ "${passed:-0}" -gt 0 ]; then notes_only=true; fi
+              # An Obsidian save often lands while the base commit's own run is
+              # still testing. Waiting for that verdict (at most 25 minutes) is
+              # never slower than running the same suites again from scratch.
+              runs="repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?head_sha=$BASE_SHA&per_page=20"
+              for attempt in $(seq 1 50); do
+                passed="$(gh api "$runs" --jq '[.workflow_runs[] | select(.conclusion == "success")] | length' || echo 0)"
+                running="$(gh api "$runs" --jq '[.workflow_runs[] | select(.status != "completed")] | length' || echo 0)"
+                if [ "${passed:-0}" -gt 0 ]; then notes_only=true; break; fi
+                if [ "${running:-0}" -eq 0 ]; then break; fi
+                echo "Waiting for the base commit's run to finish ($attempt)"
+                sleep 30
+              done
             fi
           fi
           echo "notes_only=$notes_only" >> "$GITHUB_OUTPUT"
