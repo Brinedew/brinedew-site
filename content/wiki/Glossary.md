@@ -89,6 +89,9 @@ Executioner protease in apoptosis that cleaves many substrates to dismantle the 
 **Catabolism**
 Destructive metabolic processes where complex biomolecules are broken down into the simpler ones, releasing energy.
 
+**Ceiling**
+The mortality rate that a logistic mortality model approaches at the oldest ages. In the gamma-Gompertz model it is $b/\gamma$, the Gompertz rate of increase divided by the spread of frailty; the Kannisto model sets it at 1 a year.
+
 **Cell-autonomous**
 Describes a biological effect that runs inside an affected cell using that cell's own components, such as the internal growth brake a gatekeeper tumor suppressor provides to the cell itself.
 
@@ -106,6 +109,9 @@ Built-in safety stops during the cell cycle that test whether DNA is intact and 
 
 **Cell surveillance**
 Ongoing monitoring of tissues by immune cells (e.g., T cells, natural killer cells) that spot and remove abnormal or infected cells.
+
+**Chance of dying within the year**
+The chance that someone alive on a given birthday dies before the next one, written $q_x$. Published life tables report it. It is close to the mortality rate except at the oldest ages, where it can never exceed 1.
 
 **Chemokines**
 Small secreted proteins that guide immune cell migration and shape inflammatory responses.
@@ -155,6 +161,9 @@ Signaling proteins, often immune-derived, that modulate inflammation, growth, an
 **[[death-pact.md|Death pact]]**
 Governance strategy that enforces organization-level priorities by triggering collective agent death under specific failures or contexts.
 
+**Deaths at each age**
+The share of a group followed from birth that dies at each age: the share still alive times the mortality rate. Its peak is the most common age at death.
+
 **[[De-Darwinization.md|De-Darwinization]]**
 Evolutionary pressure to reduce competition among cells in a multicellular organism.
 
@@ -169,6 +178,9 @@ A chemical tag added to DNA bases that usually dampens gene activity and helps s
 
 **[[disposable-soma-theory.md|Disposable soma theory]]**
 Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
+
+**Doubling time**
+The number of years the mortality rate takes to double, about eight in adult humans. On a logarithmic plot of mortality rate against age it sets the slope of the line.
 
 **Driver mutation**
 Genetic change to a cell within a tissue that confers it a fitness advantage over its peers and promotes cancer development.
@@ -224,6 +236,8 @@ Cell-surface protein that marks relative fitness for cell competition in flies.
 **Focal adhesions**
 Specialized cell-cell contact points where cells grip the surrounding matrix and sense mechanical forces and signals.
 
+**Frailty**
+A fixed multiplier of one person's mortality rate relative to the average person's, in models where people differ in their risk from birth. The frailest die first, so the mortality rate of the survivors rises more slowly than any individual's.
 
 ## G
 
@@ -238,6 +252,9 @@ Collection of various mutations and chromosomal alterations that drive somatic e
 
 **Germline**
 Immortal lineage of reproductive cells (such as egg and sperm cells) that passes its genetic material from one generation to another (as opposed to mortal soma that forms the rest of the body)
+
+**[[Mortality rate models|Gompertz law]]**
+The finding that the adult mortality rate rises exponentially with age, doubling about every eight years in humans. Published by the actuary Benjamin Gompertz in 1825.
 
 **Gradient (chemical)**
 Spatial variation in morphogen concentration that cells can sense to bias movement or growth.
@@ -330,6 +347,9 @@ Computation method that enables cell models to sense chemical gradients and adap
 **[[Lewontin's conditions|Lewontin's conditions]]**
 Three minimal requirements for evolution by natural selection: phenotypic variation, differential fitness, and heritability of fitness-related traits.
 
+**Life table**
+A table that follows a group of people from birth, real or hypothetical, and records how many are still alive at each age and the mortality rate at each age.
+
 **Lineage commitment**
 Step in embryogenesis where a developing cell narrows its options and chooses a particular future identity.
 
@@ -368,6 +388,15 @@ Type of cell death or permanent arrest triggered by severe errors during cell di
 
 **Morphogen**
 Diffusible signal whose concentration gradient provides positional information to cells, which is important for developmental patterning.
+
+**Mortality plateau**
+A levelling-off of the mortality rate at extreme ages, so that it stays constant instead of rising. Well documented in laboratory insects; contested in humans.
+
+**[[Mortality rate models|Mortality rate]]**
+How fast the people who have reached a given age are dying, per year, written $\mu(x)$. A rate of 1 in 144 a year means that about 1 in 144 of them die before their next birthday. Survival analysis calls it the hazard, and actuarial science the force of mortality.
+
+**Most common age at death**
+The age at which deaths at each age peak, written $M$: 87 for American men and 90 for American women in 2023. In the Gompertz law it sets where the curve sits.
 
 **Multipotent cell**
 A stem-like cell that can make several related cell types, but not every type in the body.
@@ -501,6 +530,9 @@ Life-history strategy where organisms reproduce once and then die, as opposed to
 **Senolytic therapy**
 Category of putative anti-aging treatments that selectively eliminate senescent cells accumulated over the lifespan of the organism.
 
+**Share still alive**
+The fraction of a group followed from birth that is still alive at a given age, written $S(x)$.
+
 **Single-cell RNA-seq**
 RNA sequencing method that reads which genes are active in each individual cell, revealing the mix of cell types and states in a sample.
 
@@ -512,6 +544,9 @@ Non-reproductive tissues of the body, cells that won't form a new organism and w
 
 **Somatic mosaicism**
 Presence of genetically different cells within the same person due to mutations that arise after fertilization.
+
+**Spread of frailty**
+The variance of frailty across a population, written $\gamma$. The wider the spread, the earlier and more strongly the population's mortality rate bends below the average person's.
 
 **Stem cell niche**
 Specialized tissue microenvironment, such as the base of intestinal crypts, that maintains stemness and allows stem cells to undergo proliferation and differentiation.
