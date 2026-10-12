@@ -12,6 +12,7 @@ import {
   deliverPendingCaretakerSupervoteNotifications,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 const ACCOUNT = "account_caretaker_comment_0001"
 const AUTHOR = "account_caretaker_comment_0002"
@@ -296,45 +297,21 @@ for (const [kind, deliver] of [
   })
 }
 
+// The real main schema (every migration): the caretaker's active role on TP53,
+// with a +1 supervote on asset a, and TP53 published with asset b.
 function setup(t) {
-  const primary = new TestD1()
+  const primary = iconoplasmDatabase()
+  primary.raw = primary.database
   const accounts = new TestD1()
   primary.raw.exec(`
-    CREATE TABLE icono_gene_comments (id INTEGER PRIMARY KEY, gene_symbol TEXT, status TEXT);
-    CREATE TABLE icono_publish_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gene_symbol TEXT NOT NULL,
-      from_asset_sha256 TEXT,
-      to_asset_sha256 TEXT,
-      action TEXT NOT NULL
-    );
-    CREATE TABLE icono_publish_state (
-      gene_symbol TEXT PRIMARY KEY,
-      current_asset_sha256 TEXT
-    );
-    INSERT INTO icono_publish_state VALUES ('TP53', '${"b".repeat(64)}');
-    ${readFileSync(new URL("../migrations-iconoplasm/0085_caretaker_supervotes.sql", import.meta.url), "utf8")}
-    ${readFileSync(new URL("../migrations-iconoplasm/0086_caretaker_assignment_notifications.sql", import.meta.url), "utf8")}
-    ${readFileSync(new URL("../migrations-iconoplasm/0090_caretaker_coordination.sql", import.meta.url), "utf8")}
-    ${readFileSync(new URL("../migrations-iconoplasm/0092_signed_caretaker_supervote.sql", import.meta.url), "utf8")}
-    INSERT INTO icono_caretaker_assignment_notifications (
-      caretaker_assignment_id, account_id, gene_id, canonical_symbol,
-      assignment_status, assignment_version, notification_state,
-      authority_event_id, authority_event_sequence, resolved_at
-    ) VALUES (
-      '${ASSIGNMENT}', '${ACCOUNT}', 'gene_caretaker_comment_0001', 'TP53',
-      'active', 1, 'resolved', 'event_caretaker_comment_0001', 1, CURRENT_TIMESTAMP
-    );
-    INSERT INTO icono_caretaker_vote_assignment_projection (
-      gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-      status, assignment_version, authority_event_id, authority_event_sequence
-    ) VALUES ('TP53', 'gene_caretaker_comment_0001', '${ASSIGNMENT}', '${ACCOUNT}',
-              'active', 1, 'event_caretaker_comment_0001', 1);
-    INSERT INTO icono_caretaker_supervote_projection (
-      gene_symbol, gene_id, caretaker_assignment_id, caretaker_account_id,
-      asset_sha256, direction, active, weight, supervote_version, last_mutation_id
-    ) VALUES ('TP53', 'gene_caretaker_comment_0001', '${ASSIGNMENT}', '${ACCOUNT}',
-              '${"a".repeat(64)}', 1, 1, 10, 3, 'mutation_supervote_0001');
+    INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by)
+    VALUES ('TP53', '${"b".repeat(64)}', 'seed');
+    INSERT INTO icono_caretaker_assignments (
+      caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+      relinquish_policy, invited_by_account_id, started_at,
+      supervote_asset_sha256, supervote_direction, supervote_version
+    ) VALUES ('${ASSIGNMENT}', 'TP53', '${ACCOUNT}', 'active', '2026-10-01', 'retain',
+              '${ACCOUNT}', '2026-10-01', '${"a".repeat(64)}', 1, 3);
   `)
   accounts.raw.exec(`
     CREATE TABLE brinedew_account_identities (
@@ -344,7 +321,7 @@ function setup(t) {
     INSERT INTO brinedew_account_identities VALUES ('discord', '123456789', '${ACCOUNT}', 1, NULL);
   `)
   t.after(() => {
-    primary.close()
+    primary.database.close()
     accounts.close()
   })
   return { primary, accounts, env: { ICONOPLASM_DB: primary, DB: accounts } }
@@ -419,7 +396,9 @@ test("delivery revalidates tenure and suppresses a DM after caretaker departure"
   }).run()
   primary.raw
     .prepare(
-      "UPDATE icono_caretaker_assignment_notifications SET assignment_status = 'ended', assignment_version = 2, authority_event_sequence = 2",
+      `UPDATE icono_caretaker_assignments
+          SET status = 'ended', ended_at = '2026-10-02', end_reason = 'caretaker_resigned',
+              assignment_version = 2`,
     )
     .run()
   const originalFetch = globalThis.fetch
@@ -489,7 +468,7 @@ test("a positive preferred canonical loss enqueues and delivers one deduplicated
 
 test("negative, transferred, or ended supervotes cannot send a stale canonical-loss DM", async (t) => {
   const { primary, env } = setup(t)
-  primary.raw.prepare("UPDATE icono_caretaker_supervote_projection SET direction = -1").run()
+  primary.raw.prepare("UPDATE icono_caretaker_assignments SET supervote_direction = -1").run()
   primary.raw
     .prepare(
       `INSERT INTO icono_publish_events (
@@ -504,7 +483,7 @@ test("negative, transferred, or ended supervotes cannot send a stale canonical-l
     0,
   )
 
-  primary.raw.prepare("UPDATE icono_caretaker_supervote_projection SET direction = 1").run()
+  primary.raw.prepare("UPDATE icono_caretaker_assignments SET supervote_direction = 1").run()
   primary.raw
     .prepare(
       `INSERT INTO icono_publish_events (
@@ -514,8 +493,8 @@ test("negative, transferred, or ended supervotes cannot send a stale canonical-l
     .run("a".repeat(64), "b".repeat(64))
   primary.raw
     .prepare(
-      `UPDATE icono_caretaker_supervote_projection
-          SET asset_sha256 = '${"c".repeat(64)}', supervote_version = 4`,
+      `UPDATE icono_caretaker_assignments
+          SET supervote_asset_sha256 = '${"c".repeat(64)}', supervote_version = 4`,
     )
     .run()
   const originalFetch = globalThis.fetch

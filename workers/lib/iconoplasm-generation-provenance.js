@@ -1,5 +1,5 @@
 // B-1065: a generation request is bound to the exact text and Tags it was made
-// from. Both come from the plain text tables of authoring migration 0024: the
+// from. Both come from the plain text tables of main migration 0125: the
 // gene's current text, and later the same text by its ID, checked against the
 // hashes the request carries. One D1 read each, no Bunny.
 //
@@ -88,24 +88,11 @@ export async function iconoplasmGenerationFingerprint(kind, fields) {
 
 const ENCODER = new TextEncoder()
 
-function authoringDatabase(env) {
-  if (!env?.ICONOPLASM_AUTHORING_DB) {
-    throw sourceError(
-      "AUTHORING_DATABASE_UNAVAILABLE",
-      "The manifestation authoring authority is unavailable.",
-      503,
-    )
+function textDatabase(env) {
+  if (!env?.ICONOPLASM_DB) {
+    throw sourceError("TEXT_DATABASE_UNAVAILABLE", "The gene text database is unavailable.", 503)
   }
-  return env.ICONOPLASM_AUTHORING_DB
-}
-
-function requireActiveGene(geneText) {
-  if (stringValue(geneText.gene_status) !== "active") {
-    throw sourceError(
-      "GENERATION_SOURCE_GENE_INACTIVE",
-      "This gene is not active in the manifestation authority.",
-    )
-  }
+  return env.ICONOPLASM_DB
 }
 
 // The text's Tags as the generator reads them: the Tags line, then the
@@ -138,7 +125,7 @@ export async function resolveCanonicalGenerationSource(
   if (!symbol) {
     throw sourceError("GENERATION_SOURCE_GENE_INVALID", "A gene symbol is required.", 400)
   }
-  const geneText = await readGeneText(authoringDatabase(env), symbol)
+  const geneText = await readGeneText(textDatabase(env), symbol)
   if (!geneText) {
     throw sourceError(
       "CANONICAL_GENERATION_SOURCE_NOT_FOUND",
@@ -146,7 +133,6 @@ export async function resolveCanonicalGenerationSource(
       404,
     )
   }
-  requireActiveGene(geneText)
   const mode = normalizePromptBodyMode(promptBodyMode)
   const tags = mode === "taggerizer_prompt" ? await tagsOf(geneText) : null
   const source = normalizeGenerationSource({
@@ -300,7 +286,7 @@ export function exactGenerationProvenanceValidationKey(raw, options) {
 // the ones they stored.
 async function exactGeneText(env, provenance) {
   const geneText = await readGeneTextVersion(
-    authoringDatabase(env),
+    textDatabase(env),
     provenance.source_gene_id,
     provenance.source_manifestation_revision_id,
   )
@@ -310,7 +296,6 @@ async function exactGeneText(env, provenance) {
       "The selected manifestation revision is no longer active.",
     )
   }
-  requireActiveGene(geneText)
   const mismatch = () =>
     sourceError(
       "GENERATION_SOURCE_SNAPSHOT_MISMATCH",

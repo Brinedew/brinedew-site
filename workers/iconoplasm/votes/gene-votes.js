@@ -19,7 +19,11 @@
 // their allowance for the UTC day is spent, so a refusal writes nothing. The
 // administrator's vote and import routes charge nobody.
 import { electGeneAuthorityWinner } from "../vote-authority/gene-authority-election.js"
-import { CARETAKER_SUPERVOTE_WEIGHT } from "../caretaker/caretaker-supervote.js"
+import {
+  CARETAKER_SUPERVOTE_WEIGHT,
+  CARETAKER_SUPERVOTES_SQL,
+  caretakerSupervoteOfGeneSql,
+} from "../caretaker/caretaker-supervote.js"
 import {
   GENE_VOTE_VERSION_SQL,
   VOTE_PERSON_DAILY_LIMIT,
@@ -105,15 +109,7 @@ export async function readGeneElection(db, symbol) {
           LIMIT ?2`,
       )
       .bind(symbol, GENE_ELECTION_CANDIDATE_LIMIT + 1),
-    db
-      .prepare(
-        `SELECT s.asset_sha256, s.direction, s.active, a.status AS assignment_status
-           FROM icono_caretaker_supervote_projection s
-           LEFT JOIN icono_caretaker_vote_assignment_projection a ON a.gene_symbol = s.gene_symbol
-          WHERE s.gene_symbol = ?1
-          LIMIT 1`,
-      )
-      .bind(symbol),
+    db.prepare(`${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`).bind(symbol),
     db
       .prepare(
         `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
@@ -674,10 +670,9 @@ export async function readGeneVoteSnapshots(
       .bind(JSON.stringify(symbols)),
     db
       .prepare(
-        `SELECT s.gene_symbol, s.asset_sha256, s.direction, s.active, a.status AS assignment_status
+        `SELECT s.gene_symbol, s.asset_sha256, s.direction, s.active, s.assignment_status
            FROM json_each(?1) AS wanted
-           CROSS JOIN icono_caretaker_supervote_projection AS s ON s.gene_symbol = wanted.value
-           LEFT JOIN icono_caretaker_vote_assignment_projection AS a ON a.gene_symbol = s.gene_symbol`,
+           CROSS JOIN (${CARETAKER_SUPERVOTES_SQL}) AS s ON s.gene_symbol = wanted.value`,
       )
       .bind(JSON.stringify(symbols)),
   ]
