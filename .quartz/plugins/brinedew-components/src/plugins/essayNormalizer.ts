@@ -44,6 +44,17 @@ function isPhrasingOnly(nodes: ElementContent[]): boolean {
   })
 }
 
+const isBlock = (node: RootContent | ElementContent | undefined): boolean =>
+  isElement(node) && !PHRASING_OK.has(node.tagName)
+
+function trimEdges(children: ElementContent[]): ElementContent[] {
+  let start = 0
+  let end = children.length
+  while (start < end && isWhitespaceText(children[start])) start++
+  while (end > start && isWhitespaceText(children[end - 1])) end--
+  return children.slice(start, end)
+}
+
 function stripBreaks(children: ElementContent[]): ElementContent[] {
   const next: ElementContent[] = []
   for (let i = 0; i < children.length; i++) {
@@ -96,7 +107,9 @@ function normalizeStructure(tree: Root): void {
           parent.children.splice(index, 1)
           return
         }
-        node.children = stripBreaks(meaningful as ElementContent[])
+        // Keep whitespace between inline pieces: in "**slope** $b$" the lone " "
+        // between </strong> and the math is the only space the reader gets.
+        node.children = trimEdges(stripBreaks(node.children))
 
         // Lone phrasing paragraph inside a list item → unwrap to bare phrasing.
         // Prevents <li><p>title</p><ul>…</ul></li> from having an extra block box.
@@ -110,8 +123,9 @@ function normalizeStructure(tree: Root): void {
         node.children = stripBreaks(node.children as ElementContent[])
       }
 
-      // Drop pure-whitespace text nodes between block children so flex gap is the
-      // only separator (whitespace text can still create anonymous boxes).
+      // Drop pure-whitespace text nodes beside block children so flex gap is the
+      // only separator (whitespace text can still create anonymous boxes). A
+      // space between two inline children of a list item is a word space; keep it.
       if (
         isElement(node) &&
         (node.tagName === "ul" ||
@@ -119,7 +133,13 @@ function normalizeStructure(tree: Root): void {
           node.tagName === "li" ||
           node.tagName === "blockquote")
       ) {
-        node.children = node.children.filter((child) => !isWhitespaceText(child))
+        const children = node.children
+        node.children = children.filter((child, i) => {
+          if (!isWhitespaceText(child)) return true
+          const prev = children[i - 1]
+          const next = children[i + 1]
+          return !!prev && !!next && !isBlock(prev) && !isBlock(next)
+        })
       }
     },
   )
