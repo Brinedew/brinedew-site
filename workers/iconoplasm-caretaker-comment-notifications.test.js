@@ -11,8 +11,7 @@ import {
   deliverPendingCaretakerCommentNotifications,
   deliverPendingCaretakerSupervoteNotifications,
 } from "./iconoplasm-caretaker-comment-notifications.js"
-import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
-import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
+import { blankDatabase, iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 const ACCOUNT = "account_caretaker_comment_0001"
 const AUTHOR = "account_caretaker_comment_0002"
@@ -302,7 +301,7 @@ for (const [kind, deliver] of [
 function setup(t) {
   const primary = iconoplasmDatabase()
   primary.raw = primary.database
-  const accounts = new TestD1()
+  const accounts = blankDatabase()
   primary.raw.exec(`
     INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256, updated_by)
     VALUES ('TP53', '${"b".repeat(64)}', 'seed');

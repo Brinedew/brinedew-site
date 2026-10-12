@@ -59,12 +59,7 @@ function packageVersions(sourceRoot, specifiers) {
 }
 
 // The migration schema remains an independent identity.
-const schemaDirectories = [
-  "migrations",
-  "workers/benchmark/migrations",
-  "migrations-iconoplasm",
-  "migrations-iconoplasm-authoring",
-]
+const schemaDirectories = ["migrations", "workers/benchmark/migrations", "migrations-iconoplasm"]
 
 function digest(sourceRoot, files, extra = "") {
   const hash = createHash("sha256")

@@ -55,8 +55,6 @@ test("every configured background event invokes exactly its one job, including d
   assert.equal(totals.caretakerComments * CARETAKER_COMMENT_DELIVERY_LIMIT, 80 * 24)
   assert.equal(totals.caretakerSupervotes * CARETAKER_SUPERVOTE_DELIVERY_LIMIT, 80 * 24)
   assert.equal(totals.fulfillment, 96)
-  assert.equal(totals.accounts, 120)
-  assert.equal(totals.manifestations, 120)
   assert.equal(totals.gallery, 97)
   assert.equal(totals.geneguessrBoard, 144)
   assert.equal(totals.requestPicker, 96)
@@ -103,12 +101,7 @@ test("background schedules retain bounded cadence and never repeat nightly work 
       )
       continue
     }
-    const expectedGap =
-      job === "sharedDiscovery"
-        ? 60
-        : ["caretakerSupervotes", "accounts", "manifestations"].includes(job)
-          ? 12
-          : 15
+    const expectedGap = job === "sharedDiscovery" ? 60 : job === "caretakerSupervotes" ? 12 : 15
     minutes.forEach((minute, i) =>
       assert.equal(
         minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute,

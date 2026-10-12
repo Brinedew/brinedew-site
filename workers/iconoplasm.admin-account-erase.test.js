@@ -119,7 +119,6 @@ function snapshot(world) {
     accounts: dumpDatabase(world.accounts),
     iconoplasm: dumpDatabase(world.iconoplasm),
     audit: dumpDatabase(world.audit),
-    authoring: dumpDatabase(world.authoring),
   }
 }
 
@@ -604,26 +603,6 @@ test("a person-shaped column in any migrated table is either erased or reviewed 
     [],
     "an erasure step or exempt entry names a column that no longer exists",
   )
-
-  // The caretaker authority keeps authorship and history by opaque account id only: its schema has
-  // no column for a provider identity, a name, an avatar or an email.
-  const authoring = new DatabaseSync(":memory:")
-  for (const name of sorted("migrations-iconoplasm-authoring")) {
-    authoring.exec(read("migrations-iconoplasm-authoring", name))
-  }
-  const identityShaped = []
-  for (const { name: table } of authoring
-    .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
-    .all()) {
-    for (const { name: column } of authoring
-      .prepare(`SELECT name FROM pragma_table_info('${table}')`)
-      .all()) {
-      if (/discord|username|avatar|email|provider_subject|fingerprint/i.test(column)) {
-        identityShaped.push(`${table}.${column}`)
-      }
-    }
-  }
-  assert.deepEqual(identityShaped, [])
 })
 
 test("every step's declared weight covers the rows the real schema writes for one changed row", () => {

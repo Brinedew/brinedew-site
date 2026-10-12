@@ -1,6 +1,4 @@
-import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
 import { ManifestationAuthorityError, authorityError } from "./manifestation-authority-contract.js"
-import { first, requireDatabase } from "./manifestation-authority-repository.js"
 import { IconoplasmSessionUnavailableError } from "../session-user.js"
 
 const DEFAULT_JSON_LIMIT = 24 * 1024
@@ -115,61 +113,9 @@ async function requireBrowserSession(request, env, resolveSession) {
   return { accountId, session }
 }
 
-async function requireAuthorityBearer(request, env, authorizeBearer) {
-  if (typeof authorizeBearer !== "function") {
-    throw new TypeError("Authority bearer authorizer dependency is required")
-  }
-  const authority = await authorizeBearer(request, env)
-  const actorKind = String(authority?.actor_kind || "").trim()
-  const actorAccountId = authority?.account_id == null ? null : String(authority.account_id).trim()
-  if (
-    authority?.authorized !== true ||
-    !["administrator", "service", "migration"].includes(actorKind)
-  ) {
-    throw authorityError("AUTHORITY_BEARER_REQUIRED", "Authority bearer required", 401)
-  }
-  if (actorAccountId != null && !/^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/.test(actorAccountId)) {
-    throw authorityError("AUTHORITY_BEARER_REQUIRED", "Authority bearer required", 401)
-  }
-  return { actorKind, actorAccountId }
-}
-
-async function authorityMode(db) {
-  requireDatabase(db)
-  const row = await first(
-    db,
-    "SELECT authority_mode FROM icono_authority_state WHERE singleton = 1",
-  )
-  return String(row?.authority_mode || "shadow")
-}
-
-async function requireAuthoritativeMode(db) {
-  if ((await authorityMode(db)) !== "authoritative") {
-    throw authorityError("AUTHORITY_NOT_ACTIVE", "Manifestation authority is not active", 503)
-  }
-}
-
-async function commandEnvelope(request, rawBody, body, actorKind, actorAccountId) {
-  const commandId = String(body.command_id || "").trim()
-  const requestSha256 = await sha256Hex(
-    [
-      request.method.toUpperCase(),
-      new URL(request.url).pathname,
-      actorKind,
-      actorAccountId || "",
-      rawBody,
-    ].join("\n"),
-  )
-  return { commandId, requestSha256, actorKind, actorAccountId }
-}
-
 export {
-  authorityMode,
-  commandEnvelope,
   jsonResponse,
   readBoundedJson,
-  requireAuthorityBearer,
-  requireAuthoritativeMode,
   requireBrowserSession,
   requireStrictSameOriginMutation,
   safeErrorResponse,

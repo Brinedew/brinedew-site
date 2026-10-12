@@ -36,7 +36,7 @@ import { D1LocalRefusal, d1Local } from "./d1-local.mjs"
 // 8. A dump whose bytes do not match the manifest sha256, or a truncated one, is refused and
 //    leaves no file in the cache that looks finished.
 // 9. A new dump replaces the cached copy of the older one for the same database only
-//    ("iconoplasm" must not delete the copy of "iconoplasm-authoring").
+//    ("iconoplasm" must not delete the copy of "iconoplasm-audit").
 // 10. A database name that is not a plain name (path traversal) or has no dump is refused and
 //     the refusal lists the databases that do have dumps.
 // 11. A result of 1,000+ rows is cut at 1,000 and says so; one huge text cell is cut too.
@@ -267,16 +267,16 @@ test("8: a dump that does not match its manifest, or is truncated, leaves no cac
 
 test("9: a new dump replaces the cached copy of the older one for that database only", async () => {
   const first = writeDump("iconoplasm", "2026-09-20", OLD_DUMP)
-  const neighbour = writeDump("iconoplasm-authoring", "2026-09-20", OLD_DUMP)
+  const neighbour = writeDump("iconoplasm-audit", "2026-09-20", OLD_DUMP)
   await run("iconoplasm", "SELECT 1")
-  await run("iconoplasm-authoring", "SELECT 1")
+  await run("iconoplasm-audit", "SELECT 1")
   assert.ok(existsSync(cachedCopy("iconoplasm", first.sha256)))
 
   const second = writeDump("iconoplasm", "2026-09-27", NEW_DUMP)
   await run("iconoplasm", "SELECT 1")
   assert.ok(existsSync(cachedCopy("iconoplasm", second.sha256)))
   assert.equal(existsSync(cachedCopy("iconoplasm", first.sha256)), false)
-  assert.ok(existsSync(cachedCopy("iconoplasm-authoring", neighbour.sha256)))
+  assert.ok(existsSync(cachedCopy("iconoplasm-audit", neighbour.sha256)))
 })
 
 test("10: a database without dumps, or with an unsafe name, is refused and the refusal lists what exists", async () => {

@@ -60,7 +60,7 @@ export async function verifyIconoplasmReaderRecovery({
     unknownHtml.includes(canonicalLink("NOT_A_REAL_GENE_B742"))
   )
     throw new Error("COST_READER_RECOVERY_UNKNOWN_INVALID")
-  const protectedResponse = await probe("/api/iconoplasm/authority/events")
+  const protectedResponse = await probe("/api/iconoplasm/votes/set", "POST")
   if (
     protectedResponse.status !== 503 ||
     (await protectedResponse.json()).code !== "ICONOPLASM_SCHEMA_TRANSITION"

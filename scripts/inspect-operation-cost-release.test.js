@@ -6,7 +6,7 @@ import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-i
 function capabilities(identities = OPERATION_COST_IDENTITIES) {
   return {
     features: ["preserved-budget-continuation"],
-    adapters: ["geneguessr", "iconoplasm", "iconoplasm-authoring"].map((resource) => ({
+    adapters: ["geneguessr", "iconoplasm"].map((resource) => ({
       id: `${resource}-migration-inventory`,
       resource,
       query_ids: ["schema-objects"],
@@ -45,9 +45,9 @@ test("schema inspection waits through old/new/old rollout before registering exa
       return { result: [{ results: [{ name: "icono_gene_catalog" }] }], usage: { rows_read: 1 } }
     },
   })
-  assert.equal(result.schemas.length, 3)
-  assert.equal(executed.length, 3)
-  assert.equal(plans.size, 3)
+  assert.equal(result.schemas.length, 2)
+  assert.equal(executed.length, 2)
+  assert.equal(plans.size, 2)
 })
 
 test("an unchanged or mixed deployed version exhausts bounded discovery without registering", async () => {
