@@ -174,7 +174,7 @@ The authority relationship is:
   version that public responses report.
 - `/api/iconoplasm/cards/:symbol`, the gene-page lead and
   metadata, public media, signed-in and anonymous galleries,
-  extension cards, and print-copy inputs must all project that
+  extension cards, and the print copy must all project that
   object's portrait.
 - The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 
@@ -266,7 +266,7 @@ Avoid these even if they look faster:
 - do not add a D1 fallback to the public card, public-media,
   gene-page, gallery, sitemap, or print-copy path
 - do not purge the entire Cloudflare zone for one stale card URL
-- do not use remote `wrangler dev --test-scheduled` as a repair path for this worker; remote dev does not support the Queue/SQLite Durable Object combination here
+- do not use remote `wrangler dev --test-scheduled` as a repair path for this worker
 
 ## sanity checks
 

@@ -144,18 +144,15 @@ it into `#iconoplasm`.
   line, then the comment with the author bolded inline in front:
   `**<user>**: <body>`. `allowed_mentions: { parse: [] }` so user text can never
   ping anyone.
-- **Attaches a fresh image of the gene card** (the horizontal "lit-archival"
-  ACCESSION SHEET card at the top of the gene page) instead of relying on the
-  link preview (which only showed the generic brinedew.bio logo).
-  - `renderIconoplasmGeneCardImageBytes` drives the `ICONOPLASM_PRINT_COPY_BROWSER`
-    binding to load the live gene page and screenshot the `.icono-gene-lead-card`
-    element — so it's pixel-faithful and shows the **current** canonical blot
-    (which changes as people vote).
-  - `getIconoplasmGeneCardImageBytes` caches the PNG in KV keyed by
-    `snapshot_version : canonical_asset_sha` (reusing the print-copy resolver).
-    The image re-renders only when the blot actually changes; otherwise it's
-    served from cache — at most one render per (gene, canonical version).
-  - If the render fails, the mirror degrades to a clean text-only post.
+- **Attaches the gene's published blot** (the 768x1024 WebP named by the gene's
+  stable object) instead of relying on the link preview (which only showed the
+  generic brinedew.bio logo).
+  - `mirrorGeneCommentToDiscord` reads `genes/v3/<SYMBOL>.json` and then the
+    blot object it names, with the same lookup the `/blot/<SYMBOL>.webp` route
+    uses (`readPublishedGeneBlotObject`). That is two Bunny Storage reads, no D1
+    and no KV, and it shows the **current** blot (which changes as people vote).
+  - A gene with no published blot yet, or a failed read, degrades to a clean
+    text-only post whose header line still links the gene page.
 - The author's own edit rewrites the post's text and their delete removes the post (B-1001),
   after the response and best-effort. Only a post that quotes the comment's previous text
   exactly is touched, so a post that cannot be found (one from before the mirror, or a post a

@@ -356,7 +356,6 @@ import { readSession } from "./lib/sealed-session.js"
 import {
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   publishRequestPickerObject,
   rebuildDirtyVisionRollups,
@@ -365,7 +364,6 @@ import {
   drainIconoplasmSharedDiscoveryDeliveriesForScheduled,
   publishIconoplasmGeneStableObject,
   refreshIconoplasmRegisteredGeneSummaries,
-  recoverDueIconoplasmGeneCardMaterializationsForScheduled,
   resolveActiveCaretakerAccountSession,
   settleGeneAfterVote,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -1820,14 +1818,6 @@ export default {
     })
   },
 
-  async queue(batch, env, ctx) {
-    if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") {
-      batch.retryAll({ delaySeconds: 60 })
-      return
-    }
-    return handleIconoplasmQueue(batch, env, ctx)
-  },
-
   /**
    * Scheduled handler:
    * - 23:55 UTC: pre-warm next day's target structure/bootstrap cache
@@ -1866,7 +1856,6 @@ export default {
         fulfillment: () => runScheduledIconoplasmFulfillment(env),
         sharedDiscovery: () => publishSharedGeneDiscoverySymbols(env),
         sharedDelivery: () => drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env),
-        materialization: () => recoverDueIconoplasmGeneCardMaterializationsForScheduled(env),
         recognition: () => reconcileIconoplasmRecognitionPolicies(env),
         // B-965: GeneGuessr's "Top Streaks" object on the CDN. Reads the GeneGuessr D1 (26 rows),
         // not an Iconoplasm one.

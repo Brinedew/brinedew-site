@@ -63,6 +63,19 @@ const targets = [
     source: path.join(repoRoot, "shared", "iconoplasm-card", "shared-card-label.css"),
     outputs: [path.join(repoRoot, "iconoplasm-extension", "generated", "shared-card-label.css")],
   },
+  {
+    // B-1068: the print copy, painted in the reader's browser with the card's own faces.
+    source: path.join(repoRoot, "shared", "iconoplasm-card", "print-copy-painter.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "print-copy-painter.js"),
+    ],
+    replace: [
+      "const FONT_FACES = []",
+      `const FONT_FACES = ${JSON.stringify(
+        iconoplasmFontContract.fonts.map(({ family, url, weight }) => ({ family, url, weight })),
+      )}`,
+    ],
+  },
 ]
 
 function renderIconoplasmExtensionFontRuntime() {
@@ -189,10 +202,14 @@ const bundledTargets = [
   },
 ]
 
-async function syncTarget({ source, prefix = "", outputs }) {
+async function syncTarget({ source, prefix = "", outputs, replace }) {
   const outputsToWrite = selectedOutputs(outputs)
   if (outputsToWrite.length === 0) return
-  const content = await readFile(source, "utf8")
+  let content = await readFile(source, "utf8")
+  if (replace) {
+    if (!content.includes(replace[0])) throw new Error(`${source} no longer contains ${replace[0]}`)
+    content = content.replace(replace[0], replace[1])
+  }
   const relativeSource = path.relative(repoRoot, source).replaceAll("\\", "/")
   const banner = source.endsWith(".css")
     ? `/* GENERATED FILE. Edit ${relativeSource}${prefix ? " and shared/iconoplasm-card/font-contract.json" : ""} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
@@ -367,6 +384,7 @@ if (!extensionOnly) {
     "vote-login-dialog.js",
     "candidate-delete-dialog.js",
     "generated/anima-emulsion-slot-contract.js",
+    "generated/print-copy-painter.js",
     "vendor/img-comparison-slider.js",
     "vendor/masonry.pkgd.min.js",
     "vendor/imagesloaded.pkgd.min.js",

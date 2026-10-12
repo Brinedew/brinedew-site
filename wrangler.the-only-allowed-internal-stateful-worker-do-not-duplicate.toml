@@ -73,9 +73,6 @@ enabled = false
 persist = true
 head_sampling_rate = 1
 
-[browser]
-binding = "ICONOPLASM_PRINT_COPY_BROWSER"
-
 # B-995: the caretaker editor's "Tags from prose" and "Prose from Tags" buttons.
 # Workers AI free plan: 10,000 Neurons a day (workers/iconoplasm/caretaker/taggerizer.js).
 [ai]
@@ -125,21 +122,6 @@ simple = { limit = 120, period = 60 }
 name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api"
-
-[[queues.producers]]
-binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
-queue = "iconoplasm-gene-card-materialization"
-
-[[queues.consumers]]
-queue = "iconoplasm-gene-card-materialization"
-# ARCHITECTURE FENCE [IPD-004]: one message wakes one leased D1 row. Serialized
-# delivery also keeps Browser Rendering below its launch/concurrency envelope.
-dead_letter_queue = "iconoplasm-gene-card-materialization-dlq"
-max_batch_size = 1
-max_batch_timeout = 1
-max_retries = 5
-retry_delay = 30
-max_concurrency = 1
 
 [[migrations]]
 tag = "v1"
@@ -240,11 +222,12 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 #bucket_name = "iconoplasm-portraits"
 
 [triggers]
+# ARCHITECTURE FENCE [IPD-004]: scheduled wakeups run durable work, never poll.
 # One job per invocation; workers/iconoplasm-background-schedule.js
 # owns the minute map (Iconoplasm's jobs and GeneGuessr's "Top Streaks" refresh,
 # because the free plan allows 5 cron triggers an account and this list is 5),
 # and its test checks that this expression lists exactly the job minutes, each
-# once. Six jobs run every 15 minutes; supervote delivery runs every 12
+# once. Four jobs run every 15 minutes; supervote delivery runs every 12
 # (five 16-message batches an hour), shared-discovery delivery three times an hour and the
 # shared-discovery rollup hourly. A Worker version upload never changes the
 # installed trigger. The release compares this list with the installed one
@@ -252,7 +235,7 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # differ, and fails if they still differ afterwards. Nightly archive,
 # canon repair and gallery run at 23:56/58/59 in separate invocations.
 # GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,8,9,10,11,13,14,15,17,20,21,23,24,26,27,28,29,32,34,35,36,38,39,41,44,45,46,47,49,50,51,52,53,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,8,9,10,13,14,15,17,20,21,23,24,27,28,29,32,34,35,36,38,39,44,45,46,47,49,50,51,52,53,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
@@ -262,12 +245,9 @@ name = "geneguessr-api-staging"
 workers_dev = true
 preview_urls = false
 # Wrangler inherits top-level routes unless an environment replaces them.
-# Staging owns queue consumers and test data only; it must never contend for
+# Staging owns test data only; it must never contend for
 # the production Iconoplasm hostname.
 routes = []
-
-[env.staging.browser]
-binding = "ICONOPLASM_PRINT_COPY_BROWSER"
 
 [env.staging.ai]
 binding = "AI"
@@ -319,19 +299,6 @@ preview_id = "7d59f063885e415ab3df5301393a114d"
 name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api"
-
-[[env.staging.queues.producers]]
-binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
-queue = "iconoplasm-gene-card-materialization-staging"
-
-[[env.staging.queues.consumers]]
-queue = "iconoplasm-gene-card-materialization-staging"
-dead_letter_queue = "iconoplasm-gene-card-materialization-staging-dlq"
-max_batch_size = 1
-max_batch_timeout = 1
-max_retries = 5
-retry_delay = 30
-max_concurrency = 1
 
 [[env.staging.migrations]]
 tag = "v1"

@@ -309,16 +309,13 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
 })
 
 // ARCHITECTURE FENCE [IPD-004]
-test("IPD-004 keeps ledger wakeups due-time aware", () => {
-  const materialization = readRepositoryFile(
-    "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
-  )
+test("IPD-004 runs one job per scheduled wakeup and never polls the retired discovery table", () => {
+  const schedule = readRepositoryFile("workers/iconoplasm-background-schedule.js")
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
-  // A message that arrives early is put back until its row is due, not polled.
-  assert.match(materialization, /dueMs > Date\.now\(\)/)
-  assert.match(materialization, /AND next_attempt_at <= CURRENT_TIMESTAMP/)
+  // Each scheduled minute maps to exactly one job (a duplicate minute throws at load).
+  assert.match(schedule, /Invalid or overlapping Iconoplasm background minute/)
   assert.doesNotMatch(runtime, /icono_gene_discoveries/)
 })
 

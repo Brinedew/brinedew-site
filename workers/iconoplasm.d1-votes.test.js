@@ -46,9 +46,6 @@
 // 20. An image edit's publish imports (and spends budget on) more than the
 //     inherited-upvote limit plus the publisher's own vote, however many
 //     upvotes its source holds or its stored job row claims.
-// 21. The publisher's print-copy fingerprint is not the fingerprint of what
-//     the queue consumer reads back from storage, so the consumer finds its
-//     own card superseded and the gene never materializes (or renders twice).
 // 23. A read-model sync empties the vote summaries elections read, whatever
 //     the request body asks for: a vote that lands before the table is refilled
 //     elects from zero votes everywhere.
@@ -61,7 +58,6 @@ import test from "node:test"
 
 import {
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
-  handleIconoplasmQueue,
   publishIconoplasmGeneStableObject,
   publishRequestPickerObject,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
@@ -87,15 +83,6 @@ import {
   VOTE_IMPORT_MAX_GENES,
   VOTE_IMPORT_MAX_ITEMS,
 } from "./iconoplasm/votes/vote-guards.js"
-import {
-  ICONOPLASM_GENE_CARD_QUEUE_BINDING,
-  ICONOPLASM_GENE_CARD_QUEUE_KIND,
-  enrollIconoplasmGeneCardMaterialization,
-  iconoplasmGeneCardFingerprint,
-  readIconoplasmGeneCardMaterialization,
-  recoverDueIconoplasmGeneCardMaterializations,
-  reserveIconoplasmGeneCardBrowserLaunch,
-} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
 import {
@@ -1480,122 +1467,6 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
   )
 })
 
-// --- 21 -----------------------------------------------------------------
-
-// An in-memory Bunny Storage zone (the publisher's PUT and read-back, the consumer's
-// read through the card route) and one gene's rows, on a real SQLite D1.
-// `pngStored: false` leaves the rendered PNG absent, so the consumer needs a browser launch.
-function printCopyHarness(t, { queue = null, pngStored = true } = {}) {
-  const db = new SqliteD1()
-  const stored = new Map()
-  const originalFetch = globalThis.fetch
-  t.after(() => {
-    globalThis.fetch = originalFetch
-  })
-  globalThis.fetch = async (input, init = {}) => {
-    const url = String(input)
-    const method = String(init.method || "GET").toUpperCase()
-    if (!url.startsWith("https://storage.test/zone/"))
-      throw new Error(`unexpected ${method} ${url}`)
-    if (method === "PUT") {
-      stored.set(url, new Uint8Array(init.body))
-      return new Response(null, { status: 201 })
-    }
-    const bytes = stored.get(url)
-    if (!bytes) return new Response(null, { status: 404 })
-    return new Response(method === "HEAD" ? null : bytes, {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    })
-  }
-  const env = {
-    ICONOPLASM_DB: db,
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "zone",
-    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-key",
-    ICONOPLASM_PORTRAITS: {
-      head: async (key) =>
-        !pngStored && String(key).startsWith("gene-cards/") ? null : { size: 1 },
-    },
-    ...(queue ? { [ICONOPLASM_GENE_CARD_QUEUE_BINDING]: queue } : {}),
-  }
-  seedGene(db, "TP53", { fullName: "tumor protein p53", color: "#336699" })
-  seedAsset(db, "TP53", sha("a"))
-  seedPublished(db, "TP53", sha("a"))
-  return {
-    db,
-    env,
-    stored,
-    setUpvotes(value) {
-      db.exec(
-        `INSERT INTO icono_vote_asset_summary (gene_symbol, asset_sha256, candidate_ref, upvotes, downvotes, score, vote_count)
-         VALUES ('TP53', ?, ?, ?, 0, ?, ?)
-         ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
-           upvotes = excluded.upvotes, score = excluded.score, vote_count = excluded.vote_count`,
-        sha("a"),
-        `a:TP53|${sha("a")}`,
-        value,
-        value,
-        value,
-      )
-    },
-  }
-}
-
-// One message delivered to the real queue consumer, as the Queue would.
-async function deliverGeneCardWakeup(env, symbol) {
-  const acked = []
-  const outcome = await handleIconoplasmQueue(
-    {
-      queue: "iconoplasm-gene-card-materialization",
-      messages: [
-        {
-          body: { kind: ICONOPLASM_GENE_CARD_QUEUE_KIND, symbol },
-          ack: () => acked.push(symbol),
-          retry: () => acked.push("retry"),
-        },
-      ],
-    },
-    env,
-    waitUntilRecorder(),
-  )
-  return { acked, outcome }
-}
-
-// B-997: print copies render only for readers who ask. Publication never touches a request, and
-// the consumer renders the card as published at render time, so an older fingerprint in the
-// request still ends as a PNG of the current card.
-test("21: publication queues no print copy; a request renders the card as currently published", async (t) => {
-  const { env, stored, setUpvotes } = printCopyHarness(t)
-  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
-  await enrollIconoplasmGeneCardMaterialization(env, {
-    symbol: "TP53",
-    cardFingerprint: "0".repeat(32),
-    assetSha256: sha("a"),
-  })
-  const enrolled = await readIconoplasmGeneCardMaterialization(env, "TP53")
-
-  // Republishing (a vote, the republish route) leaves the reader's request exactly as it was.
-  setUpvotes(7)
-  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
-  const untouched = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(untouched.desired_card_fingerprint, "0".repeat(32))
-  assert.equal(untouched.wakeup_generation, enrolled.wakeup_generation)
-
-  // The consumer reads the card back through the card route, sees it moved, and renders the
-  // current card for the reader (one supersede, then the render).
-  for (let delivery = 0; delivery < 2; delivery += 1) {
-    const { acked } = await deliverGeneCardWakeup(env, "TP53")
-    assert.deepEqual(acked, ["TP53"])
-  }
-  const ready = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(ready.state, "ready")
-  const readBack = JSON.parse(
-    new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
-  )
-  assert.equal(ready.ready_card_fingerprint, iconoplasmGeneCardFingerprint(readBack))
-})
-
 // 22. Something still addresses the deleted vote coordinator, so the first
 //     vote-adjacent request after the migration throws on a missing binding; or
 //     a script, route or doc keeps describing a compare, an export or a queue
@@ -1778,28 +1649,6 @@ test("25: the daily-budget 429 carries the seconds to 00:00 UTC, in the header a
   assert.equal(taken.status, 200, JSON.stringify(taken.payload))
   assert.equal(taken.headers.get("Retry-After"), null)
   assert.equal("retry_after_seconds" in taken.payload, false)
-})
-
-// 26. Every click on "print copy" enrolls the same card again. The ledger must count that request
-//     on the one row (an upsert) and never add a row per click, or a viral gene page grows the
-//     table, and the D1 write meter, with every visitor.
-test("26: asking for the same print copy again counts one more request on the one ledger row", async () => {
-  const db = new SqliteD1()
-  const env = { ICONOPLASM_DB: db }
-  db.exec(
-    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
-  )
-  for (let click = 0; click < 3; click += 1) {
-    await enrollIconoplasmGeneCardMaterialization(env, {
-      symbol: "TP53",
-      cardFingerprint: "0".repeat(32),
-      assetSha256: sha("a"),
-    })
-  }
-  const row = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(row.request_count, 3)
-  const rows = db.sqlite.prepare("SELECT COUNT(*) AS n FROM icono_gene_card_materializations").get()
-  assert.equal(rows.n, 1)
 })
 
 // B-972: the sole guards of the rules below lived in tests that ran the route against a
@@ -2377,190 +2226,4 @@ test("33: copying a candidate adds it to the target gene, checkmarks it for the 
   )
 
   assert.equal((await routeRequest(db, "POST", copyPath, { ...copy("INS"), user: {} })).status, 401)
-})
-
-// 34. Browser Rendering is a free-plan meter. The ledger admits at most eight launches a day,
-//     none within 25 seconds of the last one, and then refuses until the UTC reset. The
-//     reservation is one atomic upsert, so two cards racing for the last launch cannot both win.
-test("34: the print-copy render budget admits eight launches a day, spaced apart, then refuses until the reset", async () => {
-  const db = new SqliteD1()
-  const env = { ICONOPLASM_DB: db }
-  const spaceOut = () =>
-    db.exec(
-      "UPDATE icono_gene_card_render_budget SET last_launch_at = datetime('now', '-30 seconds')",
-    )
-
-  assert.equal((await reserveIconoplasmGeneCardBrowserLaunch(env)).ok, true)
-  const tooSoon = await reserveIconoplasmGeneCardBrowserLaunch(env)
-  assert.equal(tooSoon.ok, false)
-  assert.equal(tooSoon.reason, "launch_interval")
-  assert.ok(tooSoon.delaySeconds >= 1 && tooSoon.delaySeconds <= 25)
-
-  for (let launch = 2; launch <= 8; launch += 1) {
-    spaceOut()
-    assert.equal((await reserveIconoplasmGeneCardBrowserLaunch(env)).ok, true, `launch ${launch}`)
-  }
-  spaceOut()
-  const ninth = await reserveIconoplasmGeneCardBrowserLaunch(env)
-  assert.equal(ninth.ok, false)
-  assert.equal(ninth.reason, "daily_budget")
-  assert.ok(ninth.delaySeconds > 0, "told to wait for the reset")
-  assert.equal(db.rows("SELECT launches FROM icono_gene_card_render_budget")[0].launches, 8)
-})
-
-// 35. The cron tick that rescues cards whose wake-up was lost is bounded: eight cards by
-//     default, 32 at most, however many are due. An expired render lease goes back to the
-//     queue so a crashed render is retried.
-test("35: the cron tick wakes at most 8 due cards by default and 32 at most, and requeues expired render leases", async () => {
-  const db = new SqliteD1()
-  const sent = []
-  const env = {
-    ICONOPLASM_DB: db,
-    [ICONOPLASM_GENE_CARD_QUEUE_BINDING]: { send: async (message) => sent.push(message) },
-  }
-  for (let n = 0; n < 40; n += 1) {
-    const symbol = `G${String(n).padStart(2, "0")}`
-    db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)", symbol, symbol)
-    db.exec(
-      `INSERT INTO icono_gene_card_materializations (gene_symbol, desired_card_fingerprint, state, next_attempt_at)
-       VALUES (?, ?, 'queued', datetime('now', '-1 minute'))`,
-      symbol,
-      "a".repeat(32),
-    )
-  }
-  const defaultTick = await recoverDueIconoplasmGeneCardMaterializations(env)
-  assert.deepEqual(defaultTick, { considered: 8, enqueued: 8 })
-  assert.equal(sent.length, 8)
-  const largestTick = await recoverDueIconoplasmGeneCardMaterializations(env, { limit: 1000 })
-  assert.equal(largestTick.considered, 32)
-
-  db.exec(
-    `UPDATE icono_gene_card_materializations
-        SET state = 'rendering', lease_token = 'lost', lease_expires_at = datetime('now', '-1 minute')
-      WHERE gene_symbol = 'G39'`,
-  )
-  await recoverDueIconoplasmGeneCardMaterializations(env, { limit: 32 })
-  const expired = db.rows(
-    "SELECT state, last_error FROM icono_gene_card_materializations WHERE gene_symbol = 'G39'",
-  )[0]
-  assert.equal(expired.state, "queued")
-  assert.equal(expired.last_error, "expired_render_lease")
-})
-
-// 36. Enrolling a card again never disturbs work in flight: the same card stays as it is, a changed
-//     card is queued once with a new wake-up, and only an explicit request revives a failed card
-//     (a failure is terminal otherwise, so a crawler cannot loop a broken render).
-test("36: enrolling the same card again changes nothing, a changed card is queued once, and a new request revives a failed card", async () => {
-  const db = new SqliteD1()
-  const env = { ICONOPLASM_DB: db }
-  db.exec(
-    "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('TP53', 'tumor protein p53')",
-  )
-  const enroll = (fingerprint) =>
-    enrollIconoplasmGeneCardMaterialization(env, {
-      symbol: "TP53",
-      cardFingerprint: fingerprint,
-      assetSha256: sha("a"),
-    })
-  const cardA = "a".repeat(32)
-  const cardB = "b".repeat(32)
-
-  const queued = await enroll(cardA)
-  assert.equal(queued.state, "queued")
-  assert.equal(queued.wakeup_generation, 1)
-
-  db.exec(
-    "UPDATE icono_gene_card_materializations SET state = 'rendering', attempts = 1, lease_token = 'live', lease_expires_at = datetime('now', '+5 minutes')",
-  )
-  const duplicate = await enroll(cardA)
-  assert.equal(duplicate.state, "rendering")
-  assert.equal(duplicate.attempts, 1)
-  assert.equal(duplicate.lease_token, "live")
-  assert.equal(duplicate.wakeup_generation, 1)
-
-  db.exec(
-    "UPDATE icono_gene_card_materializations SET state = 'ready', ready_card_fingerprint = ?, lease_token = NULL, lease_expires_at = NULL",
-    cardA,
-  )
-  assert.equal((await enroll(cardA)).state, "ready")
-
-  const changed = await enroll(cardB)
-  assert.equal(changed.state, "queued")
-  assert.equal(changed.wakeup_generation, 2)
-  assert.equal(changed.attempts, 0)
-
-  db.exec("UPDATE icono_gene_card_materializations SET state = 'failed', attempts = 5")
-  const revived = await enroll(cardB)
-  assert.equal(revived.state, "queued")
-  assert.equal(revived.attempts, 0)
-  assert.equal(revived.wakeup_generation, 3)
-})
-
-// 37. A reader asks again for a print copy whose render is parked behind the day's eight browser
-//     launches. The row is not due until the 00:00 UTC reset, but the new request sends a wake-up
-//     now, so the real consumer receives the message early. It used to call a function the
-//     runtime never imported: a ReferenceError that failed the delivery, retried it five times
-//     and dead-lettered it, every time a card was asked for twice while the cap was spent. The
-//     consumer must instead put the wake-up back at the row's due time and change nothing else.
-test("37: a wake-up that arrives before its row is due is re-sent for the due time, not thrown", async (t) => {
-  const sent = []
-  const { env, db, stored } = printCopyHarness(t, {
-    queue: { send: async (message, options) => sent.push({ message, options }) },
-    pngStored: false,
-  })
-  await publishIconoplasmGeneStableObject(env, "TP53", { readManifestation: noText })
-  const published = JSON.parse(
-    new TextDecoder().decode(stored.get("https://storage.test/zone/genes/v3/TP53.json")),
-  )
-  const card = iconoplasmGeneCardFingerprint(published)
-  const ask = () =>
-    enrollIconoplasmGeneCardMaterialization(env, {
-      symbol: "TP53",
-      cardFingerprint: card,
-      assetSha256: sha("a"),
-    })
-
-  // The day's eight launches are already spent (as they are within minutes of every reset).
-  db.exec(
-    `INSERT INTO icono_gene_card_render_budget (day_utc, launches, reserved_seconds, used_seconds, last_launch_at)
-     VALUES (date('now'), 8, 480, 0, datetime('now', '-1 hour'))`,
-  )
-
-  // First request: the wake-up is delivered, finds no launch left, and parks the row until the
-  // reset without sending a next-day message of its own.
-  await ask()
-  assert.equal(sent.length, 1)
-  const first = await deliverGeneCardWakeup(env, "TP53")
-  assert.equal(first.outcome.results[0].reason, "daily_budget", JSON.stringify(first.outcome))
-  const parked = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(parked.state, "queued")
-  assert.equal(parked.attempts, 0)
-  assert.equal(sent.length, 1)
-  const dueMs = Date.parse(`${parked.next_attempt_at.replace(" ", "T")}Z`)
-  assert.ok(dueMs > Date.now(), "parked until a later UTC day")
-
-  // Second request for the same card: its wake-up is sent now, but the row is not due.
-  await ask()
-  assert.equal(sent.length, 2)
-  assert.equal(sent[1].options, undefined)
-  const second = await deliverGeneCardWakeup(env, "TP53")
-  assert.deepEqual(second.acked, ["TP53"])
-  assert.equal(second.outcome.ok, true, JSON.stringify(second.outcome))
-  assert.equal(second.outcome.results[0].deferred, true)
-
-  // The wake-up went back for the due time, and the row is as it was.
-  assert.equal(sent.length, 3)
-  assert.deepEqual(sent[2].message, sent[1].message)
-  const delay = sent[2].options.delaySeconds
-  assert.ok(
-    Math.abs(delay - (dueMs - Date.now()) / 1000) < 5,
-    `delay ${delay}s targets the due time`,
-  )
-  assert.ok(delay <= 86400, "inside the Queue's 24 hour delay limit")
-  const after = await readIconoplasmGeneCardMaterialization(env, "TP53")
-  assert.equal(after.state, "queued")
-  assert.equal(after.attempts, 0)
-  assert.equal(after.next_attempt_at, parked.next_attempt_at)
-  assert.equal(after.lease_token, null)
-  assert.equal(after.enqueued_generation, after.wakeup_generation)
 })

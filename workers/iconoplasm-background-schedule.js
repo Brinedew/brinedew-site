@@ -1,3 +1,4 @@
+// ARCHITECTURE FENCE [IPD-004]
 // One job per scheduled invocation: promises sharing a clock still share the
 // Worker's D1/external-subrequest limits. This clock allocates independent
 // invocations; each job still needs its own work bounds and daily admission.
@@ -13,7 +14,6 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   fulfillment: quarterHours(5),
   caretakerSupervotes: Object.freeze([3, 15, 27, 39, 51]),
   gallery: quarterHours(8),
-  materialization: quarterHours(11),
   recognition: quarterHours(14),
   // Every ten minutes or so, on the minutes no other job uses; the gap never exceeds 12.
   geneguessrBoard: Object.freeze([4, 13, 24, 34, 45, 52]),

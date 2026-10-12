@@ -88,14 +88,10 @@ the image route. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
 to overwrite or wait for; its long-lived CDN cache stalled real publication on
 2026-09-24 while the first-party route already worked.
 
-A gene's blot reaches machine readers through two surfaces. The static gene
-document names it as the page's share image: `og:image` and the JSON-LD
-`image` carry the stable first-party `/blot/{SYMBOL}.webp` URL. The client app
-renders it as an `<img>` inside the initially hidden print-copy surface, which
-the existing `request print copy` action reveals; the default gene-page layout
-contains neither a visible duplicate blot nor explanatory caption copy. That
-`<img>` carries `data-iconoplasm-role="canonical-blot"` and `data-gene-symbol`.
-Route and catalog records establish identity and membership only. The raw
+A gene's blot reaches machine readers through the static gene document, which
+names it as the page's share image: `og:image` and the JSON-LD `image` carry
+the stable first-party `/blot/{SYMBOL}.webp` URL. The gene page itself shows
+the card once, with no duplicate blot. Route and catalog records establish identity and membership only. The raw
 portrait may remain visible in the interactive dossier as subordinate source
 material, but it is never the social image. Visible source-portrait and
 candidate-blot `<img>` elements carry `data-iconoplasm-role="source-portrait"`
@@ -290,37 +286,19 @@ budget day.
 
 ## Requested high-resolution print copies
 
-The print-copy action is explicit enrollment, not a GET side effect. Its POST
-records the current published card fingerprint in the bounded materialization
-ledger. Signed-in users use their session; guests must pass Turnstile. Repeated
-requests from many users converge on the same gene row and content-addressed
-object. They do not create parallel renders.
+The print copy is painted in the reader's own browser when they press "download
+print copy". The browser takes the card and portrait the page already holds (read
+from the gene's stable object `genes/v3/<SYMBOL>.json`), copies the portrait's
+pixels 1:1 and bakes the card's name, symbol and shading into them, then saves
+one PNG named for the gene, for example `SOX12-iconoplasm-print-copy.png`. No
+server renders, queues, stores or serves it, so a click costs the site no Worker
+request, D1 row or Bunny object, and a viral page cannot spend a meter on it.
+The print copy never selects the current D1 authoring portrait, even during the
+expected D1-to-artifact publication window: it paints the published portrait.
 
-The Queue renders only the exact versioned published card artifact. It never
-reconstructs a winner from live votes. If publication changes while a render is
-in flight, the stale completion cannot replace the newer desired fingerprint;
-the ledger remains due for the new card. Downloads use a useful per-gene name,
-for example `SOX12-iconoplasm-gene-card.png`.
-
-Browser Rendering is a free-plan meter (10 minutes a day, one new browser every
-20 seconds), so the ledger admits eight launches a day, 25 seconds apart. A card
-that finds no launch left is parked in D1 until the next UTC day and waits for
-the scheduled due-row recovery; it does not get a next-day Queue message of its
-own. A repeated request sends an early wake-up, and the consumer puts that
-wake-up back at the row's due time without touching the row.
-
-Every print-copy enrollment, status, render, and download resolves its identity
-through `/api/iconoplasm/cards/:symbol` and the gene's stable object. An
-`asset=` query value can only assert that object's
-exact portrait SHA: malformed values return `400`, and a different valid SHA
-returns `409`. It must never select the current D1 authoring portrait, even
-during the expected D1-to-artifact publication window.
-
-High-resolution print copies remain an explicit user-requested PNG workflow.
-They are not the canonical search image. Sitemap, semantic blot, and gene-page
-GET/HEAD paths are immutable
-published reads: no enrollment, vote query, D1 repair, Queue send, or Browser
-Rendering is allowed. Crawling therefore cannot manufacture the 19,023-image
+The print copy is not the canonical search image. Sitemap, semantic blot, and
+gene-page GET/HEAD paths are immutable published reads: no vote query, D1 repair
+or render is allowed. Crawling therefore cannot manufacture the 19,023-image
 corpus.
 
 ## Safe changes

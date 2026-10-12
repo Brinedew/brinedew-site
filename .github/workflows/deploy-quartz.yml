@@ -229,22 +229,6 @@ jobs:
             geneguessr-api \
             "iconoplasm.brinedew.bio/*"
 
-      # ARCHITECTURE FENCE [IPD-004]: the materialization Queue is transport for
-      # the bounded D1 ledger. Provision names before the Worker version binds
-      # them; inspect exact names instead of parsing provider error prose.
-      - name: Ensure requested gene-card Queues exist
-        if: inputs.data_maintenance == true
-        run: |
-          set -euo pipefail
-          for queue in iconoplasm-gene-card-materialization iconoplasm-gene-card-materialization-dlq; do
-            if pnpm exec wrangler queues info "$queue" >/dev/null 2>&1; then
-              echo "Queue $queue already exists"
-              continue
-            fi
-            pnpm exec wrangler queues create "$queue"
-            pnpm exec wrangler queues info "$queue" >/dev/null
-          done
-
       - name: Pause the application for maintenance
         if: inputs.data_maintenance == true && steps.release-state.outputs.schema_transition != 'true'
         timeout-minutes: 5
@@ -282,8 +266,8 @@ jobs:
           CLOUDFLARE_BUDGET_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN }}
         run: node scripts/apply-online-d1-migrations.mjs
 
-      # A code release changes a Worker version, not its routes or queue
-      # consumers, and not its Cron triggers: only `wrangler deploy` installs
+      # A code release changes a Worker version, not its routes
+      # and not its Cron triggers: only `wrangler deploy` installs
       # those. The Worker runs a recurring job only when the scheduled event's
       # trigger string is exactly an installed one, so a toml whose crons
       # differ from the installed ones stops every job without an error.

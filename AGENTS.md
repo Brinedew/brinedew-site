@@ -87,7 +87,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-003]** — Iconoplasm gene discovery is one atomic published-catalog contract: every deploy builds the static sitemap and one document per gene from the catalog object, and eligibility follows the one stable gene object and the one catalog object. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time wakeups for durable ledgers, never polling tokens; unfinished work waits for its ledger due time. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-004]** — Iconoplasm scheduled wakeups run durable due work, never polling; unfinished work waits for its due time. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-005]** — The primary Iconoplasm D1 is bounded operational state with a 500 MB per-database wall; no history or body payloads. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
