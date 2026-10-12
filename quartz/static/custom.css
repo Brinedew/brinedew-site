@@ -1991,3 +1991,74 @@
     max-width: 100%;
   }
 }
+
+@layer blog {
+  /* Interactive charts from ```vega-lite blocks (quartz/static/charts/vega-charts.js).
+     Sliders sit under the chart so a finger never covers the curve; each shows its
+     name and live value, with a thumb large enough for a phone. */
+  .vega-figure {
+    margin: 1.5rem 0 2rem;
+  }
+
+  .vega-chart {
+    align-self: stretch;
+    min-height: 18rem;
+  }
+
+  /* The spec's JSON stays in the page for Obsidian and for readers without
+     JavaScript; with JavaScript it is replaced, so hide it until then. */
+  @media (scripting: enabled) {
+    figure[data-rehype-pretty-code-figure]:has(> pre > code[data-language="vega-lite"]) {
+      visibility: hidden;
+      height: 22rem;
+      overflow: hidden;
+    }
+  }
+
+  .vega-chart svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .vega-chart .vega-bindings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.75rem 1.75rem;
+    margin-top: 0.75rem;
+    font-family: var(--bodyFont);
+    font-size: 0.95rem;
+    color: var(--darkgray);
+  }
+
+  .vega-chart .vega-bind label {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name value"
+      "range range";
+    align-items: baseline;
+    gap: 0.2rem 0.5rem;
+  }
+
+  .vega-chart .vega-bind-name {
+    grid-area: name;
+  }
+
+  .vega-chart .vega-bind label > span:last-child {
+    grid-area: value;
+    font-variant-numeric: tabular-nums;
+    color: var(--dark);
+    font-weight: 600;
+  }
+
+  .vega-chart .vega-bind input[type="range"] {
+    grid-area: range;
+    width: 100%;
+    height: 1.75rem;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+}

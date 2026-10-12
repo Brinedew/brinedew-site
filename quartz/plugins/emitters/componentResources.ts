@@ -8,6 +8,8 @@ import spaRouterScript from "../../components/scripts/spa.inline"
 import popoverScript from "../../components/scripts/popover.inline"
 // @ts-ignore
 import draftGateScript from "../../components/scripts/draftGate.inline"
+// @ts-ignore
+import vegaChartsScript from "../../components/scripts/vegaCharts.inline"
 import baseStyles from "../../styles/base.scss"
 import customStyles from "../../styles/custom.scss"
 import popoverStyle from "../../components/styles/popover.scss"
@@ -88,6 +90,9 @@ function addGlobalPageResources(ctx: BuildCtx, componentResources: ComponentReso
 
   // draft pages: open the .draft-locked curtain for supporters and the admin
   componentResources.afterDOMLoaded.push(draftGateScript)
+
+  // ```vega-lite blocks: interactive charts, loaded only on pages that have one
+  componentResources.afterDOMLoaded.push(vegaChartsScript)
 
   // popovers
   if (cfg.enablePopovers) {

@@ -13,10 +13,12 @@ yarn.lock
 
 # Vendored third-party bundles. The Iconoplasm app ships Shoelace,
 # KaTeX, Photoswipe, masonry, imagesloaded, and img-comparison-slider
-# as static vendor files. Reformatting these is a no-op for the
+# as static vendor files, and the blog ships Vega, Vega-Lite and
+# vega-embed for chart blocks. Reformatting these is a no-op for the
 # runtime and they are regenerated from the upstream npm packages.
 quartz/static/iconoplasm/vendor/
 quartz/static/vendor/katex/
+quartz/static/vendor/vega/
 iconoplasm-extension/vendor/
 
 # Auto-generated build artifacts. These are produced by the local
