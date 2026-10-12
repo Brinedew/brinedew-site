@@ -90,7 +90,7 @@ Executioner protease in apoptosis that cleaves many substrates to dismantle the 
 Destructive metabolic processes where complex biomolecules are broken down into the simpler ones, releasing energy.
 
 **Ceiling**
-The mortality rate that a logistic mortality model approaches at the oldest ages. In the gamma-Gompertz model it is $b/\gamma$, the Gompertz rate of increase divided by the spread of frailty; the Kannisto model sets it at 1 a year.
+The mortality rate that a logistic mortality model approaches at the oldest ages, written $L$. In the gamma-Gompertz model $L = \ln 2 / (\gamma T)$, set by the spread of frailty $\gamma$ and the doubling time $T$; the Kannisto model sets $L = 1$ a year.
 
 **Cell-autonomous**
 Describes a biological effect that runs inside an affected cell using that cell's own components, such as the internal growth brake a gatekeeper tumor suppressor provides to the cell itself.
@@ -162,7 +162,7 @@ Signaling proteins, often immune-derived, that modulate inflammation, growth, an
 Governance strategy that enforces organization-level priorities by triggering collective agent death under specific failures or contexts.
 
 **Deaths at each age**
-The share of a group followed from birth that dies at each age: the share still alive times the mortality rate. Its peak is the most common age at death.
+The share of a group followed from birth that dies at each age, written $f(x)$: the share still alive times the mortality rate, $f = S \times \mu$. Its peak is the most common age at death.
 
 **[[De-Darwinization.md|De-Darwinization]]**
 Evolutionary pressure to reduce competition among cells in a multicellular organism.
@@ -180,7 +180,7 @@ A chemical tag added to DNA bases that usually dampens gene activity and helps s
 Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
 
 **Doubling time**
-The number of years the mortality rate takes to double, about eight in adult humans. On a logarithmic plot of mortality rate against age it sets the slope of the line.
+The number of years the mortality rate takes to double, written $T$; about eight in adult humans. On a logarithmic plot of mortality rate against age it sets the slope of the line.
 
 **Driver mutation**
 Genetic change to a cell within a tissue that confers it a fitness advantage over its peers and promotes cancer development.
@@ -254,7 +254,7 @@ Collection of various mutations and chromosomal alterations that drive somatic e
 Immortal lineage of reproductive cells (such as egg and sperm cells) that passes its genetic material from one generation to another (as opposed to mortal soma that forms the rest of the body)
 
 **[[Mortality rate models|Gompertz law]]**
-The finding that the adult mortality rate rises exponentially with age, doubling about every eight years in humans. Published by the actuary Benjamin Gompertz in 1825.
+The finding that the adult mortality rate rises exponentially with age, doubling about every eight years in humans. With the most common age at death $M$ and the doubling time $T$, the Gompertz curve is $G(x) = \frac{\ln 2}{T}\,2^{(x - M)/T}$. Published by the actuary Benjamin Gompertz in 1825.
 
 **Gradient (chemical)**
 Spatial variation in morphogen concentration that cells can sense to bias movement or growth.
