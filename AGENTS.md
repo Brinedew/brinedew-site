@@ -54,7 +54,9 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
   on 2026-10-09 a 96-portrait registration (192 statements) was killed at
   60 ms. Drizzle stays right for reads and single-row writes.
 - **ARCHITECTURE FENCE [IPD-013]: every admin route names its D1 price** with
-  `shedBatchWork(criticality, price)` in `workers/iconoplasm/app.js`, and is let
+  `shedBatchWork(criticality, price)` in `workers/iconoplasm/app.js`, or for the
+  legacy gateway's routes in `workers/iconoplasm/batch-route-prices.js` (which
+  refuses to load with a contract route missing), and is let
   in only when Cloudflare's meter + the batch work let in since the meter's
   newest minute + its price fit under the tier table's 85% stop
   (`workers/iconoplasm/batch-admission.js`). A job of many pages prices the
@@ -88,8 +90,6 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 **ARCHITECTURE FENCE [IPD-004]** — Iconoplasm Queue messages are due-time wakeups for durable ledgers, never polling tokens; unfinished work waits for its ledger due time. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-005]** — The primary Iconoplasm D1 is bounded operational state with a 500 MB per-database wall; no history or body payloads. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
-
-**ARCHITECTURE FENCE [IPD-012]** — Operator work (migrations, release inventories) is reserved through the operation-cost authority before it runs. B-1067 deletes this ledger and the fence with it. Caretaking is plain rows in the main D1 (B-1065). Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 Before any Iconoplasm visual or UX design work (a mockup, a restyle, a new panel), read the "Before designing" section at the top of `docs/iconoplasm-design-system/README.md`. Its rules below that section are evidence from earlier agents, not law.
 

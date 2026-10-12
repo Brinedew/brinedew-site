@@ -14,7 +14,6 @@ import {
   ICONOPLASM_DECLARED_GATEWAY_HANDLER_NAMES,
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
-  iconoplasmD1BudgetAttributionFromRequest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
 const PATTERN_EXAMPLES = Object.freeze({
@@ -100,7 +99,6 @@ test("Iconoplasm route contracts are complete, unique, immutable, and executable
     assert.equal(ids.has(route.id), false, `duplicate route id: ${route.id}`)
     ids.add(route.id)
     assert.equal(route.schemaVersion, ICONOPLASM_API_SCHEMA_VERSION)
-    assert.equal(route.observabilityRoute, route.budgetFamily)
     assert.ok(route.auth, `${route.id} must declare auth intent`)
     if (typeof route.auth === "object") {
       assert.deepEqual(
@@ -110,7 +108,6 @@ test("Iconoplasm route contracts are complete, unique, immutable, and executable
       )
     }
     assert.ok(route.cache, `${route.id} must declare cache intent`)
-    assert.ok(route.budgetFamily, `${route.id} must declare a budget family`)
     assert.ok(route.gatewayHandler, `${route.id} must declare a gateway handler`)
     assert.ok(route.methods.length > 0, `${route.id} must declare methods`)
 
@@ -177,21 +174,6 @@ test("authority routes declare one least-privilege bearer audience", () => {
       [...routeIds].sort(),
       audience,
     )
-  }
-})
-
-test("every route contract resolves to an executable D1 budget classification", () => {
-  for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
-    const attribution = iconoplasmD1BudgetAttributionFromRequest(
-      new Request(`https://iconoplasm.brinedew.bio${examplePath(route)}`, {
-        method: route.methods[0],
-      }),
-    )
-
-    assert.equal(attribution.route_family, route.budgetFamily, route.id)
-    assert.notEqual(attribution.budget_class, "non_iconoplasm", route.id)
-    assert.ok(attribution.actor_class, route.id)
-    assert.ok(attribution.source_class, route.id)
   }
 })
 

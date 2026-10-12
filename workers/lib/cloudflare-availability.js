@@ -32,21 +32,6 @@ export function isD1DailyRowLimitError(error) {
   return d1DailyRowLimitKind(error) !== null
 }
 
-export function isDurableObjectDailyDurationLimitError(error) {
-  const visited = new Set()
-  for (let current = error; current && !visited.has(current); current = current?.cause) {
-    visited.add(current)
-    const message = String(current?.message || current || "").toLowerCase()
-    if (message.includes("exceeded allowed duration in durable objects free tier")) return true
-    if (
-      message.includes("exceeded the daily cloudflare durable objects free tier limit") &&
-      message.includes("duration")
-    )
-      return true
-  }
-  return false
-}
-
 // The one answer to "how many seconds until the UTC day rolls over", plus `marginSeconds`.
 // The default 5 s is slack for Cloudflare's own daily meters to reset. A caller whose day
 // rolls over exactly at 00:00:00 UTC (the vote budget row and the browser-render budget row are

@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 
-# ARCHITECTURE FENCE [IPD-012]: bulk authority traffic must never consume the
-# account capacity required to keep the public dynamic site reachable.
+# Bulk operator traffic must never consume the account capacity required to
+# keep the public dynamic site reachable.
 
 $script:CloudflareWorkerRequestBudgetSchemaVersion = 1
 $script:CloudflareWorkerRequestBudgetLockTimeoutSeconds = 10

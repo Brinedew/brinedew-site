@@ -11,7 +11,7 @@ import {
 } from "./votes/gene-votes.js"
 import { setCaretakerSupervote } from "./caretaker/caretaker-supervote.js"
 import { IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, VOTE_PERSON_DAILY_LIMIT } from "./votes/vote-guards.js"
-import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
 // The most rows one admitted vote-budget unit writes, measured below.
 const VOTE_WORST_CASE_ROWS_WRITTEN = 21
