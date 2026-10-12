@@ -118,6 +118,83 @@ function fitToWidth(spec, width) {
   return fitted
 }
 
+// Vega parses CSV with d3-dsv, whose row converter is compiled with Function(),
+// which the site's Content-Security-Policy forbids. Charts keep CSV attachments,
+// so the module parses them itself and hands Vega plain rows.
+const tables = new Map()
+
+function parseCsv(text) {
+  const records = []
+  let record = []
+  let field = ""
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (ch === '"') quoted = false
+      else field += ch
+    } else if (ch === '"') quoted = true
+    else if (ch === ",") {
+      record.push(field)
+      field = ""
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++
+      record.push(field)
+      if (record.length > 1 || record[0] !== "") records.push(record)
+      record = []
+      field = ""
+    } else field += ch
+  }
+  record.push(field)
+  if (record.length > 1 || record[0] !== "") records.push(record)
+  const [header = [], ...rows] = records
+  return rows.map((cells) =>
+    Object.fromEntries(
+      header.map((name, i) => {
+        const raw = cells[i] ?? ""
+        const number = raw.trim() === "" ? NaN : Number(raw)
+        return [name, Number.isFinite(number) ? number : raw]
+      }),
+    ),
+  )
+}
+
+function loadTable(url) {
+  if (!tables.has(url)) {
+    tables.set(
+      url,
+      fetch(url).then((response) => {
+        if (!response.ok) throw new Error(`could not load ${url}: ${response.status}`)
+        return response.text().then(parseCsv)
+      }),
+    )
+  }
+  return tables.get(url)
+}
+
+async function inlineCsv(node) {
+  if (Array.isArray(node)) return Promise.all(node.map(inlineCsv))
+  if (!node || typeof node !== "object") return node
+  const entries = await Promise.all(
+    Object.entries(node).map(async ([key, value]) => {
+      const isCsv =
+        key === "data" &&
+        value &&
+        typeof value.url === "string" &&
+        (value.format?.type === "csv" || /\.csv(\?|$)/i.test(value.url))
+      if (isCsv) {
+        const { url, format, ...rest } = value
+        return [key, { ...rest, values: await loadTable(url) }]
+      }
+      return [key, await inlineCsv(value)]
+    }),
+  )
+  return Object.fromEntries(entries)
+}
+
 function withParamValues(spec, values) {
   if (!values || !Array.isArray(spec.params)) return spec
   return {
@@ -160,8 +237,14 @@ class Chart {
     this.values = this.currentValues()
     this.view?.finalize()
     this.layoutWidth = this.container.clientWidth
-    const spec = withParamValues(fitToWidth(this.spec, this.layoutWidth), this.values)
+    const spec = await inlineCsv(
+      withParamValues(fitToWidth(this.spec, this.layoutWidth), this.values),
+    )
     const result = await vegaEmbed(this.container, spec, {
+      // The site's Content-Security-Policy has no 'unsafe-eval', so Vega must
+      // interpret expressions (vega-embed's bundled interpreter) instead of
+      // compiling them with Function().
+      ast: true,
       actions: false,
       renderer: "svg",
       config: themeConfig(),
