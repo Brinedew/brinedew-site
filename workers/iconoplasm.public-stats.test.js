@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
@@ -97,7 +96,6 @@ test("admin asset summary refresh writes public stats projection to KV", async (
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -177,7 +175,6 @@ test("admin asset summary is read-only by default and exposes public versus ledg
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -276,7 +273,6 @@ test("admin asset summary refresh skips KV write when public stats did not mater
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
         KV: kv,
       },
@@ -346,7 +342,6 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
       }),
       {
         ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-        ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
         ICONOPLASM_DB: db,
       },
       ctx(),

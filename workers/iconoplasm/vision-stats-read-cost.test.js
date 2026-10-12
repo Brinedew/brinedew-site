@@ -4,8 +4,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
-import { withTestMutationAuthority } from "./test-only-mutation-authority.js"
+import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
 // How the admin Styles scorecard read can fail, written before the fix (B-903):
 //
@@ -107,11 +106,11 @@ async function adminRequest(db, kv, path, init = {}) {
           ...(init.headers || {}),
         },
       }),
-      withTestMutationAuthority({
+      {
         ICONOPLASM_DB: meter.db,
         ICONOPLASM_ADMIN_TOKEN: "secret",
         KV: kv,
-      }),
+      },
       { waitUntil() {} },
     )
   const payload = await response.json()

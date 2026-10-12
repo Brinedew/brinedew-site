@@ -10,10 +10,6 @@ import {
   publishSharedGeneDiscoverySymbols,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { DISCOVERY_COMPACT_SCHEMA_SQL } from "./iconoplasm/discovery-compact-store.js"
-import {
-  claimCompactDiscoveryMigrationLease,
-  migrateLegacyDiscoveryPage,
-} from "./iconoplasm/discovery-compact-migrate.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 // Real SQLite behind a D1-shaped adapter: route behavior is exercised through
@@ -145,26 +141,8 @@ class FakeKv {
   }
 }
 
-function acceptingMutationAuthority() {
-  return {
-    idFromName: () => "global",
-    get: () => ({
-      fetch: async () => Response.json({ ok: true, replayed: false }),
-    }),
-  }
-}
-
-async function buildEnv({
-  migrationComplete = true,
-  mutationAuthority = acceptingMutationAuthority(),
-} = {}) {
+async function buildEnv() {
   const db = new D1Like()
-  if (migrationComplete) {
-    db.raw.exec(
-      `UPDATE icono_discovery_compact_activation_v2
-       SET status='complete', completed_at=CURRENT_TIMESTAMP WHERE singleton=1`,
-    )
-  }
   const insertCatalog = db.raw.prepare(
     "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)",
   )
@@ -183,7 +161,6 @@ async function buildEnv({
     ICONOPLASM_DB: db,
     SESSION_SECRET: TEST_SESSION_SECRET,
     ICONOPLASM_ADMIN_TOKEN: "admin-token",
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: mutationAuthority,
     KV: new FakeKv(),
   }
   const env = {
@@ -382,53 +359,6 @@ test("a device that sent a batch while signed out keeps syncing after signing ba
   assert.equal(Number(row.member_count), 2)
 })
 
-test("activation blocks incomplete legacy migration, then migrated membership remains visible without request-time scans", async () => {
-  const env = await buildEnv({ migrationComplete: false })
-  env.gatewayDb.raw
-    .prepare(
-      `INSERT INTO icono_gene_discoveries
-       (user_id, gene_symbol, first_discovered_at, last_encountered_at, encounter_count,
-        first_source, last_source, first_trigger, last_trigger, first_dwell_ms, last_dwell_ms)
-       VALUES ('reader', 'TP53', '2026-01-03 04:05:06', '2026-01-04 05:06:07', 3,
-        'extension_hover', 'extension_hover', 'hover_dwell', 'hover_dwell', 900, 1200)`,
-    )
-    .run()
-  const request = get(
-    `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
-    { cookie: READER },
-  )
-  const blocked = await invoke(request, env)
-  assert.equal(blocked.status, 503)
-  assert.equal((await blocked.json()).code, "DISCOVERY_COMPACT_MIGRATION_INCOMPLETE")
-  assert.equal(await compactRowCount(env), 0)
-
-  const leaseToken = "discovery-test-lease"
-  await claimCompactDiscoveryMigrationLease(env.gatewayDb, { token: leaseToken })
-  const migration = await migrateLegacyDiscoveryPage({
-    db: env.gatewayDb,
-    rowLimit: 8,
-    leaseToken,
-  })
-  assert.equal(migration.complete, true)
-  const payload = await (await invoke(request, env)).json()
-  assert.deepEqual(payload.discovered_symbols, ["TP53"])
-  assert.equal(await compactRowCount(env), 1)
-
-  // After the activation receipt is complete, request membership stays on the
-  // compact record even when the retired source rows are removed.
-  env.gatewayDb.raw.exec("DELETE FROM icono_gene_discoveries")
-  const again = await (
-    await invoke(
-      get(
-        `/api/iconoplasm/discoveries/membership?symbols=${encodeURIComponent(JSON.stringify(["TP53", "EGFR"]))}`,
-        { cookie: READER },
-      ),
-      env,
-    )
-  ).json()
-  assert.deepEqual(again.discovered_symbols, ["TP53"])
-})
-
 test("shared aggregates stay exact through the durable deferred delivery drain", async () => {
   const env = await buildEnv()
   await postBatch(env, {
@@ -538,45 +468,6 @@ test("guest merge records never-seen catalog genes and reports non-catalog names
     .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
     .first()
   assert.equal(Number(state.member_count), 1)
-})
-
-// B-1067: a reader's collecting writes straight to D1 and never asks the budget
-// referee. Every reservation rescanned the day's reservations, so on a viral day the
-// collecting alone would have spent Cloudflare's Durable Object reads and taken
-// GeneGuessr down with it (publication did exactly that on 2026-10-09 at 16:00 UTC).
-test("collecting never asks the budget referee", async () => {
-  const refereeCalls = []
-  const referee = {
-    idFromName: () => "global",
-    get: () => ({
-      fetch: async (request) => {
-        refereeCalls.push(new URL(request.url).pathname)
-        return Response.json(
-          { ok: false, code: "MUTATION_PROVIDER_HEADROOM_RESERVED" },
-          { status: 429 },
-        )
-      },
-    }),
-  }
-  const env = await buildEnv({ mutationAuthority: referee })
-  const merged = await invoke(
-    post("/api/iconoplasm/discoveries/merge", {
-      cookie: READER,
-      body: { symbols: ["TP53"] },
-    }),
-    env,
-  )
-  assert.equal(merged.status, 200)
-  await postBatch(env, {
-    userId: "reader",
-    batchId: "device-a:1",
-    encounters: [hoverEncounter("EGFR", 1000)],
-  })
-  const state = await env.gatewayDb
-    .prepare("SELECT member_count FROM icono_discovery_user_state_v2 WHERE user_id = 'reader'")
-    .first()
-  assert.equal(Number(state.member_count), 2)
-  assert.deepEqual(refereeCalls, [])
 })
 
 test("discoveries me returns the compact shelf with exact first/last and counts", async () => {

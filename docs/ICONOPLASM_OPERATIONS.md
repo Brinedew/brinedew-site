@@ -14,8 +14,8 @@ state before acting. Source tests alone do not prove activation.
 
 A saved output, accepted selection, publication and fresh reader must retain
 the same logical operation identity and authority. Missing state requires its
-bounded handover or a visible refusal. Global `run-sync`, a catalog rebuild or
-an unrelated finalization backlog is not an ordinary per-gene repair path.
+bounded handover or a visible refusal. Global `run-sync` or a catalog rebuild
+is not an ordinary per-gene repair path.
 
 Choose the authority before interpreting data. Public image identity comes
 from the one stable gene object `genes/v3/<SYMBOL>.json`; D1's
@@ -407,10 +407,10 @@ on 2026-10-04, 5 candidate and 72 edit jobs that are unpublished and hold a stor
 and 2 people, and 13 comments in all, 7 of them removed by their authors, by at most 5 people)
 add up, at the steps' worst-case weights, to at most about 76,000 rows written in all: 76% of the
 100,000 a day the whole account may write, over at least 16 requests. A heavy account therefore belongs in
-the last hours of the UTC day (00:00 UTC resets the meters). The route is a high-risk admin mutation, so
-the mutation limiter refuses a pass that would cross the day's write target (503,
-`ICONOPLASM_ADMIN_MUTATION_LIMITER_ACTIVE`, with `limiter.rows_written_target_remaining`): resend
-with a smaller `max_rows_written`, or wait for the reset; do not retry in a loop. The unindexed steps (portrait creators, publish event
+the last hours of the UTC day (00:00 UTC resets the meters). Each pass is batch work priced at its
+worst case (5,000 rows written, 80,000 read, `workers/iconoplasm/batch-route-prices.js`), so it is
+refused with 503 `D1_BATCH_SHARE_SPENT` when that would cross the 85% stop: wait for the reset;
+do not retry in a loop. The unindexed steps (portrait creators, publish event
 actors) scan their tables once when everything else is gone: about 80,000 rows read. Repeat the
 request until complete, for example (stop at the first refusal; `Invoke-RestMethod` throws on a
 503):
@@ -440,9 +440,10 @@ Publication contract:
 - `.github/workflows/refresh-iconoplasm-observability-snapshot.yml` owns the hourly snapshot, account headroom check, and per-statement D1 burn check. It can also be dispatched manually. GitHub fires the hourly schedule only every few hours, so the cost endpoint serves whichever is newer: this KV snapshot or the one the last production deploy baked into the Worker. Both checks still run if collection or publication fails; cancellation stops them.
 - The generator writes one JSON snapshot. The account check reports every capacity alert but permits its one atomic KV write only when KV write headroom is available; exhausted D1 must not hide fresh telemetry. The key is `iconoplasm:observability-snapshot:v1`.
 - The authenticated `/api/iconoplasm/admin/cost/snapshot` endpoint reads that value and falls back to the snapshot bundled by the last production deploy. It remains `no-store` and does no analytics work.
-- Cloudflare GraphQL owns account-wide usage truth. The shared operation-cost
-  admission ledger reserves work and retains uncertain reservations; it is a
-  different owner.
+- Cloudflare GraphQL owns account-wide usage truth. Batch admission
+  (`workers/iconoplasm/batch-admission.js`) reads Cloudflare's meter live and
+  adds the batch work let in since its newest minute; it keeps no tally of its
+  own.
 
 Freshness SLA:
 
@@ -455,9 +456,8 @@ A red scheduled workflow is the publication failure alert. If the admin shows `s
 ### Retained obligations
 
 Retained jobs, receipts, queue messages and dead-letter state must survive until
-their accepted obligations are reconciled. Do not resume global finalization
-as an ordinary per-gene repair, kick a Queue directly, delete a job or invent a
-completion receipt. A transport failure preserves the same durable obligation.
+their accepted obligations are reconciled. Do not kick a Queue directly, delete
+a job or invent a completion receipt. A transport failure preserves the same durable obligation.
 The [current runbook](ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md)
 describes the release and background-work paths; a concrete failed operation
 belongs in its owning issue with the current source and live receipts.

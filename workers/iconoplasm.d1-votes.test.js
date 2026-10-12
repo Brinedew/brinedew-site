@@ -97,7 +97,6 @@ import {
   reserveIconoplasmGeneCardBrowserLaunch,
 } from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
-import { withTestMutationAuthority } from "./iconoplasm/test-only-mutation-authority.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
 import {
   BOT_TOKEN,
@@ -352,12 +351,12 @@ async function callApi(
       headers,
       body: JSON.stringify(body),
     }),
-    withTestMutationAuthority({
+    {
       ICONOPLASM_DB: db,
       SESSION_SECRET: TEST_SESSION_SECRET,
       ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
       ...env.bindings,
-    }),
+    },
     ctx,
   )
   const payload = await response.json()
@@ -668,7 +667,7 @@ test("4: the supervote route answers with the supervote and re-elects the gene",
         expected_supervote_version: 0,
       }),
     }),
-    withTestMutationAuthority({ ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET }),
+    { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
     ctx,
   )
   const payload = await response.json()
@@ -795,7 +794,7 @@ function republishAttempts(db, mark, symbol) {
     .filter((entry) => /catalog_full_name/.test(entry.sql) && entry.args.includes(symbol)).length
 }
 
-test("7: an upload that keeps the winner leaves a publication-affecting event, and a sync batch republishes its gene once", async (t) => {
+test("7: an upload that keeps the winner leaves a publication-affecting event, and a batch republishes its gene once", async (t) => {
   t.mock.method(console, "warn", () => {})
   const db = new SqliteD1()
   db.exec(
@@ -818,8 +817,9 @@ test("7: an upload that keeps the winner leaves a publication-affecting event, a
     sample_text_hash: sha("e"),
   })
 
-  // A sync batch: ingest marked defer_read_models (reconcile follows), then
-  // reconcile over the batch's genes. Exactly one republish, by reconcile.
+  // A repair batch: ingest marked defer_read_models (the caller rebuilds read
+  // models once for all its batches) still republishes its genes, exactly once.
+  // B-1067: it used to wait for a reconcile call nobody made any more.
   let mark = db.mark()
   const ingest = await callApi(
     db,
@@ -830,23 +830,8 @@ test("7: an upload that keeps the winner leaves a publication-affecting event, a
   assert.equal(ingest.status, 200, JSON.stringify(ingest.payload))
   assert.equal(ingest.payload.processed, 1)
   assert.equal(ingest.payload.results[0].candidate_event, "candidate_added")
-  assert.equal(ingest.payload.republished_in_process, false, "reconcile republishes the batch")
-  assert.equal(republishAttempts(db, mark, "PDX1"), 0)
-  const reconcile = await callApi(
-    db,
-    "/api/iconoplasm/admin/reconcile",
-    {
-      defer_read_models: true,
-      keep: [
-        { symbol: "PDX1", asset_sha256: sha("a") },
-        { symbol: "PDX1", asset_sha256: sha("f") },
-      ],
-    },
-    { env },
-  )
-  assert.equal(reconcile.status, 200, JSON.stringify(reconcile.payload))
-  assert.equal(reconcile.payload.republished_in_process, true)
-  assert.equal(republishAttempts(db, mark, "PDX1"), 1, "one republish per sync batch")
+  assert.equal(ingest.payload.republished_in_process, true)
+  assert.equal(republishAttempts(db, mark, "PDX1"), 1, "one republish per batch")
   const events = db.rows("SELECT action FROM icono_publish_events WHERE gene_symbol = 'PDX1'")
   assert.deepEqual(
     events.map((row) => row.action),
@@ -1178,10 +1163,10 @@ test("12: past a person's daily vote allowance their vote, import or supervote w
         expected_supervote_version: 0,
       }),
     }),
-    withTestMutationAuthority({
+    {
       ICONOPLASM_DB: db2,
       SESSION_SECRET: TEST_SESSION_SECRET,
-    }),
+    },
     ctx,
   )
   const supervotePayload = await supervote.json()
@@ -1416,10 +1401,10 @@ async function publishImageEdit(db, id, { user = "reader-1" } = {}) {
       method: "POST",
       headers: await signedInHeaders({ user_id: user }),
     }),
-    withTestMutationAuthority({
+    {
       ICONOPLASM_DB: db,
       SESSION_SECRET: TEST_SESSION_SECRET,
-    }),
+    },
     ctx,
   )
   const payload = await response.json()
@@ -1836,11 +1821,11 @@ async function routeRequest(
       headers: await signedInHeaders(user, { "Content-Type": "application/json" }),
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
-    withTestMutationAuthority({
+    {
       ICONOPLASM_DB: db,
       SESSION_SECRET: TEST_SESSION_SECRET,
       ...bindings,
-    }),
+    },
     ctx,
   )
   const payload = await response.json().catch(() => null)
@@ -2236,13 +2221,13 @@ test("30c: the picker's first page is a CDN object, written only when it changed
       ]),
     )
   for (let n = 1; n <= 130; n += 1) insert(n, 0)
-  const env = withTestMutationAuthority({
+  const env = {
     ICONOPLASM_DB: db,
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
     ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
-  })
+  }
   const KEY = "picker/v1/styles.json"
   const object = () => JSON.parse(Buffer.from(network.objects.get(KEY)).toString("utf8"))
   const puts = () => network.calls.filter((call) => call === `bunny PUT /${STORAGE_ZONE}/${KEY}`)

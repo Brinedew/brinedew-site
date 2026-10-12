@@ -154,7 +154,9 @@ async function fetchJson(url, options = {}) {
 }
 
 async function verifyToken() {
-  const adminUrl = new URL("/api/iconoplasm/admin/mutation-limiter/policy", baseUrl)
+  // An administrator-only route that reads no D1 rows (B-1067 deleted the
+  // mutation-limiter policy route this used to call).
+  const adminUrl = new URL("/api/iconoplasm/admin/cost/snapshot", baseUrl)
   const adminResult = await fetchJson(adminUrl)
   if (!adminResult.response.ok || !adminResult.payload?.ok) {
     fail(
@@ -169,7 +171,7 @@ async function verifyToken() {
       {
         ok: true,
         verified: {
-          stateful_admin_policy: adminResult.response.status,
+          stateful_admin_cost_snapshot: adminResult.response.status,
         },
       },
       null,

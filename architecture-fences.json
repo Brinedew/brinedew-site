@@ -89,9 +89,9 @@
     {
       "id": "IPD-004",
       "title": "Queue wakeups follow durable due times",
-      "decision": "Automatic messages wake durable due work; they are not polling tokens. Repeated dirty work is coalesced, and every mutation is admitted before it spends shared capacity.",
+      "decision": "Automatic messages wake durable due work; they are not polling tokens. Repeated dirty work is coalesced. Batch work is let in by its price before it spends shared capacity (IPD-013).",
       "reason": "Blind retries and one-message-per-event designs can exhaust queues and databases without producing user value.",
-      "change_control": "A replacement must preserve durable intent, idempotency, bounded idle cost, and admission against measured provider pressure that never assumes unknown capacity. Queue topology, batch sizes, lanes, and schedules may change. Missing telemetry must not become a whole-day refusal (B-897).",
+      "change_control": "A replacement must preserve durable intent, idempotency and bounded idle cost. Queue topology, batch sizes and schedules may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
       "linear_issue": "B-667",
       "additional_required_marker_categories": ["config", "deploy"],
@@ -108,7 +108,7 @@
         },
         {
           "category": "source",
-          "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
+          "file": "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
@@ -403,52 +403,9 @@
       ]
     },
     {
-      "id": "IPD-012",
-      "title": "Operator work is reserved through the operation-cost authority",
-      "operation_cost_migration": {
-        "issue": "B-741",
-        "owner": "Existing global IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate",
-        "route": "/api/iconoplasm/admin/cost/operations",
-        "contract": "Register an immutable prediction before dispatch; reserve each verified step against both twice the prediction and shared daily headroom. The authority dispatches D1 and settles provider receipts. Unknown outcomes remain charged. Direct API, CI and legacy binding cutover must be complete before claiming mandatory enforcement. No new Worker, DO namespace, or reader coordination hop."
-      },
-      "decision": "Migrations and release inventories reserve their predicted D1 cost through the operation-cost authority before they run. Caretaking is plain rows in the main D1 (B-1065); the separate authoring database, its private Bunny zone and its replica are retired.",
-      "reason": "Operator work once ran unpriced. B-1067 replaces this ledger with Cloudflare's own walls plus admission by price (IPD-013), and deletes this fence.",
-      "change_control": "Delete together with the operation-cost ledger (B-1067), moving any surviving operator path onto IPD-013's priced admission.",
-      "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
-      "linear_issue": "B-1067",
-      "additional_required_marker_categories": ["deploy"],
-      "markers": [
-        {
-          "category": "instructions",
-          "file": "AGENTS.md",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "runbook",
-          "file": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "source",
-          "file": "workers/lib/operation-cost-ledger.js",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        },
-        {
-          "category": "deploy",
-          "file": ".github/workflows/deploy-quartz.yml",
-          "token": "ARCHITECTURE FENCE [IPD-012]"
-        }
-      ]
-    },
-    {
       "id": "IPD-013",
       "title": "Batch work is let in by its price, before it runs",
-      "decision": "Every Iconoplasm admin route names its D1 price. A batch request is admitted only when Cloudflare's own meter total, plus the batch work admitted since the meter's newest minute, plus its price fit under the tier table's batch stop; a multi-page job prices its whole length on its first page; an unreadable meter stops batch work. Readers' own actions run to Cloudflare's wall. The app refuses to build when an admin route carries no price.",
+      "decision": "Every Iconoplasm admin and workstation route names its D1 price: the Hono routes in app.js, the legacy gateway's routes in workers/iconoplasm/batch-route-prices.js, which refuses to load while a contract route of those audiences has no entry. A batch request is admitted only when Cloudflare's own meter total, plus the batch work admitted since the meter's newest minute, plus its price fit under the tier table's batch stop; a multi-page job prices its whole length on its first page; an unreadable meter stops batch work. Readers' own actions run to Cloudflare's wall. The app refuses to build when an admin route carries no price.",
       "reason": "Cloudflare's usage meter runs one to two minutes late. On 2026-10-11 a copy wrote 62,000 rows in four minutes past an 85% stop that only read the meter, and readers lost their votes until 00:00 UTC. It was about the tenth outage of the same shape: work admitted before its price was known, guarded by a lagging signal.",
       "change_control": "A replacement must keep admission before spend, count spend the meter has not shown yet, fail closed for batch work when the meter is unreadable, and read only Cloudflare's own meter (no private bank, Durable Object or quota). Prices, table layout and route names may change.",
       "runbook": "docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md",
@@ -473,6 +430,11 @@
         {
           "category": "source",
           "file": "workers/iconoplasm/app.js",
+          "token": "ARCHITECTURE FENCE [IPD-013]"
+        },
+        {
+          "category": "source",
+          "file": "workers/iconoplasm/batch-route-prices.js",
           "token": "ARCHITECTURE FENCE [IPD-013]"
         },
         {

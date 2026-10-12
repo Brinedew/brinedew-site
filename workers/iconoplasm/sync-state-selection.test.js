@@ -4,7 +4,7 @@ import { createRequire } from "node:module"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { CATALOG_STATE_SCOPED_SQL, readCatalogStateRows } from "./sync-state-selection.js"
-import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 import { createIconoplasmAdminPublicationHandlers } from "../iconoplasm-admin-publication-routes.js"
 
 const require = createRequire(import.meta.url)

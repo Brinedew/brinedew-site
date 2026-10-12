@@ -51,16 +51,17 @@ writes.
 
 ## Admission
 
-The shared operation-cost authority owns reservation and settlement.
+Batch work is let in by its price before it runs (ARCHITECTURE FENCE IPD-013,
+`workers/iconoplasm/batch-admission.js`).
 
-1. Predict a reviewed worst case.
-2. Reserve before dispatch.
-3. Execute once with an idempotent identity.
-4. Settle from a trustworthy receipt.
-5. Retain the reservation if completion is uncertain.
+1. Price the whole job on every meter it touches, per statement, from a
+   measurement.
+2. Ask before starting: the gate adds Cloudflare's meter, the batch work let in
+   since the meter's newest minute, and the price, and refuses past the tier's
+   stop.
+3. Execute once with an idempotent identity, so a retry repeats nothing.
 
-Never refund on timeout, reuse an identity for different work, increase an
-allowance to admit a repair, or create an unregistered side path.
+Never raise an allowance to admit a repair, or create an unpriced side path.
 
 ## Diagnosis
 

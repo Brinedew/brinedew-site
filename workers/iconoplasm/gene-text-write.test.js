@@ -24,11 +24,11 @@ function harness(t) {
   t.after(() => db.database.close())
   const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async () => ({}),
     refreshSummaries: async () => {},
     accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
-    windowUsage: async () => null,
   })
   const save = async (symbol, body, { token = TOKEN } = {}) => {
     const response = await app.request(

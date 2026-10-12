@@ -285,20 +285,17 @@ test("default production path builds and ships both Worker owners and Pages with
     (step) => step.name === "Require account-wide D1 and Worker headroom before migrations",
   )
   assert.ok(readers >= 0 && readers < headroom, "readers recover before the D1 headroom gate")
+  // B-1067: a maintenance release pauses the app, applies the reviewed
+  // migrations and deploys the stateful Worker; nothing else is maintenance-only.
   for (const name of [
-    "Check account capacity before release mutations",
-    "Stage migration admission in the existing state owner",
-    "Apply reviewed D1 migrations through prediction admission",
-    "Prepare the published catalog through shared KV admission",
+    "Pause the application for maintenance",
+    "Apply reviewed D1 migrations with the application paused",
     "Deploy the stateful Worker after data maintenance",
-    "Ensure Iconoplasm finalization Queue consumer is bound",
   ]) {
     const step = steps.find((candidate) => candidate.name === name)
     assert.ok(step, name)
     assert.match(step.if, /data_maintenance == true/, name)
   }
-  assert.match(steps[edge].if, /continuation_required != 'true'/)
-  assert.match(steps[pages].if, /continuation_required != 'true'/)
   assert.match(steps[activate].run, /ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST/)
   assert.ok(
     steps.some(

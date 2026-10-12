@@ -8,7 +8,7 @@ import {
   rebuildGeneRollupForSymbols,
   rebuildVisionRollupsBatch,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { createOperationCostD1Meter } from "./operation-cost-d1-meter.js"
+import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(

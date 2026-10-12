@@ -3,9 +3,7 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
-import { FREE_D1_DAILY_LIMITS } from "../shared/iconoplasm-d1-budget-policy.js"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { FakeDailyBudgetNamespace } from "./test-helpers/fake-daily-budget-namespace.js"
 
 let lastPortraitAssetInsertBoundValues = []
 
@@ -110,7 +108,6 @@ function buildEnv({ bindGateway = true } = {}) {
     ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
     ICONOPLASM_DB: gatewayDb,
     ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   const env = {
     ...gatewayEnv,
@@ -248,7 +245,6 @@ test("normal external-storage ingest does not run read-after-write retries per r
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
     ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: "https://iconoplasmportraits.b-cdn.net",
     ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: new FakeDailyBudgetNamespace(),
   }
   const env = bindOnlyAllowedGateway({ ...gatewayEnv, ICONOPLASM_DB: null, gatewayDb }, gatewayEnv)
   const base64 = Buffer.from("fake-webp-payload").toString("base64")
@@ -328,61 +324,6 @@ test("admin ingest can explicitly clear sample hash for unknown provenance", asy
   assert.equal(lastPortraitAssetInsertBoundValues[19], "ABCA1-0")
   assert.equal(lastPortraitAssetInsertBoundValues[20], 0)
   assert.equal(lastPortraitAssetInsertBoundValues[21], "")
-})
-
-test("admin ingest success returns current mutation-limiter telemetry for sync forecasting", async () => {
-  // The account has written 24 rows today; the limiter's wall is Cloudflare's daily
-  // write allowance and its target is 85% of it.
-  const writtenToday = 24
-  const budgetNamespace = new FakeDailyBudgetNamespace({ rowsWritten: writtenToday })
-  const gatewayDb = new FakeIconoplasmDb()
-  const gatewayEnv = {
-    ICONOPLASM_ADMIN_TOKEN: "secret-admin-token",
-    ICONOPLASM_DB: gatewayDb,
-    ICONOPLASM_PORTRAITS: new FakePortraitBucket(),
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: budgetNamespace,
-  }
-  const env = bindOnlyAllowedGateway(
-    {
-      ...gatewayEnv,
-      ICONOPLASM_DB: null,
-      gatewayDb,
-    },
-    gatewayEnv,
-  )
-  const request = new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/ingest", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer secret-admin-token",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      dry_run: true,
-      defer_read_models: true,
-      items: [
-        {
-          symbol: "ABCA1",
-          asset_sha256: "bc77289ec8c179a2847351b2250fcb08dce316fddd8ebafb4a30b6a2376c41f6",
-          vision_id: "anima-v1-42",
-          workflow_path:
-            "d:/Coding/Datasets/iconoplasm/data/comfyui/workflows/anima-preview.api.json",
-        },
-      ],
-    }),
-  })
-
-  const response = await viaStatefulWorker(request, env, {})
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.mutation_limiter?.target_daily_percent, 85)
-  const targetCeiling = Math.floor(FREE_D1_DAILY_LIMITS.writes * 0.85)
-  assert.equal(payload?.mutation_limiter?.target_rows_written_ceiling, targetCeiling)
-  assert.equal(
-    payload?.mutation_limiter?.rows_written_target_remaining,
-    targetCeiling - writtenToday,
-  )
-  assert.equal(payload?.mutation_limiter?.budget_snapshot?.rows_written, writtenToday)
 })
 
 test("admin ingest proxy forwards POST bodies without cloning them into text first", async () => {

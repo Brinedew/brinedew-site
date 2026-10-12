@@ -126,32 +126,9 @@ name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api"
 
-[[durable_objects.bindings]]
-name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
-class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
-
-[[durable_objects.bindings]]
-name = "ICONOPLASM_SYNC_GOVERNOR"
-class_name = "IconoplasmSyncGovernor"
-
-[[queues.producers]]
-binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
-queue = "iconoplasm-sync-finalization"
-
 [[queues.producers]]
 binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
 queue = "iconoplasm-gene-card-materialization"
-
-[[queues.consumers]]
-queue = "iconoplasm-sync-finalization"
-# ARCHITECTURE FENCE [IPD-004]: consumer retries and producer replacements
-# follow durable due times; this default is only a transport-failure fallback.
-dead_letter_queue = "iconoplasm-sync-dlq"
-max_batch_size = 1
-max_batch_timeout = 1
-max_retries = 5
-retry_delay = 30
-max_concurrency = 1
 
 [[queues.consumers]]
 queue = "iconoplasm-gene-card-materialization"
@@ -207,6 +184,13 @@ deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 tag = "v9"
 deleted_classes = ["IconoplasmVoteCoordinator"]
 
+# v10 removes the daily-budget referee and the sync governor (B-1067): batch work
+# is let in by its price (workers/iconoplasm/batch-admission.js), and the sync
+# finalization pipeline they served is gone.
+[[migrations]]
+tag = "v10"
+deleted_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate", "IconoplasmSyncGovernor"]
+
 # Cloudflare Email Service send binding.
 # Used by the site-wide /api/contact endpoint to deliver contact-form submissions
 # from no-reply@brinedew.bio -> contact@brinedew.bio (which Email Routing forwards
@@ -260,15 +244,15 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # owns the minute map (Iconoplasm's jobs and GeneGuessr's "Top Streaks" refresh,
 # because the free plan allows 5 cron triggers an account and this list is 5),
 # and its test checks that this expression lists exactly the job minutes, each
-# once. Five jobs retain quarter-hour recovery; account
-# and manifestation recovery run every 12 minutes, as does supervote delivery
-# with five 16-message batches/hour. A Worker version upload never changes the
+# once. Six jobs run every 15 minutes; supervote delivery runs every 12
+# (five 16-message batches an hour), shared-discovery delivery three times an hour and the
+# shared-discovery rollup hourly. A Worker version upload never changes the
 # installed trigger. The release compares this list with the installed one
 # (scripts/stateful-worker-deploy-mode.mjs), runs `wrangler deploy` when they
 # differ, and fails if they still differ afterwards. Nightly archive,
 # canon repair and gallery run at 23:56/58/59 in separate invocations.
 # GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,8,9,10,11,13,14,15,16,17,20,21,23,24,26,27,28,29,32,33,34,35,36,38,39,41,44,45,46,47,48,49,50,51,52,53,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,2,3,4,5,8,9,10,11,13,14,15,17,20,21,23,24,26,27,28,29,32,34,35,36,38,39,41,44,45,46,47,49,50,51,52,53,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
@@ -336,30 +320,9 @@ name = "GAME_SESSIONS"
 class_name = "GameSession"
 script_name = "geneguessr-api"
 
-[[env.staging.durable_objects.bindings]]
-name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"
-class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"
-
-[[env.staging.durable_objects.bindings]]
-name = "ICONOPLASM_SYNC_GOVERNOR"
-class_name = "IconoplasmSyncGovernor"
-
-[[env.staging.queues.producers]]
-binding = "ICONOPLASM_SYNC_FINALIZATION_QUEUE"
-queue = "iconoplasm-sync-finalization-staging"
-
 [[env.staging.queues.producers]]
 binding = "ICONOPLASM_GENE_CARD_MATERIALIZATION_QUEUE"
 queue = "iconoplasm-gene-card-materialization-staging"
-
-[[env.staging.queues.consumers]]
-queue = "iconoplasm-sync-finalization-staging"
-dead_letter_queue = "iconoplasm-sync-staging-dlq"
-max_batch_size = 1
-max_batch_timeout = 1
-max_retries = 5
-retry_delay = 30
-max_concurrency = 1
 
 [[env.staging.queues.consumers]]
 queue = "iconoplasm-gene-card-materialization-staging"
@@ -405,6 +368,10 @@ deleted_classes = ["IconoplasmCardPublicationCoordinator"]
 [[env.staging.migrations]]
 tag = "v9"
 deleted_classes = ["IconoplasmVoteCoordinator"]
+
+[[env.staging.migrations]]
+tag = "v10"
+deleted_classes = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate", "IconoplasmSyncGovernor"]
 
 # Same email sending binding on staging so the form works end-to-end on
 # staging.brinedew.bio before any production deploy.

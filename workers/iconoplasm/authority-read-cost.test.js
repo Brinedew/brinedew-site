@@ -59,10 +59,8 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
   assert.equal(background.length, 0)
 })
 
-test("schema transition refuses application D1, preserves queued work and leaves admission reachable", async () => {
+test("schema transition refuses application D1 and runs no scheduled work", async () => {
   let queries = 0
-  let admitted = 0
-  let retry = null
   const db = {
     prepare() {
       queries++
@@ -73,15 +71,6 @@ test("schema transition refuses application D1, preserves queued work and leaves
     ICONOPLASM_SCHEMA_TRANSITION: "1",
     ICONOPLASM_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "test-admin",
-    ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
-      idFromName: () => "global",
-      get: () => ({
-        fetch() {
-          admitted++
-          return Response.json({ code: "COST_PREDICTION_NOT_REGISTERED" }, { status: 428 })
-        },
-      }),
-    },
   }
   const ctx = {
     waitUntil() {
@@ -100,27 +89,6 @@ test("schema transition refuses application D1, preserves queued work and leaves
   )
   assert.equal(blocked.status, 503)
   assert.equal((await blocked.json()).code, "ICONOPLASM_SCHEMA_TRANSITION")
-  const cost = await gateway(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/cost/operations/execute", {
-      method: "POST",
-      headers: { Authorization: "Bearer test-admin" },
-      body: "{}",
-    }),
-    env,
-    ctx,
-  )
-  assert.equal(cost.status, 428)
-  assert.equal(admitted, 1)
-  await runtime.queue(
-    {
-      retryAll(options) {
-        retry = options
-      },
-    },
-    env,
-    ctx,
-  )
-  assert.deepEqual(retry, { delaySeconds: 60 })
   for (const cron of [ICONOPLASM_RECURRING_CRON, ICONOPLASM_NIGHTLY_CRON]) {
     for (let minute = 0; minute < 60; minute++) {
       const event = { cron, scheduledTime: Date.UTC(2026, 8, 6, 23, minute) }

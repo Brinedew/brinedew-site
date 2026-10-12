@@ -185,13 +185,14 @@ test("every deleted Durable Object class is unbound and unexported, in productio
   }
 })
 
-test("the last top-level migration deletes the vote coordinator, so the release runs wrangler deploy", () => {
-  assert.equal(lastTopLevelMigrationTag(CONFIG), "v9")
+test("the last top-level migration deletes the budget referee and the sync governor, so the release runs wrangler deploy", () => {
+  assert.equal(lastTopLevelMigrationTag(CONFIG), "v10")
+  const deleted =
+    /deleted_classes\s*=\s*\["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate", "IconoplasmSyncGovernor"\]/
   const last = tomlBlocks(CONFIG, "migrations").at(-1)
-  assert.match(last, /tag\s*=\s*"v9"/)
-  assert.match(last, /deleted_classes\s*=\s*\["IconoplasmVoteCoordinator"\]/)
-  const stagingLast = tomlBlocks(CONFIG, "env.staging.migrations").at(-1)
-  assert.match(stagingLast, /deleted_classes\s*=\s*\["IconoplasmVoteCoordinator"\]/)
+  assert.match(last, /tag\s*=\s*"v10"/)
+  assert.match(last, deleted)
+  assert.match(tomlBlocks(CONFIG, "env.staging.migrations").at(-1), deleted)
 })
 
 // B-922 failure modes 1 to 9 (see the list above the fakes).
@@ -369,7 +370,8 @@ test("the installed triggers are verified after the last stateful Worker activat
   )
   assert.ok(verify >= 0, "a verification step exists")
   assert.ok(STEPS[verify].run.includes(`--verify ${STATEFUL_CONFIG}`))
-  assert.equal(STEPS[verify].if, "steps.migrations.outputs.continuation_required != 'true'")
+  // Both release paths end here, so the check has no condition of its own.
+  assert.equal(STEPS[verify].if, undefined)
   assert.ok(STEPS[verify]["timeout-minutes"] <= 5)
   const activations = STEPS.flatMap((step, index) =>
     step.run?.includes(STATEFUL_CONFIG) && /wrangler (deploy|versions deploy)\b/.test(step.run)

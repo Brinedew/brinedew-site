@@ -31,7 +31,7 @@ Right now the intended stack is:
 The current safety story is intentionally split:
 
 - hot public and first-party reads stay off the budget DO entirely
-- dangerous admin mutation families still use the limiter DO and fail closed when headroom or telemetry is not trustworthy
+- admin and workstation routes are let in by their D1 price before they run (`workers/iconoplasm/batch-admission.js`, `workers/iconoplasm/batch-route-prices.js`, IPD-013), and batch work stops when Cloudflare's meter is unreadable
 - usage visibility comes from Cloudflare dashboard and GraphQL analytics, not an app-owned request-path report
 
 ## what not to do

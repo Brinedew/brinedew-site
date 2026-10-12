@@ -129,7 +129,7 @@ test("4: statements that only resemble the backup are not exempted", () => {
     `SELECT rowid AS __bk_rowid, * FROM "a" WHERE rowid > ? ORDER BY rowid LIMIT ?; DELETE FROM b`,
     `SELECT rowid AS __bk_rowid, * FROM icono_publish_events WHERE rowid > ? ORDER BY rowid LIMIT ?`,
     `select rowid as __bk_rowid, * from "a" where rowid > ? order by rowid limit ?`,
-    // workers/iconoplasm/discovery-compact-migrate.js pages with unquoted keys.
+    // A keyset page with unquoted keys.
     `SELECT * FROM icono_discovery_user_state_v2 WHERE (user_id, gene_symbol) > (?, ?) ORDER BY user_id, gene_symbol LIMIT ?`,
     `SELECT * FROM "votes" WHERE ("gene", "voter") > (?, ?) ORDER BY "created_at" LIMIT ?`,
     `SELECT * FROM "votes" WHERE ("gene", "voter") > (?) ORDER BY "gene", "voter" LIMIT ?`,

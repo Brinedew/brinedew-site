@@ -93,17 +93,10 @@ test("DO NOT DELETE: per-symbol card endpoint stays KV-backed and version-barrie
   const headContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "HEAD")
   const postContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "POST")
   assert.equal(getContract?.route.id, "mobile_card_symbol")
-  assert.equal(getContract?.route.budgetFamily, "mobile_card_symbol")
   assert.equal(getContract?.route.gatewayHandler, "mobile_card_symbol")
   assert.equal(getContract?.methodAllowed, true)
   assert.equal(headContract?.methodAllowed, true)
   assert.equal(postContract?.methodAllowed, false)
-
-  const budgetClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function iconoplasmBudgetClassFromRouteFamily",
-    "function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport",
-  )
-  assert.match(budgetClass, /family === "mobile_card_symbol"[\s\S]{0,80}return "first_party_read"/)
 
   const cardEndpoint = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function handleMobileCardSymbol",
@@ -338,15 +331,7 @@ test("DO NOT DELETE: image edit routes stay authenticated, point-keyed, and off 
     const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
     assert.ok(route, `${routeId} must stay in the declarative route contract`)
     assert.match(String(route.auth), /authenticated/)
-    assert.match(route.budgetFamily, /^(?:image_edit|candidate_generation)_/)
   }
-  const budgetClass = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "function iconoplasmBudgetClassFromRouteFamily",
-    "function iconoplasmBudgetClassFromHistoricalRouteFamilyForReport",
-  )
-  assert.match(budgetClass, /family\.startsWith\("image_edit_"\)[\s\S]*first_party_write/)
-  assert.match(budgetClass, /family\.startsWith\("candidate_generation_"\)[\s\S]*first_party_write/)
-
   const sourceLookup = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     "async function sourceImageEditAssetRow",
     "function mapImageEditJobRow",

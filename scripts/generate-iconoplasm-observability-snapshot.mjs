@@ -238,7 +238,7 @@ const PLATFORM_USAGE_QUERY = `query IconoplasmPlatformUsage($accountTag: string,
   }
 }`
 
-const DURABLE_OBJECT_CLASS_NAMES = ["IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"]
+const DURABLE_OBJECT_CLASS_NAMES = ["GameSession"]
 const WORKERS_OBSERVABILITY_DAILY_LIMIT_EVENTS = FREE_PLAN_UNSAMPLED_DAILY_LIMITS.workers_log_events
 
 function parseArgs(argv) {

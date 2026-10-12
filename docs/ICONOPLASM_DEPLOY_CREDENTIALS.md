@@ -49,7 +49,7 @@ pnpm exec node scripts/rotate-iconoplasm-admin-token.mjs
 
 Use `--include-staging` only when intentionally aligning staging as well. The script reads `ICONOPLASM_ADMIN_TOKEN` from the environment, writes it to the relevant Worker secrets through Wrangler, and then verifies:
 
-- stateful admin authorization with `/api/iconoplasm/admin/mutation-limiter/policy`
+- stateful admin authorization with `/api/iconoplasm/admin/cost/snapshot`
 
 Never diagnose this as a user/session problem until the script has verified the gate.
 
@@ -83,12 +83,6 @@ Cloudflare account permission fixes must be done in the Cloudflare dashboard, th
 Do not replace this with a GitHub Actions diagnostic workflow, a repository-secret control plane, or a direct Cloudflare API connector call that bypasses the dashboard. Do not replace it with Wrangler OAuth or a local cache. Those are crutches that hide a broken credential.
 
 When a token is replaced, update only its one location from the table above. Never commit raw token values.
-
-For Iconoplasm sync specifically:
-
-- One true finalization path: durable ledger -> Cloudflare Queue message `drain_finalization_ledger` -> Queue consumer on `geneguessr-api`.
-- Forbidden paths: workstation-side finalization processing, `/api/iconoplasm/admin/finalization/process`, per-symbol Queue message formats, GitHub Actions Queue kicks, and any token/secret workaround that pretends the dashboard admin path is optional.
-- If Queue sends return HTTP `429`, the correct fixes are Cloudflare Queue allowance/plan/billing in the dashboard or waiting for the UTC reset. Code must fail loud; it must not drain directly.
 
 ## Required Cloudflare Permissions
 

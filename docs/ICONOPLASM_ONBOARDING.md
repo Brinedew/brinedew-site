@@ -246,7 +246,7 @@ Wrapping both sides in `upper(...)` looks harmless, but it can blow away index u
 
 This is the most important runtime barrier in Iconoplasm, and it is not only a D1 budget. The live admin cost cockpit at `/admin#costs` tracks the free-plan pressure points across D1, Workers, Durable Objects, KV, Queues, R2, Pages Functions, and Workers observability.
 
-Mutation and publication admission runs through the operation-cost ledger (`workers/iconoplasm/operation-cost-*.js`).
+Mutation and publication work is let in by its price before it runs (`workers/iconoplasm/batch-admission.js`, ARCHITECTURE FENCE IPD-013): every admin and workstation route names its D1 price.
 
 D1 row-read blowups are still the easiest budget wall to hit accidentally.
 
@@ -362,7 +362,7 @@ If you genuinely need to replace one of these guards, the replacement has to lan
 Verified test command:
 
 ```text
-pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm.sync-finalization-queue.test.js
+pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm/batch-admission.test.js
 ```
 
 If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.

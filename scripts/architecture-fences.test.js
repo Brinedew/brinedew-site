@@ -10,11 +10,6 @@ import {
   createPortraitDeliverySession,
   portraitSourceFromUrl,
 } from "../shared/iconoplasm-portrait/portrait-delivery-core.js"
-import {
-  D1_BACKGROUND_WRITE_CEILING,
-  D1_USER_ACTION_DAILY_WRITE_CEILING,
-  FREE_D1_DAILY_LIMITS,
-} from "../shared/iconoplasm-d1-budget-policy.js"
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -315,35 +310,16 @@ test("Bunny fences protect canonical authority without forbidding immutable CDN 
 
 // ARCHITECTURE FENCE [IPD-004]
 test("IPD-004 keeps ledger wakeups due-time aware", () => {
+  const materialization = readRepositoryFile(
+    "workers/iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js",
+  )
   const runtime = readRepositoryFile(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
   )
-  const lanes = readRepositoryFile("workers/lib/iconoplasm-mutation-lane-reservations.js")
-  assert.match(runtime, /queueDelaySecondsUntil\(drainResult\?\.next_attempt_at\)/)
-  assert.doesNotMatch(runtime, /Math\.min\(300, secondsUntilDue\)/)
+  // A message that arrives early is put back until its row is due, not polled.
+  assert.match(materialization, /dueMs > Date\.now\(\)/)
+  assert.match(materialization, /AND next_attempt_at <= CURRENT_TIMESTAMP/)
   assert.doesNotMatch(runtime, /icono_gene_discoveries/)
-  // B-1067: a reader's action never reserves in the referee; only background work does.
-  assert.doesNotMatch(runtime, /lane: "user_action"/)
-  assert.match(runtime, /lane: "finalization_recovery"/)
-  assert.match(runtime, /lane: "laptop_delivery"/)
-  // B-897: admission is measured provider pressure, not fixed lane totals.
-  // B-1036: the lanes take their numbers from the one budget policy, and a reader
-  // always keeps a band above the point where operator work stops.
-  // B-1026 (10-09): those numbers are shares of Cloudflare's meter, not a private slice.
-  assert.match(lanes, /MUTATION_BACKGROUND_CEILING = D1_BACKGROUND_WRITE_CEILING/)
-  assert.match(lanes, /MUTATION_USER_ACTION_CEILING = D1_USER_ACTION_DAILY_WRITE_CEILING/)
-  assert.doesNotMatch(lanes, /_CEILING = d/)
-  assert.ok(D1_USER_ACTION_DAILY_WRITE_CEILING > D1_BACKGROUND_WRITE_CEILING)
-  // B-1026: a person's action is critical and runs to Cloudflare's own wall.
-  assert.equal(D1_USER_ACTION_DAILY_WRITE_CEILING, FREE_D1_DAILY_LIMITS.writes)
-  assert.match(lanes, /MUTATION_ANALYTICS_LAG_MS = 15 \* 60_000/)
-  assert.doesNotMatch(lanes, /daily_mutation_lane_usage \(/)
-  assert.doesNotMatch(runtime, /MUTATION_PROVIDER_OBSERVATION_(MISSING|STALE|MALFORMED)/)
-  assert.doesNotMatch(
-    lanes,
-    /previous\.day === day\s*&&/,
-    "an uncertain exact command must replay its original reservation after UTC rollover",
-  )
 })
 
 // B-1037: on 2026-10-06 an 870-gene Image Lab batch died four times on a private 2,500
@@ -414,47 +390,15 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
   assert.match(archive, /DELETE FROM icono_publish_events/)
 })
 
-// ARCHITECTURE FENCE [IPD-012]
-test("IPD-012 reserves operator work through the one operation-cost authority", () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-012")
-  assert.ok(fence, "IPD-012 must remain registered until B-1067 deletes the ledger")
-  const deploy = readRepositoryFile(".github/workflows/deploy-quartz.yml")
+// B-1036: the PowerShell request budget reads its ceilings from the one policy.
+test("the PowerShell request budget reads its ceilings from the one budget policy", () => {
   const requestBudget = readRepositoryFile("scripts/lib/CloudflareWorkerRequestBudget.ps1")
-  assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
-  // B-1036: the PowerShell budget reads the operator ceilings from the one policy.
   assert.match(requestBudget, /'shared' 'iconoplasm-d1-budget-policy\.js'/)
   assert.match(requestBudget, /OPERATOR_ACCOUNT_CEILINGS/)
   assert.match(requestBudget, /FREE_PLAN_DAILY_LIMITS\.requests/)
   assert.doesNotMatch(requestBudget, /\b(2500|75000|3500000|70000)\b/)
   assert.match(requestBudget, /workersInvocationsAdaptive/)
   assert.match(requestBudget, /FileShare\]::None/)
-})
-
-test("caretaker migrations remain compatible with the remote D1 trigger splitter", () => {
-  const migrationGroups = [["migrations-iconoplasm", /^00(?:8[4-9]|9[0-2])_.*\.sql$/]]
-
-  for (const [directory, filenamePattern] of migrationGroups) {
-    const filenames = readdirSync(path.join(REPOSITORY_ROOT, directory))
-      .filter((filename) => filenamePattern.test(filename))
-      .sort()
-    assert.ok(filenames.length > 0, `${directory} must contain caretaker authority migrations`)
-
-    for (const filename of filenames) {
-      const sql = readRepositoryFile(`${directory}/${filename}`)
-      const topLevelCreate = /^CREATE (?:TABLE|(?:UNIQUE )?INDEX|TRIGGER)\b/gm
-      const starts = [...sql.matchAll(topLevelCreate)].map((match) => match.index)
-      starts.push(sql.length)
-      for (let index = 0; index < starts.length - 1; index += 1) {
-        const statement = sql.slice(starts[index], starts[index + 1])
-        if (!statement.startsWith("CREATE TRIGGER")) continue
-        assert.doesNotMatch(
-          statement,
-          /\b(?:CASE|END)\b/,
-          `${directory}/${filename} uses uppercase CASE/END inside a trigger; remote D1 mis-splits the inner END and returns SQLITE 7500 incomplete input`,
-        )
-      }
-    }
-  }
 })
 
 // ARCHITECTURE FENCE [IPD-009]
@@ -567,9 +511,18 @@ test("IPD-013 lets batch work in by its price, and an unpriced admin route can't
     /POST \/api\/iconoplasm\/admin\/new-sweep must name its D1 price/,
   )
 
+  const { BATCH_ROUTE_PRICES } = await import("../workers/iconoplasm/batch-route-prices.js")
+  const { ICONOPLASM_ROUTE_CONTRACTS } = await import("../workers/iconoplasm-route-contract.js")
+  for (const route of ICONOPLASM_ROUTE_CONTRACTS)
+    if (route.auth === "administrator" || route.auth === "authority-generation-bearer")
+      assert.ok(BATCH_ROUTE_PRICES[route.id], `${route.id} must name its D1 price`)
+  const prices = readRepositoryFile("workers/iconoplasm/batch-route-prices.js")
+  assert.match(prices, /^assertPrices\(\)$/m)
+
   const app = readRepositoryFile("workers/iconoplasm/app.js")
   const admission = readRepositoryFile("workers/iconoplasm/batch-admission.js")
   assert.match(app, /assertEveryAdminRoutePriced\(app,/)
+  assert.match(app, /batchRouteSpec\(route\)/)
   assert.match(admission, /D1_METER_UNAVAILABLE/)
   assert.match(admission, /FROM icono_batch_admissions WHERE minute >= \?/)
 })

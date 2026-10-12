@@ -62,6 +62,7 @@ async function harness(t, { accounts = null } = {}) {
   const published = []
   const env = { ICONOPLASM_DB: db, ...(accounts ? { DB: accounts } : {}) }
   const app = createIconoplasmApp({
+    isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async (_env, symbol) => {
       published.push(symbol)
@@ -69,7 +70,6 @@ async function harness(t, { accounts = null } = {}) {
     },
     refreshSummaries: async () => {},
     accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
-    windowUsage: async () => null,
     caretakerSession: async (request) => ({ account_id: request.headers.get("x-test-account") }),
   })
   await writeFactoryGeneText(env, {

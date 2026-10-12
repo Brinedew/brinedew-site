@@ -1,5 +1,14 @@
-import { OperationCostError } from "../lib/operation-cost-ledger.js"
-import { KV_COST_METERS } from "../lib/operation-cost-meters.js"
+// Cloudflare's own daily usage for the account, read from its GraphQL analytics.
+// It is the meter B-1085's batch admission prices against (batch-admission.js).
+const KV_COST_METERS = Object.freeze(["kv_reads", "kv_writes", "kv_deletes", "kv_lists"])
+
+class AccountUsageUnavailableError extends Error {
+  constructor() {
+    super("COST_ACCOUNT_USAGE_UNAVAILABLE")
+    this.name = "AccountUsageUnavailableError"
+    this.code = "COST_ACCOUNT_USAGE_UNAVAILABLE"
+  }
+}
 
 // B-1085: `recent` is the newest minute the meter has shown. The meter runs one
 // to two minutes behind (measured 2026-10-11: at 10:44:58 UTC the newest minute
@@ -23,47 +32,11 @@ const KV_QUERY = QUERY.replace(
     d1AnalyticsAdaptiveGroups`,
 )
 
-const WINDOW_QUERY = `query D1Window($accountTag: string, $from: Time, $to: Time) {
-  viewer { accounts(filter: { accountTag: $accountTag }) {
-    d1QueriesAdaptiveGroups(limit: 1, filter: { datetime_geq: $from, datetime_leq: $to }) {
-      sum { rowsRead rowsWritten }
-    }
-  } }
-}`
-
-const unavailable = () => new OperationCostError("COST_ACCOUNT_USAGE_UNAVAILABLE")
+const unavailable = () => new AccountUsageUnavailableError()
 
 // How far back the newest-minute probe looks. A quiet account shows no minute in
 // it, and then everything older is in the day total.
 const RECENT_WINDOW_MS = 10 * 60_000
-
-// B-1059: the whole account's D1 rows between two instants, from Cloudflare's own
-// analytics. The Drain asks for a publication's window once the analytics have
-// caught up (about 20 minutes) and learns what a portrait costs from it, instead
-// of a seed someone measured once. Readers active in the window count too: it is
-// what the account spent while the publication ran. Checked live on 2026-10-10:
-// 00:00-00:10 UTC answered 47,760 rows read and 9,460 written.
-export async function readD1WindowUsage({ accountId, token, from, to, fetcher = fetch }) {
-  if (!/^[a-f0-9]{32}$/.test(accountId || "") || !token) throw unavailable()
-  const response = await fetcher("https://api.cloudflare.com/client/v4/graphql", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: WINDOW_QUERY, variables: { accountTag: accountId, from, to } }),
-    signal: AbortSignal.timeout(10_000),
-  })
-  if (!response.ok) throw unavailable()
-  const payload = await response.json()
-  const accounts = payload?.data?.viewer?.accounts
-  if (payload?.errors?.length || !Array.isArray(accounts) || accounts.length !== 1)
-    throw unavailable()
-  const groups = accounts[0]?.d1QueriesAdaptiveGroups
-  if (!Array.isArray(groups) || groups.length > 1) throw unavailable()
-  const sum = groups[0]?.sum ?? { rowsRead: 0, rowsWritten: 0 }
-  const usage = { from, to, rows_read: sum.rowsRead, rows_written: sum.rowsWritten }
-  if (![usage.rows_read, usage.rows_written].every((n) => Number.isSafeInteger(n) && n >= 0))
-    throw unavailable()
-  return usage
-}
 
 export function parseOperationCostAccountUsage(
   payload,
@@ -131,9 +104,9 @@ export function parseOperationCostAccountUsage(
   return usage
 }
 
-// Lives on the one budget authority, not in every public request isolate.
-// No background polling, retries or application-D1 queries. One concurrent
-// control-plane request refreshes a 30-second cache while operations need it.
+// One reader per isolate. No background polling, retries or application-D1
+// queries: one concurrent request refreshes a 30-second cache when batch work
+// asks, and a failure backs off for 30 seconds.
 export function createOperationCostAccountUsageReader({
   accountId,
   token,
@@ -200,7 +173,7 @@ export function createOperationCostAccountUsageReader({
         } catch (error) {
           // B-1036: say why there's no sample. A silent catch here hid a whole day of
           // "no provider sample" behind a guess. At most one line per 30 seconds.
-          console.warn("[operation-cost] account usage sample failed", {
+          console.warn("[d1-usage] account usage sample failed", {
             code: String(error?.code || error?.name || "unknown").slice(0, 80),
             message: String(error?.message || "").slice(0, 160),
           })
@@ -214,4 +187,15 @@ export function createOperationCostAccountUsageReader({
       return pending
     },
   }
+}
+
+let isolateReader = null
+
+// Today's account-wide usage, through this isolate's one reader.
+export function accountD1Usage(env) {
+  isolateReader ??= createOperationCostAccountUsageReader({
+    accountId: env?.CLOUDFLARE_ACCOUNT_ID,
+    token: env?.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
+  })
+  return isolateReader.refresh()
 }

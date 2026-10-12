@@ -8,10 +8,6 @@ const worker = readFileSync(
   ),
   "utf8",
 )
-const finalizationPublication = readFileSync(
-  new URL("../workers/iconoplasm/sync-finalization-publication.js", import.meta.url),
-  "utf8",
-)
 const routeContract = readFileSync(
   new URL("../workers/iconoplasm-route-contract.js", import.meta.url),
   "utf8",
@@ -70,8 +66,7 @@ function doesNotMatchOrFail(haystack, pattern, message) {
 // canonical deploy path later overwrote critical budget/finalization behavior.
 // That made the GUI button look like it had regressed "by itself". This script
 // intentionally checks for loud strings that encode non-negotiable behavior:
-// pending-finalize jobs must be allowed to complete without per-scope KV
-// publishes, public hot paths must keep the shared KV barrier, and GitHub deploy
+// public hot paths must keep the shared KV barrier, and GitHub deploy
 // must wait for full CI at the exact source commit under pnpm with a 24-hour
 // release-age delay.
 // If one of these strings changes because the implementation legitimately moved,
@@ -84,48 +79,6 @@ includesOrFail(
   workflow,
   "node scripts/wait-for-iconoplasm-release-ci.mjs",
   "Production must wait for successful CI at the exact deployed commit.",
-)
-includesOrFail(
-  worker,
-  "ICONOPLASM_SYNC_FINALIZATION_PHASE_COMPLETED_PENDING_FINALIZE",
-  "Worker must keep the pending-finalize phase.",
-)
-includesOrFail(
-  worker,
-  "prepare(dueFinalizationJobsSql(true))",
-  "Scoped dispatch must use the bounded phase-priority selector.",
-)
-includesOrFail(
-  worker,
-  "prepare(GLOBAL_DUE_FINALIZATION_SQL)",
-  "Global dispatch must use the indexed phase-priority selector.",
-)
-// Priority, pending-finalize exclusion and future wakeups are exercised by
-// their behavioral tests in the full CI suite.
-includesOrFail(
-  worker,
-  "drainCompletedFinalization(env.ICONOPLASM_DB",
-  "Worker must use bounded versioned completion and durable publisher handoff.",
-)
-includesOrFail(
-  worker,
-  "prepare(GLOBAL_FINALIZATION_STATUS_LIST_SQL)",
-  "Global status lists must stop at the indexed limit.",
-)
-includesOrFail(
-  worker,
-  "prepare(SCOPED_FINALIZATION_STATUS_LIST_SQL)",
-  "Scoped status lists must probe explicit keys.",
-)
-includesOrFail(
-  finalizationPublication,
-  "finalized = await completeReadyFinalizationRows(db, rows, now)",
-  "Finalization must complete the exact scoped page the per-gene publisher accepted.",
-)
-includesOrFail(
-  finalizationPublication,
-  "global_finalize_deferred",
-  "Worker must be explicit when global gallery/card-catalog publish is deferred.",
 )
 includesOrFail(
   worker,
