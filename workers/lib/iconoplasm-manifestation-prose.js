@@ -1,5 +1,3 @@
-import { sha256Hex } from "./iconoplasm-sha256.js"
-
 const ENCODER = new TextEncoder()
 
 // The rules for manifestation prose (who owns it, where seeds came from, why this limit) are in
@@ -28,15 +26,4 @@ export function normalizeManifestationProse(raw) {
     )
   }
   return { prose, bytes, codePoints }
-}
-
-// The object a save stores is these exact bytes; its row records their hash.
-export async function prepareManifestationProse(raw) {
-  const normalized = normalizeManifestationProse(raw)
-  return Object.freeze({
-    prose: normalized.prose,
-    bytes: normalized.bytes,
-    body_sha256: await sha256Hex(normalized.bytes),
-    body_bytes: normalized.bytes.byteLength,
-  })
 }

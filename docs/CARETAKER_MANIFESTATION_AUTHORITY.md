@@ -1,10 +1,10 @@
 # Caretaker manifestation authority
 
 **Caretaker** and **manifestation** are product words. Do not use `curator`, a `latest`
-manifestation, or a second command authority in code or UI. Storage and key plumbing live in
-the IPD-012 fence in `AGENTS.md`; this page holds the rules a caretaker feels.
+manifestation, or a second command authority in code or UI. This page holds the rules a
+caretaker feels.
 
-Each gene's text lives in two plain tables in the authoring D1, behind
+Each gene's text lives in two plain tables in the main Iconoplasm D1, behind
 `workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the factory text and Tags the
 workstation writes (`PUT /api/iconoplasm/admin/texts`), and which caretaker version the gene uses.
 `icono_caretaker_text_versions` holds every version a caretaker saved. The gene's text is the

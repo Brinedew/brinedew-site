@@ -21,8 +21,6 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   // B-896: the style picker's first page on the CDN. Free minutes again, so the
   // gaps are uneven; the page is never more than 20 minutes behind.
   requestPicker: Object.freeze([9, 21, 36, 49]),
-  accounts: Object.freeze([6, 18, 30, 42, 54]),
-  manifestations: Object.freeze([7, 19, 31, 43, 55]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({

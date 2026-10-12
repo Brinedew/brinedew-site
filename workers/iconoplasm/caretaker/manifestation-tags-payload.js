@@ -1,9 +1,5 @@
-import { normalizeManifestationTags } from "../../lib/iconoplasm-manifestation-tags.js"
-import { sha256Hex } from "../../lib/iconoplasm-sha256.js"
-import { authorityError, normalizeSha256 } from "./manifestation-authority-contract.js"
+import { authorityError } from "./manifestation-authority-contract.js"
 
-const ENCODER = new TextEncoder()
-const DECODER = new TextDecoder("utf-8", { fatal: true })
 const MAX_DEPTH = 16
 const MAX_NODES = 4096
 
@@ -56,81 +52,4 @@ export function canonicalManifestationFieldsJson(raw) {
     throw authorityError("INVALID_TAG_FIELDS", "Structured Tags fields must be a JSON object")
   }
   return asciiJsonString(validateFields(raw, { nodes: 0 }))
-}
-
-export async function prepareManifestationTagsPayload(input = {}) {
-  const normalized = normalizeManifestationTags(input.tagsText)
-  const fieldsJson = canonicalManifestationFieldsJson(input.fieldsJson)
-  const fieldsBytes = ENCODER.encode(fieldsJson)
-  const tagsSha256 = await sha256Hex(normalized.bytes)
-  const fieldsSha256 = await sha256Hex(fieldsBytes)
-  if (normalizeSha256(input.tagsSha256, "tags_sha256") !== tagsSha256) {
-    throw authorityError("TAGS_HASH_MISMATCH", "Tags text SHA-256 does not match", 409)
-  }
-  if (normalizeSha256(input.fieldsSha256, "fields_sha256") !== fieldsSha256) {
-    throw authorityError(
-      "TAG_FIELDS_HASH_MISMATCH",
-      "Structured Tags fields SHA-256 does not match",
-      409,
-    )
-  }
-  const outputPlain = `${normalized.tags}\n${fieldsJson}`
-  const outputBytes = ENCODER.encode(outputPlain)
-  if (outputBytes.byteLength > 32 * 1024) {
-    throw authorityError("TAGS_OUTPUT_TOO_LARGE", "Combined Tags output exceeds 32 KiB")
-  }
-  return Object.freeze({
-    output_plain: outputPlain,
-    output_bytes: outputBytes,
-    output_plain_sha256: await sha256Hex(outputBytes),
-    output_plain_bytes: outputBytes.byteLength,
-    tags_text: normalized.tags,
-    tags_sha256: tagsSha256,
-    tags_bytes: normalized.bytes.byteLength,
-    fields_json: JSON.parse(fieldsJson),
-    fields_canonical_json: fieldsJson,
-    fields_sha256: fieldsSha256,
-    fields_bytes: fieldsBytes.byteLength,
-  })
-}
-
-export async function splitManifestationTagsPayload(outputPlain, descriptor = {}) {
-  const bytes = ENCODER.encode(String(outputPlain || ""))
-  const tagsBytes = Number(descriptor.tagsBytes)
-  const fieldsBytes = Number(descriptor.fieldsBytes)
-  if (
-    !Number.isSafeInteger(tagsBytes) ||
-    tagsBytes < 1 ||
-    !Number.isSafeInteger(fieldsBytes) ||
-    fieldsBytes < 2 ||
-    bytes.byteLength !== tagsBytes + 1 + fieldsBytes ||
-    bytes[tagsBytes] !== 0x0a
-  ) {
-    throw authorityError("TAGS_OUTPUT_INVALID", "Combined Tags output framing is invalid", 503)
-  }
-  const tagsText = DECODER.decode(bytes.slice(0, tagsBytes))
-  const fieldsCanonical = DECODER.decode(bytes.slice(tagsBytes + 1))
-  let fieldsJson
-  try {
-    fieldsJson = JSON.parse(fieldsCanonical)
-  } catch {
-    throw authorityError("TAGS_OUTPUT_INVALID", "Structured Tags fields are invalid", 503)
-  }
-  if (canonicalManifestationFieldsJson(fieldsJson) !== fieldsCanonical) {
-    throw authorityError("TAGS_OUTPUT_INVALID", "Structured Tags fields are not canonical", 503)
-  }
-  const tagsSha256 = await sha256Hex(bytes.slice(0, tagsBytes))
-  const fieldsSha256 = await sha256Hex(bytes.slice(tagsBytes + 1))
-  if (
-    tagsSha256 !== normalizeSha256(descriptor.tagsSha256, "tags_sha256") ||
-    fieldsSha256 !== normalizeSha256(descriptor.fieldsSha256, "fields_sha256")
-  ) {
-    throw authorityError("TAGS_OUTPUT_INVALID", "Structured Tags hashes failed verification", 503)
-  }
-  return Object.freeze({
-    tags_text: tagsText,
-    tags_sha256: tagsSha256,
-    fields_json: fieldsJson,
-    fields_sha256: fieldsSha256,
-  })
 }

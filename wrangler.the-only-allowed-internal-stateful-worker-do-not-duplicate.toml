@@ -92,24 +92,6 @@ database_name = "iconoplasm"
 database_id = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff"
 migrations_dir = "migrations-iconoplasm"
 
-# ARCHITECTURE FENCE [IPD-012]: caretaker assignments, immutable manifestation
-# lineage, canonical selection, command receipts, and replication events share
-# one private transactional authority. Large bodies live in Bunny;
-# neither history nor competing mutable prose belongs in the primary D1.
-[[d1_databases]]
-binding = "ICONOPLASM_AUTHORING_DB"
-database_name = "iconoplasm-authoring"
-database_id = "1ac27eba-5a08-4d8a-b5b2-99ed4254abd0"
-migrations_dir = "migrations-iconoplasm-authoring"
-
-# B-799: sealed 1..58078 replica history. The authoring DB above remains the
-# only command writer; the sync handler only reads this archive.
-[[d1_databases]]
-binding = "ICONOPLASM_AUTHORITY_EVENT_ARCHIVE_DB"
-database_name = "iconoplasm-authority-event-archive-20260831"
-database_id = "7c867585-5535-4730-8b20-d6883aefd333"
-migrations_dir = "migrations-iconoplasm-event-archive"
-
 # ARCHITECTURE FENCE [IPD-005]: immutable audit history is copied here before
 # bounded retention deletes it from the operational Iconoplasm database.
 [[d1_databases]]
@@ -252,15 +234,9 @@ ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://img.brinedew.bio"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
-# ARCHITECTURE FENCE [IPD-012]: authoring reads use authenticated Storage only.
-# The dedicated private zone has no Pull Zone and contains only body objects under
-# opaque private locators; portrait credentials are never an authoring fallback.
-ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
-ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"
 # Manifestation authority bearer secrets are deliberately separate Worker
 # secrets. Never reuse one value across audiences and never restore the retired
 # generic service token:
-#   ICONOPLASM_AUTHORITY_REPLICA_TOKEN      events, snapshots, exact material, Tags
 #   ICONOPLASM_AUTHORITY_GENERATION_TOKEN   generation claim/renew/fail/complete
 DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 
@@ -292,7 +268,7 @@ DISCORD_FEED_CHANNEL_ID = "1523072467638288455"
 # differ, and fails if they still differ afterwards. Nightly archive,
 # canon repair and gallery run at 23:56/58/59 in separate invocations.
 # GeneGuessr's three triggers stay independent.
-crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,23,24,26,27,28,29,30,31,32,33,34,35,36,38,39,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,59 * * * *", "56,58,59 23 * * *"]
+crons = ["55 23 * * *", "3 0 * * *", "6 12 * * *", "0,1,2,3,4,5,8,9,10,11,13,14,15,16,17,20,21,23,24,26,27,28,29,32,33,34,35,36,38,39,41,44,45,46,47,48,49,50,51,52,53,56,59 * * * *", "56,58,59 23 * * *"]
 
 [env.staging]
 name = "geneguessr-api-staging"
@@ -322,14 +298,6 @@ binding = "ICONOPLASM_DB"
 database_name = "iconoplasm-staging-v2"
 database_id = "c83fce97-3add-4d9b-9896-91d1659e27fa"
 migrations_dir = "migrations-iconoplasm"
-
-# ARCHITECTURE FENCE [IPD-012]: staging exercises the same isolated authority
-# and encrypted-body contract without sharing production metadata.
-[[env.staging.d1_databases]]
-binding = "ICONOPLASM_AUTHORING_DB"
-database_name = "iconoplasm-authoring-staging"
-database_id = "7f0ea4fe-be3c-409a-b87a-76c13be55fbb"
-migrations_dir = "migrations-iconoplasm-authoring"
 
 [[env.staging.d1_databases]]
 binding = "ICONOPLASM_AUDIT_DB"
@@ -459,8 +427,6 @@ ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https://img.brinedew.bio"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST = "storage.bunnycdn.com"
 ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE = "iconoplasm-portraits"
-ICONOPLASM_AUTHORING_STORAGE_HOST = "storage.bunnycdn.com"
-ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"
 # Staging has no recap cron and must never post into the production feed.
 DISCORD_FEED_CHANNEL_ID = ""
 

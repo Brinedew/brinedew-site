@@ -4,12 +4,10 @@ import test from "node:test"
 import {
   AUTHORITY_BEARER_BINDINGS,
   authorizeIconoplasmAuthorityGenerationBearer,
-  authorizeIconoplasmAuthorityReplicaBearer,
 } from "./iconoplasm-authority-service-auth.js"
 
 const ADMIN_TOKEN = "legacy-admin-token-0000000000000000001"
 const AUDIENCES = Object.freeze({
-  replica: authorizeIconoplasmAuthorityReplicaBearer,
   generation: authorizeIconoplasmAuthorityGenerationBearer,
 })
 const TOKENS = Object.freeze(
@@ -30,9 +28,12 @@ const ENV = Object.freeze(
 )
 
 function request(token, header = "authorization") {
-  return new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/authority/events", {
-    headers: token ? { [header]: header === "authorization" ? `Bearer ${token}` : token } : {},
-  })
+  return new Request(
+    "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/generation-leases/claim",
+    {
+      headers: token ? { [header]: header === "authorization" ? `Bearer ${token}` : token } : {},
+    },
+  )
 }
 
 test("each authority bearer is accepted only by its exact audience", async () => {
@@ -63,13 +64,13 @@ test("the retired backup and maintenance audiences are gone (B-859: no caller ev
 test("authority bearers have no generic, admin-token, or alternate-header fallback", async () => {
   const envWithRetiredGeneric = {
     ...ENV,
-    ICONOPLASM_AUTHORITY_SERVICE_TOKEN: TOKENS.replica,
+    ICONOPLASM_AUTHORITY_SERVICE_TOKEN: TOKENS.generation,
     ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
   }
   assert.equal(
     (
-      await authorizeIconoplasmAuthorityReplicaBearer(
-        request(TOKENS.replica, "x-iconoplasm-admin-token"),
+      await authorizeIconoplasmAuthorityGenerationBearer(
+        request(TOKENS.generation, "x-iconoplasm-admin-token"),
         envWithRetiredGeneric,
       )
     ).authorized,
@@ -77,8 +78,8 @@ test("authority bearers have no generic, admin-token, or alternate-header fallba
   )
   assert.equal(
     (
-      await authorizeIconoplasmAuthorityReplicaBearer(request(TOKENS.replica), {
-        ICONOPLASM_AUTHORITY_SERVICE_TOKEN: TOKENS.replica,
+      await authorizeIconoplasmAuthorityGenerationBearer(request(TOKENS.generation), {
+        ICONOPLASM_AUTHORITY_SERVICE_TOKEN: TOKENS.generation,
         ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN,
       })
     ).authorized,
