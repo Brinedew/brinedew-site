@@ -5,6 +5,7 @@ import test from "node:test"
 
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
+import { withGeneTexts } from "./test-helpers/account-erasure-fixture.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 const SOURCE_SHA = "a".repeat(64)
@@ -23,62 +24,6 @@ function defaultGeneContext() {
     sample_label: "A1BG-7",
     sample_number: 7,
     sample_text_hash: "d".repeat(64),
-  }
-}
-
-// The gene-text tables of authoring migration 0024 (B-1065), as one row: every
-// read the image-edit flows make is the plain text of one gene.
-class FakeAuthoringStatement {
-  constructor(authority, sql) {
-    this.authority = authority
-    this.sql = String(sql || "")
-    this.args = []
-  }
-
-  bind(...args) {
-    this.args = args
-    return this
-  }
-
-  async first() {
-    const row = await this.authority.row()
-    if (this.sql.includes("WHERE g.canonical_symbol")) {
-      return String(this.args[0] || "").toUpperCase() === row.canonical_symbol ? row : null
-    }
-    return row
-  }
-}
-
-class FakeAuthoringDb {
-  constructor(sourceDb) {
-    this.sourceDb = sourceDb
-    this.cachedRow = null
-  }
-
-  prepare(sql) {
-    return new FakeAuthoringStatement(this, sql)
-  }
-
-  async row() {
-    if (this.cachedRow) return this.cachedRow
-    const context = this.sourceDb.geneContext || defaultGeneContext()
-    const symbol = String(context.gene_symbol || "A1BG").toUpperCase()
-    const text = String(context.manifestation || "A manifestation body.")
-    this.cachedRow = {
-      gene_id: `gene_${symbol.toLowerCase()}_0001`,
-      canonical_symbol: symbol,
-      gene_status: "active",
-      origin: "factory",
-      text_id: `revision_${symbol.toLowerCase()}_0001`,
-      line_id: null,
-      version: 1,
-      text,
-      text_sha256: await sha256Hex(text),
-      tags: String(context.manifestation_tags || "") || null,
-      fields_json: context.manifestation_tags ? "{}" : null,
-      readers_see: 0,
-    }
-    return this.cachedRow
   }
 }
 
@@ -414,8 +359,27 @@ const SIGNED_IN = await sessionCookieFor({ user_id: "user-1", username: "tester"
 function buildEnv(db = new FakeDb()) {
   const env = {
     DB: db,
-    ICONOPLASM_DB: db,
-    ICONOPLASM_AUTHORING_DB: new FakeAuthoringDb(db),
+    // Every image-edit flow reads the plain text of one gene (B-1065).
+    ICONOPLASM_DB: withGeneTexts(db, async (texts) => {
+      const context = db.geneContext || defaultGeneContext()
+      const symbol = String(context.gene_symbol || "A1BG").toUpperCase()
+      const text = String(context.manifestation || "A manifestation body.")
+      texts
+        .prepare(
+          `INSERT INTO icono_gene_texts
+             (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
+        )
+        .run(
+          symbol,
+          `gene_${symbol.toLowerCase()}_0001`,
+          `revision_${symbol.toLowerCase()}_0001`,
+          text,
+          await sha256Hex(text),
+          String(context.manifestation_tags || "") || null,
+          context.manifestation_tags ? "{}" : null,
+        )
+    }),
     ICONOPLASM_PORTRAITS: buildPortraitStorage(),
     KV: {
       async get() {

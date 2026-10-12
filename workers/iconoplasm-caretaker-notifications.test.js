@@ -1,110 +1,115 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
   markCaretakerCommentsRead,
-  projectCaretakerAssignmentNotification,
   readCaretakerCoordination,
 } from "./iconoplasm-caretaker-notifications.js"
-import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
+import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
-const MIGRATIONS = [
-  "0085_caretaker_supervotes.sql",
-  "0086_caretaker_assignment_notifications.sql",
-  "0090_caretaker_coordination.sql",
-  "0092_signed_caretaker_supervote.sql",
-]
-  .map((name) => readFileSync(new URL(`../migrations-iconoplasm/${name}`, import.meta.url), "utf8"))
-  .join("\n")
+// B-1065 B2b: the caretaker's own role and unread gene comments, read from the
+// role row in the real main schema (every migration). Failure modes:
+// 1. an offered (not yet accepted) or ended role shows as the person's gene;
+// 2. a suspended role disappears, so the caretaker loses their gene's link;
+// 3. marking comments read goes backwards, past the newest visible comment, or
+//    works on another person's role;
+// 4. a hidden comment counts as unread.
 const ACCOUNT = "account_notification_0001"
 const OTHER = "account_notification_0002"
-const ASSIGNMENT = "assignment_notification_0001"
-const GENE = "gene_notification_0001"
-
-function event(sequence, status, version = sequence) {
-  return {
-    event_id: `event_notification_${String(sequence).padStart(4, "0")}`,
-    event_sequence: sequence,
-    gene_id: GENE,
-    gene: { gene_id: GENE, canonical_symbol: "TP53" },
-    assignment: {
-      caretaker_assignment_id: ASSIGNMENT,
-      account_id: ACCOUNT,
-      status,
-      assignment_version: version,
-    },
-  }
-}
+const ROLE = "assignment_notification_0001"
 
 function setup(t) {
-  const db = new TestD1()
-  db.raw.exec(`
-    CREATE TABLE icono_gene_comments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gene_symbol TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'visible'
-    );
-    CREATE TABLE icono_publish_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gene_symbol TEXT NOT NULL,
-      from_asset_sha256 TEXT,
-      to_asset_sha256 TEXT,
-      action TEXT NOT NULL
-    );
-    ${MIGRATIONS}
-  `)
-  t.after(() => db.close())
+  const db = iconoplasmDatabase()
+  t.after(() => db.database.close())
   return db
 }
 
-test("only a current active or suspended assignment appears in caretaker coordination", async (t) => {
-  const db = setup(t)
-  assert.equal((await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker, null)
-  await projectCaretakerAssignmentNotification(db, event(1, "active"))
-  const active = (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker
-  assert.equal(active.canonical_symbol, "TP53")
-  assert.equal(active.assignment_status, "active")
-  assert.equal(active.unread_comment_count, 0)
-  await projectCaretakerAssignmentNotification(db, event(2, "ended"))
-  assert.equal((await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker, null)
+function role(db, status) {
+  const started = status === "pending_acceptance" ? null : "2026-10-01"
+  db.database
+    .prepare(
+      `INSERT INTO icono_caretaker_assignments
+         (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+          relinquish_policy, invited_by_account_id, started_at, suspended_at, ended_at, end_reason)
+       VALUES (?, 'TP53', ?, ?, ?, 'retain', ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      ROLE,
+      ACCOUNT,
+      status,
+      started,
+      ACCOUNT,
+      started,
+      status === "suspended" ? "2026-10-02" : null,
+      status === "ended" ? "2026-10-03" : null,
+      status === "ended" ? "caretaker_resigned" : null,
+    )
+}
+
+function comment(db, status = "visible") {
+  db.database
+    .prepare(
+      `INSERT INTO icono_gene_comments (gene_symbol, user_id, body, status)
+       VALUES ('TP53', 'reader', 'A comment.', ?)`,
+    )
+    .run(status)
+}
+
+test("1, 2: only an accepted, open role shows as the person's gene, suspended included", async (t) => {
+  for (const [status, shown] of [
+    ["pending_acceptance", false],
+    ["active", true],
+    ["suspended", true],
+    ["ended", false],
+  ]) {
+    const db = setup(t)
+    role(db, status)
+    const { caretaker } = await readCaretakerCoordination(db, { accountId: ACCOUNT })
+    assert.equal(Boolean(caretaker), shown, status)
+    if (shown) {
+      assert.equal(caretaker.canonical_symbol, "TP53")
+      assert.equal(caretaker.assignment_status, status)
+      assert.equal(caretaker.href, "/gene/TP53")
+    }
+  }
 })
 
-test("comment high-water is account scoped, monotonic, and does not swallow a later comment", async (t) => {
+test("3, 4: the read mark only moves forward, stops at the newest visible comment, and is the person's own", async (t) => {
   const db = setup(t)
-  await projectCaretakerAssignmentNotification(db, event(1, "active"))
-  db.raw.prepare("INSERT INTO icono_gene_comments (gene_symbol) VALUES ('TP53'), ('TP53')").run()
-  assert.equal(
-    (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker.unread_comment_count,
-    2,
-  )
-  db.raw.prepare("INSERT INTO icono_gene_comments (gene_symbol) VALUES ('TP53')").run()
+  role(db, "active")
+  comment(db)
+  comment(db)
+  comment(db, "hidden")
+  const unread = async () =>
+    (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker.unread_comment_count
+  assert.equal(await unread(), 2, "the hidden comment does not count")
+  comment(db)
   await markCaretakerCommentsRead(db, {
     accountId: ACCOUNT,
-    assignmentId: ASSIGNMENT,
+    assignmentId: ROLE,
     throughCommentId: 2,
   })
-  const after = (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker
-  assert.equal(after.unread_comment_count, 1)
-  await assert.rejects(
-    markCaretakerCommentsRead(db, {
-      accountId: OTHER,
-      assignmentId: ASSIGNMENT,
-      throughCommentId: 3,
-    }),
-    (error) => error?.code === "CARETAKER_ASSIGNMENT_NOT_FOUND",
-  )
-})
-
-test("projection replay remains idempotent", async (t) => {
-  const db = setup(t)
-  const first = await projectCaretakerAssignmentNotification(db, event(1, "active"))
-  const replay = await projectCaretakerAssignmentNotification(db, event(1, "active"))
-  assert.equal(first.replayed, false)
-  assert.equal(replay.replayed, true)
+  assert.equal(await unread(), 1, "the later comment stays unread")
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 1,
+  })
+  assert.equal(await unread(), 1, "the mark never goes back")
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 999,
+  })
   assert.equal(
-    db.raw.prepare("SELECT count(*) AS total FROM icono_caretaker_assignment_notifications").get()
-      .total,
-    1,
+    db.database
+      .prepare(`SELECT comments_read_through_id AS id FROM icono_caretaker_assignments`)
+      .get().id,
+    4,
+    "the mark stops at the newest visible comment",
+  )
+  await assert.rejects(
+    markCaretakerCommentsRead(db, { accountId: OTHER, assignmentId: ROLE, throughCommentId: 4 }),
+    (error) => error?.code === "CARETAKER_ASSIGNMENT_NOT_FOUND",
   )
 })

@@ -389,6 +389,7 @@ import {
   refreshIconoplasmRegisteredGeneSummaries,
   recoverDueIconoplasmGeneCardMaterializationsForScheduled,
   resolveActiveCaretakerAccountSession,
+  settleGeneAfterVote,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
 import {
@@ -1823,6 +1824,10 @@ const app = createIconoplasmApp({
   refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
   // The signed-in Brinedew account behind a caretaker panel request.
   caretakerSession: resolveActiveCaretakerAccountSession,
+  // Re-runs a gene's election and republishes its card after a caretaker role
+  // that held a supervote ends.
+  settleGene: (env, ctx, symbol) =>
+    settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_assignment_supervote_cleared" }),
   // Today's account-wide D1 usage from Cloudflare's analytics, one reader per
   // isolate (it caches 30 s and backs off after a failure).
   accountUsage: (env) => {

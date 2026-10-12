@@ -36,28 +36,13 @@ import {
   EXEMPT_COLUMNS,
   PERSON_COLUMN_PATTERN,
 } from "./iconoplasm/account-erasure/erasure-steps.js"
-import {
-  TestD1,
-  command,
-  sha,
-  storage,
-} from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
-import {
-  registerAuthorityAccount,
-  registerCaretakerTermsVersion,
-  registerGeneIdentity,
-  offerCaretakerAssignment,
-  saveManifestationRevision,
-  seedSystemManifestation,
-  transitionCaretakerAssignment,
-} from "./iconoplasm/caretaker/manifestation-authority.js"
+import { CARETAKER_SUPERVOTES_SQL } from "./iconoplasm/caretaker/caretaker-supervote.js"
 import {
   brinedewFormerAuthorLabel,
   brinedewProviderSubjectFingerprint,
   readBrinedewAccount,
   resolveBrinedewAccountIdentity,
 } from "./lib/brinedew-account-identity.js"
-import { drainBrinedewAuthorityAccountProjectionOutbox } from "./lib/brinedew-authority-account-projection.js"
 import {
   commentMirrorContent,
   commentMirrorWithAuthor,
@@ -340,14 +325,6 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
   ]) {
     assert.throws(() => world.accounts.database.exec(sql), /append-only/)
   }
-  const outbox = row(
-    world.accounts,
-    `SELECT source_status, authority_status FROM brinedew_authority_account_projection_outbox
-      WHERE account_id = ?`,
-    accountId,
-  )
-  assert.deepEqual({ ...outbox }, { source_status: "erased", authority_status: "tombstoned" })
-
   // 3. The content stays, with no link to the person.
   const comments = rows(
     world.iconoplasm,
@@ -711,68 +688,32 @@ test("every step's declared weight covers the rows the real schema writes for on
   assert.ok(ERASURE_MIN_ROW_WRITES >= Math.max(...ERASURE_STEPS.map((step) => step.weight)))
 })
 
-test("a caretaker's manifestation survives the erasure under the anonymous label, with no Discord id in the authority", async () => {
+test("a caretaker's role ends at once, their supervote stops counting, and their texts stay with the gene", async () => {
   const world = await erasedWorld()
   const env = routeEnv(world.env)
-  const authoring = world.authoring
-  const now = "2026-10-03T00:00:00.000Z"
-  const terms = "terms_version_0001"
-  const inviter = world.otherAccount
-  await registerAuthorityAccount(authoring, { accountId: inviter, now })
-  await registerAuthorityAccount(authoring, { accountId: world.erasedAccount, now })
-  await registerGeneIdentity(authoring, { geneId: "gene_tp53_0001", canonicalSymbol: "TP53", now })
-  await registerCaretakerTermsVersion(authoring, {
-    termsVersionId: terms,
-    termsSha256: sha("f"),
-    documentUrl: "https://brinedew.com/iconoplasm/caretaker-terms/v1",
-    displayLabel: "Caretaker terms v1",
-    effectiveAt: now,
-    createdByAccountId: inviter,
-  })
-  await seedSystemManifestation(authoring, {
-    geneId: "gene_tp53_0001",
-    storage: storage(1),
-    expectedHeadVersion: 0,
-    expectedCanonicalRevisionId: null,
-    manifestationId: "manifestation_seed_0001",
-    revisionId: "revision_seed_0001",
-    selectionId: "selection_seed_0001",
-    eventUuid: "event_seed_0001",
-    now,
-    ...command("command_seed_0001", "1", null, "migration"),
-  })
-  await offerCaretakerAssignment(authoring, {
-    geneId: "gene_tp53_0001",
-    accountId: world.erasedAccount,
-    invitedByAccountId: inviter,
-    entitlementPolicyVersion: "entitlement-v1",
-    expectedGeneRevision: 1,
-    assignmentId: "assignment_0001",
-    eventUuid: "event_offer_0001",
-    now,
-    ...command("command_offer_0001", "2", inviter, "administrator"),
-  })
-  await transitionCaretakerAssignment(authoring, {
-    assignmentId: "assignment_0001",
-    action: "accept",
-    expectedAssignmentVersion: 1,
-    termsVersionId: terms,
-    relinquishPolicy: "retain",
-    eventUuid: "event_accept_0001",
-    now,
-    ...command("command_accept_0001", "3", world.erasedAccount, "account"),
-  })
-  const saved = await saveManifestationRevision(authoring, {
-    assignmentId: "assignment_0001",
-    expectedAssignmentVersion: 2,
-    expectedManifestationVersion: 0,
-    storage: storage(10),
-    manifestationId: "manifestation_user_0001",
-    revisionId: "revision_user_0001_01",
-    eventUuid: "event_save_0001_01",
-    now,
-    ...command("command_save_0001_01", "4", world.erasedAccount, "account"),
-  })
+  const db = world.iconoplasm.database
+  db.prepare(
+    `INSERT INTO icono_gene_texts
+       (gene_symbol, gene_id, text_id, version, text, text_sha256, readers_see,
+        chosen_caretaker_version_id)
+     VALUES ('TP53', 'gene_tp53_0001', 'text_tp53_0001', 1, 'Factory words.', ?, 1,
+             'version_caretaker_0001')`,
+  ).run("0".repeat(64))
+  db.prepare(
+    `INSERT INTO icono_caretaker_assignments
+       (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+        relinquish_policy, invited_by_account_id, started_at, supervote_asset_sha256,
+        supervote_direction, supervote_version)
+     VALUES ('assignment_0001', 'TP53', ?, 'active', '2026-10-01', 'retain', ?, '2026-10-01',
+             ?, 1, 1)`,
+  ).run(world.erasedAccount, world.erasedAccount, "a".repeat(64))
+  db.prepare(
+    `INSERT INTO icono_caretaker_text_versions
+       (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
+        text, text_sha256, readers_see)
+     VALUES ('version_caretaker_0001', 'TP53', 'line_caretaker_0001', 1, ?, 'assignment_0001',
+             'The caretaker''s words.', ?, 1)`,
+  ).run(world.erasedAccount, "1".repeat(64))
 
   let complete = false
   for (let attempt = 0; attempt < 12 && !complete; attempt += 1) {
@@ -786,56 +727,23 @@ test("a caretaker's manifestation survives the erasure under the anonymous label
   }
   assert.equal(complete, true)
 
-  // The scheduled drain carries the erasure into the authority: the account is tombstoned and its
-  // assignment ends. The manifestation it wrote stays, authored by the opaque account id.
-  const drained = await drainBrinedewAuthorityAccountProjectionOutbox({
-    primaryDb: world.accounts,
-    authoringDb: authoring,
-    limit: 10,
-    now: Date.now(),
-  })
-  assert.ok(
-    drained.results.every((result) => result.status === "delivered"),
-    JSON.stringify(drained),
-  )
+  const role = db.prepare(`SELECT status, end_reason FROM icono_caretaker_assignments`).get()
+  assert.deepEqual({ ...role }, { status: "ended", end_reason: "account_erasure_requested" })
   assert.equal(
-    authoring.raw
-      .prepare("SELECT status FROM icono_authority_accounts WHERE account_id = ?")
-      .get(world.erasedAccount).status,
-    "tombstoned",
+    db.prepare(`SELECT COUNT(*) AS n FROM (${CARETAKER_SUPERVOTES_SQL})`).get().n,
+    0,
+    "the supervote no longer counts in any election",
   )
-  const manifestation = authoring.raw
-    .prepare(
-      `SELECT manifestation_id, author_account_id, status FROM icono_manifestations
-        WHERE manifestation_id = ?`,
-    )
-    .get(saved.manifestation_id)
-  assert.equal(manifestation.author_account_id, world.erasedAccount)
-  assert.notEqual(
-    manifestation.status,
-    "withdrawn",
-    "retained, not withdrawn, by the retain policy",
-  )
+  // The erasure keeps content (the privacy pages' rule): the version stays in
+  // use, authored by the opaque account ID, which History shows as removed.
+  const version = db
+    .prepare(`SELECT account_id, withdrawn_at FROM icono_caretaker_text_versions`)
+    .get()
+  assert.deepEqual({ ...version }, { account_id: world.erasedAccount, withdrawn_at: null })
   assert.equal(
-    authoring.raw
-      .prepare(
-        `SELECT count(*) AS count FROM icono_manifestation_revisions WHERE author_account_id = ?`,
-      )
-      .get(world.erasedAccount).count >= 1,
-    true,
+    db.prepare(`SELECT chosen_caretaker_version_id AS id FROM icono_gene_texts`).get().id,
+    "version_caretaker_0001",
   )
-
-  // Nothing in the authority, which never stored a provider identity, names the person.
-  const traces = []
-  for (const { name } of authoring.raw
-    .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
-    .all()) {
-    for (const stored of authoring.raw.prepare(`SELECT * FROM ${name}`).all()) {
-      const text = JSON.stringify(stored)
-      if (text.includes(ERASED_USER) || text.includes(ERASED_NAME)) traces.push(name)
-    }
-  }
-  assert.deepEqual(traces, [])
 })
 
 test("an unpublished job's result images leave the storage with the job; published and other people's objects stay (B-993)", async () => {

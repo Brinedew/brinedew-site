@@ -226,15 +226,15 @@ test(
         ).n,
         0,
       )
+      // B-1065 B2b: roles live in the main database (caretaker-roles.js), so an
+      // old role event drains as published and copies nothing.
       assert.equal(
         (
           await primary
-            .prepare(
-              "SELECT COUNT(*) AS n FROM icono_caretaker_assignment_notifications WHERE assignment_status='active'",
-            )
+            .prepare("SELECT COUNT(*) AS n FROM icono_caretaker_assignment_notifications")
             .first()
         ).n,
-        10,
+        0,
       )
       assert.equal(
         (
@@ -253,51 +253,28 @@ test(
         sourceEventSequence: 1,
         occurredAt: new Date().toISOString(),
       })
-      // The caretaker assignment projection (D1, caretaker-supervote.js) fails
-      // once; the event stays failed and the next scheduled drain publishes it.
-      await primary
-        .prepare(
-          "CREATE TRIGGER test_assignment_projection_unavailable BEFORE UPDATE ON icono_caretaker_vote_assignment_projection BEGIN SELECT RAISE(ABORT, 'assignment projection temporarily unavailable'); END",
-        )
-        .run()
-      for (let attempt = 0; attempt < 2; attempt++) {
-        if (attempt === 1)
-          await primary.prepare("DROP TRIGGER test_assignment_projection_unavailable").run()
-        const observed = createD1InvocationBudget()
-        const result = await drainIconoplasmManifestationAuthorityProjection(
-          {
-            ICONOPLASM_DB: observed.binding(primary),
-            ICONOPLASM_AUTHORING_DB: observed.binding(authoring),
-            ICONOPLASM_CARD_PUBLICATION: coordinator,
-            ...BODY_ENV,
-          },
-          1,
-          { priorityEventId: changed.event_id },
-        )
-        assert.equal(result.failed, attempt === 0 ? 1 : 0)
-        assert.equal(result.statement_count, observed.used)
-        assert.ok(observed.used <= 50)
-        assert.equal(
-          (
-            await authoring
-              .prepare(
-                "SELECT projection_status FROM icono_manifestation_events WHERE event_uuid=?",
-              )
-              .bind(changed.event_id)
-              .first()
-          ).projection_status,
-          attempt === 0 ? "failed" : "published",
-        )
-      }
+      const observed = createD1InvocationBudget()
+      const result = await drainIconoplasmManifestationAuthorityProjection(
+        {
+          ICONOPLASM_DB: observed.binding(primary),
+          ICONOPLASM_AUTHORING_DB: observed.binding(authoring),
+          ICONOPLASM_CARD_PUBLICATION: coordinator,
+          ...BODY_ENV,
+        },
+        1,
+        { priorityEventId: changed.event_id },
+      )
+      assert.equal(result.failed, 0, JSON.stringify(result.results))
+      assert.equal(result.statement_count, observed.used)
+      assert.ok(observed.used <= 50)
       assert.equal(
         (
-          await primary
-            .prepare(
-              "SELECT assignment_status FROM icono_caretaker_assignment_notifications WHERE caretaker_assignment_id='assignment_projection_cost_1'",
-            )
+          await authoring
+            .prepare("SELECT projection_status FROM icono_manifestation_events WHERE event_uuid=?")
+            .bind(changed.event_id)
             .first()
-        ).assignment_status,
-        "suspended",
+        ).projection_status,
+        "published",
       )
     } finally {
       await runtime.dispose()

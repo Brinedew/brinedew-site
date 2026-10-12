@@ -1,5 +1,5 @@
-// B-1065 B2a: the caretaker panel's text routes, on the plain tables of authoring
-// migration 0024. A gene's caretaker texts are rows of icono_caretaker_text_versions,
+// B-1065: the caretaker panel's text routes, on plain tables of the main database
+// (migration 0125), next to the votes and roles. A gene's caretaker texts are rows of icono_caretaker_text_versions,
 // grouped into lines (`line_id`, one caretaker's run on one gene). The text the
 // gene uses is icono_gene_texts.chosen_caretaker_version_id, or the factory's own
 // text when that is empty or withdrawn (lib/iconoplasm-gene-text.js, which the card
@@ -11,13 +11,11 @@
 // (quartz/static/iconoplasm/caretaker-manifestations-*.js), so a line is still a
 // "manifestation" and a version a "revision" on the wire.
 //
-// Claiming, accepting, declining and ending a caretaker role still go through
-// the old commands until B2b moves assignments next to votes.
+// Roles (claim, accept, leave, the admin's changes) live in caretaker-roles.js.
 import { normalizeManifestationProse } from "../lib/iconoplasm-manifestation-prose.js"
 import { normalizeManifestationTags } from "../lib/iconoplasm-manifestation-tags.js"
 import { publicGeneText, readGeneText } from "../lib/iconoplasm-gene-text.js"
 import { sha256Hex } from "../lib/iconoplasm-sha256.js"
-import { readActiveCaretakerTerms } from "./caretaker/caretaker-terms-registry.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
 import {
   jsonResponse,
@@ -27,9 +25,16 @@ import {
   safeErrorResponse,
 } from "./caretaker/manifestation-authority-http-security.js"
 import { readCandidateSources } from "./caretaker/manifestation-candidate-sources.js"
-import { resolveGene } from "./caretaker/manifestation-gene-resolver.js"
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
 import { taggerizerDisabled } from "./caretaker/taggerizer.js"
+import {
+  caretakerPseudonym,
+  caretakerTerms,
+  requireSteward,
+  resolveGene,
+  rolesDb,
+  viewerRole,
+} from "./caretaker-roles.js"
 
 const HISTORY_PAGE = 20
 // The factory's text appears in the panel as one more line, "Original manifestation".
@@ -38,13 +43,6 @@ const OPEN_STATUSES = new Set(["pending_acceptance", "active", "suspended"])
 const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
 // A save's JSON (prose, Tags and fields) is at most about 16 + 32 KiB.
 const SAVE_BODY_LIMIT = 96 * 1024
-
-function authoringDb(env) {
-  const db = env?.ICONOPLASM_AUTHORING_DB
-  if (!db?.prepare)
-    throw authorityError("AUTHORITY_UNAVAILABLE", "Caretaker tools are unavailable", 503)
-  return db
-}
 
 const first = (db, sql, ...args) =>
   db
@@ -59,52 +57,12 @@ const all = async (db, sql, ...args) =>
       .all()
   ).results || []
 
-// The account's caretaker role on this gene: its open one first, else its latest.
-// Only an account that has cared for the gene may open its panel.
-async function viewerAssignment(db, gene, accountId) {
-  return first(
-    db,
-    `SELECT caretaker_assignment_id, gene_id, account_id, status, assignment_version
-       FROM icono_caretaker_assignments
-      WHERE account_id = ? AND (gene_id = ? OR gene_id IS ?)
-      ORDER BY CASE status
-        WHEN 'active' THEN 0 WHEN 'suspended' THEN 1
-        WHEN 'pending_acceptance' THEN 2 ELSE 3 END,
-        created_at DESC, caretaker_assignment_id DESC
-      LIMIT 1`,
-    accountId,
-    gene.gene_id,
-    gene.merged_into_gene_id ?? null,
-  )
-}
-
-// A write needs the gene's active caretaker (B-860: they look after every line
-// on the gene, not only their own).
-async function requireSteward(db, geneLocator, accountId) {
-  const gene = await resolveGene(db, geneLocator)
-  const assignment = await first(
-    db,
-    `SELECT caretaker_assignment_id, gene_id, status
-       FROM icono_caretaker_assignments
-      WHERE gene_id = ? AND account_id = ?
-        AND status IN ('pending_acceptance', 'active', 'suspended')
-      LIMIT 1`,
-    gene.gene_id,
-    accountId,
-  )
-  if (!assignment)
-    throw authorityError("ASSIGNMENT_NOT_FOUND", "Caretaker assignment was not found", 404)
-  if (assignment.status !== "active" || gene.status !== "active")
-    throw authorityError("ASSIGNMENT_NOT_ACTIVE", "Caretaker assignment is not active", 409)
-  return { gene, assignment }
-}
-
 async function requireLine(db, gene, lineId) {
   const line = await first(
     db,
-    `SELECT line_id FROM icono_caretaker_text_versions WHERE line_id = ? AND gene_id = ? LIMIT 1`,
+    `SELECT line_id FROM icono_caretaker_text_versions WHERE line_id = ? AND gene_symbol = ? LIMIT 1`,
     lineId,
-    gene.gene_id,
+    gene.canonical_symbol,
   )
   if (!line) throw authorityError("MANIFESTATION_NOT_FOUND", "Manifestation was not found", 404)
   return line
@@ -115,30 +73,30 @@ async function requireLine(db, gene, lineId) {
 // the newest remaining caretaker version with Tags, else to the factory's text.
 // The statements run in the caller's batch, after anything else it writes, so
 // account erasure and the admin's "withdraw" leave policy share this rule.
-export function withdrawCaretakerTextStatements(db, { geneId, lineId, assignmentId, at }) {
+export function withdrawCaretakerTextStatements(db, { symbol, lineId, assignmentId, at }) {
   const [column, value] = lineId ? ["line_id", lineId] : ["caretaker_assignment_id", assignmentId]
-  if (!geneId || !value)
+  if (!symbol || !value)
     throw new TypeError("withdrawCaretakerTextStatements needs a gene and a line or role")
   return [
     db
       .prepare(
         `UPDATE icono_caretaker_text_versions SET withdrawn_at = ?
-          WHERE gene_id = ? AND ${column} = ? AND withdrawn_at IS NULL`,
+          WHERE gene_symbol = ? AND ${column} = ? AND withdrawn_at IS NULL`,
       )
-      .bind(at, geneId, value),
+      .bind(at, symbol, value),
     db
       .prepare(
         `UPDATE icono_gene_texts
             SET chosen_caretaker_version_id = (
               SELECT version_id FROM icono_caretaker_text_versions
-               WHERE gene_id = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
+               WHERE gene_symbol = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
                ORDER BY created_at DESC, version_id DESC LIMIT 1),
                 updated_at = CURRENT_TIMESTAMP
-          WHERE gene_id = ? AND chosen_caretaker_version_id IN (
+          WHERE gene_symbol = ? AND chosen_caretaker_version_id IN (
             SELECT version_id FROM icono_caretaker_text_versions
-             WHERE gene_id = ? AND ${column} = ?)`,
+             WHERE gene_symbol = ? AND ${column} = ?)`,
       )
-      .bind(geneId, geneId, geneId, value),
+      .bind(symbol, symbol, symbol, value),
   ]
 }
 
@@ -170,12 +128,31 @@ async function revisionView(row, viewerAccountId) {
 }
 
 // Versions carry their author's name, as every Wikipedia revision does (owner,
-// 27 Sep 2026). A removed account never shows its old name.
-function authorLabel(row, viewerAccountId) {
-  if (!row.account_id) return "Original manifestation"
-  if (row.account_id === viewerAccountId) return "You"
-  if (row.account_status === "tombstoned") return "Removed account"
-  return String(row.public_credit_label || "Anonymous caretaker")
+// 27 Sep 2026): the account's pseudonym (caretakerPseudonym). A removed account
+// never shows it.
+async function authorLabels(env, accountIds) {
+  const ids = [...new Set(accountIds.filter(Boolean))]
+  const removed = new Set()
+  if (ids.length && env?.DB?.prepare) {
+    const rows = await all(
+      env.DB,
+      `SELECT account_id FROM brinedew_accounts
+        WHERE account_id IN (${ids.map(() => "?").join(", ")})
+          AND status IN ('erasure_pending', 'erased')`,
+      ...ids,
+    )
+    for (const row of rows) removed.add(row.account_id)
+  }
+  const labels = new Map()
+  for (const id of ids)
+    labels.set(id, removed.has(id) ? "Removed account" : await caretakerPseudonym(id))
+  return labels
+}
+
+function authorLabel(labels, accountId, viewerAccountId) {
+  if (!accountId) return "Original manifestation"
+  if (accountId === viewerAccountId) return "You"
+  return labels.get(accountId) || "Anonymous caretaker"
 }
 
 function decodeCursor(raw) {
@@ -196,22 +173,20 @@ function encodeCursor(row) {
 const VERSION_COLUMNS = `version_id, line_id, version, account_id, text, tags, fields_json,
   withdrawn_at, created_at`
 
-export async function readCaretakerTextDossier(env, { geneLocator, accountId, cursor, now }) {
-  const db = authoringDb(env)
+export async function readCaretakerTextDossier(env, { geneLocator, accountId, cursor }) {
+  const db = rolesDb(env)
   const gene = await resolveGene(db, geneLocator)
-  const assignment = await viewerAssignment(db, gene, accountId)
+  const symbol = gene.canonical_symbol
+  const assignment = await viewerRole(db, symbol, accountId)
   if (!assignment) return { enabled: false }
-  const steward =
-    gene.status === "active" &&
-    assignment.status === "active" &&
-    assignment.gene_id === gene.gene_id
+  const steward = assignment.status === "active"
   const page = decodeCursor(cursor)
   const [factory, lineRows, pageRows, count, current] = await Promise.all([
     first(
       db,
       `SELECT text_id, version, text, tags, fields_json, readers_see, updated_at
-         FROM icono_gene_texts WHERE gene_id = ?`,
-      gene.gene_id,
+         FROM icono_gene_texts WHERE gene_symbol = ?`,
+      symbol,
     ),
     // Each line with its newest version, which holds the line's state.
     all(
@@ -219,24 +194,22 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       `SELECT v.line_id, v.account_id, v.caretaker_assignment_id, v.version_id AS head_id,
               v.readers_see, v.withdrawn_at,
               (SELECT MIN(f.created_at) FROM icono_caretaker_text_versions f
-                WHERE f.line_id = v.line_id) AS created_at,
-              a.public_credit_label, a.status AS account_status
+                WHERE f.line_id = v.line_id) AS created_at
          FROM icono_caretaker_text_versions v
-         LEFT JOIN icono_authority_accounts a ON a.account_id = v.account_id
-        WHERE v.gene_id = ?
+        WHERE v.gene_symbol = ?
           AND v.version = (SELECT MAX(m.version) FROM icono_caretaker_text_versions m
                             WHERE m.line_id = v.line_id)
         ORDER BY created_at, v.line_id`,
-      gene.gene_id,
+      symbol,
     ),
     all(
       db,
       `SELECT ${VERSION_COLUMNS} FROM icono_caretaker_text_versions
-        WHERE gene_id = ?
+        WHERE gene_symbol = ?
           AND (? IS NULL OR created_at < ? OR (created_at = ? AND version_id < ?))
         ORDER BY created_at DESC, version_id DESC
         LIMIT ${HISTORY_PAGE + 1}`,
-      gene.gene_id,
+      symbol,
       page?.c ?? null,
       page?.c ?? null,
       page?.c ?? null,
@@ -244,10 +217,10 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
     ),
     first(
       db,
-      `SELECT COUNT(*) AS total FROM icono_caretaker_text_versions WHERE gene_id = ?`,
-      gene.gene_id,
+      `SELECT COUNT(*) AS total FROM icono_caretaker_text_versions WHERE gene_symbol = ?`,
+      symbol,
     ),
-    readGeneText(db, gene.canonical_symbol),
+    readGeneText(db, symbol),
   ])
   const shown = pageRows.slice(0, HISTORY_PAGE)
   const canonicalId = current?.text_id || ""
@@ -265,8 +238,8 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
     ? await all(
         db,
         `SELECT ${VERSION_COLUMNS} FROM icono_caretaker_text_versions
-          WHERE gene_id = ? AND version_id IN (${missing.map(() => "?").join(", ")})`,
-        gene.gene_id,
+          WHERE gene_symbol = ? AND version_id IN (${missing.map(() => "?").join(", ")})`,
+        symbol,
         ...missing,
       )
     : []
@@ -303,13 +276,17 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
     const fallback = await first(
       db,
       `SELECT version_id FROM icono_caretaker_text_versions
-        WHERE gene_id = ? AND line_id <> ? AND withdrawn_at IS NULL AND tags IS NOT NULL
+        WHERE gene_symbol = ? AND line_id <> ? AND withdrawn_at IS NULL AND tags IS NOT NULL
         LIMIT 1`,
-      gene.gene_id,
+      symbol,
       ownLine.line_id,
     )
     fallbackLabel = fallback ? "an earlier caretaker manifestation" : "Original manifestation"
   }
+  const labels = await authorLabels(
+    env,
+    lineRows.map((line) => line.account_id),
+  )
   const manifestations = []
   if (factory) {
     manifestations.push({
@@ -343,7 +320,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       public_page_visible: Number(line.readers_see) === 1,
       author_is_viewer: own,
       belongs_to_current_assignment: currentRole(line),
-      author_label: authorLabel(line, viewerId),
+      author_label: authorLabel(labels, line.account_id, viewerId),
       can_withdraw: steward && !withdrawn,
       can_restore: steward && withdrawn,
       created_at: line.created_at,
@@ -351,10 +328,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       revisions: revisions.filter((revision) => revision.manifestation_id === line.line_id),
     })
   }
-  const terms =
-    assignment.status === "pending_acceptance"
-      ? await readActiveCaretakerTerms(db, now || new Date().toISOString())
-      : null
+  const terms = assignment.status === "pending_acceptance" ? caretakerTerms() : null
   return {
     schema_version: 1,
     enabled: true,
@@ -362,7 +336,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       gene_id: gene.gene_id,
       symbol: gene.canonical_symbol,
       status: gene.status,
-      merged_into_symbol: gene.merged_into_symbol || null,
+      merged_into_symbol: null,
       aliases: gene.aliases,
     },
     assignment: {
@@ -404,22 +378,22 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
 
 // The Tags of one version (or of the factory's text), for the editor.
 export async function readCaretakerTextTags(env, { geneLocator, accountId, versionId }) {
-  const db = authoringDb(env)
+  const db = rolesDb(env)
   const gene = await resolveGene(db, geneLocator)
-  if (!(await viewerAssignment(db, gene, accountId)))
+  if (!(await viewerRole(db, gene.canonical_symbol, accountId)))
     throw authorityError("GENE_DOSSIER_FORBIDDEN", "A caretaker relationship is required", 403)
   const row =
     (await first(
       db,
       `SELECT tags, fields_json FROM icono_caretaker_text_versions
-        WHERE gene_id = ? AND version_id = ?`,
-      gene.gene_id,
+        WHERE gene_symbol = ? AND version_id = ?`,
+      gene.canonical_symbol,
       versionId,
     )) ||
     (await first(
       db,
-      `SELECT tags, fields_json FROM icono_gene_texts WHERE gene_id = ? AND text_id = ?`,
-      gene.gene_id,
+      `SELECT tags, fields_json FROM icono_gene_texts WHERE gene_symbol = ? AND text_id = ?`,
+      gene.canonical_symbol,
       versionId,
     ))
   if (!row) throw authorityError("DERIVATIVE_NOT_FOUND", "Derivative was not found", 404)
@@ -468,7 +442,7 @@ function isConstraintError(error) {
 }
 
 export async function saveCaretakerText(env, { geneLocator, accountId, body, withTags }) {
-  const db = authoringDb(env)
+  const db = rolesDb(env)
   const { gene, assignment } = await requireSteward(db, geneLocator, accountId)
   const commandId = readCommandId(body)
   let prose
@@ -507,16 +481,14 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
       manifestation_revision_id: versionId,
       manifestation_id: saved.line_id,
     }
-  if (!(await first(db, `SELECT 1 AS ok FROM icono_gene_texts WHERE gene_id = ?`, gene.gene_id)))
-    throw authorityError("GENE_NOT_READY", "This gene has no text yet", 409)
   // The role's latest line, unless it was withdrawn: new writing after a
   // withdrawal starts a line of its own.
   const latest = await first(
     db,
     `SELECT line_id, withdrawn_at FROM icono_caretaker_text_versions
-      WHERE gene_id = ? AND caretaker_assignment_id = ?
+      WHERE gene_symbol = ? AND caretaker_assignment_id = ?
       ORDER BY created_at DESC, version DESC LIMIT 1`,
-    gene.gene_id,
+    gene.canonical_symbol,
     assignment.caretaker_assignment_id,
   )
   const lineId = latest && !latest.withdrawn_at ? latest.line_id : newLineId()
@@ -528,7 +500,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     db
       .prepare(
         `INSERT INTO icono_caretaker_text_versions
-           (version_id, gene_id, line_id, version, account_id, caretaker_assignment_id,
+           (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
             text, text_sha256, tags, fields_json, readers_see, created_at)
          SELECT ?, ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?,
                 COALESCE((SELECT readers_see FROM icono_caretaker_text_versions
@@ -537,7 +509,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
       )
       .bind(
         versionId,
-        gene.gene_id,
+        gene.canonical_symbol,
         lineId,
         accountId,
         assignment.caretaker_assignment_id,
@@ -556,9 +528,9 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
       db
         .prepare(
           `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE gene_id = ?`,
+                    WHERE gene_symbol = ?`,
         )
-        .bind(versionId, gene.gene_id),
+        .bind(versionId, gene.canonical_symbol),
     )
   await runWrite(db, statements)
   return { ok: true, manifestation_revision_id: versionId, manifestation_id: lineId, gene }
@@ -578,7 +550,7 @@ async function runWrite(db, statements) {
 }
 
 export async function withdrawCaretakerLine(env, { geneLocator, accountId, lineId }) {
-  const db = authoringDb(env)
+  const db = rolesDb(env)
   const { gene } = await requireSteward(db, geneLocator, accountId)
   if (lineId === FACTORY_LINE_ID)
     throw authorityError("MANIFESTATION_NOT_WITHDRAWABLE", "The original text stays", 409)
@@ -586,7 +558,7 @@ export async function withdrawCaretakerLine(env, { geneLocator, accountId, lineI
   await runWrite(
     db,
     withdrawCaretakerTextStatements(db, {
-      geneId: gene.gene_id,
+      symbol: gene.canonical_symbol,
       lineId,
       at: new Date().toISOString(),
     }),
@@ -597,7 +569,7 @@ export async function withdrawCaretakerLine(env, { geneLocator, accountId, lineI
 // Restoring brings back the versions withdrawn with the line's newest one and
 // makes the line the gene's text again ("restored and made canonical").
 export async function restoreCaretakerLine(env, { geneLocator, accountId, lineId }) {
-  const db = authoringDb(env)
+  const db = rolesDb(env)
   const { gene } = await requireSteward(db, geneLocator, accountId)
   await requireLine(db, gene, lineId)
   const head = await first(
@@ -625,16 +597,16 @@ export async function restoreCaretakerLine(env, { geneLocator, accountId, lineId
                WHERE line_id = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
                ORDER BY version DESC LIMIT 1), chosen_caretaker_version_id),
                 updated_at = CURRENT_TIMESTAMP
-          WHERE gene_id = ?`,
+          WHERE gene_symbol = ?`,
       )
-      .bind(lineId, gene.gene_id),
+      .bind(lineId, gene.canonical_symbol),
   )
   await runWrite(db, statements)
   return { ok: true, manifestation_id: lineId, gene }
 }
 
 export async function setCaretakerLineVisibility(env, { geneLocator, accountId, lineId, body }) {
-  const db = authoringDb(env)
+  const db = rolesDb(env)
   const { gene } = await requireSteward(db, geneLocator, accountId)
   if (typeof body?.visible !== "boolean")
     throw authorityError("VISIBLE_REQUIRED", "visible must be true or false", 400)
@@ -659,7 +631,7 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
   // rebuilt only when what readers see changes, not on every autosave of a
   // hidden text. A failed rebuild tells the panel the public view is behind.
   async function publicText(env, symbol) {
-    return publicGeneText(await readGeneText(authoringDb(env), symbol))
+    return publicGeneText(await readGeneText(rolesDb(env), symbol))
   }
   async function write(c, run) {
     try {
@@ -667,7 +639,7 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
       const accountId = await session(c)
       const parsed = await readBoundedJson(c.req.raw, SAVE_BODY_LIMIT)
       const geneLocator = decodeURIComponent(c.req.param("gene"))
-      const symbolBefore = (await resolveGene(authoringDb(c.env), geneLocator)).canonical_symbol
+      const symbolBefore = (await resolveGene(rolesDb(c.env), geneLocator)).canonical_symbol
       const before = await publicText(c.env, symbolBefore)
       const { gene, ...result } = await run({ geneLocator, accountId, body: parsed.value })
       const after = await publicText(c.env, gene.canonical_symbol)

@@ -1,17 +1,14 @@
 import assert from "node:assert/strict"
-import { readdirSync, readFileSync } from "node:fs"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
-import { TestD1 } from "./caretaker/manifestation-authority-test-support.js"
+import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
 import { withdrawCaretakerTextStatements } from "./caretaker-texts.js"
 import { writeFactoryGeneText } from "./gene-text-write.js"
 import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 
-// B-1065 B2a: the caretaker panel's text routes, through the real Hono app into
-// the real authoring schema (every migration). Failure modes written before the
-// code:
+// B-1065: the caretaker panel's text routes, through the real Hono app into the
+// real main schema (every migration). Failure modes written before the code:
 // 1. a save lands in the wrong line, numbers its version wrongly, or a save with
 //    Tags does not become the text new images are drawn from;
 // 2. an autosave retried with the same command ID saves twice;
@@ -29,8 +26,9 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 //    leaves its plain versions in use;
 // 10. (B-724) a candidate made from version 1 is shown as made from a later
 //    version, a legacy image gets an invented source, the sources reach a
-//    stranger, the lookup reads another gene's pool, or an unreadable primary
-//    database breaks the panel.
+//    stranger, or the lookup reads another gene's pool;
+// 11. History names a caretaker by their account, or two caretakers alike, or
+//    a removed account by its old name.
 
 const ORIGIN = "https://iconoplasm.test"
 const CARETAKER = "account_caretaker_0001"
@@ -38,41 +36,31 @@ const OTHER = "account_caretaker_0002"
 const STRANGER = "account_stranger_0003"
 const NOW = "2026-10-11T08:00:00.000Z"
 
-async function account(db, id, label) {
-  db.raw
-    .prepare(`INSERT INTO icono_authority_accounts (account_id, public_credit_label) VALUES (?, ?)`)
-    .run(id, label)
-}
-
-function assignment(db, { id, geneId, accountId, status = "active" }) {
+function assignment(db, { id, accountId, status = "active" }) {
   const ended = status === "ended"
   db.raw
     .prepare(
       `INSERT INTO icono_caretaker_assignments
-         (caretaker_assignment_id, gene_id, account_id, status, terms_accepted_at,
-          entitlement_policy_version, relinquish_policy, invited_by_account_id, started_at,
-          ended_at, end_reason, created_at)
-       VALUES (?, ?, ?, ?, ?, 'v1', 'retain', ?, ?, ?, ?, ?)`,
+         (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+          relinquish_policy, invited_by_account_id, started_at, ended_at, end_reason, created_at)
+       VALUES (?, 'MFNG', ?, ?, ?, 'retain', ?, ?, ?, ?, ?)`,
     )
-    .run(
-      id,
-      geneId,
-      accountId,
-      status,
-      NOW,
-      accountId,
-      NOW,
-      ended ? NOW : null,
-      ended ? "test" : null,
-      NOW,
-    )
+    .run(id, accountId, status, NOW, accountId, NOW, ended ? NOW : null, ended ? "test" : null, NOW)
 }
 
-async function harness(t, { primary } = {}) {
-  const db = new TestD1()
-  t.after(() => db.close())
+async function harness(t, { accounts = null } = {}) {
+  const db = iconoplasmDatabase()
+  db.raw = db.database
+  // Every statement the routes prepare, for the read-cost checks.
+  db.statements = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = (sql) => {
+    db.statements.push(sql)
+    return prepare(sql)
+  }
+  t.after(() => db.database.close())
   const published = []
-  const env = { ICONOPLASM_AUTHORING_DB: db, ...(primary ? { ICONOPLASM_DB: primary } : {}) }
+  const env = { ICONOPLASM_DB: db, ...(accounts ? { DB: accounts } : {}) }
   const app = createIconoplasmApp({
     legacy: async () => new Response("legacy", { status: 299 }),
     publishGene: async (_env, symbol) => {
@@ -90,12 +78,8 @@ async function harness(t, { primary } = {}) {
     tags: "factory, tag",
     fields: { mood: ["calm"] },
   })
-  const geneId = (await readGeneText(db, "MFNG")).gene_id
-  await account(db, CARETAKER, "Caretaker One")
-  await account(db, OTHER, "Caretaker Two")
-  await account(db, STRANGER, "Stranger Three")
-  assignment(db, { id: "assignment_old_0002", geneId, accountId: OTHER, status: "ended" })
-  assignment(db, { id: "assignment_now_0001", geneId, accountId: CARETAKER })
+  assignment(db, { id: "assignment_old_0002", accountId: OTHER, status: "ended" })
+  assignment(db, { id: "assignment_now_0001", accountId: CARETAKER })
 
   let commands = 0
   const call = async (method, suffix, body, { as = CARETAKER, headers = {} } = {}) => {
@@ -140,7 +124,7 @@ async function harness(t, { primary } = {}) {
       )
       .all()
   const chosen = async () => (await readGeneText(db, "MFNG")).text
-  return { db, env, geneId, call, save, versions, chosen, published }
+  return { db, env, call, save, versions, chosen, published }
 }
 
 test("1, 2, 3: saves number within one line, a retry saves once, and only a save with Tags is drawn from", async (t) => {
@@ -196,12 +180,13 @@ test("6: withdrawing the chosen line falls back to a text with Tags; restore bri
   h.db.raw
     .prepare(
       `INSERT INTO icono_caretaker_text_versions
-         (version_id, gene_id, line_id, version, account_id, caretaker_assignment_id,
+         (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
           text, text_sha256, tags, fields_json, created_at)
-       VALUES ('revision_earlier_tagged', ?, 'manifestation_earlier', 1, ?, 'assignment_old_0002',
-               'Earlier caretaker text.', ?, 'old tag', '{}', '2026-09-01T00:00:00.000Z')`,
+       VALUES ('revision_earlier_tagged', 'MFNG', 'manifestation_earlier', 1, ?,
+               'assignment_old_0002', 'Earlier caretaker text.', ?, 'old tag', '{}',
+               '2026-09-01T00:00:00.000Z')`,
     )
-    .run(h.geneId, OTHER, "0".repeat(64))
+    .run(OTHER, "0".repeat(64))
   const one = await h.save("Mine, one.")
   await h.save("Mine, two.")
   const line = one.body.manifestation_id
@@ -340,7 +325,7 @@ test("9: a role's withdrawal takes all its versions out of use and the gene fall
   assert.equal(await h.chosen(), "Mine, chosen.")
   await h.db.batch(
     withdrawCaretakerTextStatements(h.db, {
-      geneId: h.geneId,
+      symbol: "MFNG",
       assignmentId: "assignment_now_0001",
       at: NOW,
     }),
@@ -349,89 +334,55 @@ test("9: a role's withdrawal takes all its versions out of use and the gene fall
   assert.ok(h.versions().every((row) => row.withdrawn_at === NOW))
 })
 
-// The real primary schema (every checked-in migration), counting what it reads.
-const PRIMARY_MIGRATIONS = new URL("../../migrations-iconoplasm/", import.meta.url)
 const hex = (character) => character.repeat(64)
-class PrimaryD1 {
-  constructor() {
-    this.sqlite = new DatabaseSync(":memory:")
-    for (const name of readdirSync(PRIMARY_MIGRATIONS)
-      .filter((file) => file.endsWith(".sql"))
-      .sort())
-      this.sqlite.exec(readFileSync(new URL(name, PRIMARY_MIGRATIONS), "utf8"))
-    this.statements = []
-    this.rowsRead = 0
-  }
-  prepare(sql) {
-    const db = this
-    let args = []
-    return {
-      bind(...values) {
-        args = values
-        return this
-      },
-      async all() {
-        db.statements.push(sql)
-        const results = db.sqlite.prepare(sql).all(...args)
-        db.rowsRead += results.length
-        return { results }
-      },
-    }
-  }
-  candidate(symbol, assetSha, sourceVersionId) {
-    if (sourceVersionId == null) {
-      this.sqlite
-        .prepare(
-          `INSERT INTO icono_portrait_assets
-             (gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status)
-           VALUES (?, ?, 'hero', 'thumb', 'draft')`,
-        )
-        .run(symbol, assetSha)
-      return
-    }
-    this.sqlite
+
+function candidate(db, symbol, assetSha, sourceVersionId) {
+  if (sourceVersionId == null) {
+    db.raw
       .prepare(
-        `INSERT INTO icono_portrait_assets (
-           gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status,
-           generation_provenance_status, generation_request_id, generation_attempt_id,
-           generation_provider_id, generation_model_id, generation_prompt_sha256,
-           generation_config_sha256, source_gene_id, source_manifestation_id,
-           source_manifestation_revision_id, source_manifestation_body_sha256,
-           source_canonical_selection_id, source_canonical_head_version,
-           source_gene_revision, source_snapshot_sha256
-         ) VALUES (?, ?, 'hero', 'thumb', 'draft', 'bound', ?, ?, 'provider', 'model', ?, ?,
-                   'gene_for_test', 'line_for_test', ?, ?, 'selection_for_test', 1, 1, ?)`,
+        `INSERT INTO icono_portrait_assets
+           (gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status)
+         VALUES (?, ?, 'hero', 'thumb', 'draft')`,
       )
-      .run(
-        symbol,
-        assetSha,
-        `request_${assetSha.slice(0, 12)}`,
-        `attempt_${assetSha.slice(0, 12)}`,
-        hex("1"),
-        hex("2"),
-        sourceVersionId,
-        hex("3"),
-        hex("4"),
-      )
+      .run(symbol, assetSha)
+    return
   }
-  close() {
-    this.sqlite.close()
-  }
+  db.raw
+    .prepare(
+      `INSERT INTO icono_portrait_assets (
+         gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status,
+         generation_provenance_status, generation_request_id, generation_attempt_id,
+         generation_provider_id, generation_model_id, generation_prompt_sha256,
+         generation_config_sha256, source_gene_id, source_manifestation_id,
+         source_manifestation_revision_id, source_manifestation_body_sha256,
+         source_canonical_selection_id, source_canonical_head_version,
+         source_gene_revision, source_snapshot_sha256
+       ) VALUES (?, ?, 'hero', 'thumb', 'draft', 'bound', ?, ?, 'provider', 'model', ?, ?,
+                 'gene_for_test', 'line_for_test', ?, ?, 'selection_for_test', 1, 1, ?)`,
+    )
+    .run(
+      symbol,
+      assetSha,
+      `request_${assetSha.slice(0, 12)}`,
+      `attempt_${assetSha.slice(0, 12)}`,
+      hex("1"),
+      hex("2"),
+      sourceVersionId,
+      hex("3"),
+      hex("4"),
+    )
 }
 
 test("10: a candidate keeps pointing at the version that made it, for its caretaker only", async (t) => {
-  const primary = new PrimaryD1()
-  t.after(() => primary.close())
-  const h = await harness(t, { primary })
+  const h = await harness(t)
   const first = await h.save("First words.")
-  primary.candidate("MFNG", hex("a"), first.body.manifestation_revision_id)
-  primary.candidate("MFNG", hex("c"), null)
-  primary.candidate("OTHER1", hex("d"), "revision_belongs_to_another_gene")
+  candidate(h.db, "MFNG", hex("a"), first.body.manifestation_revision_id)
+  candidate(h.db, "MFNG", hex("c"), null)
+  candidate(h.db, "OTHER1", hex("d"), "revision_belongs_to_another_gene")
   const second = await h.save("Second words, after another edit.")
-  primary.candidate("MFNG", hex("b"), second.body.manifestation_revision_id)
+  candidate(h.db, "MFNG", hex("b"), second.body.manifestation_revision_id)
 
-  primary.statements.length = 0
-  primary.rowsRead = 0
+  h.db.statements.length = 0
   const dossier = (await h.call("GET", "")).body
   const sources = new Map(
     dossier.candidate_sources.map((entry) => [
@@ -446,26 +397,56 @@ test("10: a candidate keeps pointing at the version that made it, for its careta
     .flatMap((line) => line.revisions)
     .find((revision) => revision.manifestation_revision_id === first.body.manifestation_revision_id)
   assert.equal(history.body, "First words.")
-  assert.equal(primary.statements.length, 1, "one primary read per panel")
-  assert.equal(primary.rowsRead, 2, "this gene's two bound candidates")
-  assert.match(primary.statements[0], /WHERE gene_symbol = \?/)
-  assert.doesNotMatch(primary.statements[0], /upper\(|lower\(/i)
+  const pool = h.db.statements.filter((sql) => /icono_portrait_assets/.test(sql))
+  assert.equal(pool.length, 1, "one candidate read per panel")
+  assert.match(pool[0], /WHERE gene_symbol = \?/)
+  assert.doesNotMatch(pool[0], /upper\(|lower\(/i)
 
-  primary.statements.length = 0
+  h.db.statements.length = 0
   assert.deepEqual((await h.call("GET", "", null, { as: STRANGER })).body, { enabled: false })
-  assert.equal(primary.statements.length, 0, "a stranger's request never reads the pool")
+  assert.equal(
+    h.db.statements.filter((sql) => /icono_portrait_assets/.test(sql)).length,
+    0,
+    "a stranger's request never reads the pool",
+  )
 })
 
-test("10: an unreadable primary database leaves the panel intact", async (t) => {
-  const h = await harness(t, {
-    primary: {
-      prepare() {
-        throw new Error("primary D1 unavailable")
-      },
-    },
-  })
-  await h.save("Words.")
-  const dossier = (await h.call("GET", "")).body
-  assert.equal(dossier.enabled, true)
-  assert.equal("candidate_sources" in dossier, false)
+test("11: History names each caretaker by a pseudonym of their own, and a removed account as removed", async (t) => {
+  const accounts = iconoplasmDatabase()
+  t.after(() => accounts.database.close())
+  accounts.database.exec(
+    `CREATE TABLE brinedew_accounts (account_id TEXT PRIMARY KEY, status TEXT NOT NULL)`,
+  )
+  accounts.database
+    .prepare(`INSERT INTO brinedew_accounts VALUES (?, 'erased')`)
+    .run("account_removed_0004")
+  const h = await harness(t, { accounts })
+  for (const [id, account] of [
+    ["revision_other_0001", OTHER],
+    ["revision_removed_0001", "account_removed_0004"],
+  ])
+    h.db.raw
+      .prepare(
+        `INSERT INTO icono_caretaker_text_versions
+           (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
+            text, text_sha256, created_at)
+         VALUES (?, 'MFNG', ?, 1, ?, 'assignment_old_0002', 'Words.', ?, '2026-09-01T00:00:00.000Z')`,
+      )
+      .run(id, `line_${id}`, account, "0".repeat(64))
+  await h.save("Mine.")
+  const labels = Object.fromEntries(
+    (await h.call("GET", "")).body.manifestations.map((line) => [
+      line.manifestation_id,
+      line.author_label,
+    ]),
+  )
+  assert.match(labels.line_revision_other_0001, /^Caretaker [0-9A-F]{8}$/)
+  assert.equal(labels.line_revision_removed_0001, "Removed account")
+  assert.ok(Object.values(labels).includes("You"))
+  // The same account keeps its pseudonym; another account gets another.
+  const again = (await h.call("GET", "")).body.manifestations.find(
+    (line) => line.manifestation_id === "line_revision_other_0001",
+  )
+  assert.equal(again.author_label, labels.line_revision_other_0001)
+  assert.notEqual(labels.line_revision_other_0001, "Caretaker " + "0".repeat(8))
 })

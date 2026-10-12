@@ -1,41 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 
 import { createDiagnosticMatrixRunForTest } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
-class StaticAuthoringStatement {
-  bind() {
-    return this
-  }
-
-  // One gene text from the plain tables of authoring migration 0024 (B-1065).
-  async first() {
-    return {
-      gene_id: "gene_aff2_0001",
-      canonical_symbol: "AFF2",
-      gene_status: "active",
-      origin: "factory",
-      text_id: "revision_aff2_0001",
-      line_id: null,
-      version: 1,
-      text: "AFF2 keeps a quiet ledger.",
-      text_sha256: "a".repeat(64),
-      tags: "quiet_ledger, ink_cuffs",
-      fields_json: "{}",
-      readers_see: 0,
-    }
-  }
-}
-
-const STATIC_AUTHORING_DB = Object.freeze({
-  prepare() {
-    return new StaticAuthoringStatement()
-  },
-})
-
 function diagnosticEnv(d1) {
-  return { ICONOPLASM_DB: d1, ICONOPLASM_AUTHORING_DB: STATIC_AUTHORING_DB }
+  return { ICONOPLASM_DB: d1 }
 }
 
 class SQLiteD1Statement {
@@ -108,6 +79,18 @@ function diagnosticDatabase(options) {
       full_name TEXT NOT NULL DEFAULT ''
     );
     INSERT INTO icono_gene_catalog VALUES ('AFF2', 'ALF transcription elongation factor 2');
+  `)
+  // One gene text, in the plain tables of main migration 0125 (B-1065).
+  db.exec(
+    readFileSync(
+      new URL("../migrations-iconoplasm/0125_plain_caretaking.sql", import.meta.url),
+      "utf8",
+    ),
+  )
+  db.exec(`
+    INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json)
+    VALUES ('AFF2', 'gene_aff2_0001', 'revision_aff2_0001', 1, 'AFF2 keeps a quiet ledger.',
+            '${"a".repeat(64)}', 'quiet_ledger, ink_cuffs', '{}');
     CREATE TABLE icono_factory_active_recipe (
       singleton_id INTEGER PRIMARY KEY,
       pipeline_code TEXT NOT NULL,
