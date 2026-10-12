@@ -6,8 +6,7 @@ import {
   createIconoplasmCaretakerAdminHandlers,
 } from "./iconoplasm-caretaker-admin-routes.js"
 import { caretakerPseudonym, caretakerTerms } from "./iconoplasm/caretaker-roles.js"
-import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
-import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
+import { blankDatabase, iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 // B-1065 B2b: the admin's caretaker page, through its declared handlers, on the
 // roles table of the real main schema (every migration). Failure modes:
@@ -46,7 +45,7 @@ function mutationRequest(
 
 function setup(t, { supervote = false } = {}) {
   const db = iconoplasmDatabase()
-  const accounts = new TestD1()
+  const accounts = blankDatabase()
   t.after(() => {
     db.database.close()
     accounts.close()

@@ -20,12 +20,7 @@ test("cost identities follow the cost authority imports, not unrelated Worker co
     mkdirSync(path.dirname(file), { recursive: true })
     writeFileSync(file, text)
   }
-  for (const directory of [
-    "migrations",
-    "workers/benchmark/migrations",
-    "migrations-iconoplasm",
-    "migrations-iconoplasm-authoring",
-  ])
+  for (const directory of ["migrations", "workers/benchmark/migrations", "migrations-iconoplasm"])
     write(`${directory}/0001.sql`, "SELECT 1;\n")
   write(
     "workers/iconoplasm/operation-cost-http.js",

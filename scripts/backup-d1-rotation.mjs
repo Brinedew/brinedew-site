@@ -7,9 +7,8 @@
 //
 // Why a rotation: an export reads every row, and D1 Free allows 5M row reads a
 // day for the whole account. Measured reads per export (backup-log.jsonl,
-// 2026-09-25 to 2026-10-02): iconoplasm 572k, iconoplasm-authoring 394k,
-// iconoplasm-audit 302k, geneguessr 204k including its FTS table, the event
-// archive 58k. One database per night stays within 20% of the day's allowance
+// 2026-09-25 to 2026-10-02): iconoplasm 572k, iconoplasm-audit 302k,
+// geneguessr 204k including its FTS table. One database per night stays within 20% of the day's allowance
 // (1M reads). The hourly capacity observer
 // (scripts/check-iconoplasm-d1-statement-burns.mjs) recognises the paging
 // statements below by their exact text and fails when they read more than
@@ -60,13 +59,8 @@ import {
 
 export const BACKUP_ROTATION = Object.freeze([
   { name: "iconoplasm", id: "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" },
-  { name: "iconoplasm-authoring", id: "1ac27eba-5a08-4d8a-b5b2-99ed4254abd0" },
   { name: "geneguessr", id: "c213abba-394b-42e0-ba15-a1b179cbe7db" },
   { name: "iconoplasm-audit", id: "43f485e3-a933-4345-b2f4-7c5ec1aaee6f" },
-  {
-    name: "iconoplasm-authority-event-archive-20260831",
-    id: "7c867585-5535-4730-8b20-d6883aefd333",
-  },
 ])
 
 // Where sheddable_plus work stops on the account's D1 reads: 4.25M of 5M.

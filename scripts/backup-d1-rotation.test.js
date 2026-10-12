@@ -184,10 +184,8 @@ test("11: a skipped database is first in line the next day, and a day holds one 
   // The real state on 2026-10-05: iconoplasm last dumped 09-29, its 10-04 turn skipped.
   const dates = {
     iconoplasm: "2026-09-29",
-    "iconoplasm-authoring": "2026-09-30",
     geneguessr: "2026-10-01",
     "iconoplasm-audit": "2026-10-02",
-    "iconoplasm-authority-event-archive-20260831": "2026-10-03",
   }
   for (const database of BACKUP_ROTATION) dumpOn(root, database, dates[database.name])
   const morning = Date.parse("2026-10-05T12:00:00Z")
@@ -200,7 +198,7 @@ test("11: a skipped database is first in line the next day, and a day holds one 
   // Later runs the same day land on the database already dumped today.
   assert.equal(dueDatabase(root, morning + 2 * 3600000).name, "iconoplasm")
   // Tomorrow the oldest dump is next.
-  assert.equal(dueDatabase(root, morning + 86400000).name, "iconoplasm-authoring")
+  assert.equal(dueDatabase(root, morning + 86400000).name, "geneguessr")
 })
 
 test("8: retention drops dumps older than 30 days but keeps the newest two", () => {

@@ -47,8 +47,8 @@ const [first, second] = [staged(1), staged(2)]
 // The schema-drop bound is eight passes over the admitted 512-row schema plus
 // 256 rows, and 32 rows written.
 const DROP_BOUND = { rows_read: 8 * 512 + 256, rows_written: 32 }
-// Three inventories each read the schema objects and the applied journal.
-const INVENTORY_READS = 3 * (2050 + 1026)
+// Two inventories (GeneGuessr and Iconoplasm) each read the schema objects and the applied journal.
+const INVENTORY_READS = 2 * (2050 + 1026)
 const syntheticAdapters = () => {
   const adapters = createMigrationOperationCostAdapters({}, OPERATION_COST_IDENTITIES)
   for (const { key, adapterId } of [first, second])
@@ -211,7 +211,7 @@ test("release authentication is checked without D1 work, redirects or credential
     )
 })
 
-test("release reserves headroom for every pending migration and three inventories", async () => {
+test("release reserves headroom for every pending migration and both inventories", async () => {
   const result = await check(sample)
   assert.deepEqual(result.required, {
     rows_read: 15900 + 2 * 2 * first.entry.prediction.rows_read,
@@ -296,7 +296,7 @@ test("applied migrations do not consume new-release headroom; unknown or duplica
   await assert.rejects(verify(["iconoplasm/unknown.sql"]), /MIGRATION_NOT_REVIEWED/)
 })
 
-test("an empty plan reserves the three inventories and nothing else", async () => {
+test("an empty plan reserves the two inventories and nothing else", async () => {
   const result = await preflightOperationCostRelease({
     manifest: { ...releaseManifest, catalog_initialization_prediction: undefined, migrations: {} },
     reader: { refresh: async () => sample },

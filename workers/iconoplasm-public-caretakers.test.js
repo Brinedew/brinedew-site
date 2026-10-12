@@ -1,15 +1,14 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { TestD1 } from "./iconoplasm/caretaker/manifestation-authority-test-support.js"
 import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
-import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
+import { blankDatabase, iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 // The gene page's caretaker name and avatar, from the roles table of the real
 // main schema (every migration) and the sign-in database's profile.
 function buildDatabases(t) {
   const iconoplasm = iconoplasmDatabase()
   iconoplasm.raw = iconoplasm.database
-  const accounts = new TestD1()
+  const accounts = blankDatabase()
   t.after(() => {
     iconoplasm.database.close()
     accounts.close()

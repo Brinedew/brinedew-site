@@ -47,8 +47,11 @@ step must never silently fall back to rebuilding the corpus.
 
 <!-- ARCHITECTURE FENCE [IPD-012] -->
 
-The Website is the command authority for caretaker and manifestation state. The
-workstation is a version-bound replica and executor, not a second writer.
+Operator work (migrations and release inventories) is reserved through the
+operation-cost authority before it runs. B-1067 deletes that ledger; until
+then it is the one path. Caretaking is plain rows in the main D1 (B-1065): the
+site writes them, and the workstation reads and PUTs gene texts through the
+admin text routes.
 
 <!-- ARCHITECTURE FENCE [IPD-013] -->
 

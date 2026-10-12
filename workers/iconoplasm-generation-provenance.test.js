@@ -14,10 +14,8 @@ import {
 } from "./lib/iconoplasm-generation-provenance.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
-import {
-  canonicalManifestationFieldsJson,
-  prepareManifestationTagsPayload,
-} from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { canonicalManifestationFieldsJson } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
+import { normalizeManifestationTags } from "./lib/iconoplasm-manifestation-tags.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
 
 test("generation source fingerprint matches the frozen Website/workstation vector", async () => {
@@ -93,13 +91,40 @@ async function rejects(promise, code) {
 const ENCODER = new TextEncoder()
 const FIELDS = { protein_class: "kinase", locations: ["nucleus"], note: "café" }
 
+// What the retired caretaker authority (deleted in B-1065) computed when it
+// accepted a Tags derivative: requests it queued still carry these hashes.
+async function oldAuthorityTagsPayload(input = {}) {
+  const normalized = normalizeManifestationTags(input.tagsText)
+  const fieldsJson = canonicalManifestationFieldsJson(input.fieldsJson)
+  const fieldsBytes = ENCODER.encode(fieldsJson)
+  const tagsSha256 = await sha256Hex(normalized.bytes)
+  const fieldsSha256 = await sha256Hex(fieldsBytes)
+  assert.equal(input.tagsSha256, tagsSha256)
+  assert.equal(input.fieldsSha256, fieldsSha256)
+  const outputPlain = `${normalized.tags}\n${fieldsJson}`
+  const outputBytes = ENCODER.encode(outputPlain)
+  return Object.freeze({
+    output_plain: outputPlain,
+    output_bytes: outputBytes,
+    output_plain_sha256: await sha256Hex(outputBytes),
+    output_plain_bytes: outputBytes.byteLength,
+    tags_text: normalized.tags,
+    tags_sha256: tagsSha256,
+    tags_bytes: normalized.bytes.byteLength,
+    fields_json: JSON.parse(fieldsJson),
+    fields_canonical_json: fieldsJson,
+    fields_sha256: fieldsSha256,
+    fields_bytes: fieldsBytes.byteLength,
+  })
+}
+
 test("a request queued under the old authority validates against its backfilled text", async (t) => {
   const h = harness(t)
   // What the old authority hashed when it accepted these Tags.
   const tagsText = "guardian, watchful"
   const canonicalFields = canonicalManifestationFieldsJson(FIELDS)
   assert.notEqual(canonicalFields, JSON.stringify(FIELDS), "the fixture must exercise escaping")
-  const old = await prepareManifestationTagsPayload({
+  const old = await oldAuthorityTagsPayload({
     tagsText,
     fieldsJson: FIELDS,
     tagsSha256: await sha256Hex(ENCODER.encode(tagsText)),

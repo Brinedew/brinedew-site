@@ -1,5 +1,5 @@
-// Manifestation prose/tags belong exclusively to the authoring authority.
-// Bulk essence publication writes character metadata, never that private source.
+// Bulk essence publication writes character metadata, never caretaker prose or
+// Tags, which only the caretaking routes write.
 const FIELDS = [
   "gene_symbol",
   "full_name",

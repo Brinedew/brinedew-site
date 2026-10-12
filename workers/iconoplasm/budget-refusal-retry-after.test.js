@@ -28,7 +28,6 @@ import { realBudgetLedger, spyOnLedger } from "../test-helpers/reservation-recei
 
 const { MUTATION_ANALYTICS_LAG_MS, MUTATION_BACKGROUND_CEILING } = laneModule
 const GENERATION_TOKEN = "generation-secret"
-const REPLICA_TOKEN = "replica-secret"
 const CLAIM = "/api/iconoplasm/authority/generation-leases/claim"
 const CLAIM_UNITS = generationClaimWriteUnits(50)
 const quiet = (t) => {
@@ -87,7 +86,6 @@ function laptopGateway(t, providerRowsWritten) {
   const env = {
     ICONOPLASM_DB: d1.db,
     ICONOPLASM_AUTHORITY_GENERATION_TOKEN: GENERATION_TOKEN,
-    ICONOPLASM_AUTHORITY_REPLICA_TOKEN: REPLICA_TOKEN,
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: spy.namespace,
   }
   const day = new Date().toISOString().slice(0, 10)

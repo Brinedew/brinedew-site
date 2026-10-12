@@ -11,7 +11,6 @@ export function createMigrationOperationCostAdapters(env, identities) {
     ...[
       ["geneguessr", env.DB],
       ["iconoplasm", env.ICONOPLASM_DB],
-      ["iconoplasm-authoring", env.ICONOPLASM_AUTHORING_DB],
     ].map(([resource, db]) => [
       `${resource}-migration-inventory`,
       createMigrationInventoryCostAdapter({ db, resource, ...identities }),

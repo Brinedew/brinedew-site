@@ -89,7 +89,7 @@ The executable registry is `architecture-fences.json`: every entry carries its f
 
 **ARCHITECTURE FENCE [IPD-005]** — The primary Iconoplasm D1 is bounded operational state with a 500 MB per-database wall; no history or body payloads. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
-**ARCHITECTURE FENCE [IPD-012]** — The Website is the sole command authority for caretaker manifestation history and canonical selection; prose and Tags bodies live as plain-text objects in the private Bunny zone, and authoring D1 holds their hashes. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-012]** — Operator work (migrations, release inventories) is reserved through the operation-cost authority before it runs. B-1067 deletes this ledger and the fence with it. Caretaking is plain rows in the main D1 (B-1065). Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 
 Before any Iconoplasm visual or UX design work (a mockup, a restyle, a new panel), read the "Before designing" section at the top of `docs/iconoplasm-design-system/README.md`. Its rules below that section are evidence from earlier agents, not law.
 

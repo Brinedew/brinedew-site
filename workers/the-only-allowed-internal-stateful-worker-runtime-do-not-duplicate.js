@@ -377,8 +377,6 @@ import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate,
   IconoplasmSyncGovernor,
-  drainIconoplasmAuthorityAccountProjection,
-  drainIconoplasmManifestationAuthorityProjection,
   handleIconoplasmQueue,
   publishSharedGeneDiscoverySymbols,
   publishRequestPickerObject,
@@ -406,7 +404,6 @@ import {
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
-import { releaseAbandonedManifestationUploads } from "./iconoplasm/caretaker/manifestation-upload-intents.js"
 import { dispatchIconoplasmCatalogPublication } from "./iconoplasm-catalog-dispatch.js"
 import {
   iconoplasmBackgroundJob,
@@ -1923,14 +1920,6 @@ export default {
           }))
           const picker = await publishRequestPickerObject(env)
           return { ...picker, vision_rollups: visionRollups }
-        },
-        accounts: () => drainIconoplasmAuthorityAccountProjection(env, { limit: 25 }),
-        // B-985: after the projection drain, release uploads a caretaker abandoned and
-        // never retried (at most 3 per run), so their reserved bytes and stored body return.
-        manifestations: async () => {
-          const projection = await drainIconoplasmManifestationAuthorityProjection(env, 25)
-          const uploadSweep = await releaseAbandonedManifestationUploads(env)
-          return { ...projection, upload_sweep: uploadSweep, ok: projection.ok && uploadSweep.ok }
         },
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
         caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),

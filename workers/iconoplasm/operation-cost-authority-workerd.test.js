@@ -61,11 +61,11 @@ test(
         script: bundled.outputFiles[0].text,
         compatibilityDate: "2025-04-01",
         durableObjects: { AUTHORITY: { className: "TestAuthority", useSQLite: true } },
-        d1Databases: ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB"],
+        d1Databases: ["DB", "ICONOPLASM_DB"],
       }),
     )
     try {
-      for (const binding of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB"]) {
+      for (const binding of ["DB", "ICONOPLASM_DB"]) {
         const db = await runtime.getD1Database(binding)
         await db.exec(
           "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
@@ -95,7 +95,7 @@ test(
       const discovery = await send("")
       assert.ok(discovery.features.includes("shared-capacity-snapshot"))
       assert.equal((await send("/capacity")).remaining.rows_read, REPLICA_DAILY_ADMISSION.rows_read)
-      for (const resource of ["geneguessr", "iconoplasm", "iconoplasm-authoring"]) {
+      for (const resource of ["geneguessr", "iconoplasm"]) {
         const adapter = discovery.adapters.find(
           (item) => item.id === `${resource}-migration-inventory`,
         )
@@ -133,7 +133,7 @@ test(
         releaseId: "test-release",
         now: clock,
       })
-      assert.equal(inspection.schemas.length, 3)
+      assert.equal(inspection.schemas.length, 2)
       assert.ok(inspection.capacity.used.rows_read > 0)
       assert.ok(
         inspection.schemas.every(

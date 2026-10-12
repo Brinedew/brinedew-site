@@ -415,39 +415,12 @@ test("IPD-005 uses the per-database wall and a verified cold archive", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-012]
-test("IPD-012 keeps one manifestation command authority", () => {
+test("IPD-012 reserves operator work through the one operation-cost authority", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-012")
-  assert.ok(fence, "IPD-012 must remain registered")
-  assert.match(fence.decision, /Website is the sole command authority/)
-  assert.match(fence.decision, /plain-text objects in a private storage zone/)
-  assert.match(fence.decision, /workstation is a version-bound replica/)
-
-  const config = readRepositoryFile(
-    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-  )
+  assert.ok(fence, "IPD-012 must remain registered until B-1067 deletes the ledger")
   const deploy = readRepositoryFile(".github/workflows/deploy-quartz.yml")
-  const storage = readRepositoryFile("workers/lib/iconoplasm-manifestation-body-storage.js")
   const requestBudget = readRepositoryFile("scripts/lib/CloudflareWorkerRequestBudget.ps1")
-  assert.match(config, /binding = "ICONOPLASM_AUTHORING_DB"/)
-  assert.match(config, /database_name = "iconoplasm-authoring"/)
-  assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring"/)
-  assert.match(config, /ICONOPLASM_AUTHORING_STORAGE_ZONE = "iconoplasm-authoring-staging"/)
-  const authoringZones = [
-    ...config.matchAll(/^ICONOPLASM_AUTHORING_STORAGE_ZONE = "([^"]+)"$/gm),
-  ].map((match) => match[1])
-  assert.deepEqual(
-    new Set(authoringZones).size,
-    2,
-    "production and staging authoring zones must differ",
-  )
   assert.match(deploy, /node scripts\/run-admitted-d1-migrations\.mjs/)
-  assert.match(
-    deploy,
-    /- name: Apply reviewed D1 migrations through prediction admission\n\s+if: inputs\.data_maintenance == true/,
-  )
-  assert.doesNotMatch(deploy, /wrangler\s+d1\s+migrations\s+apply/)
-  assert.match(storage, /AccessKey/)
-  assert.doesNotMatch(storage, /b-cdn\.net|EXTERNAL_PORTRAIT/)
   // B-1036: the PowerShell budget reads the operator ceilings from the one policy.
   assert.match(requestBudget, /'shared' 'iconoplasm-d1-budget-policy\.js'/)
   assert.match(requestBudget, /OPERATOR_ACCOUNT_CEILINGS/)
@@ -457,11 +430,8 @@ test("IPD-012 keeps one manifestation command authority", () => {
   assert.match(requestBudget, /FileShare\]::None/)
 })
 
-test("IPD-012 caretaker migrations remain compatible with the remote D1 trigger splitter", () => {
-  const migrationGroups = [
-    ["migrations-iconoplasm-authoring", /^000[1-8]_.*\.sql$/],
-    ["migrations-iconoplasm", /^00(?:8[4-9]|9[0-2])_.*\.sql$/],
-  ]
+test("caretaker migrations remain compatible with the remote D1 trigger splitter", () => {
+  const migrationGroups = [["migrations-iconoplasm", /^00(?:8[4-9]|9[0-2])_.*\.sql$/]]
 
   for (const [directory, filenamePattern] of migrationGroups) {
     const filenames = readdirSync(path.join(REPOSITORY_ROOT, directory))

@@ -7,7 +7,6 @@ import { sealSession } from "../lib/sealed-session.js"
 import { readFileSync, readdirSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 
-import { TestD1 } from "../iconoplasm/caretaker/manifestation-authority-test-support.js"
 import { GameSession } from "../the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { setGeneVote } from "../iconoplasm/votes/gene-votes.js"
 import { readLeaderboard } from "../lib/leaderboard-streaks.js"
@@ -150,6 +149,16 @@ export async function accountsDatabase() {
   const adapter = new SqliteD1(database)
   await readLeaderboard(adapter, 1)
   return adapter
+}
+
+// An empty database, for a test that creates its own tables (the sign-in
+// database's accounts, say). `raw` is the SQLite handle.
+export function blankDatabase() {
+  const database = new DatabaseSync(":memory:")
+  const db = new SqliteD1(database)
+  db.raw = database
+  db.close = () => database.close()
+  return db
 }
 
 export function iconoplasmDatabase() {
@@ -439,13 +448,10 @@ export async function seedWorld() {
   const iconoplasm = iconoplasmDatabase()
   const audit = auditDatabase()
   const kv = new MemoryKv()
-  // The caretaker authority's own database; the erasure only tells it the account is pending.
-  const authoring = new TestD1()
   const env = {
     DB: accounts,
     ICONOPLASM_DB: iconoplasm,
     ICONOPLASM_AUDIT_DB: audit,
-    ICONOPLASM_AUTHORING_DB: authoring,
     KV: kv,
     // The Discord bot and the Bunny storage the erasure reaches through the fake network below.
     DISCORD_BOT_TOKEN: BOT_TOKEN,
@@ -821,7 +827,6 @@ export async function seedWorld() {
     accounts,
     iconoplasm,
     audit,
-    authoring,
     kv,
     sessions,
     network,
@@ -931,7 +936,6 @@ export function findTraces(world, needles) {
     ["accounts", world.accounts],
     ["iconoplasm", world.iconoplasm],
     ["audit", world.audit],
-    ["authoring", world.authoring],
   ]) {
     for (const [table, rows] of Object.entries(dumpDatabase(db))) {
       if (rows.some(has)) hits.push(`${label}.${table}`)

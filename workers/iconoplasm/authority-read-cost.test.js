@@ -36,8 +36,6 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
   const env = {
     DB: db,
     ICONOPLASM_DB: db,
-    ICONOPLASM_AUTHORING_DB: db,
-    ICONOPLASM_AUTHORITY_REPLICA_TOKEN: "test-replica",
     ICONOPLASM_AUTHORITY_GENERATION_TOKEN: "test-generation",
   }
   const ctx = {
@@ -46,10 +44,8 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
     },
   }
   for (const [path, method] of [
-    ["/api/iconoplasm/authority/snapshots/missing", "GET"],
-    ["/api/iconoplasm/authority/events", "GET"],
-    ["/api/iconoplasm/authority/revisions/revision-cost/tags-derivative-head", "POST"],
     ["/api/iconoplasm/authority/generation-leases/claim", "POST"],
+    ["/api/iconoplasm/authority/generation-leases/complete", "POST"],
   ]) {
     const result = await gateway(
       new Request(`https://iconoplasm.brinedew.bio${path}`, { method }),
@@ -58,26 +54,6 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
     )
     assert.ok([401, 403].includes(result.status), `${path}: ${result.status}`)
   }
-  for (const method of ["GET", "HEAD"]) {
-    const result = await gateway(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/authority/snapshots/missing", {
-        method,
-        headers: { Authorization: "Bearer test-replica" },
-      }),
-      env,
-      ctx,
-    )
-    assert.equal(result.status, 428)
-  }
-  const selection = await gateway(
-    new Request(
-      "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/revisions/revision-cost/tags-derivative-head",
-      { method: "POST", headers: { Authorization: "Bearer test-replica" }, body: "{}" },
-    ),
-    env,
-    ctx,
-  )
-  assert.equal(selection.status, 428)
   await Promise.allSettled(background)
   assert.equal(queries, 0)
   assert.equal(background.length, 0)
@@ -96,7 +72,6 @@ test("schema transition refuses application D1, preserves queued work and leaves
   const env = {
     ICONOPLASM_SCHEMA_TRANSITION: "1",
     ICONOPLASM_DB: db,
-    ICONOPLASM_AUTHORING_DB: db,
     ICONOPLASM_ADMIN_TOKEN: "test-admin",
     ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE: {
       idFromName: () => "global",
@@ -114,7 +89,12 @@ test("schema transition refuses application D1, preserves queued work and leaves
     },
   }
   const blocked = await gateway(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/authority/events"),
+    new Request(
+      "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/generation-leases/claim",
+      {
+        method: "POST",
+      },
+    ),
     env,
     ctx,
   )

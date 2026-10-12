@@ -192,7 +192,7 @@ export function findNewestDump({ root, database }) {
 }
 
 function pruneCache(cacheDir, database, keep, now) {
-  // "iconoplasm" and "iconoplasm-authoring" share a prefix, so match the whole name.
+  // Database names can share a prefix ("iconoplasm", "iconoplasm-audit"), so match the whole name.
   const mine = new RegExp(`^${database}-[0-9a-f]{64}\\.sqlite(\\.\\d+\\.partial)?$`)
   for (const name of readdirSync(cacheDir)) {
     if (!mine.test(name) || name === keep) continue

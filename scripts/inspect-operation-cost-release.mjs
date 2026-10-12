@@ -3,7 +3,7 @@ import { acquireReleasePlan, readCanonicalReleaseOrigin } from "./operation-cost
 import { pathToFileURL } from "node:url"
 import { OPERATION_COST_IDENTITIES } from "../workers/generated/operation-cost-identities.js"
 
-const INVENTORY_RESOURCES = ["geneguessr", "iconoplasm", "iconoplasm-authoring"]
+const INVENTORY_RESOURCES = ["geneguessr", "iconoplasm"]
 
 // A successful upload can precede the admission DO switching implementations.
 // Spend only bounded discovery requests until the exact release is observed

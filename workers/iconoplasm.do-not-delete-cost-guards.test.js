@@ -169,8 +169,8 @@ test("DO NOT DELETE: Website/wrangler.toml must not quietly regain direct state 
 
   assert.doesNotMatch(
     publicWrangler,
-    /binding = "ICONOPLASM_DB"|binding = "ICONOPLASM_AUTHORING_DB"/,
-    "the public edge worker must not bind either Iconoplasm D1 authority",
+    /binding = "ICONOPLASM_DB"/,
+    "the public edge worker must not bind the Iconoplasm database",
   )
   assert.doesNotMatch(
     publicWrangler,
@@ -237,18 +237,13 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.doesNotMatch(
     publicEdge,
-    /ICONOPLASM_DB|ICONOPLASM_AUTHORING_DB|env\.DB|GAME_SESSIONS|STRUCTURES_BUCKET|ICONOPLASM_PORTRAITS/,
+    /ICONOPLASM_DB|env\.DB|GAME_SESSIONS|STRUCTURES_BUCKET|ICONOPLASM_PORTRAITS/,
     "public edge worker should stay free of direct state bindings in runtime code",
   )
   assert.match(
     internalWrangler,
     /name = "ICONOPLASM_D1_DAILY_BUDGET_KILL_SWITCH_DO_NOT_DUPLICATE"[\s\S]*class_name = "IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate"/,
     "internal stateful worker should bind the hard daily budget durable object because alerts are not a kill switch",
-  )
-  assert.match(
-    internalWrangler,
-    /binding = "ICONOPLASM_AUTHORING_DB"[\s\S]*database_name = "iconoplasm-authoring"/,
-    "the one internal state owner should bind the isolated manifestation authority",
   )
   assert.match(
     internalWrangler,
@@ -273,7 +268,7 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
   )
   assert.doesNotMatch(
     cardDeliverySource,
-    /ICONOPLASM_DB|ICONOPLASM_AUTHORING_DB|\.prepare\(|\.batch\(/u,
+    /ICONOPLASM_DB|\.prepare\(|\.batch\(/u,
     "the publication-object fallback handler must never touch D1",
   )
   assert.match(

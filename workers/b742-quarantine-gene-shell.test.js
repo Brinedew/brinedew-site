@@ -72,7 +72,6 @@ function buildForbiddenEnv(kv, d1Calls) {
     KV: kv,
     DB: forbiddenDb,
     ICONOPLASM_DB: forbiddenDb,
-    ICONOPLASM_AUTHORING_DB: forbiddenDb,
     ICONOPLASM_AUDIT_DB: forbiddenDb,
     PUBLIC_RATE_LIMIT_120: { limit: async () => ({ success: true }) },
   }
@@ -187,10 +186,10 @@ test("B-742 reader recovery serves the first-party portrait without D1 and under
   }
 })
 
-test("B-742 reader recovery leaves voting and authority routes behind the transition fence", async () => {
+test("B-742 reader recovery leaves voting and workstation routes behind the transition fence", async () => {
   const d1Calls = { count: 0 }
   for (const [path, method] of [
-    ["/api/iconoplasm/authority/events", "GET"],
+    ["/api/iconoplasm/authority/generation-leases/claim", "POST"],
     ["/api/iconoplasm/votes/set", "POST"],
     ["/api/iconoplasm/discoveries/encounter", "POST"],
   ]) {

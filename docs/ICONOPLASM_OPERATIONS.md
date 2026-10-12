@@ -20,8 +20,8 @@ an unrelated finalization backlog is not an ordinary per-gene repair path.
 Choose the authority before interpreting data. Public image identity comes
 from the one stable gene object `genes/v3/<SYMBOL>.json`; D1's
 `icono_publish_state` is the projection the publisher writes alongside it.
-Neither D1 nor a cache may elect substitute public bytes. The workstation is an exact
-replica and draft/generation surface, never a second overwrite authority.
+Neither D1 nor a cache may elect substitute public bytes. The workstation is a draft
+and generation surface, never a second overwrite authority.
 
 For a gene whose published portrait disagrees with D1, follow the repair in
 `docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
@@ -34,7 +34,7 @@ alias/blocklist recognition-pair bundle and remain KV-only.
 
 ## Investigating production data
 
-Investigate production data with `node scripts/d1-local.mjs <database> "<sql>" [--json]`, run from `d:\Coding\Website`. It answers from the newest nightly dump in `D:\Backups\brinedew-d1\<database>\` (written by `scripts/backup-d1-rotation.mjs`, so a copy up to about five days old, and its first line of output gives the dump's date), opens it read-only, runs one SELECT, EXPLAIN, PRAGMA or WITH ... SELECT statement, prints at most 1,000 rows, and costs nothing on Cloudflare. The databases are `iconoplasm`, `iconoplasm-authoring`, `geneguessr`, `iconoplasm-audit` and `iconoplasm-authority-event-archive-20260831`. Agents have no production D1 credential, by design (B-1002): one hand-run query can spend the whole account's daily D1 read allowance, and only a missing credential, not a rule in a document, prevents that.
+Investigate production data with `node scripts/d1-local.mjs <database> "<sql>" [--json]`, run from `d:\Coding\Website`. It answers from the newest nightly dump in `D:\Backups\brinedew-d1\<database>\` (written by `scripts/backup-d1-rotation.mjs`, so a copy up to about five days old, and its first line of output gives the dump's date), opens it read-only, runs one SELECT, EXPLAIN, PRAGMA or WITH ... SELECT statement, prints at most 1,000 rows, and costs nothing on Cloudflare. The databases are `iconoplasm`, `geneguessr` and `iconoplasm-audit`. Agents have no production D1 credential, by design (B-1002): one hand-run query can spend the whole account's daily D1 read allowance, and only a missing credential, not a rule in a document, prevents that.
 
 ## tables you usually want
 
@@ -317,7 +317,7 @@ public value (`workers/iconoplasm/account-erasure/erasure-steps.js` lists every 
 | Kind                          | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Deleted                       | discoveries and discovery state (compact and legacy tables, the delivery outbox and its receipts, the migration cursor), favourites, user emulsions and their picker rollup rows, image-provider API keys, the request inbox and Discord delivery rows, requests with no output, unpublished or pending generation and edit jobs and their result images in the portrait storage, comments the author had already removed (and their post in the public Discord channel), the caretaker's own delivery outbox, GeneGuessr stats, the leaderboard row, game state and results waiting for the stats row (the `user_<id>` and `practice_user_<id>` Durable Objects), the KV keys that embed the Discord id, the `users` row and the provider link |
-| Kept, cut off from the person | votes and vote events (the user id becomes the erased account's id, so every count and every election is unchanged), public gene comments (shown under the anonymous label, no avatar; their post in the public Discord channel is rewritten to the label), requests that produced a published image, published generation and edit jobs, the creator of a published portrait, publish event actors (also in the audit database), emulsion labels on published portraits and jobs, caretaker manifestations (the caretaker authority, retained under the label)                                                                                                                                                                                 |
+| Kept, cut off from the person | votes and vote events (the user id becomes the erased account's id, so every count and every election is unchanged), public gene comments (shown under the anonymous label, no avatar; their post in the public Discord channel is rewritten to the label), requests that produced a published image, published generation and edit jobs, the creator of a published portrait, publish event actors (also in the audit database), emulsion labels on published portraits and jobs, caretaker texts and roles (retained under the label)                                                                                                                                                                                                         |
 | Rewritten                     | the provider-subject fingerprint in identity events and in the command ids built from it, to an opaque `erased:` marker (the append-only guards are lifted and restored in the same transaction)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Everything cut off from the person points at the erased account's opaque id or its label
@@ -350,7 +350,7 @@ abuse case: erasure ends the disabling.
   where someone had already requested it; no purge is sent, because a purge right after a delete can
   refill the edge from a storage replica that still holds the file (Bunny replicates storage
   changes to other regions asynchronously; measured for an overwrite on 2026-10-02).
-- The caretaker authority, the archive and the cold backups (the nightly local dumps, kept 30
+- The audit archive and the cold backups (the nightly local dumps, kept 30
   days, and D1 Time Travel, 7 days) are retained by design or expire on their own.
 - The workstation's vote mirror (`remote_asset_votes` in `control_plane.db`, on the operator's machine) holds
   no Discord id since B-991: each vote is keyed by an HMAC digest of its gene, asset and voter under a
@@ -398,7 +398,7 @@ plan allows 50 per invocation), about thirteen jobs.
 
 **Cost.** Each request writes at most `erasure.rows_written` <= 5,000 D1 rows (every pass
 reserves the worst case of what it sends before sending it) and makes at most 20 D1 calls for the
-data plus about 16 for the account lifecycle and the caretaker authority, and at most 40
+data plus about 16 for the account lifecycle and caretaking, and at most 40
 external calls (Bunny deletes and Discord calls); `max_rows_written` in the request lowers the
 5,000 (minimum 100). A small erasure is one request. The largest per-person
 row counts in production on 2026-10-03 (2,287 requests, 2,280 notifications, 2,092 legacy discovery

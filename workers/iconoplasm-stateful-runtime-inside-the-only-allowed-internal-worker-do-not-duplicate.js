@@ -88,8 +88,6 @@ import {
   OPERATION_COST_ROUTE_PREFIX,
 } from "./iconoplasm/operation-cost-http.js"
 import { createOperationCostAccountUsageReader } from "./iconoplasm/operation-cost-account-usage.js"
-import { isReplicaCostRoute } from "./iconoplasm/operation-cost-replica-adapter.js"
-import { forwardReplicaCostRequest } from "./iconoplasm/operation-cost-replica-gateway.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
 import {
   D1_CRITICALITY_SHARES,
@@ -153,15 +151,11 @@ import {
   assertExactGenerationLeaseCompletion,
   completeExactGenerationLease,
 } from "./iconoplasm-generation-lease.js"
-import {
-  authorizeIconoplasmAuthorityGenerationBearer,
-  authorizeIconoplasmAuthorityReplicaBearer,
-} from "./iconoplasm-authority-service-auth.js"
+import { authorizeIconoplasmAuthorityGenerationBearer } from "./iconoplasm-authority-service-auth.js"
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
 import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
-import { drainManifestationPublicCardPublicationWakes } from "./iconoplasm-manifestation-publication-wake.js"
 import {
   CARETAKER_SUPERVOTES_SQL,
   caretakerSupervoteOfGeneSql,
@@ -210,7 +204,6 @@ import {
   deliverPendingCaretakerCommentNotifications,
   resolveCaretakerCommentRecipient,
 } from "./iconoplasm-caretaker-comment-notifications.js"
-import { createIconoplasmManifestationAuthorityRuntimeHandler } from "./iconoplasm-manifestation-authority-runtime.js"
 import {
   readCaretakerSwitchCooldown,
   writeCaretakerSwitchCooldown,
@@ -227,8 +220,6 @@ import {
   readBrinedewAccount,
 } from "./lib/brinedew-account-identity.js"
 import { createD1InvocationBudget } from "./lib/d1-invocation-budget.js"
-import { drainBrinedewAuthorityAccountProjectionOutbox } from "./lib/brinedew-authority-account-projection.js"
-import { drainManifestationAuthorityProjectionOutbox } from "./lib/iconoplasm-manifestation-authority-projection.js"
 import { ICONOPLASM_OBSERVABILITY_SNAPSHOT } from "./generated/iconoplasm-observability-snapshot.js"
 import { FREE_DAILY_LIMITS, readAccountBudget } from "../scripts/lib/cloudflare-account-budget.mjs"
 import { iconoplasmCacheControl } from "./iconoplasm-cache-policy.js"
@@ -2714,7 +2705,6 @@ function iconoplasmBudgetTelemetryLockedReason() {
 // before it reads a row.
 const LAPTOP_BEARER_AUTHORIZERS = Object.freeze({
   "authority-generation-bearer": authorizeIconoplasmAuthorityGenerationBearer,
-  "authority-replica-bearer": authorizeIconoplasmAuthorityReplicaBearer,
 })
 
 async function laptopRouteAdmission(env, request) {
@@ -2899,12 +2889,6 @@ async function wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(
   return {
     ...env,
     ICONOPLASM_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(env.ICONOPLASM_DB, state),
-    // ARCHITECTURE FENCE [IPD-012]: D1 read/write allowances are account-wide.
-    // The isolated authoring database shares the existing one-owner meter.
-    ICONOPLASM_AUTHORING_DB: wrapIconoplasmD1DatabaseWithDailyBudgetKillSwitch(
-      env.ICONOPLASM_AUTHORING_DB,
-      state,
-    ),
     [ICONOPLASM_D1_REQUEST_USAGE_STATE_DO_NOT_TOUCH]: state,
   }
 }
@@ -8851,7 +8835,8 @@ export function buildCandidateGenerationPrompt({
 }) {
   const geneSymbol = normalizeSymbol(symbol || geneContext?.gene_symbol || "") || ""
   const fullName = sanitizeText(geneContext?.full_name || "", 255) || ""
-  const manifestation = sanitizeText(geneContext?.manifestation || "", 4000) || ""
+  // The whole prose: a saved text is already bounded (lib/iconoplasm-manifestation-prose.js).
+  const manifestation = String(geneContext?.manifestation || "").trim()
   // B-879: the retired colors tags pull image generation off course; they are
   // dropped here, using the grouping saved with the flat list.
   const tags = normalizeTaggerizerPrompt(
@@ -12920,15 +12905,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const familySurname = sanitizeText(payload.family_surname || payload.gene_surname, 64)
   const familyMembers = optionalInt(payload.family_members)
   const familyFeature = sanitizeText(payload.family_feature, 255)
-  const manifestation = sanitizeText(payload.manifestation || payload.description, 4000)
-  const manifestationTags = normalizeTaggerizerPrompt(payload.manifestation_tags || payload.tags)
-  const manifestationFieldsJson = sanitizeText(
-    payload.manifestation_fields_json || payload.fields_json || "",
-    8000,
-  )
-  const sampleLabel = sanitizeText(payload.sample_label || "", 64)
-  const sampleNumber = optionalInt(payload.sample_number)
-  const sampleTextHash = normalizeSha256(payload.sample_text_hash || "")
   const traitOriginValidationError = validateEssenceTraitOrigins({
     symbol,
     aesthetics,
@@ -12961,12 +12937,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
     family_surname: familySurname,
     family_members: familyMembers,
     family_feature: familyFeature,
-    manifestation,
-    manifestation_tags: manifestationTags,
-    manifestation_fields_json: manifestationFieldsJson,
-    sample_label: sampleLabel,
-    sample_number: sampleNumber,
-    sample_text_hash: sampleTextHash,
     ...(validationError ? { validation_error: validationError } : {}),
   }
 }
@@ -15584,8 +15554,6 @@ export class IconoplasmD1DailyBudgetKillSwitchDoNotDuplicate {
     this.operationCosts = createOperationCostAuthority(state.storage, env, {
       usage: this.accountUsage,
       initializeCatalog: initializePublishedHydratedCatalog,
-      onAuthorityEvent: (event, scopedEnv) =>
-        projectAcceptedManifestationAuthorityEvent(scopedEnv, event),
       readOtherUsage: (day) => {
         const usage = this.usageRow(day)
         return {
@@ -18956,7 +18924,7 @@ export async function handleIconoplasmSyncFinalizationQueue(batch, env, ctx) {
   }
   const invocationBudget = createD1InvocationBudget()
   env = { ...env }
-  for (const name of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB", "ICONOPLASM_AUDIT_DB"]) {
+  for (const name of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUDIT_DB"]) {
     if (env[name]?.prepare) env[name] = invocationBudget.binding(env[name])
   }
   const permit = await iconoplasmSyncGovernorJson(env, "/permit?requested=1", { requested: 1 })
@@ -24494,11 +24462,7 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     ) {
       // Token authentication costs no D1 query. Missing predictions must reach
       // the authority before any application database work can occur.
-      const costPrincipal = hasAdminToken(request, env)
-        ? "admin"
-        : (await authorizeIconoplasmAuthorityReplicaBearer(request, env)).authorized
-          ? "replica"
-          : null
+      const costPrincipal = hasAdminToken(request, env) ? "admin" : null
       if (!costPrincipal) {
         responseStatus = 403
         return json({ error: "Unauthorized" }, 403, { "Cache-Control": "no-store" })
@@ -24523,16 +24487,6 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
         "Cache-Control": "no-store",
         "Retry-After": "60",
       })
-    }
-
-    if (isReplicaCostRoute(request.method, path)) {
-      const response = await forwardReplicaCostRequest(
-        request,
-        env,
-        iconoplasmD1DailyBudgetKillSwitchStub(env),
-      )
-      responseStatus = response.status
-      return response
     }
 
     meteredEnv = await wrapEnvWithIconoplasmD1DailyBudgetKillSwitch(env, request)
@@ -24952,55 +24906,6 @@ async function publishCatalogArtifact(env) {
   }
 }
 
-export async function drainIconoplasmManifestationAuthorityProjection(
-  env,
-  limit = 10,
-  { priorityEventId = null } = {},
-) {
-  if (!env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
-    throw new Error("Manifestation authority projection bindings are missing")
-  }
-  const invocationBudget = createD1InvocationBudget()
-  env = { ...env }
-  for (const name of ["DB", "ICONOPLASM_DB", "ICONOPLASM_AUTHORING_DB", "ICONOPLASM_AUDIT_DB"]) {
-    if (env[name]?.prepare) env[name] = invocationBudget.binding(env[name])
-  }
-  const drained = await drainManifestationAuthorityProjectionOutbox({
-    primaryDb: env.ICONOPLASM_DB,
-    authoringDb: env.ICONOPLASM_AUTHORING_DB,
-    limit,
-    priorityEventId,
-    invocationBudget,
-    // B-1065 B2b: roles live in the main database now (caretaker-roles.js), so
-    // an old role event has nothing left to copy.
-    projectAssignmentEvent: async () => ({ ok: true, changed: false, skipped: true }),
-    projectPublicMaterialEvent: (event) =>
-      drainManifestationPublicCardPublicationWakes(env.ICONOPLASM_DB, {
-        authorityEventId: event.event_id,
-        limit: 10,
-      }),
-    onIntegrityFailure: async (failure) => {
-      console.error("[ICONOPLASM_AUTHORITY_PROJECTION_INTEGRITY]", failure)
-    },
-  })
-  return Object.freeze({ ...drained, ok: drained.ok && !drained.has_more })
-}
-
-export async function drainIconoplasmAuthorityAccountProjection(env, { limit = 10 } = {}) {
-  if (!env?.DB || !env?.ICONOPLASM_DB || !env?.ICONOPLASM_AUTHORING_DB) {
-    throw new Error("Manifestation authority projection bindings are missing")
-  }
-  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
-  // Batch recovery never wakes a full downstream drain for each account.
-  // The next scheduled minute owns one independent manifestation batch;
-  // interactive single-account synchronization retains its immediate wake.
-  return drainBrinedewAuthorityAccountProjectionOutbox({
-    primaryDb: env.DB,
-    authoringDb: env.ICONOPLASM_AUTHORING_DB,
-    limit: boundedLimit,
-  })
-}
-
 export async function resolveActiveCaretakerAccountSession(request, env) {
   const session = await iconoplasmSessionUser(request, env)
   const accountId = String(session?.account_id || "").trim()
@@ -25032,38 +24937,12 @@ const handleIconoplasmGenerationExecutorRoute = createIconoplasmGenerationExecut
   inlineDeliveryLimit: ICONOPLASM_FULFILLMENT_DM_INLINE_LIMIT,
 })
 
-async function handleDeclaredManifestationAuthorityRoute({ request, env, ctx, done }) {
-  // Accepted writes wake their exact event below; the scheduled outbox retry
-  // preserves recovery after failure. Reads and unauthenticated requests must
-  // not start an unrelated database repair pass outside their admission.
-  const handler = createIconoplasmManifestationAuthorityRuntimeHandler({
-    env,
-    resolveSession: resolveActiveCaretakerAccountSession,
-    onAuthorityEvent: (event) => projectAcceptedManifestationAuthorityEvent(env, event),
-    onIntegrityFailure: async (failure) => {
-      console.error("[ICONOPLASM_AUTHORITY_BODY_INTEGRITY]", failure)
-    },
-    scheduleBackground: (promise) => ctx?.waitUntil?.(promise),
-  })
-  const response = await handler(request)
-  if (!response) throw new Error("Declared manifestation authority route was not handled")
-  return done("manifestation_authority", response)
-}
-
-async function projectAcceptedManifestationAuthorityEvent(env, event) {
-  const result = await drainIconoplasmManifestationAuthorityProjection(env, 1, {
-    priorityEventId: event.event_id,
-  })
-  const accepted = result.results.find((item) => item.event_id === event.event_id)
-  if (accepted?.status !== "published") {
-    throw new Error("Accepted manifestation authority event remains pending")
-  }
-}
-
 const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
-  caretaker_manifestations: handleDeclaredManifestationAuthorityRoute,
-  manifestation_authority_sync: handleDeclaredManifestationAuthorityRoute,
-  manifestation_authority_service: handleDeclaredManifestationAuthorityRoute,
+  // B-1065: the caretaker panel's routes are Hono's (workers/iconoplasm/caretaker-texts.js,
+  // caretaker-role-routes.js); their contract entries stay for the rate limits that run first.
+  // A method Hono doesn't route on those paths ends here.
+  caretaker_manifestations: ({ done }) =>
+    done("caretaker_route_not_found", json({ error: "Not found" }, 404)),
   // B-871, B-987: fulfil an erasure request. One bounded slice per request: the same request is
   // sent again until `erasure.complete` is true (workers/iconoplasm/account-erasure). The
   // account projection outbox carries the result into the caretaker authority (assignments end,

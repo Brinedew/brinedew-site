@@ -34,7 +34,7 @@ const plainPlan = {
   migrations: {
     "iconoplasm/9001_a.sql": synthetic("iconoplasm-migration-9001"),
     "iconoplasm/9002_b.sql": synthetic("iconoplasm-migration-9002"),
-    "iconoplasm-authoring/9003_c.sql": synthetic("iconoplasm-authoring-migration-9003"),
+    "iconoplasm/9003_c.sql": synthetic("iconoplasm-migration-9003"),
   },
 }
 const stagedPlan = {
@@ -47,11 +47,10 @@ const stagedPlan = {
   ),
 }
 const emptyPlan = { ...manifest, migrations: {} }
-const resources = ["geneguessr", "iconoplasm", "iconoplasm-authoring"]
+const resources = ["geneguessr", "iconoplasm"]
 const directories = {
   geneguessr: "migrations",
   iconoplasm: "migrations-iconoplasm",
-  "iconoplasm-authoring": "migrations-iconoplasm-authoring",
 }
 
 function harness(extra = false, plan = plainPlan) {
@@ -82,7 +81,7 @@ function harness(extra = false, plan = plainPlan) {
           ...Object.keys(plan.migrations)
             .filter((key) => key.startsWith(resource + "/"))
             .map((key) => key.split("/")[1]),
-          ...(extra && resource === "iconoplasm-authoring" ? ["9999-unreviewed.sql"] : []),
+          ...(extra && resource === "geneguessr" ? ["9999-unreviewed.sql"] : []),
         ].sort()
       },
       send: async (suffix, method, body) => {
@@ -122,28 +121,28 @@ test("release manifest points only at real reviewed migration files", () => {
 })
 
 test("a standard D1 migration already in the journal needs no custom release adapter", async () => {
-  const migration = "0018_assignment_manifestation_lookup.sql"
-  assert.ok(existsSync(new URL(`../migrations-iconoplasm-authoring/${migration}`, import.meta.url)))
-  assert.equal(manifest.migrations[`iconoplasm-authoring/${migration}`], undefined)
+  const migration = "0003_vote_tables.sql"
+  assert.ok(existsSync(new URL(`../migrations-iconoplasm/${migration}`, import.meta.url)))
+  assert.equal(manifest.migrations[`iconoplasm/${migration}`], undefined)
   const h = harness()
   const originalFiles = h.options.files
   const originalSend = h.options.send
   h.options.files = (directory) =>
-    directory === "migrations-iconoplasm-authoring"
+    directory === "migrations-iconoplasm"
       ? [...originalFiles(directory), migration]
       : originalFiles(directory)
   h.options.send = async (...args) => {
     const result = await originalSend(...args)
     if (
       args[0] === "/execute" &&
-      args[2]?.adapter_id === "iconoplasm-authoring-migration-inventory" &&
+      args[2]?.adapter_id === "iconoplasm-migration-inventory" &&
       args[2]?.arguments?.statements?.[0]?.query_id === "applied-migrations"
     )
       result.result[0].results.push({ id: 2, name: migration })
     return result
   }
   const result = await runAdmittedMigrations({ ...h.options, inventoryOnly: true })
-  assert.ok(!result.pending_migrations.includes(`iconoplasm-authoring/${migration}`))
+  assert.ok(!result.pending_migrations.includes(`iconoplasm/${migration}`))
   assert.equal(
     h.calls.filter(
       (call) =>
@@ -164,7 +163,7 @@ test("fresh inventory observations cannot change the retained migration operatio
     .filter((call) => call.suffix === "/register")
     .map((call) => call.body)
   assert.ok(
-    registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length >= 3,
+    registrations.filter((plan) => plan.adapter_id.endsWith("-migration-inventory")).length >= 2,
   )
   for (const plan of registrations) {
     assert.ok(
@@ -195,7 +194,10 @@ test("every inventory and migration registers before execution and records its r
   const { options, calls } = harness()
   const result = await runAdmittedMigrations(options)
   assert.equal(result.migrations_applied, Object.keys(options.manifest.migrations).length)
-  assert.equal(result.evidence.length, Object.keys(options.manifest.migrations).length + 3)
+  assert.equal(
+    result.evidence.length,
+    Object.keys(options.manifest.migrations).length + resources.length,
+  )
   for (let index = 0; index < calls.length; index++) {
     if (calls[index].suffix !== "/register") continue
     assert.equal(calls[index + 1].suffix, "/execute")
@@ -223,7 +225,7 @@ test("pre-deploy inventory pins the installed implementation and never executes 
     result.pending_migrations.sort(),
     Object.keys(options.manifest.migrations).sort(),
   )
-  assert.equal(calls.filter((call) => call.suffix === "/execute").length, 3)
+  assert.equal(calls.filter((call) => call.suffix === "/execute").length, resources.length)
   for (const call of calls.filter((call) => call.suffix === "/register")) {
     assert.ok(call.body.adapter_id.endsWith("-migration-inventory"))
     assert.equal(call.body.executable_sha256, "e".repeat(64))
@@ -323,12 +325,12 @@ test("a protocol the runner does not implement refuses before any DDL", async ()
   }
 })
 
-test("an empty plan reads the three inventories and applies nothing", async () => {
+test("an empty plan reads every inventory and applies nothing", async () => {
   const { options, calls } = harness(false, emptyPlan)
   const result = await runAdmittedMigrations(options)
   assert.equal(result.migrations_applied, 0)
   assert.equal(result.continuation_required, false)
-  assert.equal(result.evidence.length, 3)
+  assert.equal(result.evidence.length, resources.length)
   assert.deepEqual(
     calls.filter((call) => call.suffix === "/execute").map((call) => call.body.adapter_id),
     resources.map((resource) => `${resource}-migration-inventory`),
