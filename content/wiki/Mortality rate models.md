@@ -185,7 +185,7 @@ A life table follows a group of people from birth, either a real generation or a
 
 Any one of the three determines the other two, so a model of the mortality rate is a model of the entire life table, including life expectancy. Published life tables usually report a fourth quantity, the **chance of dying within the year**, $q_x$: the chance that someone alive on their $x$th birthday dies before the next one. At low mortality it is nearly equal to the mortality rate. The two diverge at the oldest ages, where a chance can never exceed 1 but a rate can.
 
-The top panel's axis is logarithmic: each equal step up the axis multiplies the rate by the same factor, here ten. A rate that rises by a fixed percentage each year, as an exponential does, then appears as a straight line. The time the rate takes to double, the **doubling time** $T$, is the most widely quoted single number for the pace of demographic ageing.[^finch1990]
+The top panel's axis is logarithmic: each equal step up the axis multiplies the rate by the same factor, here ten. A rate that rises by a fixed percentage each year, as an exponential does, then appears as a straight line. The time the rate takes to double, the **doubling time**, is the most widely quoted single number for the pace of demographic ageing.[^finch1990]
 
 > [!note]- Formal definitions
 > Let $T$ be the age at death of a newborn, treated as a random variable. The share still alive is $S(x) = \Pr(T > x)$, which demographers write as $l_x / l_0$. Deaths at each age are the probability density of age at death, $f(x)$, and the mortality rate is
@@ -206,7 +206,7 @@ The top panel's axis is logarithmic: each equal step up the axis multiplies the 
 > q_x = 1 - \frac{S(x+1)}{S(x)} = 1 - \exp\!\left(-\int_x^{x+1} \mu(t)\,\mathrm{d}t\right).
 > $$
 >
-> Demographers estimate the mortality rate from raw counts as the *central death rate* $m_x$: deaths at age $x$ divided by the total time, in years, that members of the population spent alive at that age (the *person-years*). If the mortality rate is constant within each year of age, $m_x = \mu$ and $q_x = 1 - e^{-m_x}$. A mortality rate with doubling time $T$ grows as $2^{x/T}$.
+> Demographers estimate the mortality rate from raw counts as the *central death rate* $m_x$: deaths at age $x$ divided by the total time, in years, that members of the population spent alive at that age (the *person-years*). If the mortality rate is constant within each year of age, $m_x = \mu$ and $q_x = 1 - e^{-m_x}$. For a mortality rate that grows as $e^{bx}$, the doubling time is $\ln 2 / b$.
 
 A model may describe a *period* (the mortality rates observed in one calendar year, applied to a hypothetical cohort) or a *cohort* (people born in the same year, followed until all have died). The two can differ substantially when mortality is falling, and mixing cohorts is one of the main sources of artefacts at old ages.[^gavrilov2011]
 
@@ -271,7 +271,7 @@ Human mortality follows the same broad shape in every well-recorded population. 
       "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
     },
     {
-      "data": {"values": [{"age": 98, "hazard": 0.00022, "label": "T ≈ 9 years"}]},
+      "data": {"values": [{"age": 98, "hazard": 0.00022, "label": "8.5 to 9.5 years"}]},
       "mark": {"type": "text", "style": "observed-label", "align": "right"},
       "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
     },
@@ -336,15 +336,15 @@ The law has a single parameter, the maximum age $\omega$. It is now used mainly 
 
 ### Gompertz law
 
-In the Gompertz law the mortality rate is multiplied by the same factor with each year of age, so it grows exponentially and appears on a logarithmic plot as a straight line. Two numbers set the line: how fast it rises, given as the doubling time, and where it sits, given as the most common age at death. Figure 3 sets both against American women in 2023. A shorter doubling time steepens the line and squeezes deaths into a narrower band of ages. A later most common age at death slides the line to the right and moves the peak of deaths with it.
+In the Gompertz law the mortality rate is multiplied by the same factor with each year of age, so it grows exponentially and appears on a logarithmic plot as a straight line. Two numbers set the line. The **Gompertz slope** $b$ is how fast it rises: with $b = 0.08$ a year, the rate grows by about 8% with each year of age and doubles every $\ln 2 / b$, about 8.7 years. The most common age at death $M$ is where it sits. Figure 3 sets both against American women in 2023. A steeper slope shortens the doubling time and squeezes deaths into a narrower band of ages. A later $M$ slides the line to the right and moves the peak of deaths with it.
 
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 3. The Gompertz law against American women in 2023: the mortality rate, on a logarithmic scale, and deaths at each age, as a share of all women born. The sliders set the law's two numbers, the most common age at death M and the doubling time T; they start at the fit in Figure 2.",
+  "description": "Figure 3. The Gompertz law against American women in 2023: the mortality rate, on a logarithmic scale, and deaths at each age, as a share of all women born. The sliders set the law's two numbers, the most common age at death M and the Gompertz slope b; they start at the fit in Figure 2.",
   "params": [
     {"name": "M", "value": 89, "bind": {"input": "range", "min": 60, "max": 110, "step": 1, "name": "Most common age at death M"}},
-    {"name": "T", "value": 8.5, "bind": {"input": "range", "min": 4, "max": 16, "step": 0.5, "name": "Doubling time T, years"}}
+    {"name": "b", "value": 0.081, "bind": {"input": "range", "min": 0.04, "max": 0.16, "step": 0.001, "name": "Gompertz slope b, per year"}}
   ],
   "hconcat": [
     {
@@ -359,7 +359,7 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
         },
         {
           "data": {"sequence": {"start": 20, "stop": 110.25, "step": 0.5, "as": "age"}},
-          "transform": [{"calculate": "log(2) / T", "as": "b"}, {"calculate": "datum.b * exp(datum.b * (datum.age - M))", "as": "hazard"}],
+          "transform": [{"calculate": "b * exp(b * (datum.age - M))", "as": "hazard"}],
           "mark": {"type": "line", "style": "model", "clip": true},
           "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
         },
@@ -367,7 +367,7 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
           "data": {
             "values": [
               {"age": 22, "age2": 26, "hazard": 0.45, "label": "US women, 2023", "kind": "observed"},
-              {"age": 22, "age2": 26, "hazard": 0.17, "label": "Gompertz law G(x)", "kind": "model"}
+              {"age": 22, "age2": 26, "hazard": 0.17, "label": "Gompertz law", "kind": "model"}
             ]
           },
           "layer": [
@@ -389,6 +389,12 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
             }
           ],
           "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
+        },
+        {
+          "data": {"values": [{"age": 108, "hazard": 0.0007, "line": 0}, {"age": 108, "hazard": 0.0003, "line": 1}]},
+          "transform": [{"calculate": "datum.line == 0 ? 'doubling time' : 'ln 2/b = ' + format(log(2) / b, '.1f') + ' years'", "as": "label"}],
+          "mark": {"type": "text", "style": "model-label", "align": "right"},
+          "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
         }
       ],
       "encoding": {
@@ -413,9 +419,8 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
         {
           "data": {"sequence": {"start": 20, "stop": 110.25, "step": 0.5, "as": "age"}},
           "transform": [
-            {"calculate": "log(2) / T", "as": "b"},
-            {"calculate": "datum.b * exp(datum.b * (datum.age - M))", "as": "hazard"},
-            {"calculate": "0.9911 * exp(-(exp(datum.b * (datum.age - M)) - exp(datum.b * (20 - M))))", "as": "alive"},
+            {"calculate": "b * exp(b * (datum.age - M))", "as": "hazard"},
+            {"calculate": "0.9911 * exp(-(exp(b * (datum.age - M)) - exp(b * (20 - M))))", "as": "alive"},
             {"calculate": "datum.hazard * datum.alive", "as": "deaths"}
           ],
           "mark": {"type": "line", "style": "model", "clip": true},
@@ -424,9 +429,8 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
         {
           "data": {"values": [{}]},
           "transform": [
-            {"calculate": "log(2) / T", "as": "b"},
             {"calculate": "M", "as": "age"},
-            {"calculate": "0.9911 * datum.b * exp(-(1 - exp(datum.b * (20 - M))))", "as": "deaths"},
+            {"calculate": "0.9911 * b * exp(-(1 - exp(b * (20 - M))))", "as": "deaths"},
             {"calculate": "'M = ' + M", "as": "label"}
           ],
           "layer": [
@@ -452,24 +456,28 @@ In the Gompertz law the mortality rate is multiplied by the same factor with eac
 }
 ```
 
-In symbols, with the two sliders of Figure 3, the most common age at death $M$ and the doubling time $T$, the Gompertz curve is[^missov2015]
+Gompertz's law is usually written[^gompertz1825]
 
 $$
-G(x) = \frac{\ln 2}{T}\,2^{(x - M)/T}.
+\mu(x) = a\,e^{bx},
 $$
 
-The factor $2^{(x - M)/T}$ doubles the rate every $T$ years and equals 1 at age $M$; the factor $\ln 2 / T$ is what puts the peak of deaths at $M$. The later models in this article reuse $G(x)$ as their ageing term. In humans $T$ is about eight years: the mortality rate rises by about 8% to 9% with each year of age.[^finch1990] The fits in Figure 2 give doubling times of 9.5 years for American men and 8.5 for women in 2023, and place the most common age at death at about 85 for men and 89 for women. The ages at which most deaths actually occur in the 2023 table are 87 and 90; the fitted values differ because the curve is fitted to ages 35 to 85 and the real mortality rate steepens above that range.
+where $a$ is the mortality rate extrapolated back to birth. Because nobody follows the law at that age, $a$ is hard to interpret and strongly correlated with $b$ in any fit. Trifon Missov and colleagues replaced it with the most common age at death, using $a = b\,e^{-bM}$, which gives the form that Figure 3 uses:[^missov2015]
 
-Older texts write the same curve as $a\,e^{bx}$, with $b = \ln 2 / T$ and $a$ the rate extrapolated back to birth. Because nobody follows the law at that age, $a$ is hard to interpret and strongly correlated with $b$ in any fit, which is why this article uses $M$ and $T$ instead.
+$$
+\mu(x) = b\,e^{b(x - M)}.
+$$
+
+In humans $b$ is close to 0.08 a year, a doubling time of about eight years.[^finch1990] The fits in Figure 2 give $b = 0.073$ for American men and $0.081$ for women in 2023, doubling times of 9.5 and 8.5 years, and place $M$ at about 85 for men and 89 for women. The ages at which most deaths actually occur in the 2023 table are 87 and 90; the fitted values differ because the curve is fitted to ages 35 to 85 and the real mortality rate steepens above that range.
 
 > [!note]- Survival under the Gompertz law
 > Integrating the mortality rate gives the share still alive,
 >
 > $$
-> S(x) = \exp\!\left[-\left(2^{(x - M)/T} - 2^{-M/T}\right)\right].
+> S(x) = \exp\!\left[-\left(e^{b(x - M)} - e^{-bM}\right)\right].
 > $$
 >
-> Deaths at each age, $f(x) = G(x)\,S(x)$, peak where $G(x) = \ln 2 / T$, which is at $x = M$.
+> Deaths at each age, $f(x) = \mu(x)\,S(x)$, peak where $\mu(x) = b$, which is at $x = M$.
 
 The Gompertz law describes adult mortality in people and in many laboratory animals with two parameters. Its weaknesses are just as clear. It cannot represent the decline of mortality in childhood or the young-adult hump, and it predicts a mortality rate that grows without limit. Whether that unbounded growth is real at the highest ages is the subject of the [plateau debate](#late-life-deceleration-and-the-plateau-debate).
 
@@ -480,7 +488,7 @@ Makeham added a constant $c$ to the Gompertz mortality rate. Figure 4 adds it to
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 4. Makeham's constant added to a Gompertz curve, against the mortality rates of American men in 2023 on a logarithmic scale. The Gompertz term is fixed at its fit to ages 15 to 100 (M = 84, T = 7.8 years); the slider sets Makeham's constant c. It starts at the fitted value.",
+  "description": "Figure 4. Makeham's constant added to a Gompertz curve, against the mortality rates of American men in 2023 on a logarithmic scale. The Gompertz term a eᵇˣ is fixed at its fit to ages 15 to 100 (a = 5.1 × 10⁻⁵, b = 0.089); the slider sets Makeham's constant c. It starts at the fitted value.",
   "params": [{"name": "c", "value": 0.0009, "bind": {"input": "range", "min": 0, "max": 0.003, "step": 0.0001, "name": "Makeham's constant c"}}],
   "width": 560,
   "height": 260,
@@ -493,11 +501,7 @@ Makeham added a constant $c$ to the Gompertz mortality rate. Figure 4 adds it to
     },
     {
       "data": {"sequence": {"start": 15, "stop": 100.25, "step": 0.5, "as": "age"}},
-      "transform": [
-        {"calculate": "log(2) / 7.8", "as": "b"},
-        {"calculate": "datum.b * exp(datum.b * (datum.age - 84))", "as": "gompertz"},
-        {"calculate": "c + datum.gompertz", "as": "hazard"}
-      ],
+      "transform": [{"calculate": "5.0918e-05 * exp(0.088865 * datum.age)", "as": "gompertz"}, {"calculate": "c + datum.gompertz", "as": "hazard"}],
       "layer": [
         {"mark": {"type": "line", "style": "alt", "clip": true}, "encoding": {"y": {"field": "gompertz", "type": "quantitative"}}},
         {"mark": {"type": "line", "style": "model", "clip": true}, "encoding": {"y": {"field": "hazard", "type": "quantitative"}}}
@@ -520,8 +524,8 @@ Makeham added a constant $c$ to the Gompertz mortality rate. Figure 4 adds it to
       "data": {
         "values": [
           {"age": 17, "age2": 20, "hazard": 0.5, "label": "US men, 2023", "kind": "observed"},
-          {"age": 17, "age2": 20, "hazard": 0.22, "label": "Gompertz–Makeham G(x) + c", "kind": "model"},
-          {"age": 17, "age2": 20, "hazard": 0.1, "label": "Gompertz term G(x)", "kind": "alt"}
+          {"age": 17, "age2": 20, "hazard": 0.22, "label": "Gompertz–Makeham a eᵇˣ + c", "kind": "model"},
+          {"age": 17, "age2": 20, "hazard": 0.1, "label": "Gompertz term a eᵇˣ", "kind": "alt"}
         ]
       },
       "layer": [
@@ -563,7 +567,7 @@ Makeham added a constant $c$ to the Gompertz mortality rate. Figure 4 adds it to
 ```
 
 $$
-\mu(x) = G(x) + c.
+\mu(x) = a\,e^{bx} + c.
 $$
 
 The constant represents deaths whose risk does not depend on age, which he attributed to chance.[^makeham1860] Adding it lets the law follow mortality down into the late teens, where the ageing term is negligible but deaths are not. Fitted to American men aged 15 to 100 in 2023, $c$ is about 0.0009 a year, or 1 in 1,100. In modern low-mortality populations the constant is small and hard to estimate. It also absorbs part of the young-adult hump, so it should not be read as a pure measure of "extrinsic" mortality; the division of deaths into ageing and background components is itself a simplification.[^horiuchi1998]
@@ -573,16 +577,16 @@ The constant represents deaths whose risk does not depend on age, which he attri
 In the Weibull model the mortality rate rises as a power of age rather than exponentially:
 
 $$
-\mu(x) = \frac{k}{\lambda}\left(\frac{x}{\lambda}\right)^{k - 1}.
+\mu(x) = \frac{\beta}{\alpha}\left(\frac{x}{\alpha}\right)^{\beta - 1}.
 $$
 
-Here $\lambda$ is a characteristic life and $k$ is the shape. A shape above 1 gives a rising mortality rate, a shape of 1 a constant one and a shape below 1 a falling one. On a plot with both axes logarithmic the Weibull rate is a straight line, so on the usual plot, with only the rate axis logarithmic, it is concave: it rises steeply at first and then more slowly. Figure 5 fixes $\lambda$ by pinning the curve to the mortality rate of American men at 70, and lets the shape $k$ vary. No shape bends it onto the data.
+Here $\alpha$ is a characteristic life and $\beta$ is the shape. A shape above 1 gives a rising mortality rate, a shape of 1 a constant one and a shape below 1 a falling one. On a plot with both axes logarithmic the Weibull rate is a straight line, so on the usual plot, with only the rate axis logarithmic, it is concave: it rises steeply at first and then more slowly. Figure 5 fixes $\alpha$ by pinning the curve to the mortality rate of American men at 70, and lets the shape $\beta$ vary. No shape bends it onto the data.
 
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 5. The Weibull model against the mortality rates of American men in 2023, on a logarithmic scale. The Weibull curve is pinned to the observed rate at age 70; the slider sets its shape k, starting at the best fit to ages 30 to 100. The dashed line is the Gompertz law fitted to the same ages.",
-  "params": [{"name": "k", "value": 5.6, "bind": {"input": "range", "min": 2, "max": 10, "step": 0.1, "name": "Shape k"}}],
+  "description": "Figure 5. The Weibull model against the mortality rates of American men in 2023, on a logarithmic scale. The Weibull curve is pinned to the observed rate at age 70; the slider sets its shape β, starting at the best fit to ages 30 to 100. The dashed line is the Gompertz law fitted to the same ages.",
+  "params": [{"name": "beta", "value": 5.6, "bind": {"input": "range", "min": 2, "max": 10, "step": 0.1, "name": "Shape β"}}],
   "width": 560,
   "height": 260,
   "layer": [
@@ -595,7 +599,7 @@ Here $\lambda$ is a characteristic life and $k$ is the shape. A shape above 1 gi
     {
       "data": {"sequence": {"start": 20, "stop": 100.25, "step": 0.5, "as": "age"}},
       "transform": [
-        {"calculate": "0.0231693 * pow(datum.age / 70, k - 1)", "as": "weibull"},
+        {"calculate": "0.0231693 * pow(datum.age / 70, beta - 1)", "as": "weibull"},
         {"calculate": "0.0792 * exp(0.0792 * (datum.age - 82.8))", "as": "gompertz"}
       ],
       "layer": [
@@ -605,7 +609,7 @@ Here $\lambda$ is a characteristic life and $k$ is the shape. A shape above 1 gi
       "encoding": {"x": {"field": "age", "type": "quantitative"}}
     },
     {
-      "data": {"values": [{"age": 70, "hazard": 0.0231693, "label": "pinned at 70, which sets λ"}]},
+      "data": {"values": [{"age": 70, "hazard": 0.0231693, "label": "pinned at 70, which sets α"}]},
       "layer": [
         {"mark": {"type": "circle", "style": "model-point", "size": 60}},
         {"mark": {"type": "text", "style": "model-label", "align": "left", "dx": 8, "dy": 12}, "encoding": {"text": {"field": "label"}}}
@@ -617,7 +621,7 @@ Here $\lambda$ is a characteristic life and $k$ is the shape. A shape above 1 gi
         "values": [
           {"age": 22, "age2": 25, "hazard": 0.5, "label": "US men, 2023", "kind": "observed"},
           {"age": 22, "age2": 25, "hazard": 0.22, "label": "Weibull model", "kind": "model"},
-          {"age": 22, "age2": 25, "hazard": 0.1, "label": "Gompertz law G(x)", "kind": "alt"}
+          {"age": 22, "age2": 25, "hazard": 0.1, "label": "Gompertz law", "kind": "alt"}
         ]
       },
       "layer": [
@@ -658,21 +662,21 @@ Here $\lambda$ is a characteristic life and $k$ is the shape. A shape above 1 gi
 }
 ```
 
-Reliability engineering derives the Weibull law from systems that fail when any of many components fails, or when damage accumulates in several independent steps. In epidemiology the same power law describes the incidence of many cancers, which rises roughly as the fifth or sixth power of age; the [[Armitage–Doll model]] explains this as the need for several sequential mutations in one cell lineage. For all-cause human mortality, the Gompertz law usually fits better. A comparison of the two functions found the Gompertz law the better descriptor of all-cause mortality, and the Weibull law the better descriptor of single causes of death.[^juckett1993] In the 2023 American data, the best Weibull fit to men aged 30 to 100 (shape about 5.6) misses observed mortality rates by about 61% on a typical age, against 26% for the Gompertz law over the same range.
+Reliability engineering derives the Weibull law from systems that fail when any of many components fails, or when damage accumulates in several independent steps. In epidemiology the same power law describes the incidence of many cancers, which rises roughly as the fifth or sixth power of age; the [[Armitage–Doll model]] explains this as the need for several sequential mutations in one cell lineage. For all-cause human mortality, the Gompertz law usually fits better. A comparison of the two functions found the Gompertz law the better descriptor of all-cause mortality, and the Weibull law the better descriptor of single causes of death.[^juckett1993] In the 2023 American data, the best Weibull fit to men aged 30 to 100 ($\beta$ about 5.6) misses observed mortality rates by about 61% on a typical age, against 26% for the Gompertz law over the same range.
 
 Robert Ricklefs and Alex Scheuerlein argued that the choice between the two models has biological content.[^ricklefs2002] In the forms they compared, both of which include a constant baseline, the Gompertz ageing term multiplies the baseline, which suits ageing as rising vulnerability to external hazards. The Weibull ageing term is added to the baseline, which suits ageing as the growth of internal causes of death. They proposed comparing wild and captive populations of the same species to tell the two apart, and found that the comparison favoured the internal-causes (Weibull) reading for birds but gave mixed results for mammals.
 
 ### Logistic models
 
-Logistic models bend the Gompertz exponential so that the mortality rate rises ever more slowly and approaches a **ceiling**, $L$. They take their name from the logistic (S-shaped) curve of population growth, which has the same mathematical form: near-exponential growth that saturates. Wilfred Perks introduced them in 1932.[^perks1932] Two are in common use.
+Logistic models bend the Gompertz exponential so that the mortality rate rises ever more slowly and approaches a **ceiling**. They take their name from the logistic (S-shaped) curve of population growth, which has the same mathematical form: near-exponential growth that saturates. Wilfred Perks introduced them in 1932.[^perks1932] Two are in common use.
 
-**The gamma-Gompertz model** explains the bend. It assumes that each person's mortality rate is the Gompertz curve $G(x)$ multiplied by their own **frailty**, a fixed multiplier of that person's mortality rate, drawn at birth from a gamma distribution (a flexible distribution of positive numbers) with mean 1.[^vaupel1979][^beard1959] The **spread of frailty**, $\gamma$, is the variance of that distribution. The frailest die first, so the survivors are increasingly robust, and the mortality rate of everyone still alive bends below every individual's. In Figure 6, a spread of zero makes everyone the average person, and the population follows a straight Gompertz line. Widen the spread and the frailest and sturdiest tenth fan out, the population curve bends toward its ceiling, and the average person's own line steepens. Every setting passes through the observed rates at 75 and 95, so the data cannot tell them apart.
+**The gamma-Gompertz model** explains the bend. It assumes that each person's mortality rate is a Gompertz curve, $a\,e^{bx}$, multiplied by their own **frailty**, a fixed multiplier of that person's mortality rate, drawn at birth from a gamma distribution (a flexible distribution of positive numbers) with mean 1.[^vaupel1979][^beard1959] The **frailty variance** $\gamma$ measures how widely frailty differs between people. The frailest die first, so the survivors are increasingly robust, and the mortality rate of everyone still alive bends below every individual's. In Figure 6, a variance of zero makes everyone the average person, and the population follows a straight Gompertz line. Raise the variance and the frailest and sturdiest tenth fan out, the population curve bends toward its ceiling, and the average person's own line steepens. Every setting passes through the observed rates at 75 and 95, so the data cannot tell them apart.
 
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 6. Frailty bends the population's mortality rate below every individual's. The gamma-Gompertz model against American women aged 60 to 100 in 2023, on a logarithmic scale. Each person's rate is the Gompertz curve G(x) times their frailty; the slider sets the spread of frailty γ. Every setting passes through the observed rates at ages 75 and 95.",
-  "params": [{"name": "g", "value": 0.2, "bind": {"input": "range", "min": 0, "max": 0.3, "step": 0.01, "name": "Spread of frailty γ"}}],
+  "description": "Figure 6. Frailty bends the population's mortality rate below every individual's. The gamma-Gompertz model against American women aged 60 to 100 in 2023, on a logarithmic scale. Each person's rate is a Gompertz curve, a eᵇˣ, times their frailty; the slider sets the frailty variance γ. Every setting passes through the observed rates at ages 75 and 95.",
+  "params": [{"name": "g", "value": 0.2, "bind": {"input": "range", "min": 0, "max": 0.3, "step": 0.01, "name": "Frailty variance γ"}}],
   "width": 560,
   "height": 270,
   "layer": [
@@ -728,13 +732,13 @@ Logistic models bend the Gompertz exponential so that the mortality rate rises e
         {"calculate": "datum.b8", "as": "b"},
         {"calculate": "1 / (1 / 0.0241349 - g / datum.b)", "as": "g75"},
         {"calculate": "datum.b / g", "as": "hazard"},
-        {"calculate": "120", "as": "age"},
-        {"calculate": "'ceiling L = ' + format(datum.hazard, '.2f')", "as": "label"}
+        {"calculate": "61", "as": "age"},
+        {"calculate": "'ceiling b/γ = ' + format(datum.hazard, '.2f')", "as": "label"}
       ],
       "layer": [
         {"mark": {"type": "rule", "style": "guide", "clip": true}, "encoding": {"y": {"field": "hazard", "type": "quantitative"}}},
         {
-          "mark": {"type": "text", "style": "model-label", "align": "right", "dy": -7, "clip": true},
+          "mark": {"type": "text", "style": "model-label", "align": "left", "dy": -7, "clip": true},
           "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
         }
       ]
@@ -744,7 +748,7 @@ Logistic models bend the Gompertz exponential so that the mortality rate rises e
         "values": [
           {"age": 82, "age2": 85, "hazard": 0.012, "label": "US women, 2023", "kind": "observed"},
           {"age": 82, "age2": 85, "hazard": 0.0072, "label": "Everyone still alive μ(x)", "kind": "model"},
-          {"age": 82, "age2": 85, "hazard": 0.0043, "label": "Average person G(x)", "kind": "alt-solid"},
+          {"age": 82, "age2": 85, "hazard": 0.0043, "label": "Average person a eᵇˣ", "kind": "alt-solid"},
           {"age": 82, "age2": 85, "hazard": 0.0026, "label": "Frailest, sturdiest tenth", "kind": "alt-thin"}
         ]
       },
@@ -800,18 +804,18 @@ Logistic models bend the Gompertz exponential so that the mortality rate rises e
 }
 ```
 
-With $G(x)$ the average person's Gompertz curve, the mortality rate of everyone still alive is
+The mortality rate of everyone still alive is then
 
 $$
-\mu(x) = \frac{1}{1/G(x) + 1/L}, \qquad L = \frac{\ln 2}{\gamma\,T}.
+\mu(x) = \frac{a\,e^{bx}}{1 + \frac{a\gamma}{b}\left(e^{bx} - 1\right)} \;\longrightarrow\; \frac{b}{\gamma} \quad \text{as } x \to \infty.
 $$
 
-While $G(x)$ is far below the ceiling $L$, the population follows it; as $G(x)$ approaches $L$, the population's rate levels off at $L$. Adding Makeham's constant outside the frailty term gives the gamma-Gompertz–Makeham model, which Beard derived in 1959.[^beard1959]
+While few people have died, the population follows the average person's curve $a\,e^{bx}$; as deaths accumulate, its rate levels off at the ceiling $b/\gamma$. Adding Makeham's constant outside the frailty term gives the gamma-Gompertz–Makeham model, which Beard derived in 1959.[^beard1959]
 
-**The Kannisto model** is the special case with a ceiling $L = 1$ a year:[^thatcher1998]
+**The Kannisto model** is a logistic model with a ceiling of 1 a year:[^thatcher1998]
 
 $$
-\mu(x) = \frac{G(x)}{1 + G(x)}.
+\mu(x) = \frac{a\,e^{bx}}{1 + a\,e^{bx}}.
 $$
 
 The Human Mortality Database, the main open archive of national life tables, fits this model by maximum likelihood to smooth mortality rates above age 80.[^hmd2025]
@@ -823,7 +827,7 @@ The Human Mortality Database, the main open archive of national life tables, fit
 > \mu(x) = \frac{c + a\,e^{bx}}{1 + d\,e^{bx}},
 > $$
 >
-> which approaches the ceiling $a/d$ at the oldest ages. The Kannisto model sets $c = 0$ and $d = a$. The gamma-Gompertz model is the case $c = 0$, with $a$ and $d$ fixed by $G(x)$ and $L$.
+> which approaches the ceiling $a/d$ at the oldest ages. The Kannisto model sets $c = 0$ and $d = a$. The gamma-Gompertz model is also a case with $c = 0$, its ceiling $a/d$ equal to $b/\gamma$.
 
 Logistic models have no term for childhood or the young-adult hump. They are applied to adult and old-age mortality, where they usually fit at least as well as the Gompertz law and extrapolate more conservatively.[^thatcher1998]
 
@@ -836,10 +840,10 @@ Multi-component models add a separate term for each regime of the human age patt
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 7. Thiele's three-term model fitted to the mortality rates of American men in 2023, on a logarithmic scale. Dashed lines are the three terms; the solid line is their sum. The hump's width w is fixed at 8.7 years. The sliders set the hump's height h and peak age xₕ; they start at the fitted values.",
+  "description": "Figure 7. Thiele's three-term model fitted to the mortality rates of American men in 2023, on a logarithmic scale. Dashed lines are the three terms; the solid line is their sum. The hump's width is fixed by b₂ = 0.013. The sliders set the hump's height a₂ and peak age c; they start at the fitted values.",
   "params": [
-    {"name": "h", "value": 0.0017, "bind": {"input": "range", "min": 0, "max": 0.004, "step": 0.0001, "name": "Hump height h"}},
-    {"name": "p", "value": 33, "bind": {"input": "range", "min": 15, "max": 60, "step": 1, "name": "Hump peak age xₕ"}}
+    {"name": "a2", "value": 0.0017, "bind": {"input": "range", "min": 0, "max": 0.004, "step": 0.0001, "name": "Hump height a₂"}},
+    {"name": "c", "value": 33, "bind": {"input": "range", "min": 15, "max": 60, "step": 1, "name": "Hump peak age c"}}
   ],
   "width": 560,
   "height": 270,
@@ -854,8 +858,8 @@ Multi-component models add a separate term for each regime of the human age patt
       "data": {"sequence": {"start": 0, "stop": 100.125, "step": 0.25, "as": "age"}},
       "transform": [
         {"calculate": "0.004644 * exp(-0.9967 * datum.age)", "as": "childhood"},
-        {"calculate": "h * exp(-0.5 * pow((datum.age - p) / 8.71, 2))", "as": "hump"},
-        {"calculate": "0.09015 * exp(0.09015 * (datum.age - 83.9))", "as": "ageing"},
+        {"calculate": "a2 * exp(-0.5 * 0.013181 * pow(datum.age - c, 2))", "as": "hump"},
+        {"calculate": "4.682e-05 * exp(0.09015 * datum.age)", "as": "ageing"},
         {"calculate": "datum.childhood + datum.hump + datum.ageing", "as": "hazard"}
       ],
       "layer": [
@@ -864,7 +868,7 @@ Multi-component models add a separate term for each regime of the human age patt
           "encoding": {"y": {"field": "childhood", "type": "quantitative"}}
         },
         {
-          "transform": [{"filter": "h > 0"}],
+          "transform": [{"filter": "a2 > 0"}],
           "mark": {"type": "line", "style": "alt", "clip": true, "strokeWidth": 1.5},
           "encoding": {"y": {"field": "hump", "type": "quantitative"}}
         },
@@ -874,23 +878,23 @@ Multi-component models add a separate term for each regime of the human age patt
       "encoding": {"x": {"field": "age", "type": "quantitative"}}
     },
     {
-      "data": {"values": [{"age": 2.2, "hazard": 0.002, "label": "childhood: a₁ = 1 in 215"}]},
+      "data": {"values": [{"age": 2.5, "hazard": 0.0058, "label": "childhood: a₁ = 1 in 215"}]},
       "mark": {"type": "text", "style": "alt-label", "align": "left"},
       "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
     },
     {
       "data": {"values": [{}]},
       "transform": [
-        {"filter": "h > 0"},
-        {"calculate": "p + 12", "as": "age"},
-        {"calculate": "h * exp(-0.5 * pow(12 / 8.71, 2))", "as": "hazard"},
-        {"calculate": "'hump: h = 1 in ' + format(1 / h, ',.0f') + ', xₕ = ' + p", "as": "label"}
+        {"filter": "a2 > 0"},
+        {"calculate": "c + 12", "as": "age"},
+        {"calculate": "a2 * exp(-0.5 * 0.013181 * 144)", "as": "hazard"},
+        {"calculate": "'hump: a₂ = 1 in ' + format(1 / a2, ',.0f') + ', c = ' + c", "as": "label"}
       ],
-      "mark": {"type": "text", "style": "alt-label", "align": "left", "dx": 8, "dy": 4},
+      "mark": {"type": "text", "style": "alt-label", "align": "left", "dx": 12, "dy": -6},
       "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
     },
     {
-      "data": {"values": [{"age": 58, "hazard": 0.0055, "label": "ageing G(x)"}]},
+      "data": {"values": [{"age": 58, "hazard": 0.0055, "label": "ageing: b₃ = 0.090"}]},
       "mark": {"type": "text", "style": "alt-label", "align": "left"},
       "encoding": {"x": {"field": "age", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}, "text": {"field": "label"}}
     },
@@ -945,15 +949,15 @@ Multi-component models add a separate term for each regime of the human age patt
 ```
 
 $$
-\mu(x) = a_1 e^{-b_1 x} + h \exp\!\left[-\tfrac{1}{2}\left(\frac{x - x_h}{w}\right)^2\right] + G(x).
+\mu(x) = a_1 e^{-b_1 x} + a_2 \exp\!\left[-\tfrac{1}{2} b_2 (x - c)^2\right] + a_3 e^{b_3 x}.
 $$
 
-The first term is childhood: $a_1$ is the rate at birth and $b_1$ how fast it falls. The second is the hump, with height $h$, peak age $x_h$ and width $w$; the sliders set $h$ and $x_h$. The third is the Gompertz curve $G(x)$. Fitted to American men from birth to 100, the hump peaks at about 33 and the model misses the observed rates by about 22% on a typical age.
+The first term is childhood: $a_1$ is the rate at birth and $b_1$ how fast it falls. The second is the hump, with height $a_2$ and peak age $c$, set by the sliders, and a width fixed by $b_2$. The third is a Gompertz curve. Fitted to American men from birth to 100, the hump peaks at about 33 and the model misses the observed rates by about 22% on a typical age.
 
 **Siler (1979)** replaced Thiele's hump with Makeham's constant, giving five parameters for a juvenile decline, a constant background and an ageing rise.[^siler1979]
 
 $$
-\mu(x) = a_1 e^{-b_1 x} + c + G(x).
+\mu(x) = a_1 e^{-b_1 x} + a_2 + a_3 e^{b_3 x}.
 $$
 
 The Siler model was designed for animal populations, in which juvenile mortality is high and the young-adult hump is absent. It fits such data well, and it remains one of the standard models in comparative demography.[^jones2014] In human data with a pronounced hump it cuts straight through the excess: fitted to American men from birth to 100, it misses by about 42% on a typical age.
@@ -971,19 +975,19 @@ $A$, $B$ and $C$ set the fall of childhood mortality; $D$, $E$ and $F$ set the h
 Byung Mook Weon and Jung Ho Je generalised the Weibull model by letting its shape change with age:[^weon2009]
 
 $$
-S(x) = \exp\!\left[-\left(\frac{x}{\lambda}\right)^{k(x)}\right],
+S(x) = \exp\!\left[-\left(\frac{x}{\alpha}\right)^{\beta(x)}\right],
 $$
 
-where $\lambda$ is a characteristic life and the shape $k(x)$ is usually a low-order polynomial in age. A constant shape recovers the ordinary Weibull model. A rising $k(x)$ makes the survival curve more *rectangular*: nearly flat until old age and then dropping steeply, as when most deaths fall in a narrow band of old ages. Modern populations have been moving in that direction.
+where $\alpha$ is a characteristic life and the shape $\beta(x)$ is usually a low-order polynomial in age. A constant shape recovers the ordinary Weibull model. A rising $\beta(x)$ makes the survival curve more *rectangular*: nearly flat until old age and then dropping steeply, as when most deaths fall in a narrow band of old ages. Modern populations have been moving in that direction.
 
 > [!note]- The Weon–Je mortality rate
-> Differentiating $(x/\lambda)^{k(x)}$ gives
+> Differentiating $(x/\alpha)^{\beta(x)}$ gives
 >
 > $$
-> \mu(x) = \left(\frac{x}{\lambda}\right)^{k(x)}\left[\frac{k(x)}{x} + k'(x)\ln\frac{x}{\lambda}\right].
+> \mu(x) = \left(\frac{x}{\alpha}\right)^{\beta(x)}\left[\frac{\beta(x)}{x} + \beta'(x)\ln\frac{x}{\alpha}\right].
 > $$
 >
-> If $k(x)$ falls at advanced ages, the bracket shrinks.
+> If $\beta(x)$ falls at advanced ages, the bracket shrinks.
 
 If the shape falls at advanced ages, the mortality rate first decelerates and would eventually reach zero, which is impossible for a real mortality rate. Weon and Je used that mathematical boundary to estimate a maximum human lifespan of about 126 years from Swedish women's period life tables for 1950 to 2005.[^weon2009] The estimate rests on extrapolating the fitted shape beyond the ages where data exist. In this model the same falling shape that reproduces late-life deceleration also produces the hard limit, so the limit is partly a property of the chosen functional form.
 
@@ -994,16 +998,16 @@ The typical miss is how far the fitted mortality rate falls from the observed on
 | Model (year) | Mortality rate $\mu(x)$ | Parameters | Typical miss | Describes well | Misses |
 | --- | --- | :---: | :---: | --- | --- |
 | de Moivre (1725) | $1/(\omega - x)$ | 1 | | Simple annuity arithmetic | The shape of every real population |
-| Gompertz (1825) | $G(x) = \frac{\ln 2}{T}\,2^{(x - M)/T}$ | 2 | 26% (30–100) | Adult mortality, about 30 to 90 | Childhood, the young-adult hump, any old-age deceleration |
-| Gompertz–Makeham (1860) | $G(x) + c$ | 3 | 20% (15–100) | Adults, down to the late teens | Childhood; the hump only in part |
-| Thiele (1871) | $a_1 e^{-b_1 x}$ + hump + $G(x)$ | 7 | 22% (0–100) | The whole life span | Stability: many parameters for its era's data |
-| Perks (1932), Beard (1959) | $G(x)$ bent toward a ceiling $L$ | 3–4 | | Adult and old-age deceleration | Childhood and the hump |
-| Weibull (1939, 1951) | $\frac{k}{\lambda}\left(\frac{x}{\lambda}\right)^{k-1}$ | 2 | 61% (30–100) | Single causes of death, cancer incidence, machine failure | The shape of all-cause human mortality |
-| Gamma-Gompertz (1979) | $\left(1/G(x) + 1/L\right)^{-1}$ | 3 | | Deceleration explained by frailty | Childhood and the hump |
-| Siler (1979) | $a_1 e^{-b_1 x} + c + G(x)$ | 5 | 42% (0–100) | Animal populations; human childhood and adulthood | The young-adult hump |
+| Gompertz (1825) | $a\,e^{bx}$ | 2 | 26% (30–100) | Adult mortality, about 30 to 90 | Childhood, the young-adult hump, any old-age deceleration |
+| Gompertz–Makeham (1860) | $a\,e^{bx} + c$ | 3 | 20% (15–100) | Adults, down to the late teens | Childhood; the hump only in part |
+| Thiele (1871) | $a_1 e^{-b_1 x} + a_2 e^{-\frac{1}{2} b_2 (x - c)^2} + a_3 e^{b_3 x}$ | 7 | 22% (0–100) | The whole life span | Stability: many parameters for its era's data |
+| Perks (1932), Beard (1959) | $\frac{c + a\,e^{bx}}{1 + d\,e^{bx}}$ | 3–4 | | Adult and old-age deceleration | Childhood and the hump |
+| Weibull (1939, 1951) | $\frac{\beta}{\alpha}\left(\frac{x}{\alpha}\right)^{\beta-1}$ | 2 | 61% (30–100) | Single causes of death, cancer incidence, machine failure | The shape of all-cause human mortality |
+| Gamma-Gompertz (1979) | $\frac{a\,e^{bx}}{1 + \frac{a\gamma}{b}(e^{bx} - 1)}$ | 3 | | Deceleration explained by frailty | Childhood and the hump |
+| Siler (1979) | $a_1 e^{-b_1 x} + a_2 + a_3 e^{b_3 x}$ | 5 | 42% (0–100) | Animal populations; human childhood and adulthood | The young-adult hump |
 | Heligman–Pollard (1980) | Odds: $A^{(x+B)^C} + D e^{-E(\ln x - \ln F)^2} + G H^x$ | 8 | 11% (0–100) | The whole human life span, including the hump | Parameter stability; old-age deceleration |
-| Kannisto (1990s) | $G(x) / (1 + G(x))$ | 2 | | Ages 80 and over | Younger ages, by design |
-| Weon–Je (2009) | $S(x) = e^{-(x/\lambda)^{k(x)}}$ | 4 or more | | Rectangularising survival curves | Extrapolating the shape forces a hard maximum age |
+| Kannisto (1990s) | $\frac{a\,e^{bx}}{1 + a\,e^{bx}}$ | 2 | | Ages 80 and over | Younger ages, by design |
+| Weon–Je (2009) | $S(x) = e^{-(x/\alpha)^{\beta(x)}}$ | 4 or more | | Rectangularising survival curves | Extrapolating the shape forces a hard maximum age |
 
 ## Explanations of the Gompertz law
 
@@ -1051,13 +1055,13 @@ Two lines of evidence point the other way:
 - **Single-year cohorts.** Studying single-year American birth cohorts in the Social Security Death Master File, the Gavrilovs found that mortality follows the Gompertz law up to ages 102 to 105 without noticeable deceleration.[^gavrilov2011] They argued that earlier reports of deceleration below age 100 were artefacts of mixing birth cohorts with different mortality levels, of using cross-sectional data, and of age exaggeration.
 - **Error models.** Saul Newman showed that age-estimation and cohort-blending errors at rates below 1 in 10,000 are enough to produce late-life deceleration and plateaus. Correcting for such errors removed the plateaus in his analysis, and he concluded that human ageing does not slow at old ages. The Italian estimates, by contrast, rest on individually validated ages.[^newman2018][^barbi2018]
 
-The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 8 shows the problem with the gamma-Gompertz model of Figure 6, set this time by its ceiling $L$. Every ceiling passes through the observed rates for American women at 75 and 95 and stays close to the data between 60 and 100; a ceiling of 1 is the Kannisto model. Beyond the data the settings part ways. With a ceiling of 0.7, near the level Gampe measured, about 230 of every million women alive at 60 reach 110. With a ceiling of 3, about 23 do, and with no ceiling at all, the Gompertz law, about 6.
+The disagreement is hard to resolve with data, because the models agree wherever data are plentiful. Figure 8 shows the problem with the gamma-Gompertz model of Figure 6, set this time by its ceiling $b/\gamma$. Every ceiling passes through the observed rates for American women at 75 and 95 and stays close to the data between 60 and 100; a ceiling of 1 is the Kannisto model. Beyond the data the settings part ways. With a ceiling of 0.7, near the level Gampe measured, about 230 of every million women alive at 60 reach 110. With a ceiling of 3, about 23 do, and with no ceiling at all, the Gompertz law, about 6.
 
 ```vega-lite
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 8. Where the mortality rate levels off decides who reaches 110. The gamma-Gompertz model of Figure 6, set by its ceiling L, against the mortality rates of American women aged 60 to 100 in 2023, and the number of women alive at each age out of a million alive at 60, both on logarithmic scales. Every setting, like the Gompertz curve shown for comparison, passes through the observed rates at ages 75 and 95. A ceiling of 1 is the Kannisto model.",
-  "params": [{"name": "L", "value": 0.7, "bind": {"input": "range", "min": 0.3, "max": 3, "step": 0.05, "name": "Ceiling L"}}],
+  "description": "Figure 8. Where the mortality rate levels off decides who reaches 110. The gamma-Gompertz model of Figure 6, set by its ceiling b/γ, against the mortality rates of American women aged 60 to 100 in 2023, and the number of women alive at each age out of a million alive at 60, both on logarithmic scales. Every setting, like the Gompertz curve shown for comparison, passes through the observed rates at ages 75 and 95. A ceiling of 1 is the Kannisto model.",
+  "params": [{"name": "L", "value": 0.7, "bind": {"input": "range", "min": 0.3, "max": 3, "step": 0.05, "name": "Ceiling b/γ"}}],
   "hconcat": [
     {
       "width": 290,
@@ -1088,7 +1092,7 @@ The disagreement is hard to resolve with data, because the models agree wherever
         },
         {
           "data": {"values": [{}]},
-          "transform": [{"calculate": "'ceiling L = ' + format(L, '.2f') + (abs(L - 1) < 0.001 ? ' (Kannisto)' : '')", "as": "label"}],
+          "transform": [{"calculate": "'ceiling b/γ = ' + format(L, '.2f') + (abs(L - 1) < 0.001 ? ' (Kannisto)' : '')", "as": "label"}],
           "layer": [
             {"mark": {"type": "rule", "style": "guide"}, "encoding": {"y": {"datum": {"expr": "L"}, "type": "quantitative"}}},
             {
@@ -1101,7 +1105,7 @@ The disagreement is hard to resolve with data, because the models agree wherever
           "data": {
             "values": [
               {"age": 104, "age2": 107, "hazard": 0.032, "label": "Gamma-Gompertz", "kind": "model"},
-              {"age": 104, "age2": 107, "hazard": 0.018, "label": "Gompertz G(x)", "kind": "alt"},
+              {"age": 104, "age2": 107, "hazard": 0.018, "label": "Gompertz a eᵇˣ", "kind": "alt"},
               {"age": 104, "age2": 107, "hazard": 0.0102, "label": "US women, 2023", "kind": "observed"}
             ]
           },
@@ -1214,10 +1218,10 @@ The models above describe one age pattern. Forecasting requires a model of how t
 The Lee–Carter model lets the mortality rates at all ages rise and fall together with a single index of overall mortality, each age to its own fixed degree. It writes the logarithm of the central death rate at age $x$ in year $t$ as[^leecarter1992]
 
 $$
-\ln m_{x,t} = \alpha_x + \beta_x \kappa_t + \varepsilon_{x,t},
+\ln m_{x,t} = a_x + b_x k_t + \varepsilon_{x,t},
 $$
 
-where $\alpha_x$ is the average age pattern, $\kappa_t$ is a single index of the overall level of mortality, and $\beta_x$ is how strongly each age responds to changes in $\kappa_t$. Without further conditions the parameters are not unique (multiplying every $\beta_x$ by 2 and halving every $\kappa_t$ gives the same fit), so constraints such as $\sum_x \beta_x = 1$ and $\sum_t \kappa_t = 0$ fix them. Lee and Carter estimated them with a singular value decomposition, a standard matrix factorisation; Natacha Brouhns and colleagues later recast the model as a Poisson regression on death counts.[^brouhns2002] To forecast, the index $\kappa_t$ is projected as a *random walk with drift*: each year it moves by a fixed average amount plus random noise, which yields forecasts with prediction intervals. Nan Li and Lee extended the model to forecast several related populations, such as the two sexes or neighbouring countries, without letting their projections diverge implausibly.[^lilee2005] The model makes no assumption about the shape of $\alpha_x$. It assumes instead that the improvement at each age stays in fixed proportion over time.
+where $a_x$ is the average age pattern, $k_t$ is a single index of the overall level of mortality, and $b_x$ is how strongly each age responds to changes in $k_t$. Without further conditions the parameters are not unique (multiplying every $b_x$ by 2 and halving every $k_t$ gives the same fit), so constraints such as $\sum_x b_x = 1$ and $\sum_t k_t = 0$ fix them. Lee and Carter estimated them with a singular value decomposition, a standard matrix factorisation; Natacha Brouhns and colleagues later recast the model as a Poisson regression on death counts.[^brouhns2002] To forecast, the index $k_t$ is projected as a *random walk with drift*: each year it moves by a fixed average amount plus random noise, which yields forecasts with prediction intervals. Nan Li and Lee extended the model to forecast several related populations, such as the two sexes or neighbouring countries, without letting their projections diverge implausibly.[^lilee2005] The model makes no assumption about the shape of $a_x$. It assumes instead that the improvement at each age stays in fixed proportion over time.
 
 Extensions address its main weaknesses. The Renshaw–Haberman model adds a term for each year of birth, to capture cohort effects: generations whose mortality is persistently higher or lower than their neighbours'.[^renshaw2006] The Cairns–Blake–Dowd model, designed for pension liabilities at older ages, models the logit of the chance of dying within the year, $\ln[q/(1-q)]$, as a straight line in age whose intercept and slope both evolve as random walks:[^cbd2006]
 
@@ -1239,7 +1243,7 @@ With two parameters, this lets demographers build complete life tables for popul
 
 ### Rectangularisation and the shifting mode
 
-Over the twentieth century, mortality fell first in infancy and childhood and, since about 1970 in industrialised countries, mainly at older ages. Survival curves became more rectangular, and both average and maximum lifespans rose steadily.[^wilmoth2000] Vaupel summarised the evidence as a delay of human ageing by about a decade, with the rate of deterioration with age roughly constant across individuals and over time.[^vaupel2010] In Gompertz terms that is a rising most common age at death with little change in the doubling time.[^missov2015]
+Over the twentieth century, mortality fell first in infancy and childhood and, since about 1970 in industrialised countries, mainly at older ages. Survival curves became more rectangular, and both average and maximum lifespans rose steadily.[^wilmoth2000] Vaupel summarised the evidence as a delay of human ageing by about a decade, with the rate of deterioration with age roughly constant across individuals and over time.[^vaupel2010] In Gompertz terms that is a rising most common age at death $M$ with little change in the slope $b$.[^missov2015]
 
 ## Estimation
 
