@@ -11,7 +11,7 @@ aliases:
 
 **What does it mean to be a caretaker?**
 
-Iconoplasm represents each human gene as a humanlike character. Any Iconoplasm user can claim a gene to take care for. Caretakers can modify:
+Any Iconoplasm user can claim a gene and become its caretaker. Caretakers have control over gene's humanlike identity:
 * Modify gene prose description
 * Modify gene image tags
 * 
@@ -19,6 +19,14 @@ Iconoplasm represents each human gene as a humanlike character. Any Iconoplasm u
 * **Quality control**: Some genes consistently  characters
 * **Real-time coordination**: Caretakers adjust to corrections in gene-to-character mappings and to new media modalities
 * Creative narratives
+
+**How do I become a caretaker?**
+
+1. Go to any gene page
+2. Tap "Become this gene's caretaker" button under the gene card
+![[image-74.png]]
+3. Read and accept the [caretaker terms](https://iconoplasm.brinedew.bio/caretaker-terms)
+![[image-75.png]]
 
 **Who can become a caretaker?**
 At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of Brinedew.bio to be a caretaker. This might change in the future.
