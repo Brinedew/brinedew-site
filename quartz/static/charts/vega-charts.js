@@ -8,7 +8,8 @@
 // that cross the phone breakpoint, keeping the reader's slider positions.
 //
 // Theme hooks for specs: mark styles "observed", "observed-label", "model",
-// "model-point", "model-label", "alt", "alt-label" and "guide". The spec's top-level
+// "model-point", "model-label", "alt", "alt-label", "guide" and "label" (body-text
+// colour, for annotations that sit on shaded areas). The spec's top-level
 // "description" becomes the figure caption.
 
 const VENDOR = "/static/vendor/vega"
@@ -92,6 +93,7 @@ function themeConfig() {
       alt: { color: alt, strokeWidth: 2.25, strokeDash: [6, 4] },
       "alt-label": { color: alt, fontSize: 13, fontWeight: 600 },
       guide: { color: muted, strokeDash: [3, 3], opacity: 0.8 },
+      label: { color: text, fontSize: 13 },
     },
   }
 }
