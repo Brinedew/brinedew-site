@@ -558,7 +558,7 @@ Specialized tissue microenvironment, such as the base of intestinal crypts, that
 ## T
 
 **[[telomeres|Telomeres]]**
-Repetitive chromosome ends that shorten with each cell division, telomeres act as a replication counter and a protective mutagen sink.
+Repetitive DNA–protein caps at chromosome ends. They shorten as most human cells divide, which limits the number of divisions a cell lineage can make and acts as a barrier to cancer.
 
 **[[telomerase-tert|Telomerase]]**
 Enzyme that extends telomeres and supports replicative immortality in stem cells and many cancer cells.
