@@ -36,7 +36,7 @@ Formation of new blood vessels that supply nutrients and oxygen to growing tissu
 Programmed cell suicide triggered when cells lose appropriate attachment to the extracellular matrix.
 
 **[[antagonistic-pleiotropy-theory.md|Antagonistic pleiotropy theory]]**
-Idea that evolution selects genes which increase early-life fitness but decrease late-life fitness, contributing to aging.
+Alleles that raise survival or reproduction at some ages and lower them at others, compared with the alternative allele. Selection can favour them when the benefit comes earlier in life, so their late costs contribute to ageing.
 
 **Apical–basal polarity**
 Built-in “top–bottom” orientation of epithelial cells that lets tissues know which side faces the outside and which faces the inside.
