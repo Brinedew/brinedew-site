@@ -29,7 +29,7 @@ All of these are specific instances of the [[Clonal governance|clonal governance
 Evolutionary frameworks for understanding aging:
 
 - **[[selection-shadow-theory]]** - Why natural selection tolerates aging
-- **[[antagonistic-pleiotropy-theory]]** - Genes beneficial early, harmful later
+- **[[antagonistic-pleiotropy-theory]]** - Alleles that raise survival or reproduction at some ages and lower them at others
 - **[[disposable-soma-theory]]** - Resource allocation trade-offs
 - **[[defensive-degeneration-theory]]** - Aging as cancer prevention
 - **[[tumor-suppressor-theory-of-aging]]** - Anti-cancer mechanisms driving senescence
