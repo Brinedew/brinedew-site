@@ -471,7 +471,7 @@ Type of cell signaling where signals are transmitted short distances to nearby c
 A genetic change that does not confer a selective advantage to the cell but co-occurs with beneficial driver mutations.
 
 **[[petos-paradox|Peto’s paradox]]**
-Observation that large animals have similar cancer rates to small animals, despite having orders of magnitude more cells, implying stronger cancer defenses scaling with organism size.
+The observation that cancer risk across species does not rise with body size and lifespan as it would if every cell carried the same risk; large and long-lived species are thought to have evolved stronger cancer suppression.
 
 **PI3K-AKT-mTOR pathway**
 Central growth and survival pathway activated by growth factors and oncogenic mutations.

@@ -43,7 +43,7 @@ Evolutionary frameworks for understanding aging:
 - **[[immunoediting]]** - Elimination, equilibrium, and escape
 - **[[adaptive-oncogenesis]]** - Aging changes which mutations are selected
 - **[[adaptive-therapy]]** - Managing tumors instead of eradicating them
-- **[[petos-paradox]]** - Why large, long-lived animals do not get proportionally more cancer
+- **[[petos-paradox]]** - Why cancer risk across species does not scale with body size and lifespan, and the mechanisms proposed in elephants, whales and naked mole-rats
 - **[[immune-surveillance]]** - Immune elimination, equilibrium, and escape
 - **[[flower-drosophila|Flower]]** - The molecular marker system of cell competition
 
