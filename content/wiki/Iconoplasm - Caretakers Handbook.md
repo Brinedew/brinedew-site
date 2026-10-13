@@ -9,9 +9,9 @@ aliases:
 ---
 # Iconoplasm - Caretaker's Handbook
 
-**What does it mean to be a caretaker?**
+**Who are caretakers?**
 
-Any Iconoplasm user can claim a gene and become its caretaker. Caretakers have control over gene's humanlike identity:
+Any Iconoplasm user can claim a gene and become its caretaker. Caretakers have control over the gene's character identity:
 * Modify gene prose description
 * Modify gene image tags
 * 
