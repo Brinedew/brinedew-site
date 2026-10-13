@@ -54,7 +54,7 @@ Key cellular and molecular processes:
 - **[[apoptosis]]** - Programmed cell death, intrinsic and extrinsic
 - **[[cellular-senescence]]** - Controlled cellular aging
 - **[[p53-tp53|p53]]** - The genome's primary tumor suppressor
-- **[[telomeres]]** - Chromosomal aging timers
+- **[[telomeres]]** - Protective chromosome ends whose shortening limits cell division
 - **[[weismann-barrier]]** - Separating soma from germline
 - **[[bioelectricity]]** - Voltage patterns as developmental signals
 
