@@ -525,7 +525,7 @@ Senescence-Associated Secretory Phenotype, the signal signature produced by sene
 Speciated by CANcer Development AnimaL, a controversial hypothesis where a lineage of cancer cells can undergo speciation and become a new species.
 
 **[[selection-shadow-theory|Selection shadow]]**
-Decline in selection pressure after reproduction event, that allows late-acting deleterious traits to persist.
+The range of ages at which selection acts weakly, because little of an individual's expected reproduction lies ahead. It lets late-acting deleterious alleles persist (mutation accumulation).
 
 **[[cellular-senescence|Senescent cells]]**
 Cells in a state of irreversible proliferation arrest, unable to properly function but also cancer-resistant.
