@@ -30,7 +30,7 @@ Evolutionary frameworks for understanding aging:
 
 - **[[selection-shadow-theory]]** - The decline with age in the force of selection, and mutation accumulation
 - **[[antagonistic-pleiotropy-theory]]** - Alleles that raise survival or reproduction at some ages and lower them at others
-- **[[disposable-soma-theory]]** - Resource allocation trade-offs
+- **[[disposable-soma-theory]]** - Ageing as the cost of spending less on maintenance than on reproduction
 - **[[defensive-degeneration-theory]]** - Aging as cancer prevention
 - **[[tumor-suppressor-theory-of-aging]]** - Anti-cancer mechanisms driving senescence
 - **[[Atavistic-theory-of-cancer]]** - Cancer as reversion to unicellular state

@@ -177,7 +177,7 @@ Cellular network that senses DNA lesions and coordinates repair, checkpoint acti
 A chemical tag added to DNA bases that usually dampens gene activity and helps set long-term patterns of gene activity.
 
 **[[disposable-soma-theory.md|Disposable soma theory]]**
-Idea that evolution de-prioritizes long-term maintenance in favor of routing limited resources to reproduction, contributing to aging.
+Theory that organisms spend less on maintaining and repairing their bodies than indefinite survival would require, because those resources would otherwise go to reproduction; the damage left unrepaired accumulates as ageing.
 
 **Doubling time**
 The number of years the mortality rate takes to double; about eight in adult humans. Under the Gompertz law it is $\ln 2 / b$, where $b$ is the Gompertz slope.
