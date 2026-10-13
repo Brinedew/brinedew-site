@@ -903,17 +903,17 @@ The ablation experiment answers the late-removal question, not the allele questi
 
 ## History
 
-- **1891.** Weismann proposes that selection designed a mechanism to remove the old, possibly a limit on cell division.[^williams1957]
-- **1930–1952.** Fisher notes that selection weakens with age. Haldane and Medawar develop the point, and Medawar states the mutation-accumulation theory.[^charlesworth2000][^medawar1952]
-- **1957.** Williams proposes that alleles with early benefits and late costs are favoured, and lists nine testable deductions.[^williams1957]
-- **1966.** Hamilton derives the age-specific force of selection on survival and fecundity.[^hamilton1966]
-- **1977.** Kirkwood proposes the disposable soma theory.[^kirkwood1977]
-- **1980.** Charlesworth's *Evolution in Age-Structured Populations* gives the population genetics of age-specific selection a systematic form.[^charlesworth1980]
-- **1981–1984.** Negative genetic correlations between early fecundity and longevity are found in *Drosophila*, and selection for late reproduction produces longer-lived lines.[^rosecharlesworth1981a][^rose1984][^luckinbill1984]
-- **1991–1994.** Rose's *Evolutionary Biology of Aging* sets out the experimental programme.[^rose1991] The trade-off is found to be conditional and, under long selection, to disappear.[^partridgefowler1992][^leroi1994] Quantitative-genetic tests begin to separate the two mechanisms.[^hughescharlesworth1994]
-- **2000–2005.** Long-lived worm mutants are shown to carry fitness costs.[^walker2000][^jenkins2004] Campisi proposes that cellular senescence is antagonistically pleiotropic.[^campisi2005] Leroi and colleagues find few genes with demonstrated antagonistic effects on measured fitness.[^leroi2005]
-- **2005–2019.** The theory's foundations are re-examined: the dependence of Hamilton's indicators on parameterisation,[^baudisch2005] the role of transfers,[^lee2003] the extrinsic-mortality prediction[^caswell2007][^moorad2019] and the linear approximation.[^wachter2013]
-- **2017–2023.** Genome-wide and biobank studies look for antagonistic variants in humans, with contested results.[^rodriguez2017][^longzhang2019][^longzhang2023] Mendelian randomisation and the long telomere syndrome show that telomere shortening keeps suppressing cancer at old ages.[^haycock2017][^kuo2019][^deboy2023]
+### From Weismann to Hamilton
+
+Weismann proposed in 1891 that selection had designed a mechanism to remove the old, possibly a limit on the number of times somatic cells can divide.[^williams1957] Fisher noted in 1930 that selection weakens with age, and Haldane and Medawar developed the point; Medawar's 1952 lecture stated the theory of mutation accumulation.[^charlesworth2000][^medawar1952] Williams's 1957 paper proposed that selection actively favours alleles with early benefits and late costs, and listed nine testable deductions.[^williams1957] Hamilton derived the age-specific force of selection on survival and fecundity in 1966,[^hamilton1966] and Charlesworth's *Evolution in Age-Structured Populations* gave the population genetics of age-specific selection a systematic form in 1980.[^charlesworth1980] In between, Kirkwood proposed the disposable soma theory in 1977.[^kirkwood1977]
+
+### Experiments
+
+The first direct tests came from *Drosophila* between 1981 and 1984: negative genetic correlations between early fecundity and longevity, and longer-lived lines produced by selection for late reproduction.[^rosecharlesworth1981a][^rose1984][^luckinbill1984] Rose's *Evolutionary Biology of Aging* set out the experimental programme in 1991.[^rose1991] Over the following years the trade-off was found to depend on the environment and, under long selection, to disappear,[^partridgefowler1992][^leroi1994] and quantitative-genetic tests began to separate antagonistic pleiotropy from mutation accumulation.[^hughescharlesworth1994] Around 2000, long-lived worm mutants were shown to carry fitness costs.[^walker2000][^jenkins2004] In 2005 Campisi proposed that cellular senescence is antagonistically pleiotropic,[^campisi2005] and Leroi and colleagues found few genes with demonstrated antagonistic effects on measured fitness.[^leroi2005]
+
+### Revisions and human data
+
+From 2005 the theory's foundations were re-examined: the dependence of Hamilton's indicators on how a mutation's effect is measured,[^baudisch2005] the role of transfers between generations,[^lee2003] the extrinsic-mortality prediction[^caswell2007][^moorad2019] and the linear approximation.[^wachter2013] Since 2017, genome-wide and biobank studies have looked for antagonistic variants in humans, with contested results.[^rodriguez2017][^longzhang2019][^longzhang2023] Mendelian randomisation and the long telomere syndrome have shown that telomere shortening continues to suppress cancer at old ages.[^haycock2017][^kuo2019][^deboy2023]
 
 ## Data and figures
 
