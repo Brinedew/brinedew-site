@@ -512,6 +512,9 @@ Recovery of variation, heritability, and differential reproduction by somatic ce
 **[[red-queen-hypothesis|Red Queen hypothesis]]**
 Idea that species must constantly adapt to keep up with co-evolving parasites, and that this arms race favors sexual reproduction.
 
+**[[reliability-theory-of-ageing|Reliability theory of ageing]]**
+The model of an organism as vital blocks in series, each made of redundant elements that fail at a constant rate. Its mortality rate rises as redundancy is used up and levels off at old ages; its exponential slope falls with age, unlike that of human mortality.
+
 **Replicative senescence**
 Permanent cell division arrest triggered by telomere shortening after repeated divisions.
 
