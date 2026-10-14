@@ -42,6 +42,7 @@ Why the risk of death rises with age, and how fast:
 
 - **[[Mortality rate models]]** - The Gompertz law and its alternatives, and the explanations proposed for them
 - **[[reliability-theory-of-ageing]]** - Ageing as the loss of redundancy in a system of non-ageing parts, and why its derivation of the Gompertz law fails
+- **[[critical-point-model-of-ageing]]** - Ageing as a loss of resilience ending at a critical point, and the claimed 120–150-year limit to human lifespan
 - **[[saturating-removal-model-of-senescence]]** - A model of senescent-cell turnover that predicts Gompertz-like mortality, and how well it is supported
 
 ## Cancer evolution
