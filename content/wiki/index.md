@@ -53,6 +53,7 @@ Key cellular and molecular processes:
 
 - **[[apoptosis]]** - Programmed cell death, intrinsic and extrinsic
 - **[[cellular-senescence]]** - Stable arrest of cell division in damaged or stressed cells
+- **[[senolytics]]** - Drugs that kill senescent cells, and what the mouse and human trials show
 - **[[p53-tp53|p53]]** - The genome's primary tumor suppressor
 - **[[telomeres]]** - Protective chromosome ends whose shortening limits cell division
 - **[[weismann-barrier]]** - Separating soma from germline
