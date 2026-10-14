@@ -76,88 +76,9 @@ How long senescent cells persist depends on how fast they are removed. Omer Kari
 
 ### A model of senescent-cell dynamics
 
-Karin and colleagues proposed a model in which senescent cells are produced at a rate that rises in proportion to age and removed at a rate that saturates when they are numerous, as when the immune cells that remove them are fully occupied. Random fluctuations are added, and the authors assumed, for illustration, that death occurs when the burden of senescent cells first exceeds a threshold; they noted that "the precise relationship is currently unknown". With production, removal and noise chosen to be consistent with the reporter data and to match the mean and spread of C57BL/6J lifespans, the model gives a mortality rate that rises roughly exponentially with age, as in the [[Mortality rate models#gompertz-law|Gompertz law]], and slows at the oldest ages.[^karin2019] The fit to mortality does not on its own show that the burden is senescent cells: the same equation, with the burden read as generic damage, fits the survival curves of flies, nematodes and other species.[^karin2019][^raz2026]
+*Main article: [[saturating-removal-model-of-senescence|Saturating-removal model of senescence]]*
 
-Figure 1 simulates the model for 20,000 mice. With the maximum removal rate of 0.15 a day used in the authors' mortality fit (their fit to the reporter trajectories gave 0.27 a day), the median mouse lives 28.4 months, and the monthly mortality rate rises about tenfold between 15 and 21 months. Drag the removal rate down to 0.12 a day and the median lifespan falls to 24.5 months; raise it to 0.18 and it rises to 32.4. A 20% change in the maximum removal rate, applied throughout life, shifts the median lifespan by about 14% in either direction.
-
-```vega-lite
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "description": "Figure 1. The saturating-removal model of Karin and colleagues, simulated for 20,000 mice. Senescent cells are produced at a rate that rises with age and removed at a rate that saturates when they are numerous; random fluctuations are added, and a mouse dies when its senescent-cell burden first crosses a threshold. The first panel shows the burden among mice still alive (median, with the 10th to 90th percentile shaded) and the threshold. The second shows the resulting mortality rate per month, on a logarithmic scale. The slider sets the maximum removal rate β; the other parameters are those the authors used to fit C57BL/6J mortality (production slope 0.084 per day per year, half-saturation 0.5, noise 0.16 per day, threshold 17; burden in units of the mean burden of young mice).",
-  "params": [{"name": "B", "value": 0.15, "bind": {"input": "range", "min": 0.12, "max": 0.18, "step": 0.01, "name": "Maximum removal rate β, per day"}}],
-  "hconcat": [
-    {
-      "width": 290,
-      "height": 230,
-      "layer": [
-        {
-          "data": {"url": "/attachments/senescent-cell-model.csv"},
-          "transform": [{"filter": "abs(datum.beta - B) < 0.001 && isValid(datum.xmed) && datum.xmed !== ''"}],
-          "layer": [
-            {"mark": {"type": "area", "style": "observed", "opacity": 0.35}, "encoding": {"y": {"field": "xlo", "type": "quantitative"}, "y2": {"field": "xhi"}}},
-            {"mark": {"type": "line", "style": "model"}, "encoding": {"y": {"field": "xmed", "type": "quantitative"}}}
-          ],
-          "encoding": {"x": {"field": "month", "type": "quantitative"}}
-        },
-        {"data": {"values": [{}]}, "mark": {"type": "rule", "style": "guide"}, "encoding": {"y": {"datum": 17, "type": "quantitative"}}},
-        {
-          "data": {"values": [{"month": 1, "y": 17, "label": "threshold"}]},
-          "mark": {"type": "text", "style": "observed-label", "align": "left", "dy": -8},
-          "encoding": {"x": {"field": "month", "type": "quantitative"}, "y": {"field": "y", "type": "quantitative"}, "text": {"field": "label"}}
-        }
-      ],
-      "encoding": {
-        "x": {"type": "quantitative", "scale": {"domain": [0, 45], "nice": false}, "axis": {"title": "Age, months", "values": [0, 6, 12, 18, 24, 30, 36, 42]}},
-        "y": {"type": "quantitative", "scale": {"domain": [0, 18], "nice": false}, "axis": {"title": "Senescent-cell burden", "values": [0, 5, 10, 15]}}
-      }
-    },
-    {
-      "width": 290,
-      "height": 230,
-      "layer": [
-        {
-          "data": {"url": "/attachments/senescent-cell-model.csv"},
-          "transform": [{"filter": "abs(datum.beta - B) < 0.001 && isValid(datum.hazard) && datum.hazard !== '' && datum.hazard >= 0.002"}],
-          "layer": [
-            {"mark": {"type": "line", "style": "model", "strokeWidth": 2}},
-            {"mark": {"type": "circle", "style": "model-point", "size": 22}}
-          ],
-          "encoding": {"x": {"field": "month", "type": "quantitative"}, "y": {"field": "hazard", "type": "quantitative"}}
-        },
-        {
-          "data": {"url": "/attachments/senescent-cell-model.csv"},
-          "transform": [
-            {"filter": "abs(datum.beta - B) < 0.001"},
-            {"aggregate": [{"op": "max", "field": "median", "as": "median"}]},
-            {"calculate": "'Median lifespan ' + format(datum.median, '.1f') + ' months'", "as": "label"},
-            {"calculate": "1", "as": "lx"},
-            {"calculate": "0.8", "as": "ly"}
-          ],
-          "mark": {"type": "text", "style": "model-label", "align": "left", "baseline": "top"},
-          "encoding": {"x": {"field": "lx", "type": "quantitative"}, "y": {"field": "ly", "type": "quantitative"}, "text": {"field": "label"}}
-        }
-      ],
-      "encoding": {
-        "x": {"type": "quantitative", "scale": {"domain": [0, 45], "nice": false}, "axis": {"title": "Age, months", "values": [0, 6, 12, 18, 24, 30, 36, 42]}},
-        "y": {
-          "type": "quantitative",
-          "scale": {"type": "log", "domain": [0.001, 1], "nice": false},
-          "axis": {"title": "Deaths per month among survivors", "values": [0.001, 0.01, 0.1, 1], "labelExpr": "datum.value >= 1 ? '1' : '1 in ' + format(1 / datum.value, ',')"}
-        }
-      }
-    }
-  ]
-}
-```
-
-> [!note]- The saturating-removal model
-> The senescent-cell burden $X$ changes as
->
-> $$
-> \frac{\mathrm{d}X}{\mathrm{d}t} = \eta\,t - \frac{\beta X}{\kappa + X} + \sqrt{2\varepsilon}\,\xi(t),
-> $$
->
-> where $\eta t$ is the production rate, rising with age $t$; $\beta$ is the maximum removal rate; $\kappa$ is the burden at which removal runs at half its maximum; and $\xi(t)$ is white noise of strength $\varepsilon$. Death occurs when $X$ first reaches $X_c$.[^karin2019] Figure 1 uses $\eta = 0.084$ per day per year, $\kappa = 0.5$, $\varepsilon = 0.16$ per day and $X_c = 17$, with $X$ in arbitrary units, and integrates the equation in half-day steps.
+Karin and colleagues proposed that senescent cells are produced at a rate that rises in proportion to age and removed at a rate that saturates when they are numerous, and assumed, for illustration, that death occurs when their burden first crosses a threshold. The model fitted whole-body p16-reporter trajectories from 33 mice better than variants without saturating removal, and, with a separate set of parameters chosen to match the lifespans of C57BL/6J mice, gives a mortality rate that rises roughly exponentially with age, as in the [[Mortality rate models#gompertz-law|Gompertz law]].[^karin2019] Neither fit singles it out. A model with constant production and a fraction of senescent cells that cannot be removed fits the same reporter data comparably;[^kowald2020] lineage tracing found half-lives of 2.6 to 4.2 months for naturally arising cells with high p16 expression;[^omori2020] and the same equation, with the burden read as generic damage, fits the survival curves of species from bacteria to humans.[^raz2026]
 
 ### Clearing senescent cells in mice
 
@@ -193,9 +114,7 @@ Oncogene-induced senescence was described in 1997,[^serrano1997] and in 2005 fou
 
 In 2011 and 2016 Baker and colleagues showed that removing p16-expressing cells delays age-related disease and extends lifespan in mice,[^baker2011][^baker2016] and the first senolytic drugs were reported in 2015.[^zhu2015] The first human pilot studies were published in 2019,[^justice2019][^hickson2019] and in 2020 the first placebo-controlled phase 2 trial of a senolytic failed.[^unity2020] Randomised trials of dasatinib plus quercetin published in 2023 and 2024 were also negative on their primary or main outcomes.[^nambiar2023][^farr2024]
 
-## Data and figures
-
-Figure 1 was computed for this article by simulating the model of Karin and colleagues,[^karin2019] with the parameters in the note beneath it, for 20,000 mice at each of seven values of the maximum removal rate. Mortality rates are deaths in each month divided by mice alive at its start, shown where they are at least 0.002; burden percentiles are shown while at least 200 mice remain alive.
+[^karin2019] with the parameters in the note beneath it, for 20,000 mice at each of seven values of the maximum removal rate. Mortality rates are deaths in each month divided by mice alive at its start, shown where they are at least 0.002; burden percentiles are shown while at least 200 mice remain alive.
 
 [^campisi2007]: Campisi J, d'Adda di Fagagna F (2007). "Cellular senescence: when bad things happen to good cells". *Nature Reviews Molecular Cell Biology*. 8 (9): 729–740. [doi:10.1038/nrm2233](https://doi.org/10.1038/nrm2233)
 
@@ -301,3 +220,7 @@ Figure 1 was computed for this article by simulating the model of Karin and coll
 [^hall2016]: Hall BM, Balan V, Gleiberman AS, Strom E, Krasnov P, et al. (2016). "Aging of mice is associated with p16(Ink4a)- and β-galactosidase-positive macrophage accumulation that can be induced in young mice by senescent cells". *Aging*. 8 (7): 1294–1315. [doi:10.18632/aging.100991](https://doi.org/10.18632/aging.100991)
 
 [^reyes2022]: Reyes NS, Krasilnikov M, Allen NC, Lee JY, Hyams B, et al. (2022). "Sentinel *p16*<sup>INK4a+</sup> cells in the basement membrane form a reparative niche in the lung". *Science*. 378 (6616): 192–201. [doi:10.1126/science.abf3326](https://doi.org/10.1126/science.abf3326)
+
+[^kowald2020]: Kowald A, Passos JF, Kirkwood TBL (2020). "On the evolution of cellular senescence". *Aging Cell*. 19 (12): e13270. [doi:10.1111/acel.13270](https://doi.org/10.1111/acel.13270)
+
+[^omori2020]: Omori S, Wang TW, Johmura Y, Kanai T, Nakano Y, et al. (2020). "Generation of a p16 reporter mouse and its use to characterize and target p16high cells in vivo". *Cell Metabolism*. 32 (5): 814–828. [doi:10.1016/j.cmet.2020.09.006](https://doi.org/10.1016/j.cmet.2020.09.006)
