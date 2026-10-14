@@ -1011,7 +1011,7 @@ The typical miss is how far the fitted mortality rate falls from the observed on
 
 ## Explanations of the Gompertz law
 
-That the mortality rate of adult humans rises by a nearly constant percentage each year is one of the most regular findings in biology. Several theories explain it; they are not mutually exclusive.
+That the mortality rate of adult humans rises by a nearly constant percentage each year is one of the most regular findings in biology. Several theories explain it; they are not mutually exclusive. Several of them are first-passage models, in which death is the first crossing of a threshold by a fluctuating state, and share that family's strengths and limits. (See [[first-passage-models-of-mortality|First-passage models of mortality]].)
 
 ### Strehler–Mildvan theory
 

@@ -1,0 +1,3208 @@
+family,param,t,hazard
+spread-out start,0,0.02,3.1468
+spread-out start,0,0.06,1.9598
+spread-out start,0,0.1,1.5962
+spread-out start,0,0.14,1.4036
+spread-out start,0,0.18,1.28
+spread-out start,0,0.22,1.1923
+spread-out start,0,0.26,1.126
+spread-out start,0,0.3,1.0737
+spread-out start,0,0.341,1.0301
+spread-out start,0,0.381,0.99468
+spread-out start,0,0.421,0.96457
+spread-out start,0,0.461,0.93856
+spread-out start,0,0.501,0.91582
+spread-out start,0,0.541,0.89573
+spread-out start,0,0.581,0.87781
+spread-out start,0,0.621,0.86172
+spread-out start,0,0.661,0.84716
+spread-out start,0,0.701,0.83391
+spread-out start,0,0.741,0.8218
+spread-out start,0,0.781,0.81066
+spread-out start,0,0.821,0.80039
+spread-out start,0,0.861,0.79087
+spread-out start,0,0.901,0.78202
+spread-out start,0,0.942,0.77358
+spread-out start,0,0.982,0.76587
+spread-out start,0,1.022,0.75865
+spread-out start,0,1.062,0.75187
+spread-out start,0,1.102,0.74547
+spread-out start,0,1.142,0.73943
+spread-out start,0,1.182,0.73372
+spread-out start,0,1.222,0.72832
+spread-out start,0,1.262,0.72318
+spread-out start,0,1.302,0.7183
+spread-out start,0,1.342,0.71365
+spread-out start,0,1.382,0.70922
+spread-out start,0,1.422,0.70499
+spread-out start,0,1.462,0.70095
+spread-out start,0,1.502,0.69708
+spread-out start,0,1.543,0.69328
+spread-out start,0,1.583,0.68972
+spread-out start,0,1.623,0.68631
+spread-out start,0,1.663,0.68304
+spread-out start,0,1.703,0.67988
+spread-out start,0,1.743,0.67685
+spread-out start,0,1.783,0.67392
+spread-out start,0,1.823,0.6711
+spread-out start,0,1.863,0.66838
+spread-out start,0,1.903,0.66576
+spread-out start,0,1.943,0.66322
+spread-out start,0,1.983,0.66076
+spread-out start,0,2.023,0.65838
+spread-out start,0,2.063,0.65608
+spread-out start,0,2.103,0.65385
+spread-out start,0,2.144,0.65164
+spread-out start,0,2.184,0.64955
+spread-out start,0,2.224,0.64751
+spread-out start,0,2.264,0.64554
+spread-out start,0,2.304,0.64363
+spread-out start,0,2.344,0.64176
+spread-out start,0,2.384,0.63995
+spread-out start,0,2.424,0.63819
+spread-out start,0,2.464,0.63647
+spread-out start,0,2.504,0.6348
+spread-out start,0,2.544,0.63318
+spread-out start,0,2.584,0.6316
+spread-out start,0,2.624,0.63005
+spread-out start,0,2.664,0.62855
+spread-out start,0,2.704,0.62708
+spread-out start,0,2.745,0.62561
+spread-out start,0,2.785,0.62421
+spread-out start,0,2.825,0.62284
+spread-out start,0,2.865,0.62151
+spread-out start,0,2.905,0.62021
+spread-out start,0,2.945,0.61894
+spread-out start,0,2.985,0.61769
+spread-out start,0,3.025,0.61647
+spread-out start,0,3.065,0.61528
+spread-out start,0,3.105,0.61412
+spread-out start,0,3.145,0.61298
+spread-out start,0,3.185,0.61186
+spread-out start,0,3.225,0.61077
+spread-out start,0,3.265,0.6097
+spread-out start,0,3.305,0.60865
+spread-out start,0,3.346,0.6076
+spread-out start,0,3.386,0.60659
+spread-out start,0,3.426,0.6056
+spread-out start,0,3.466,0.60464
+spread-out start,0,3.506,0.60369
+spread-out start,0,3.546,0.60276
+spread-out start,0,3.586,0.60184
+spread-out start,0,3.626,0.60094
+spread-out start,0,3.666,0.60006
+spread-out start,0,3.706,0.5992
+spread-out start,0,3.746,0.59835
+spread-out start,0,3.786,0.59752
+spread-out start,0,3.826,0.5967
+spread-out start,0,3.866,0.5959
+spread-out start,0,3.906,0.59511
+spread-out start,0,3.947,0.59431
+spread-out start,0,3.987,0.59355
+spread-out start,0,4.027,0.5928
+spread-out start,0,4.067,0.59206
+spread-out start,0,4.107,0.59134
+spread-out start,0,4.147,0.59062
+spread-out start,0,4.187,0.58992
+spread-out start,0,4.227,0.58923
+spread-out start,0,4.267,0.58855
+spread-out start,0,4.307,0.58788
+spread-out start,0,4.347,0.58722
+spread-out start,0,4.387,0.58658
+spread-out start,0,4.427,0.58594
+spread-out start,0,4.467,0.58531
+spread-out start,0,4.507,0.58469
+spread-out start,0,4.548,0.58407
+spread-out start,0,4.588,0.58347
+spread-out start,0,4.628,0.58288
+spread-out start,0,4.668,0.5823
+spread-out start,0,4.708,0.58172
+spread-out start,0,4.748,0.58116
+spread-out start,0,4.788,0.5806
+spread-out start,0,4.828,0.58005
+spread-out start,0,4.868,0.57951
+spread-out start,0,4.908,0.57897
+spread-out start,0,4.948,0.57845
+spread-out start,0,4.988,0.57793
+spread-out start,0,5.028,0.57742
+spread-out start,0,5.068,0.57691
+spread-out start,0,5.108,0.57641
+spread-out start,0,5.149,0.57591
+spread-out start,0,5.189,0.57542
+spread-out start,0,5.229,0.57494
+spread-out start,0,5.269,0.57447
+spread-out start,0,5.309,0.574
+spread-out start,0,5.349,0.57354
+spread-out start,0,5.389,0.57309
+spread-out start,0,5.429,0.57264
+spread-out start,0,5.469,0.5722
+spread-out start,0,5.509,0.57176
+spread-out start,0,5.549,0.57133
+spread-out start,0,5.589,0.5709
+spread-out start,0,5.629,0.57048
+spread-out start,0,5.669,0.57007
+spread-out start,0,5.709,0.56966
+spread-out start,0,5.75,0.56924
+spread-out start,0,5.79,0.56884
+spread-out start,0,5.83,0.56844
+spread-out start,0,5.87,0.56805
+spread-out start,0,5.91,0.56766
+spread-out start,0,5.95,0.56728
+spread-out start,0,5.99,0.5669
+spread-out start,0,6.03,0.56653
+spread-out start,0,6.07,0.56616
+spread-out start,0,6.11,0.5658
+spread-out start,0,6.15,0.56543
+spread-out start,0,6.19,0.56508
+spread-out start,0,6.23,0.56472
+spread-out start,0,6.27,0.56437
+spread-out start,0,6.311,0.56402
+spread-out start,0,6.351,0.56368
+spread-out start,0,6.391,0.56334
+spread-out start,0,6.431,0.56301
+spread-out start,0,6.471,0.56268
+spread-out start,0,6.511,0.56235
+spread-out start,0,6.551,0.56203
+spread-out start,0,6.591,0.56171
+spread-out start,0,6.631,0.56139
+spread-out start,0,6.671,0.56108
+spread-out start,0,6.711,0.56077
+spread-out start,0,6.751,0.56046
+spread-out start,0,6.791,0.56016
+spread-out start,0,6.831,0.55986
+spread-out start,0,6.871,0.55956
+spread-out start,0,6.912,0.55926
+spread-out start,0,6.952,0.55897
+spread-out start,0,6.992,0.55868
+spread-out start,0,7.032,0.5584
+spread-out start,0,7.072,0.55812
+spread-out start,0,7.112,0.55784
+spread-out start,0,7.152,0.55756
+spread-out start,0,7.192,0.55729
+spread-out start,0,7.232,0.55701
+spread-out start,0,7.272,0.55675
+spread-out start,0,7.312,0.55648
+spread-out start,0,7.352,0.55622
+spread-out start,0,7.392,0.55595
+spread-out start,0,7.432,0.5557
+spread-out start,0,7.472,0.55544
+spread-out start,0,7.513,0.55518
+spread-out start,0,7.553,0.55493
+spread-out start,0,7.593,0.55468
+spread-out start,0,7.633,0.55443
+spread-out start,0,7.673,0.55419
+spread-out start,0,7.713,0.55395
+spread-out start,0,7.753,0.55371
+spread-out start,0,7.793,0.55347
+spread-out start,0,7.833,0.55323
+spread-out start,0,7.873,0.553
+spread-out start,0,7.913,0.55277
+spread-out start,0,7.953,0.55254
+spread-out start,0,7.993,0.55231
+spread-out start,0,8.033,0.55208
+spread-out start,0,8.073,0.55186
+spread-out start,0,8.114,0.55163
+spread-out start,0,8.154,0.55141
+spread-out start,0,8.194,0.5512
+spread-out start,0,8.234,0.55098
+spread-out start,0,8.274,0.55077
+spread-out start,0,8.314,0.55056
+spread-out start,0,8.354,0.55035
+spread-out start,0,8.394,0.55014
+spread-out start,0,8.434,0.54993
+spread-out start,0,8.474,0.54973
+spread-out start,0,8.514,0.54952
+spread-out start,0,8.554,0.54932
+spread-out start,0,8.594,0.54912
+spread-out start,0,8.634,0.54892
+spread-out start,0,8.674,0.54873
+spread-out start,0,8.715,0.54853
+spread-out start,0,8.755,0.54833
+spread-out start,0,8.795,0.54814
+spread-out start,0,8.835,0.54795
+spread-out start,0,8.875,0.54776
+spread-out start,0,8.915,0.54758
+spread-out start,0,8.955,0.54739
+spread-out start,0,8.995,0.54721
+spread-out start,0,9.035,0.54702
+spread-out start,0,9.075,0.54684
+spread-out start,0,9.115,0.54666
+spread-out start,0,9.155,0.54648
+spread-out start,0,9.195,0.54631
+spread-out start,0,9.235,0.54613
+spread-out start,0,9.275,0.54596
+spread-out start,0,9.316,0.54578
+spread-out start,0,9.356,0.54561
+spread-out start,0,9.396,0.54544
+spread-out start,0,9.436,0.54527
+spread-out start,0,9.476,0.5451
+spread-out start,0,9.516,0.54493
+spread-out start,0,9.556,0.54477
+spread-out start,0,9.596,0.54461
+spread-out start,0,9.636,0.54444
+spread-out start,0,9.676,0.54428
+spread-out start,0,9.716,0.54412
+spread-out start,0,9.756,0.54396
+spread-out start,0,9.796,0.5438
+spread-out start,0,9.836,0.54365
+spread-out start,0,9.876,0.54349
+spread-out start,0,9.917,0.54333
+spread-out start,0,9.957,0.54318
+spread-out start,0,9.997,0.54303
+spread-out start,0.25,0.02,2.0699
+spread-out start,0.25,0.06,1.4369
+spread-out start,0.25,0.1,1.2259
+spread-out start,0.25,0.14,1.1096
+spread-out start,0.25,0.18,1.0331
+spread-out start,0.25,0.22,0.97768
+spread-out start,0.25,0.26,0.9352
+spread-out start,0.25,0.3,0.90127
+spread-out start,0.25,0.341,0.87272
+spread-out start,0.25,0.381,0.84933
+spread-out start,0.25,0.421,0.82929
+spread-out start,0.25,0.461,0.81188
+spread-out start,0.25,0.501,0.79657
+spread-out start,0.25,0.541,0.78297
+spread-out start,0.25,0.581,0.77079
+spread-out start,0.25,0.621,0.7598
+spread-out start,0.25,0.661,0.74982
+spread-out start,0.25,0.701,0.74071
+spread-out start,0.25,0.741,0.73235
+spread-out start,0.25,0.781,0.72465
+spread-out start,0.25,0.821,0.71752
+spread-out start,0.25,0.861,0.71089
+spread-out start,0.25,0.901,0.70472
+spread-out start,0.25,0.942,0.69881
+spread-out start,0.25,0.982,0.69342
+spread-out start,0.25,1.022,0.68835
+spread-out start,0.25,1.062,0.68358
+spread-out start,0.25,1.102,0.67907
+spread-out start,0.25,1.142,0.67481
+spread-out start,0.25,1.182,0.67077
+spread-out start,0.25,1.222,0.66694
+spread-out start,0.25,1.262,0.6633
+spread-out start,0.25,1.302,0.65984
+spread-out start,0.25,1.342,0.65653
+spread-out start,0.25,1.382,0.65338
+spread-out start,0.25,1.422,0.65036
+spread-out start,0.25,1.462,0.64748
+spread-out start,0.25,1.502,0.64471
+spread-out start,0.25,1.543,0.642
+spread-out start,0.25,1.583,0.63945
+spread-out start,0.25,1.623,0.63701
+spread-out start,0.25,1.663,0.63466
+spread-out start,0.25,1.703,0.6324
+spread-out start,0.25,1.743,0.63022
+spread-out start,0.25,1.783,0.62811
+spread-out start,0.25,1.823,0.62608
+spread-out start,0.25,1.863,0.62412
+spread-out start,0.25,1.903,0.62223
+spread-out start,0.25,1.943,0.6204
+spread-out start,0.25,1.983,0.61862
+spread-out start,0.25,2.023,0.61691
+spread-out start,0.25,2.063,0.61525
+spread-out start,0.25,2.103,0.61363
+spread-out start,0.25,2.144,0.61203
+spread-out start,0.25,2.184,0.61052
+spread-out start,0.25,2.224,0.60904
+spread-out start,0.25,2.264,0.60761
+spread-out start,0.25,2.304,0.60622
+spread-out start,0.25,2.344,0.60487
+spread-out start,0.25,2.384,0.60355
+spread-out start,0.25,2.424,0.60227
+spread-out start,0.25,2.464,0.60103
+spread-out start,0.25,2.504,0.59981
+spread-out start,0.25,2.544,0.59863
+spread-out start,0.25,2.584,0.59748
+spread-out start,0.25,2.624,0.59635
+spread-out start,0.25,2.664,0.59525
+spread-out start,0.25,2.704,0.59418
+spread-out start,0.25,2.745,0.59311
+spread-out start,0.25,2.785,0.59209
+spread-out start,0.25,2.825,0.5911
+spread-out start,0.25,2.865,0.59012
+spread-out start,0.25,2.905,0.58917
+spread-out start,0.25,2.945,0.58824
+spread-out start,0.25,2.985,0.58733
+spread-out start,0.25,3.025,0.58644
+spread-out start,0.25,3.065,0.58557
+spread-out start,0.25,3.105,0.58472
+spread-out start,0.25,3.145,0.58388
+spread-out start,0.25,3.185,0.58307
+spread-out start,0.25,3.225,0.58227
+spread-out start,0.25,3.265,0.58148
+spread-out start,0.25,3.305,0.58071
+spread-out start,0.25,3.346,0.57994
+spread-out start,0.25,3.386,0.5792
+spread-out start,0.25,3.426,0.57848
+spread-out start,0.25,3.466,0.57777
+spread-out start,0.25,3.506,0.57708
+spread-out start,0.25,3.546,0.57639
+spread-out start,0.25,3.586,0.57572
+spread-out start,0.25,3.626,0.57506
+spread-out start,0.25,3.666,0.57442
+spread-out start,0.25,3.706,0.57378
+spread-out start,0.25,3.746,0.57316
+spread-out start,0.25,3.786,0.57255
+spread-out start,0.25,3.826,0.57194
+spread-out start,0.25,3.866,0.57135
+spread-out start,0.25,3.906,0.57077
+spread-out start,0.25,3.947,0.57019
+spread-out start,0.25,3.987,0.56963
+spread-out start,0.25,4.027,0.56907
+spread-out start,0.25,4.067,0.56853
+spread-out start,0.25,4.107,0.568
+spread-out start,0.25,4.147,0.56747
+spread-out start,0.25,4.187,0.56695
+spread-out start,0.25,4.227,0.56644
+spread-out start,0.25,4.267,0.56595
+spread-out start,0.25,4.307,0.56545
+spread-out start,0.25,4.347,0.56497
+spread-out start,0.25,4.387,0.56449
+spread-out start,0.25,4.427,0.56402
+spread-out start,0.25,4.467,0.56356
+spread-out start,0.25,4.507,0.5631
+spread-out start,0.25,4.548,0.56264
+spread-out start,0.25,4.588,0.5622
+spread-out start,0.25,4.628,0.56176
+spread-out start,0.25,4.668,0.56133
+spread-out start,0.25,4.708,0.56091
+spread-out start,0.25,4.748,0.56049
+spread-out start,0.25,4.788,0.56008
+spread-out start,0.25,4.828,0.55967
+spread-out start,0.25,4.868,0.55927
+spread-out start,0.25,4.908,0.55888
+spread-out start,0.25,4.948,0.55849
+spread-out start,0.25,4.988,0.5581
+spread-out start,0.25,5.028,0.55773
+spread-out start,0.25,5.068,0.55735
+spread-out start,0.25,5.108,0.55698
+spread-out start,0.25,5.149,0.55661
+spread-out start,0.25,5.189,0.55625
+spread-out start,0.25,5.229,0.5559
+spread-out start,0.25,5.269,0.55555
+spread-out start,0.25,5.309,0.5552
+spread-out start,0.25,5.349,0.55486
+spread-out start,0.25,5.389,0.55453
+spread-out start,0.25,5.429,0.55419
+spread-out start,0.25,5.469,0.55387
+spread-out start,0.25,5.509,0.55354
+spread-out start,0.25,5.549,0.55322
+spread-out start,0.25,5.589,0.55291
+spread-out start,0.25,5.629,0.5526
+spread-out start,0.25,5.669,0.55229
+spread-out start,0.25,5.709,0.55198
+spread-out start,0.25,5.75,0.55168
+spread-out start,0.25,5.79,0.55138
+spread-out start,0.25,5.83,0.55109
+spread-out start,0.25,5.87,0.55079
+spread-out start,0.25,5.91,0.55051
+spread-out start,0.25,5.95,0.55022
+spread-out start,0.25,5.99,0.54994
+spread-out start,0.25,6.03,0.54967
+spread-out start,0.25,6.07,0.54939
+spread-out start,0.25,6.11,0.54912
+spread-out start,0.25,6.15,0.54885
+spread-out start,0.25,6.19,0.54859
+spread-out start,0.25,6.23,0.54833
+spread-out start,0.25,6.27,0.54807
+spread-out start,0.25,6.311,0.54781
+spread-out start,0.25,6.351,0.54756
+spread-out start,0.25,6.391,0.54731
+spread-out start,0.25,6.431,0.54706
+spread-out start,0.25,6.471,0.54681
+spread-out start,0.25,6.511,0.54657
+spread-out start,0.25,6.551,0.54633
+spread-out start,0.25,6.591,0.54609
+spread-out start,0.25,6.631,0.54586
+spread-out start,0.25,6.671,0.54563
+spread-out start,0.25,6.711,0.5454
+spread-out start,0.25,6.751,0.54517
+spread-out start,0.25,6.791,0.54494
+spread-out start,0.25,6.831,0.54472
+spread-out start,0.25,6.871,0.5445
+spread-out start,0.25,6.912,0.54428
+spread-out start,0.25,6.952,0.54406
+spread-out start,0.25,6.992,0.54385
+spread-out start,0.25,7.032,0.54363
+spread-out start,0.25,7.072,0.54342
+spread-out start,0.25,7.112,0.54322
+spread-out start,0.25,7.152,0.54301
+spread-out start,0.25,7.192,0.54281
+spread-out start,0.25,7.232,0.54261
+spread-out start,0.25,7.272,0.54241
+spread-out start,0.25,7.312,0.54221
+spread-out start,0.25,7.352,0.54201
+spread-out start,0.25,7.392,0.54182
+spread-out start,0.25,7.432,0.54163
+spread-out start,0.25,7.472,0.54143
+spread-out start,0.25,7.513,0.54124
+spread-out start,0.25,7.553,0.54105
+spread-out start,0.25,7.593,0.54087
+spread-out start,0.25,7.633,0.54069
+spread-out start,0.25,7.673,0.54051
+spread-out start,0.25,7.713,0.54033
+spread-out start,0.25,7.753,0.54015
+spread-out start,0.25,7.793,0.53997
+spread-out start,0.25,7.833,0.53979
+spread-out start,0.25,7.873,0.53962
+spread-out start,0.25,7.913,0.53945
+spread-out start,0.25,7.953,0.53928
+spread-out start,0.25,7.993,0.53911
+spread-out start,0.25,8.033,0.53894
+spread-out start,0.25,8.073,0.53878
+spread-out start,0.25,8.114,0.53861
+spread-out start,0.25,8.154,0.53844
+spread-out start,0.25,8.194,0.53828
+spread-out start,0.25,8.234,0.53812
+spread-out start,0.25,8.274,0.53796
+spread-out start,0.25,8.314,0.5378
+spread-out start,0.25,8.354,0.53765
+spread-out start,0.25,8.394,0.53749
+spread-out start,0.25,8.434,0.53734
+spread-out start,0.25,8.474,0.53719
+spread-out start,0.25,8.514,0.53704
+spread-out start,0.25,8.554,0.53688
+spread-out start,0.25,8.594,0.53674
+spread-out start,0.25,8.634,0.53659
+spread-out start,0.25,8.674,0.53644
+spread-out start,0.25,8.715,0.53629
+spread-out start,0.25,8.755,0.53615
+spread-out start,0.25,8.795,0.53601
+spread-out start,0.25,8.835,0.53587
+spread-out start,0.25,8.875,0.53573
+spread-out start,0.25,8.915,0.53558
+spread-out start,0.25,8.955,0.53545
+spread-out start,0.25,8.995,0.53531
+spread-out start,0.25,9.035,0.53517
+spread-out start,0.25,9.075,0.53504
+spread-out start,0.25,9.115,0.5349
+spread-out start,0.25,9.155,0.53477
+spread-out start,0.25,9.195,0.53464
+spread-out start,0.25,9.235,0.53451
+spread-out start,0.25,9.275,0.53438
+spread-out start,0.25,9.316,0.53425
+spread-out start,0.25,9.356,0.53412
+spread-out start,0.25,9.396,0.53399
+spread-out start,0.25,9.436,0.53387
+spread-out start,0.25,9.476,0.53374
+spread-out start,0.25,9.516,0.53362
+spread-out start,0.25,9.556,0.53349
+spread-out start,0.25,9.596,0.53337
+spread-out start,0.25,9.636,0.53325
+spread-out start,0.25,9.676,0.53313
+spread-out start,0.25,9.716,0.53301
+spread-out start,0.25,9.756,0.53289
+spread-out start,0.25,9.796,0.53277
+spread-out start,0.25,9.836,0.53266
+spread-out start,0.25,9.876,0.53254
+spread-out start,0.25,9.917,0.53242
+spread-out start,0.25,9.957,0.53231
+spread-out start,0.25,9.997,0.53219
+spread-out start,0.5,0.02,1.3228
+spread-out start,0.5,0.06,1.0313
+spread-out start,0.5,0.1,0.92495
+spread-out start,0.5,0.14,0.86377
+spread-out start,0.5,0.18,0.82234
+spread-out start,0.5,0.22,0.79175
+spread-out start,0.5,0.26,0.7679
+spread-out start,0.5,0.3,0.7486
+spread-out start,0.5,0.341,0.73217
+spread-out start,0.5,0.381,0.71859
+spread-out start,0.5,0.421,0.70687
+spread-out start,0.5,0.461,0.6966
+spread-out start,0.5,0.501,0.68752
+spread-out start,0.5,0.541,0.67941
+spread-out start,0.5,0.581,0.67211
+spread-out start,0.5,0.621,0.66549
+spread-out start,0.5,0.661,0.65946
+spread-out start,0.5,0.701,0.65393
+spread-out start,0.5,0.741,0.64883
+spread-out start,0.5,0.781,0.64412
+spread-out start,0.5,0.821,0.63975
+spread-out start,0.5,0.861,0.63568
+spread-out start,0.5,0.901,0.63187
+spread-out start,0.5,0.942,0.62823
+spread-out start,0.5,0.982,0.62488
+spread-out start,0.5,1.022,0.62174
+spread-out start,0.5,1.062,0.61877
+spread-out start,0.5,1.102,0.61596
+spread-out start,0.5,1.142,0.6133
+spread-out start,0.5,1.182,0.61077
+spread-out start,0.5,1.222,0.60837
+spread-out start,0.5,1.262,0.60608
+spread-out start,0.5,1.302,0.60391
+spread-out start,0.5,1.342,0.60183
+spread-out start,0.5,1.382,0.59984
+spread-out start,0.5,1.422,0.59793
+spread-out start,0.5,1.462,0.59611
+spread-out start,0.5,1.502,0.59436
+spread-out start,0.5,1.543,0.59264
+spread-out start,0.5,1.583,0.59103
+spread-out start,0.5,1.623,0.58947
+spread-out start,0.5,1.663,0.58798
+spread-out start,0.5,1.703,0.58654
+spread-out start,0.5,1.743,0.58515
+spread-out start,0.5,1.783,0.58381
+spread-out start,0.5,1.823,0.58252
+spread-out start,0.5,1.863,0.58127
+spread-out start,0.5,1.903,0.58006
+spread-out start,0.5,1.943,0.57888
+spread-out start,0.5,1.983,0.57775
+spread-out start,0.5,2.023,0.57665
+spread-out start,0.5,2.063,0.57558
+spread-out start,0.5,2.103,0.57455
+spread-out start,0.5,2.144,0.57352
+spread-out start,0.5,2.184,0.57255
+spread-out start,0.5,2.224,0.5716
+spread-out start,0.5,2.264,0.57068
+spread-out start,0.5,2.304,0.56979
+spread-out start,0.5,2.344,0.56891
+spread-out start,0.5,2.384,0.56807
+spread-out start,0.5,2.424,0.56724
+spread-out start,0.5,2.464,0.56644
+spread-out start,0.5,2.504,0.56566
+spread-out start,0.5,2.544,0.56489
+spread-out start,0.5,2.584,0.56415
+spread-out start,0.5,2.624,0.56342
+spread-out start,0.5,2.664,0.56271
+spread-out start,0.5,2.704,0.56202
+spread-out start,0.5,2.745,0.56132
+spread-out start,0.5,2.785,0.56066
+spread-out start,0.5,2.825,0.56002
+spread-out start,0.5,2.865,0.55939
+spread-out start,0.5,2.905,0.55877
+spread-out start,0.5,2.945,0.55817
+spread-out start,0.5,2.985,0.55758
+spread-out start,0.5,3.025,0.557
+spread-out start,0.5,3.065,0.55644
+spread-out start,0.5,3.105,0.55588
+spread-out start,0.5,3.145,0.55534
+spread-out start,0.5,3.185,0.55481
+spread-out start,0.5,3.225,0.55429
+spread-out start,0.5,3.265,0.55378
+spread-out start,0.5,3.305,0.55328
+spread-out start,0.5,3.346,0.55278
+spread-out start,0.5,3.386,0.5523
+spread-out start,0.5,3.426,0.55183
+spread-out start,0.5,3.466,0.55136
+spread-out start,0.5,3.506,0.55091
+spread-out start,0.5,3.546,0.55046
+spread-out start,0.5,3.586,0.55003
+spread-out start,0.5,3.626,0.5496
+spread-out start,0.5,3.666,0.54918
+spread-out start,0.5,3.706,0.54876
+spread-out start,0.5,3.746,0.54836
+spread-out start,0.5,3.786,0.54796
+spread-out start,0.5,3.826,0.54756
+spread-out start,0.5,3.866,0.54718
+spread-out start,0.5,3.906,0.5468
+spread-out start,0.5,3.947,0.54641
+spread-out start,0.5,3.987,0.54605
+spread-out start,0.5,4.027,0.54569
+spread-out start,0.5,4.067,0.54533
+spread-out start,0.5,4.107,0.54498
+spread-out start,0.5,4.147,0.54464
+spread-out start,0.5,4.187,0.5443
+spread-out start,0.5,4.227,0.54397
+spread-out start,0.5,4.267,0.54364
+spread-out start,0.5,4.307,0.54332
+spread-out start,0.5,4.347,0.543
+spread-out start,0.5,4.387,0.54269
+spread-out start,0.5,4.427,0.54238
+spread-out start,0.5,4.467,0.54208
+spread-out start,0.5,4.507,0.54178
+spread-out start,0.5,4.548,0.54148
+spread-out start,0.5,4.588,0.54119
+spread-out start,0.5,4.628,0.5409
+spread-out start,0.5,4.668,0.54062
+spread-out start,0.5,4.708,0.54034
+spread-out start,0.5,4.748,0.54007
+spread-out start,0.5,4.788,0.5398
+spread-out start,0.5,4.828,0.53953
+spread-out start,0.5,4.868,0.53927
+spread-out start,0.5,4.908,0.53901
+spread-out start,0.5,4.948,0.53875
+spread-out start,0.5,4.988,0.5385
+spread-out start,0.5,5.028,0.53825
+spread-out start,0.5,5.068,0.53801
+spread-out start,0.5,5.108,0.53777
+spread-out start,0.5,5.149,0.53752
+spread-out start,0.5,5.189,0.53729
+spread-out start,0.5,5.229,0.53705
+spread-out start,0.5,5.269,0.53682
+spread-out start,0.5,5.309,0.5366
+spread-out start,0.5,5.349,0.53637
+spread-out start,0.5,5.389,0.53615
+spread-out start,0.5,5.429,0.53593
+spread-out start,0.5,5.469,0.53572
+spread-out start,0.5,5.509,0.53551
+spread-out start,0.5,5.549,0.53529
+spread-out start,0.5,5.589,0.53509
+spread-out start,0.5,5.629,0.53488
+spread-out start,0.5,5.669,0.53468
+spread-out start,0.5,5.709,0.53448
+spread-out start,0.5,5.75,0.53428
+spread-out start,0.5,5.79,0.53408
+spread-out start,0.5,5.83,0.53389
+spread-out start,0.5,5.87,0.5337
+spread-out start,0.5,5.91,0.53351
+spread-out start,0.5,5.95,0.53332
+spread-out start,0.5,5.99,0.53314
+spread-out start,0.5,6.03,0.53295
+spread-out start,0.5,6.07,0.53277
+spread-out start,0.5,6.11,0.5326
+spread-out start,0.5,6.15,0.53242
+spread-out start,0.5,6.19,0.53224
+spread-out start,0.5,6.23,0.53207
+spread-out start,0.5,6.27,0.5319
+spread-out start,0.5,6.311,0.53173
+spread-out start,0.5,6.351,0.53156
+spread-out start,0.5,6.391,0.5314
+spread-out start,0.5,6.431,0.53124
+spread-out start,0.5,6.471,0.53107
+spread-out start,0.5,6.511,0.53091
+spread-out start,0.5,6.551,0.53075
+spread-out start,0.5,6.591,0.5306
+spread-out start,0.5,6.631,0.53044
+spread-out start,0.5,6.671,0.53029
+spread-out start,0.5,6.711,0.53014
+spread-out start,0.5,6.751,0.52999
+spread-out start,0.5,6.791,0.52984
+spread-out start,0.5,6.831,0.52969
+spread-out start,0.5,6.871,0.52955
+spread-out start,0.5,6.912,0.5294
+spread-out start,0.5,6.952,0.52926
+spread-out start,0.5,6.992,0.52912
+spread-out start,0.5,7.032,0.52898
+spread-out start,0.5,7.072,0.52884
+spread-out start,0.5,7.112,0.5287
+spread-out start,0.5,7.152,0.52857
+spread-out start,0.5,7.192,0.52843
+spread-out start,0.5,7.232,0.5283
+spread-out start,0.5,7.272,0.52817
+spread-out start,0.5,7.312,0.52804
+spread-out start,0.5,7.352,0.52791
+spread-out start,0.5,7.392,0.52778
+spread-out start,0.5,7.432,0.52765
+spread-out start,0.5,7.472,0.52753
+spread-out start,0.5,7.513,0.5274
+spread-out start,0.5,7.553,0.52727
+spread-out start,0.5,7.593,0.52715
+spread-out start,0.5,7.633,0.52703
+spread-out start,0.5,7.673,0.52691
+spread-out start,0.5,7.713,0.52679
+spread-out start,0.5,7.753,0.52667
+spread-out start,0.5,7.793,0.52656
+spread-out start,0.5,7.833,0.52644
+spread-out start,0.5,7.873,0.52633
+spread-out start,0.5,7.913,0.52621
+spread-out start,0.5,7.953,0.5261
+spread-out start,0.5,7.993,0.52599
+spread-out start,0.5,8.033,0.52588
+spread-out start,0.5,8.073,0.52577
+spread-out start,0.5,8.114,0.52566
+spread-out start,0.5,8.154,0.52555
+spread-out start,0.5,8.194,0.52544
+spread-out start,0.5,8.234,0.52533
+spread-out start,0.5,8.274,0.52523
+spread-out start,0.5,8.314,0.52512
+spread-out start,0.5,8.354,0.52502
+spread-out start,0.5,8.394,0.52492
+spread-out start,0.5,8.434,0.52482
+spread-out start,0.5,8.474,0.52472
+spread-out start,0.5,8.514,0.52462
+spread-out start,0.5,8.554,0.52452
+spread-out start,0.5,8.594,0.52442
+spread-out start,0.5,8.634,0.52432
+spread-out start,0.5,8.674,0.52422
+spread-out start,0.5,8.715,0.52413
+spread-out start,0.5,8.755,0.52403
+spread-out start,0.5,8.795,0.52394
+spread-out start,0.5,8.835,0.52384
+spread-out start,0.5,8.875,0.52375
+spread-out start,0.5,8.915,0.52366
+spread-out start,0.5,8.955,0.52357
+spread-out start,0.5,8.995,0.52348
+spread-out start,0.5,9.035,0.52338
+spread-out start,0.5,9.075,0.5233
+spread-out start,0.5,9.115,0.52321
+spread-out start,0.5,9.155,0.52312
+spread-out start,0.5,9.195,0.52303
+spread-out start,0.5,9.235,0.52294
+spread-out start,0.5,9.275,0.52286
+spread-out start,0.5,9.316,0.52277
+spread-out start,0.5,9.356,0.52269
+spread-out start,0.5,9.396,0.5226
+spread-out start,0.5,9.436,0.52252
+spread-out start,0.5,9.476,0.52244
+spread-out start,0.5,9.516,0.52236
+spread-out start,0.5,9.556,0.52227
+spread-out start,0.5,9.596,0.52219
+spread-out start,0.5,9.636,0.52211
+spread-out start,0.5,9.676,0.52203
+spread-out start,0.5,9.716,0.52195
+spread-out start,0.5,9.756,0.52187
+spread-out start,0.5,9.796,0.5218
+spread-out start,0.5,9.836,0.52172
+spread-out start,0.5,9.876,0.52164
+spread-out start,0.5,9.917,0.52156
+spread-out start,0.5,9.957,0.52149
+spread-out start,0.5,9.997,0.52141
+spread-out start,1,0.02,0.5
+spread-out start,1,0.06,0.5
+spread-out start,1,0.1,0.5
+spread-out start,1,0.14,0.5
+spread-out start,1,0.18,0.5
+spread-out start,1,0.22,0.5
+spread-out start,1,0.26,0.5
+spread-out start,1,0.3,0.5
+spread-out start,1,0.341,0.5
+spread-out start,1,0.381,0.5
+spread-out start,1,0.421,0.5
+spread-out start,1,0.461,0.5
+spread-out start,1,0.501,0.5
+spread-out start,1,0.541,0.5
+spread-out start,1,0.581,0.5
+spread-out start,1,0.621,0.5
+spread-out start,1,0.661,0.5
+spread-out start,1,0.701,0.5
+spread-out start,1,0.741,0.5
+spread-out start,1,0.781,0.5
+spread-out start,1,0.821,0.5
+spread-out start,1,0.861,0.5
+spread-out start,1,0.901,0.5
+spread-out start,1,0.942,0.5
+spread-out start,1,0.982,0.5
+spread-out start,1,1.022,0.5
+spread-out start,1,1.062,0.5
+spread-out start,1,1.102,0.5
+spread-out start,1,1.142,0.5
+spread-out start,1,1.182,0.5
+spread-out start,1,1.222,0.5
+spread-out start,1,1.262,0.5
+spread-out start,1,1.302,0.5
+spread-out start,1,1.342,0.5
+spread-out start,1,1.382,0.5
+spread-out start,1,1.422,0.5
+spread-out start,1,1.462,0.5
+spread-out start,1,1.502,0.5
+spread-out start,1,1.543,0.5
+spread-out start,1,1.583,0.5
+spread-out start,1,1.623,0.5
+spread-out start,1,1.663,0.5
+spread-out start,1,1.703,0.5
+spread-out start,1,1.743,0.5
+spread-out start,1,1.783,0.5
+spread-out start,1,1.823,0.5
+spread-out start,1,1.863,0.5
+spread-out start,1,1.903,0.5
+spread-out start,1,1.943,0.5
+spread-out start,1,1.983,0.5
+spread-out start,1,2.023,0.5
+spread-out start,1,2.063,0.5
+spread-out start,1,2.103,0.5
+spread-out start,1,2.144,0.5
+spread-out start,1,2.184,0.5
+spread-out start,1,2.224,0.5
+spread-out start,1,2.264,0.5
+spread-out start,1,2.304,0.5
+spread-out start,1,2.344,0.5
+spread-out start,1,2.384,0.5
+spread-out start,1,2.424,0.5
+spread-out start,1,2.464,0.5
+spread-out start,1,2.504,0.5
+spread-out start,1,2.544,0.5
+spread-out start,1,2.584,0.5
+spread-out start,1,2.624,0.5
+spread-out start,1,2.664,0.5
+spread-out start,1,2.704,0.5
+spread-out start,1,2.745,0.5
+spread-out start,1,2.785,0.5
+spread-out start,1,2.825,0.5
+spread-out start,1,2.865,0.5
+spread-out start,1,2.905,0.5
+spread-out start,1,2.945,0.5
+spread-out start,1,2.985,0.5
+spread-out start,1,3.025,0.5
+spread-out start,1,3.065,0.5
+spread-out start,1,3.105,0.5
+spread-out start,1,3.145,0.5
+spread-out start,1,3.185,0.5
+spread-out start,1,3.225,0.5
+spread-out start,1,3.265,0.5
+spread-out start,1,3.305,0.5
+spread-out start,1,3.346,0.5
+spread-out start,1,3.386,0.5
+spread-out start,1,3.426,0.5
+spread-out start,1,3.466,0.5
+spread-out start,1,3.506,0.5
+spread-out start,1,3.546,0.5
+spread-out start,1,3.586,0.5
+spread-out start,1,3.626,0.5
+spread-out start,1,3.666,0.5
+spread-out start,1,3.706,0.5
+spread-out start,1,3.746,0.5
+spread-out start,1,3.786,0.5
+spread-out start,1,3.826,0.5
+spread-out start,1,3.866,0.5
+spread-out start,1,3.906,0.5
+spread-out start,1,3.947,0.5
+spread-out start,1,3.987,0.5
+spread-out start,1,4.027,0.5
+spread-out start,1,4.067,0.5
+spread-out start,1,4.107,0.5
+spread-out start,1,4.147,0.5
+spread-out start,1,4.187,0.5
+spread-out start,1,4.227,0.5
+spread-out start,1,4.267,0.5
+spread-out start,1,4.307,0.5
+spread-out start,1,4.347,0.5
+spread-out start,1,4.387,0.5
+spread-out start,1,4.427,0.5
+spread-out start,1,4.467,0.5
+spread-out start,1,4.507,0.5
+spread-out start,1,4.548,0.5
+spread-out start,1,4.588,0.5
+spread-out start,1,4.628,0.5
+spread-out start,1,4.668,0.5
+spread-out start,1,4.708,0.5
+spread-out start,1,4.748,0.5
+spread-out start,1,4.788,0.5
+spread-out start,1,4.828,0.5
+spread-out start,1,4.868,0.5
+spread-out start,1,4.908,0.5
+spread-out start,1,4.948,0.5
+spread-out start,1,4.988,0.5
+spread-out start,1,5.028,0.5
+spread-out start,1,5.068,0.5
+spread-out start,1,5.108,0.5
+spread-out start,1,5.149,0.5
+spread-out start,1,5.189,0.5
+spread-out start,1,5.229,0.5
+spread-out start,1,5.269,0.5
+spread-out start,1,5.309,0.5
+spread-out start,1,5.349,0.5
+spread-out start,1,5.389,0.5
+spread-out start,1,5.429,0.5
+spread-out start,1,5.469,0.5
+spread-out start,1,5.509,0.5
+spread-out start,1,5.549,0.5
+spread-out start,1,5.589,0.5
+spread-out start,1,5.629,0.5
+spread-out start,1,5.669,0.5
+spread-out start,1,5.709,0.5
+spread-out start,1,5.75,0.5
+spread-out start,1,5.79,0.5
+spread-out start,1,5.83,0.5
+spread-out start,1,5.87,0.5
+spread-out start,1,5.91,0.5
+spread-out start,1,5.95,0.5
+spread-out start,1,5.99,0.5
+spread-out start,1,6.03,0.5
+spread-out start,1,6.07,0.5
+spread-out start,1,6.11,0.5
+spread-out start,1,6.15,0.5
+spread-out start,1,6.19,0.5
+spread-out start,1,6.23,0.5
+spread-out start,1,6.27,0.5
+spread-out start,1,6.311,0.5
+spread-out start,1,6.351,0.5
+spread-out start,1,6.391,0.5
+spread-out start,1,6.431,0.5
+spread-out start,1,6.471,0.5
+spread-out start,1,6.511,0.5
+spread-out start,1,6.551,0.5
+spread-out start,1,6.591,0.5
+spread-out start,1,6.631,0.5
+spread-out start,1,6.671,0.5
+spread-out start,1,6.711,0.5
+spread-out start,1,6.751,0.5
+spread-out start,1,6.791,0.5
+spread-out start,1,6.831,0.5
+spread-out start,1,6.871,0.5
+spread-out start,1,6.912,0.5
+spread-out start,1,6.952,0.5
+spread-out start,1,6.992,0.5
+spread-out start,1,7.032,0.5
+spread-out start,1,7.072,0.5
+spread-out start,1,7.112,0.5
+spread-out start,1,7.152,0.5
+spread-out start,1,7.192,0.5
+spread-out start,1,7.232,0.5
+spread-out start,1,7.272,0.5
+spread-out start,1,7.312,0.5
+spread-out start,1,7.352,0.5
+spread-out start,1,7.392,0.5
+spread-out start,1,7.432,0.5
+spread-out start,1,7.472,0.5
+spread-out start,1,7.513,0.5
+spread-out start,1,7.553,0.5
+spread-out start,1,7.593,0.5
+spread-out start,1,7.633,0.5
+spread-out start,1,7.673,0.5
+spread-out start,1,7.713,0.5
+spread-out start,1,7.753,0.5
+spread-out start,1,7.793,0.5
+spread-out start,1,7.833,0.5
+spread-out start,1,7.873,0.5
+spread-out start,1,7.913,0.5
+spread-out start,1,7.953,0.5
+spread-out start,1,7.993,0.5
+spread-out start,1,8.033,0.5
+spread-out start,1,8.073,0.5
+spread-out start,1,8.114,0.5
+spread-out start,1,8.154,0.5
+spread-out start,1,8.194,0.5
+spread-out start,1,8.234,0.5
+spread-out start,1,8.274,0.5
+spread-out start,1,8.314,0.5
+spread-out start,1,8.354,0.5
+spread-out start,1,8.394,0.5
+spread-out start,1,8.434,0.5
+spread-out start,1,8.474,0.5
+spread-out start,1,8.514,0.5
+spread-out start,1,8.554,0.5
+spread-out start,1,8.594,0.5
+spread-out start,1,8.634,0.5
+spread-out start,1,8.674,0.5
+spread-out start,1,8.715,0.5
+spread-out start,1,8.755,0.5
+spread-out start,1,8.795,0.5
+spread-out start,1,8.835,0.5
+spread-out start,1,8.875,0.5
+spread-out start,1,8.915,0.5
+spread-out start,1,8.955,0.5
+spread-out start,1,8.995,0.5
+spread-out start,1,9.035,0.5
+spread-out start,1,9.075,0.5
+spread-out start,1,9.115,0.5
+spread-out start,1,9.155,0.5
+spread-out start,1,9.195,0.5
+spread-out start,1,9.235,0.5
+spread-out start,1,9.275,0.5
+spread-out start,1,9.316,0.5
+spread-out start,1,9.356,0.5
+spread-out start,1,9.396,0.5
+spread-out start,1,9.436,0.5
+spread-out start,1,9.476,0.5
+spread-out start,1,9.516,0.5
+spread-out start,1,9.556,0.5
+spread-out start,1,9.596,0.5
+spread-out start,1,9.636,0.5
+spread-out start,1,9.676,0.5
+spread-out start,1,9.716,0.5
+spread-out start,1,9.756,0.5
+spread-out start,1,9.796,0.5
+spread-out start,1,9.836,0.5
+spread-out start,1,9.876,0.5
+spread-out start,1,9.917,0.5
+spread-out start,1,9.957,0.5
+spread-out start,1,9.997,0.5
+spread-out start,2,0.02,0.055899
+spread-out start,2,0.06,0.095198
+spread-out start,2,0.1,0.12099
+spread-out start,2,0.14,0.14106
+spread-out start,2,0.18,0.15773
+spread-out start,2,0.22,0.17205
+spread-out start,2,0.26,0.18465
+spread-out start,2,0.3,0.1959
+spread-out start,2,0.341,0.20632
+spread-out start,2,0.381,0.21558
+spread-out start,2,0.421,0.22409
+spread-out start,2,0.461,0.23195
+spread-out start,2,0.501,0.23926
+spread-out start,2,0.541,0.24609
+spread-out start,2,0.581,0.25248
+spread-out start,2,0.621,0.25848
+spread-out start,2,0.661,0.26415
+spread-out start,2,0.701,0.26949
+spread-out start,2,0.741,0.27456
+spread-out start,2,0.781,0.27937
+spread-out start,2,0.821,0.28395
+spread-out start,2,0.861,0.2883
+spread-out start,2,0.901,0.29246
+spread-out start,2,0.942,0.29653
+spread-out start,2,0.982,0.30033
+spread-out start,2,1.022,0.30397
+spread-out start,2,1.062,0.30747
+spread-out start,2,1.102,0.31082
+spread-out start,2,1.142,0.31405
+spread-out start,2,1.182,0.31715
+spread-out start,2,1.222,0.32014
+spread-out start,2,1.262,0.32303
+spread-out start,2,1.302,0.32581
+spread-out start,2,1.342,0.3285
+spread-out start,2,1.382,0.3311
+spread-out start,2,1.422,0.33361
+spread-out start,2,1.462,0.33604
+spread-out start,2,1.502,0.3384
+spread-out start,2,1.543,0.34074
+spread-out start,2,1.583,0.34295
+spread-out start,2,1.623,0.34509
+spread-out start,2,1.663,0.34718
+spread-out start,2,1.703,0.3492
+spread-out start,2,1.743,0.35117
+spread-out start,2,1.783,0.35308
+spread-out start,2,1.823,0.35494
+spread-out start,2,1.863,0.35675
+spread-out start,2,1.903,0.35851
+spread-out start,2,1.943,0.36023
+spread-out start,2,1.983,0.3619
+spread-out start,2,2.023,0.36353
+spread-out start,2,2.063,0.36512
+spread-out start,2,2.103,0.36667
+spread-out start,2,2.144,0.36822
+spread-out start,2,2.184,0.3697
+spread-out start,2,2.224,0.37114
+spread-out start,2,2.264,0.37255
+spread-out start,2,2.304,0.37392
+spread-out start,2,2.344,0.37527
+spread-out start,2,2.384,0.37658
+spread-out start,2,2.424,0.37787
+spread-out start,2,2.464,0.37913
+spread-out start,2,2.504,0.38036
+spread-out start,2,2.544,0.38156
+spread-out start,2,2.584,0.38274
+spread-out start,2,2.624,0.3839
+spread-out start,2,2.664,0.38503
+spread-out start,2,2.704,0.38614
+spread-out start,2,2.745,0.38725
+spread-out start,2,2.785,0.38831
+spread-out start,2,2.825,0.38936
+spread-out start,2,2.865,0.39038
+spread-out start,2,2.905,0.39138
+spread-out start,2,2.945,0.39237
+spread-out start,2,2.985,0.39334
+spread-out start,2,3.025,0.39428
+spread-out start,2,3.065,0.39521
+spread-out start,2,3.105,0.39613
+spread-out start,2,3.145,0.39703
+spread-out start,2,3.185,0.39791
+spread-out start,2,3.225,0.39877
+spread-out start,2,3.265,0.39963
+spread-out start,2,3.305,0.40046
+spread-out start,2,3.346,0.4013
+spread-out start,2,3.386,0.40211
+spread-out start,2,3.426,0.40291
+spread-out start,2,3.466,0.40369
+spread-out start,2,3.506,0.40445
+spread-out start,2,3.546,0.40521
+spread-out start,2,3.586,0.40595
+spread-out start,2,3.626,0.40668
+spread-out start,2,3.666,0.4074
+spread-out start,2,3.706,0.40811
+spread-out start,2,3.746,0.40881
+spread-out start,2,3.786,0.40949
+spread-out start,2,3.826,0.41017
+spread-out start,2,3.866,0.41083
+spread-out start,2,3.906,0.41149
+spread-out start,2,3.947,0.41215
+spread-out start,2,3.987,0.41279
+spread-out start,2,4.027,0.41341
+spread-out start,2,4.067,0.41403
+spread-out start,2,4.107,0.41464
+spread-out start,2,4.147,0.41524
+spread-out start,2,4.187,0.41583
+spread-out start,2,4.227,0.41641
+spread-out start,2,4.267,0.41698
+spread-out start,2,4.307,0.41755
+spread-out start,2,4.347,0.4181
+spread-out start,2,4.387,0.41865
+spread-out start,2,4.427,0.4192
+spread-out start,2,4.467,0.41973
+spread-out start,2,4.507,0.42026
+spread-out start,2,4.548,0.42079
+spread-out start,2,4.588,0.42131
+spread-out start,2,4.628,0.42181
+spread-out start,2,4.668,0.42232
+spread-out start,2,4.708,0.42281
+spread-out start,2,4.748,0.4233
+spread-out start,2,4.788,0.42378
+spread-out start,2,4.828,0.42425
+spread-out start,2,4.868,0.42472
+spread-out start,2,4.908,0.42519
+spread-out start,2,4.948,0.42564
+spread-out start,2,4.988,0.4261
+spread-out start,2,5.028,0.42654
+spread-out start,2,5.068,0.42698
+spread-out start,2,5.108,0.42742
+spread-out start,2,5.149,0.42786
+spread-out start,2,5.189,0.42828
+spread-out start,2,5.229,0.4287
+spread-out start,2,5.269,0.42912
+spread-out start,2,5.309,0.42953
+spread-out start,2,5.349,0.42993
+spread-out start,2,5.389,0.43033
+spread-out start,2,5.429,0.43073
+spread-out start,2,5.469,0.43112
+spread-out start,2,5.509,0.4315
+spread-out start,2,5.549,0.43189
+spread-out start,2,5.589,0.43226
+spread-out start,2,5.629,0.43264
+spread-out start,2,5.669,0.43301
+spread-out start,2,5.709,0.43337
+spread-out start,2,5.75,0.43374
+spread-out start,2,5.79,0.4341
+spread-out start,2,5.83,0.43445
+spread-out start,2,5.87,0.4348
+spread-out start,2,5.91,0.43515
+spread-out start,2,5.95,0.43549
+spread-out start,2,5.99,0.43583
+spread-out start,2,6.03,0.43616
+spread-out start,2,6.07,0.43649
+spread-out start,2,6.11,0.43682
+spread-out start,2,6.15,0.43715
+spread-out start,2,6.19,0.43747
+spread-out start,2,6.23,0.43778
+spread-out start,2,6.27,0.4381
+spread-out start,2,6.311,0.43842
+spread-out start,2,6.351,0.43872
+spread-out start,2,6.391,0.43903
+spread-out start,2,6.431,0.43933
+spread-out start,2,6.471,0.43963
+spread-out start,2,6.511,0.43993
+spread-out start,2,6.551,0.44022
+spread-out start,2,6.591,0.44051
+spread-out start,2,6.631,0.44079
+spread-out start,2,6.671,0.44108
+spread-out start,2,6.711,0.44136
+spread-out start,2,6.751,0.44164
+spread-out start,2,6.791,0.44192
+spread-out start,2,6.831,0.44219
+spread-out start,2,6.871,0.44246
+spread-out start,2,6.912,0.44273
+spread-out start,2,6.952,0.443
+spread-out start,2,6.992,0.44326
+spread-out start,2,7.032,0.44352
+spread-out start,2,7.072,0.44378
+spread-out start,2,7.112,0.44404
+spread-out start,2,7.152,0.44429
+spread-out start,2,7.192,0.44454
+spread-out start,2,7.232,0.44479
+spread-out start,2,7.272,0.44504
+spread-out start,2,7.312,0.44528
+spread-out start,2,7.352,0.44553
+spread-out start,2,7.392,0.44577
+spread-out start,2,7.432,0.446
+spread-out start,2,7.472,0.44624
+spread-out start,2,7.513,0.44648
+spread-out start,2,7.553,0.44671
+spread-out start,2,7.593,0.44694
+spread-out start,2,7.633,0.44717
+spread-out start,2,7.673,0.44739
+spread-out start,2,7.713,0.44762
+spread-out start,2,7.753,0.44784
+spread-out start,2,7.793,0.44806
+spread-out start,2,7.833,0.44828
+spread-out start,2,7.873,0.44849
+spread-out start,2,7.913,0.44871
+spread-out start,2,7.953,0.44892
+spread-out start,2,7.993,0.44913
+spread-out start,2,8.033,0.44934
+spread-out start,2,8.073,0.44955
+spread-out start,2,8.114,0.44976
+spread-out start,2,8.154,0.44996
+spread-out start,2,8.194,0.45016
+spread-out start,2,8.234,0.45037
+spread-out start,2,8.274,0.45056
+spread-out start,2,8.314,0.45076
+spread-out start,2,8.354,0.45096
+spread-out start,2,8.394,0.45115
+spread-out start,2,8.434,0.45134
+spread-out start,2,8.474,0.45154
+spread-out start,2,8.514,0.45172
+spread-out start,2,8.554,0.45191
+spread-out start,2,8.594,0.4521
+spread-out start,2,8.634,0.45228
+spread-out start,2,8.674,0.45247
+spread-out start,2,8.715,0.45265
+spread-out start,2,8.755,0.45284
+spread-out start,2,8.795,0.45302
+spread-out start,2,8.835,0.45319
+spread-out start,2,8.875,0.45337
+spread-out start,2,8.915,0.45355
+spread-out start,2,8.955,0.45372
+spread-out start,2,8.995,0.45389
+spread-out start,2,9.035,0.45406
+spread-out start,2,9.075,0.45423
+spread-out start,2,9.115,0.4544
+spread-out start,2,9.155,0.45457
+spread-out start,2,9.195,0.45474
+spread-out start,2,9.235,0.4549
+spread-out start,2,9.275,0.45507
+spread-out start,2,9.316,0.45523
+spread-out start,2,9.356,0.45539
+spread-out start,2,9.396,0.45555
+spread-out start,2,9.436,0.45571
+spread-out start,2,9.476,0.45587
+spread-out start,2,9.516,0.45603
+spread-out start,2,9.556,0.45619
+spread-out start,2,9.596,0.45634
+spread-out start,2,9.636,0.45649
+spread-out start,2,9.676,0.45665
+spread-out start,2,9.716,0.4568
+spread-out start,2,9.756,0.45695
+spread-out start,2,9.796,0.4571
+spread-out start,2,9.836,0.45725
+spread-out start,2,9.876,0.45739
+spread-out start,2,9.917,0.45754
+spread-out start,2,9.957,0.45769
+spread-out start,2,9.997,0.45783
+spread-out start,4,0.02,0.00037238
+spread-out start,4,0.06,0.0018967
+spread-out start,4,0.1,0.0040008
+spread-out start,4,0.14,0.0064974
+spread-out start,4,0.18,0.0092877
+spread-out start,4,0.22,0.012306
+spread-out start,4,0.26,0.015507
+spread-out start,4,0.3,0.018852
+spread-out start,4,0.341,0.022401
+spread-out start,4,0.381,0.025957
+spread-out start,4,0.421,0.029586
+spread-out start,4,0.461,0.033272
+spread-out start,4,0.501,0.037
+spread-out start,4,0.541,0.04076
+spread-out start,4,0.581,0.044541
+spread-out start,4,0.621,0.048334
+spread-out start,4,0.661,0.052132
+spread-out start,4,0.701,0.055928
+spread-out start,4,0.741,0.059717
+spread-out start,4,0.781,0.063494
+spread-out start,4,0.821,0.067254
+spread-out start,4,0.861,0.070995
+spread-out start,4,0.901,0.074712
+spread-out start,4,0.942,0.078494
+spread-out start,4,0.982,0.082156
+spread-out start,4,1.022,0.085787
+spread-out start,4,1.062,0.089385
+spread-out start,4,1.102,0.09295
+spread-out start,4,1.142,0.09648
+spread-out start,4,1.182,0.099973
+spread-out start,4,1.222,0.10343
+spread-out start,4,1.262,0.10685
+spread-out start,4,1.302,0.11023
+spread-out start,4,1.342,0.11357
+spread-out start,4,1.382,0.11687
+spread-out start,4,1.422,0.12014
+spread-out start,4,1.462,0.12336
+spread-out start,4,1.502,0.12654
+spread-out start,4,1.543,0.12977
+spread-out start,4,1.583,0.13287
+spread-out start,4,1.623,0.13594
+spread-out start,4,1.663,0.13896
+spread-out start,4,1.703,0.14195
+spread-out start,4,1.743,0.1449
+spread-out start,4,1.783,0.14781
+spread-out start,4,1.823,0.15068
+spread-out start,4,1.863,0.15352
+spread-out start,4,1.903,0.15632
+spread-out start,4,1.943,0.15908
+spread-out start,4,1.983,0.1618
+spread-out start,4,2.023,0.16449
+spread-out start,4,2.063,0.16715
+spread-out start,4,2.103,0.16976
+spread-out start,4,2.144,0.17241
+spread-out start,4,2.184,0.17496
+spread-out start,4,2.224,0.17748
+spread-out start,4,2.264,0.17996
+spread-out start,4,2.304,0.18241
+spread-out start,4,2.344,0.18482
+spread-out start,4,2.384,0.18721
+spread-out start,4,2.424,0.18956
+spread-out start,4,2.464,0.19189
+spread-out start,4,2.504,0.19418
+spread-out start,4,2.544,0.19644
+spread-out start,4,2.584,0.19867
+spread-out start,4,2.624,0.20088
+spread-out start,4,2.664,0.20305
+spread-out start,4,2.704,0.2052
+spread-out start,4,2.745,0.20737
+spread-out start,4,2.785,0.20947
+spread-out start,4,2.825,0.21153
+spread-out start,4,2.865,0.21357
+spread-out start,4,2.905,0.21558
+spread-out start,4,2.945,0.21757
+spread-out start,4,2.985,0.21953
+spread-out start,4,3.025,0.22147
+spread-out start,4,3.065,0.22338
+spread-out start,4,3.105,0.22527
+spread-out start,4,3.145,0.22714
+spread-out start,4,3.185,0.22898
+spread-out start,4,3.225,0.2308
+spread-out start,4,3.265,0.2326
+spread-out start,4,3.305,0.23438
+spread-out start,4,3.346,0.23617
+spread-out start,4,3.386,0.2379
+spread-out start,4,3.426,0.23961
+spread-out start,4,3.466,0.24131
+spread-out start,4,3.506,0.24298
+spread-out start,4,3.546,0.24463
+spread-out start,4,3.586,0.24626
+spread-out start,4,3.626,0.24787
+spread-out start,4,3.666,0.24946
+spread-out start,4,3.706,0.25103
+spread-out start,4,3.746,0.25259
+spread-out start,4,3.786,0.25413
+spread-out start,4,3.826,0.25565
+spread-out start,4,3.866,0.25715
+spread-out start,4,3.906,0.25863
+spread-out start,4,3.947,0.26014
+spread-out start,4,3.987,0.26159
+spread-out start,4,4.027,0.26302
+spread-out start,4,4.067,0.26444
+spread-out start,4,4.107,0.26584
+spread-out start,4,4.147,0.26722
+spread-out start,4,4.187,0.26859
+spread-out start,4,4.227,0.26995
+spread-out start,4,4.267,0.27129
+spread-out start,4,4.307,0.27261
+spread-out start,4,4.347,0.27393
+spread-out start,4,4.387,0.27522
+spread-out start,4,4.427,0.27651
+spread-out start,4,4.467,0.27777
+spread-out start,4,4.507,0.27903
+spread-out start,4,4.548,0.2803
+spread-out start,4,4.588,0.28153
+spread-out start,4,4.628,0.28275
+spread-out start,4,4.668,0.28395
+spread-out start,4,4.708,0.28514
+spread-out start,4,4.748,0.28631
+spread-out start,4,4.788,0.28748
+spread-out start,4,4.828,0.28863
+spread-out start,4,4.868,0.28977
+spread-out start,4,4.908,0.2909
+spread-out start,4,4.948,0.29202
+spread-out start,4,4.988,0.29312
+spread-out start,4,5.028,0.29422
+spread-out start,4,5.068,0.2953
+spread-out start,4,5.108,0.29637
+spread-out start,4,5.149,0.29746
+spread-out start,4,5.189,0.29851
+spread-out start,4,5.229,0.29956
+spread-out start,4,5.269,0.30059
+spread-out start,4,5.309,0.30161
+spread-out start,4,5.349,0.30262
+spread-out start,4,5.389,0.30362
+spread-out start,4,5.429,0.30461
+spread-out start,4,5.469,0.30559
+spread-out start,4,5.509,0.30656
+spread-out start,4,5.549,0.30752
+spread-out start,4,5.589,0.30847
+spread-out start,4,5.629,0.30942
+spread-out start,4,5.669,0.31035
+spread-out start,4,5.709,0.31128
+spread-out start,4,5.75,0.31222
+spread-out start,4,5.79,0.31313
+spread-out start,4,5.83,0.31403
+spread-out start,4,5.87,0.31492
+spread-out start,4,5.91,0.3158
+spread-out start,4,5.95,0.31668
+spread-out start,4,5.99,0.31755
+spread-out start,4,6.03,0.3184
+spread-out start,4,6.07,0.31926
+spread-out start,4,6.11,0.3201
+spread-out start,4,6.15,0.32094
+spread-out start,4,6.19,0.32176
+spread-out start,4,6.23,0.32259
+spread-out start,4,6.27,0.3234
+spread-out start,4,6.311,0.32423
+spread-out start,4,6.351,0.32503
+spread-out start,4,6.391,0.32582
+spread-out start,4,6.431,0.3266
+spread-out start,4,6.471,0.32738
+spread-out start,4,6.511,0.32815
+spread-out start,4,6.551,0.32892
+spread-out start,4,6.591,0.32968
+spread-out start,4,6.631,0.33043
+spread-out start,4,6.671,0.33117
+spread-out start,4,6.711,0.33191
+spread-out start,4,6.751,0.33265
+spread-out start,4,6.791,0.33337
+spread-out start,4,6.831,0.33409
+spread-out start,4,6.871,0.33481
+spread-out start,4,6.912,0.33553
+spread-out start,4,6.952,0.33624
+spread-out start,4,6.992,0.33693
+spread-out start,4,7.032,0.33762
+spread-out start,4,7.072,0.33831
+spread-out start,4,7.112,0.33899
+spread-out start,4,7.152,0.33966
+spread-out start,4,7.192,0.34033
+spread-out start,4,7.232,0.34099
+spread-out start,4,7.272,0.34165
+spread-out start,4,7.312,0.3423
+spread-out start,4,7.352,0.34295
+spread-out start,4,7.392,0.34359
+spread-out start,4,7.432,0.34423
+spread-out start,4,7.472,0.34486
+spread-out start,4,7.513,0.3455
+spread-out start,4,7.553,0.34612
+spread-out start,4,7.593,0.34674
+spread-out start,4,7.633,0.34735
+spread-out start,4,7.673,0.34796
+spread-out start,4,7.713,0.34856
+spread-out start,4,7.753,0.34916
+spread-out start,4,7.793,0.34975
+spread-out start,4,7.833,0.35034
+spread-out start,4,7.873,0.35092
+spread-out start,4,7.913,0.3515
+spread-out start,4,7.953,0.35208
+spread-out start,4,7.993,0.35265
+spread-out start,4,8.033,0.35322
+spread-out start,4,8.073,0.35378
+spread-out start,4,8.114,0.35435
+spread-out start,4,8.154,0.3549
+spread-out start,4,8.194,0.35545
+spread-out start,4,8.234,0.356
+spread-out start,4,8.274,0.35654
+spread-out start,4,8.314,0.35708
+spread-out start,4,8.354,0.35761
+spread-out start,4,8.394,0.35814
+spread-out start,4,8.434,0.35867
+spread-out start,4,8.474,0.35919
+spread-out start,4,8.514,0.35971
+spread-out start,4,8.554,0.36022
+spread-out start,4,8.594,0.36073
+spread-out start,4,8.634,0.36124
+spread-out start,4,8.674,0.36174
+spread-out start,4,8.715,0.36226
+spread-out start,4,8.755,0.36275
+spread-out start,4,8.795,0.36324
+spread-out start,4,8.835,0.36373
+spread-out start,4,8.875,0.36422
+spread-out start,4,8.915,0.3647
+spread-out start,4,8.955,0.36518
+spread-out start,4,8.995,0.36566
+spread-out start,4,9.035,0.36613
+spread-out start,4,9.075,0.3666
+spread-out start,4,9.115,0.36707
+spread-out start,4,9.155,0.36753
+spread-out start,4,9.195,0.36799
+spread-out start,4,9.235,0.36845
+spread-out start,4,9.275,0.3689
+spread-out start,4,9.316,0.36936
+spread-out start,4,9.356,0.36981
+spread-out start,4,9.396,0.37025
+spread-out start,4,9.436,0.37069
+spread-out start,4,9.476,0.37113
+spread-out start,4,9.516,0.37157
+spread-out start,4,9.556,0.372
+spread-out start,4,9.596,0.37243
+spread-out start,4,9.636,0.37285
+spread-out start,4,9.676,0.37328
+spread-out start,4,9.716,0.3737
+spread-out start,4,9.756,0.37412
+spread-out start,4,9.796,0.37453
+spread-out start,4,9.836,0.37495
+spread-out start,4,9.876,0.37536
+spread-out start,4,9.917,0.37578
+spread-out start,4,9.957,0.37618
+spread-out start,4,9.997,0.37658
+spread-out start,8,0.381,0.00010721
+spread-out start,8,0.421,0.00014904
+spread-out start,8,0.461,0.00020071
+spread-out start,8,0.501,0.00026325
+spread-out start,8,0.541,0.00033764
+spread-out start,8,0.581,0.00042481
+spread-out start,8,0.621,0.00052569
+spread-out start,8,0.661,0.00064111
+spread-out start,8,0.701,0.00077191
+spread-out start,8,0.741,0.00091886
+spread-out start,8,0.781,0.0010827
+spread-out start,8,0.821,0.001264
+spread-out start,8,0.861,0.0014635
+spread-out start,8,0.901,0.0016818
+spread-out start,8,0.942,0.0019255
+spread-out start,8,0.982,0.0021832
+spread-out start,8,1.022,0.0024612
+spread-out start,8,1.062,0.0027597
+spread-out start,8,1.102,0.0030791
+spread-out start,8,1.142,0.0034197
+spread-out start,8,1.182,0.0037818
+spread-out start,8,1.222,0.0041655
+spread-out start,8,1.262,0.0045711
+spread-out start,8,1.302,0.0049985
+spread-out start,8,1.342,0.0054481
+spread-out start,8,1.382,0.0059197
+spread-out start,8,1.422,0.0064135
+spread-out start,8,1.462,0.0069293
+spread-out start,8,1.502,0.0074672
+spread-out start,8,1.543,0.0080413
+spread-out start,8,1.583,0.0086236
+spread-out start,8,1.623,0.0092276
+spread-out start,8,1.663,0.0098532
+spread-out start,8,1.703,0.0105
+spread-out start,8,1.743,0.011168
+spread-out start,8,1.783,0.011857
+spread-out start,8,1.823,0.012567
+spread-out start,8,1.863,0.013298
+spread-out start,8,1.903,0.014048
+spread-out start,8,1.943,0.014818
+spread-out start,8,1.983,0.015608
+spread-out start,8,2.023,0.016417
+spread-out start,8,2.063,0.017245
+spread-out start,8,2.103,0.018092
+spread-out start,8,2.144,0.018978
+spread-out start,8,2.184,0.019861
+spread-out start,8,2.224,0.020761
+spread-out start,8,2.264,0.021679
+spread-out start,8,2.304,0.022613
+spread-out start,8,2.344,0.023563
+spread-out start,8,2.384,0.024529
+spread-out start,8,2.424,0.025511
+spread-out start,8,2.464,0.026508
+spread-out start,8,2.504,0.027519
+spread-out start,8,2.544,0.028545
+spread-out start,8,2.584,0.029584
+spread-out start,8,2.624,0.030637
+spread-out start,8,2.664,0.031703
+spread-out start,8,2.704,0.032781
+spread-out start,8,2.745,0.033899
+spread-out start,8,2.785,0.035002
+spread-out start,8,2.825,0.036116
+spread-out start,8,2.865,0.037241
+spread-out start,8,2.905,0.038377
+spread-out start,8,2.945,0.039523
+spread-out start,8,2.985,0.040678
+spread-out start,8,3.025,0.041844
+spread-out start,8,3.065,0.043018
+spread-out start,8,3.105,0.044201
+spread-out start,8,3.145,0.045392
+spread-out start,8,3.185,0.046591
+spread-out start,8,3.225,0.047798
+spread-out start,8,3.265,0.049012
+spread-out start,8,3.305,0.050232
+spread-out start,8,3.346,0.051491
+spread-out start,8,3.386,0.052724
+spread-out start,8,3.426,0.053964
+spread-out start,8,3.466,0.055209
+spread-out start,8,3.506,0.056459
+spread-out start,8,3.546,0.057714
+spread-out start,8,3.586,0.058974
+spread-out start,8,3.626,0.060238
+spread-out start,8,3.666,0.061506
+spread-out start,8,3.706,0.062778
+spread-out start,8,3.746,0.064054
+spread-out start,8,3.786,0.065332
+spread-out start,8,3.826,0.066614
+spread-out start,8,3.866,0.067898
+spread-out start,8,3.906,0.069184
+spread-out start,8,3.947,0.070505
+spread-out start,8,3.987,0.071795
+spread-out start,8,4.027,0.073087
+spread-out start,8,4.067,0.074381
+spread-out start,8,4.107,0.075675
+spread-out start,8,4.147,0.076971
+spread-out start,8,4.187,0.078267
+spread-out start,8,4.227,0.079564
+spread-out start,8,4.267,0.080862
+spread-out start,8,4.307,0.082159
+spread-out start,8,4.347,0.083456
+spread-out start,8,4.387,0.084753
+spread-out start,8,4.427,0.08605
+spread-out start,8,4.467,0.087346
+spread-out start,8,4.507,0.088642
+spread-out start,8,4.548,0.089969
+spread-out start,8,4.588,0.091262
+spread-out start,8,4.628,0.092554
+spread-out start,8,4.668,0.093844
+spread-out start,8,4.708,0.095134
+spread-out start,8,4.748,0.096421
+spread-out start,8,4.788,0.097707
+spread-out start,8,4.828,0.09899
+spread-out start,8,4.868,0.10027
+spread-out start,8,4.908,0.10155
+spread-out start,8,4.948,0.10283
+spread-out start,8,4.988,0.1041
+spread-out start,8,5.028,0.10537
+spread-out start,8,5.068,0.10664
+spread-out start,8,5.108,0.10791
+spread-out start,8,5.149,0.10921
+spread-out start,8,5.189,0.11047
+spread-out start,8,5.229,0.11173
+spread-out start,8,5.269,0.11298
+spread-out start,8,5.309,0.11423
+spread-out start,8,5.349,0.11548
+spread-out start,8,5.389,0.11672
+spread-out start,8,5.429,0.11796
+spread-out start,8,5.469,0.1192
+spread-out start,8,5.509,0.12044
+spread-out start,8,5.549,0.12167
+spread-out start,8,5.589,0.12289
+spread-out start,8,5.629,0.12412
+spread-out start,8,5.669,0.12533
+spread-out start,8,5.709,0.12655
+spread-out start,8,5.75,0.12779
+spread-out start,8,5.79,0.129
+spread-out start,8,5.83,0.1302
+spread-out start,8,5.87,0.1314
+spread-out start,8,5.91,0.13259
+spread-out start,8,5.95,0.13378
+spread-out start,8,5.99,0.13497
+spread-out start,8,6.03,0.13615
+spread-out start,8,6.07,0.13733
+spread-out start,8,6.11,0.1385
+spread-out start,8,6.15,0.13967
+spread-out start,8,6.19,0.14083
+spread-out start,8,6.23,0.14199
+spread-out start,8,6.27,0.14315
+spread-out start,8,6.311,0.14433
+spread-out start,8,6.351,0.14547
+spread-out start,8,6.391,0.14661
+spread-out start,8,6.431,0.14775
+spread-out start,8,6.471,0.14888
+spread-out start,8,6.511,0.15001
+spread-out start,8,6.551,0.15113
+spread-out start,8,6.591,0.15225
+spread-out start,8,6.631,0.15337
+spread-out start,8,6.671,0.15448
+spread-out start,8,6.711,0.15558
+spread-out start,8,6.751,0.15668
+spread-out start,8,6.791,0.15778
+spread-out start,8,6.831,0.15887
+spread-out start,8,6.871,0.15995
+spread-out start,8,6.912,0.16106
+spread-out start,8,6.952,0.16214
+spread-out start,8,6.992,0.16321
+spread-out start,8,7.032,0.16428
+spread-out start,8,7.072,0.16534
+spread-out start,8,7.112,0.16639
+spread-out start,8,7.152,0.16745
+spread-out start,8,7.192,0.1685
+spread-out start,8,7.232,0.16954
+spread-out start,8,7.272,0.17058
+spread-out start,8,7.312,0.17161
+spread-out start,8,7.352,0.17264
+spread-out start,8,7.392,0.17367
+spread-out start,8,7.432,0.17469
+spread-out start,8,7.472,0.1757
+spread-out start,8,7.513,0.17674
+spread-out start,8,7.553,0.17774
+spread-out start,8,7.593,0.17874
+spread-out start,8,7.633,0.17974
+spread-out start,8,7.673,0.18073
+spread-out start,8,7.713,0.18172
+spread-out start,8,7.753,0.1827
+spread-out start,8,7.793,0.18368
+spread-out start,8,7.833,0.18465
+spread-out start,8,7.873,0.18562
+spread-out start,8,7.913,0.18659
+spread-out start,8,7.953,0.18755
+spread-out start,8,7.993,0.1885
+spread-out start,8,8.033,0.18945
+spread-out start,8,8.073,0.1904
+spread-out start,8,8.114,0.19136
+spread-out start,8,8.154,0.1923
+spread-out start,8,8.194,0.19323
+spread-out start,8,8.234,0.19416
+spread-out start,8,8.274,0.19509
+spread-out start,8,8.314,0.196
+spread-out start,8,8.354,0.19692
+spread-out start,8,8.394,0.19783
+spread-out start,8,8.434,0.19874
+spread-out start,8,8.474,0.19964
+spread-out start,8,8.514,0.20053
+spread-out start,8,8.554,0.20143
+spread-out start,8,8.594,0.20232
+spread-out start,8,8.634,0.2032
+spread-out start,8,8.674,0.20408
+spread-out start,8,8.715,0.20498
+spread-out start,8,8.755,0.20585
+spread-out start,8,8.795,0.20672
+spread-out start,8,8.835,0.20758
+spread-out start,8,8.875,0.20844
+spread-out start,8,8.915,0.2093
+spread-out start,8,8.955,0.21015
+spread-out start,8,8.995,0.211
+spread-out start,8,9.035,0.21184
+spread-out start,8,9.075,0.21268
+spread-out start,8,9.115,0.21351
+spread-out start,8,9.155,0.21434
+spread-out start,8,9.195,0.21517
+spread-out start,8,9.235,0.21599
+spread-out start,8,9.275,0.21681
+spread-out start,8,9.316,0.21765
+spread-out start,8,9.356,0.21846
+spread-out start,8,9.396,0.21926
+spread-out start,8,9.436,0.22007
+spread-out start,8,9.476,0.22086
+spread-out start,8,9.516,0.22166
+spread-out start,8,9.556,0.22245
+spread-out start,8,9.596,0.22324
+spread-out start,8,9.636,0.22402
+spread-out start,8,9.676,0.2248
+spread-out start,8,9.716,0.22558
+spread-out start,8,9.756,0.22635
+spread-out start,8,9.796,0.22712
+spread-out start,8,9.836,0.22788
+spread-out start,8,9.876,0.22864
+spread-out start,8,9.917,0.22942
+spread-out start,8,9.957,0.23018
+spread-out start,8,9.997,0.23093
+single starting point,0.2,0.02,15.51
+single starting point,0.2,0.06,9.2033
+single starting point,0.2,0.1,6.5149
+single starting point,0.2,0.14,5.14
+single starting point,0.2,0.18,4.3038
+single starting point,0.2,0.22,3.7393
+single starting point,0.2,0.26,3.3311
+single starting point,0.2,0.3,3.0213
+single starting point,0.2,0.341,2.7722
+single starting point,0.2,0.381,2.576
+single starting point,0.2,0.421,2.4138
+single starting point,0.2,0.461,2.2771
+single starting point,0.2,0.501,2.1603
+single starting point,0.2,0.541,2.0592
+single starting point,0.2,0.581,1.9708
+single starting point,0.2,0.621,1.8927
+single starting point,0.2,0.661,1.8233
+single starting point,0.2,0.701,1.761
+single starting point,0.2,0.741,1.7048
+single starting point,0.2,0.781,1.6539
+single starting point,0.2,0.821,1.6075
+single starting point,0.2,0.861,1.565
+single starting point,0.2,0.901,1.526
+single starting point,0.2,0.942,1.4891
+single starting point,0.2,0.982,1.4558
+single starting point,0.2,1.022,1.4248
+single starting point,0.2,1.062,1.396
+single starting point,0.2,1.102,1.3691
+single starting point,0.2,1.142,1.3438
+single starting point,0.2,1.182,1.3201
+single starting point,0.2,1.222,1.2979
+single starting point,0.2,1.262,1.2769
+single starting point,0.2,1.302,1.2571
+single starting point,0.2,1.342,1.2383
+single starting point,0.2,1.382,1.2206
+single starting point,0.2,1.422,1.2037
+single starting point,0.2,1.462,1.1877
+single starting point,0.2,1.502,1.1724
+single starting point,0.2,1.543,1.1575
+single starting point,0.2,1.583,1.1437
+single starting point,0.2,1.623,1.1304
+single starting point,0.2,1.663,1.1178
+single starting point,0.2,1.703,1.1057
+single starting point,0.2,1.743,1.0941
+single starting point,0.2,1.783,1.0829
+single starting point,0.2,1.823,1.0722
+single starting point,0.2,1.863,1.0619
+single starting point,0.2,1.903,1.052
+single starting point,0.2,1.943,1.0425
+single starting point,0.2,1.983,1.0333
+single starting point,0.2,2.023,1.0245
+single starting point,0.2,2.063,1.0159
+single starting point,0.2,2.103,1.0077
+single starting point,0.2,2.144,0.99952
+single starting point,0.2,2.184,0.99182
+single starting point,0.2,2.224,0.98438
+single starting point,0.2,2.264,0.97717
+single starting point,0.2,2.304,0.97019
+single starting point,0.2,2.344,0.96342
+single starting point,0.2,2.384,0.95686
+single starting point,0.2,2.424,0.9505
+single starting point,0.2,2.464,0.94432
+single starting point,0.2,2.504,0.93832
+single starting point,0.2,2.544,0.93249
+single starting point,0.2,2.584,0.92683
+single starting point,0.2,2.624,0.92132
+single starting point,0.2,2.664,0.91596
+single starting point,0.2,2.704,0.91074
+single starting point,0.2,2.745,0.90554
+single starting point,0.2,2.785,0.9006
+single starting point,0.2,2.825,0.89578
+single starting point,0.2,2.865,0.89109
+single starting point,0.2,2.905,0.88651
+single starting point,0.2,2.945,0.88204
+single starting point,0.2,2.985,0.87769
+single starting point,0.2,3.025,0.87344
+single starting point,0.2,3.065,0.86928
+single starting point,0.2,3.105,0.86523
+single starting point,0.2,3.145,0.86127
+single starting point,0.2,3.185,0.8574
+single starting point,0.2,3.225,0.85361
+single starting point,0.2,3.265,0.84991
+single starting point,0.2,3.305,0.8463
+single starting point,0.2,3.346,0.84267
+single starting point,0.2,3.386,0.8392
+single starting point,0.2,3.426,0.83581
+single starting point,0.2,3.466,0.8325
+single starting point,0.2,3.506,0.82925
+single starting point,0.2,3.546,0.82606
+single starting point,0.2,3.586,0.82294
+single starting point,0.2,3.626,0.81989
+single starting point,0.2,3.666,0.81689
+single starting point,0.2,3.706,0.81395
+single starting point,0.2,3.746,0.81107
+single starting point,0.2,3.786,0.80825
+single starting point,0.2,3.826,0.80548
+single starting point,0.2,3.866,0.80276
+single starting point,0.2,3.906,0.80009
+single starting point,0.2,3.947,0.7974
+single starting point,0.2,3.987,0.79483
+single starting point,0.2,4.027,0.79231
+single starting point,0.2,4.067,0.78983
+single starting point,0.2,4.107,0.78739
+single starting point,0.2,4.147,0.785
+single starting point,0.2,4.187,0.78265
+single starting point,0.2,4.227,0.78034
+single starting point,0.2,4.267,0.77806
+single starting point,0.2,4.307,0.77583
+single starting point,0.2,4.347,0.77363
+single starting point,0.2,4.387,0.77147
+single starting point,0.2,4.427,0.76935
+single starting point,0.2,4.467,0.76726
+single starting point,0.2,4.507,0.7652
+single starting point,0.2,4.548,0.76313
+single starting point,0.2,4.588,0.76114
+single starting point,0.2,4.628,0.75918
+single starting point,0.2,4.668,0.75725
+single starting point,0.2,4.708,0.75535
+single starting point,0.2,4.748,0.75348
+single starting point,0.2,4.788,0.75164
+single starting point,0.2,4.828,0.74983
+single starting point,0.2,4.868,0.74804
+single starting point,0.2,4.908,0.74628
+single starting point,0.2,4.948,0.74455
+single starting point,0.2,4.988,0.74284
+single starting point,0.2,5.028,0.74116
+single starting point,0.2,5.068,0.7395
+single starting point,0.2,5.108,0.73786
+single starting point,0.2,5.149,0.73621
+single starting point,0.2,5.189,0.73462
+single starting point,0.2,5.229,0.73306
+single starting point,0.2,5.269,0.73151
+single starting point,0.2,5.309,0.72999
+single starting point,0.2,5.349,0.72848
+single starting point,0.2,5.389,0.727
+single starting point,0.2,5.429,0.72554
+single starting point,0.2,5.469,0.72409
+single starting point,0.2,5.509,0.72267
+single starting point,0.2,5.549,0.72126
+single starting point,0.2,5.589,0.71987
+single starting point,0.2,5.629,0.7185
+single starting point,0.2,5.669,0.71715
+single starting point,0.2,5.709,0.71582
+single starting point,0.2,5.75,0.71447
+single starting point,0.2,5.79,0.71317
+single starting point,0.2,5.83,0.71188
+single starting point,0.2,5.87,0.71061
+single starting point,0.2,5.91,0.70936
+single starting point,0.2,5.95,0.70813
+single starting point,0.2,5.99,0.7069
+single starting point,0.2,6.03,0.7057
+single starting point,0.2,6.07,0.7045
+single starting point,0.2,6.11,0.70332
+single starting point,0.2,6.15,0.70216
+single starting point,0.2,6.19,0.70101
+single starting point,0.2,6.23,0.69987
+single starting point,0.2,6.27,0.69875
+single starting point,0.2,6.311,0.69761
+single starting point,0.2,6.351,0.69651
+single starting point,0.2,6.391,0.69543
+single starting point,0.2,6.431,0.69435
+single starting point,0.2,6.471,0.69329
+single starting point,0.2,6.511,0.69224
+single starting point,0.2,6.551,0.69121
+single starting point,0.2,6.591,0.69018
+single starting point,0.2,6.631,0.68917
+single starting point,0.2,6.671,0.68817
+single starting point,0.2,6.711,0.68717
+single starting point,0.2,6.751,0.68619
+single starting point,0.2,6.791,0.68522
+single starting point,0.2,6.831,0.68426
+single starting point,0.2,6.871,0.68331
+single starting point,0.2,6.912,0.68235
+single starting point,0.2,6.952,0.68142
+single starting point,0.2,6.992,0.6805
+single starting point,0.2,7.032,0.67959
+single starting point,0.2,7.072,0.67868
+single starting point,0.2,7.112,0.67779
+single starting point,0.2,7.152,0.67691
+single starting point,0.2,7.192,0.67604
+single starting point,0.2,7.232,0.67517
+single starting point,0.2,7.272,0.67432
+single starting point,0.2,7.312,0.67347
+single starting point,0.2,7.352,0.67263
+single starting point,0.2,7.392,0.6718
+single starting point,0.2,7.432,0.67098
+single starting point,0.2,7.472,0.67016
+single starting point,0.2,7.513,0.66934
+single starting point,0.2,7.553,0.66854
+single starting point,0.2,7.593,0.66775
+single starting point,0.2,7.633,0.66696
+single starting point,0.2,7.673,0.66619
+single starting point,0.2,7.713,0.66542
+single starting point,0.2,7.753,0.66466
+single starting point,0.2,7.793,0.66391
+single starting point,0.2,7.833,0.66316
+single starting point,0.2,7.873,0.66242
+single starting point,0.2,7.913,0.66169
+single starting point,0.2,7.953,0.66096
+single starting point,0.2,7.993,0.66024
+single starting point,0.2,8.033,0.65953
+single starting point,0.2,8.073,0.65882
+single starting point,0.2,8.114,0.65811
+single starting point,0.2,8.154,0.65741
+single starting point,0.2,8.194,0.65673
+single starting point,0.2,8.234,0.65604
+single starting point,0.2,8.274,0.65537
+single starting point,0.2,8.314,0.6547
+single starting point,0.2,8.354,0.65404
+single starting point,0.2,8.394,0.65338
+single starting point,0.2,8.434,0.65273
+single starting point,0.2,8.474,0.65208
+single starting point,0.2,8.514,0.65144
+single starting point,0.2,8.554,0.65081
+single starting point,0.2,8.594,0.65018
+single starting point,0.2,8.634,0.64956
+single starting point,0.2,8.674,0.64894
+single starting point,0.2,8.715,0.64831
+single starting point,0.2,8.755,0.6477
+single starting point,0.2,8.795,0.6471
+single starting point,0.2,8.835,0.6465
+single starting point,0.2,8.875,0.64591
+single starting point,0.2,8.915,0.64532
+single starting point,0.2,8.955,0.64474
+single starting point,0.2,8.995,0.64416
+single starting point,0.2,9.035,0.64358
+single starting point,0.2,9.075,0.64302
+single starting point,0.2,9.115,0.64245
+single starting point,0.2,9.155,0.64189
+single starting point,0.2,9.195,0.64134
+single starting point,0.2,9.235,0.64079
+single starting point,0.2,9.275,0.64024
+single starting point,0.2,9.316,0.63968
+single starting point,0.2,9.356,0.63914
+single starting point,0.2,9.396,0.63861
+single starting point,0.2,9.436,0.63808
+single starting point,0.2,9.476,0.63756
+single starting point,0.2,9.516,0.63704
+single starting point,0.2,9.556,0.63652
+single starting point,0.2,9.596,0.63601
+single starting point,0.2,9.636,0.6355
+single starting point,0.2,9.676,0.63499
+single starting point,0.2,9.716,0.63449
+single starting point,0.2,9.756,0.63399
+single starting point,0.2,9.796,0.6335
+single starting point,0.2,9.836,0.63301
+single starting point,0.2,9.876,0.63252
+single starting point,0.2,9.917,0.63203
+single starting point,0.2,9.957,0.63155
+single starting point,0.2,9.997,0.63107
+single starting point,0.5,0.02,0.22238
+single starting point,0.5,0.06,2.8964
+single starting point,0.5,0.1,3.4627
+single starting point,0.5,0.14,3.3594
+single starting point,0.5,0.18,3.1369
+single starting point,0.5,0.22,2.9137
+single starting point,0.5,0.26,2.7149
+single starting point,0.5,0.3,2.5428
+single starting point,0.5,0.341,2.3912
+single starting point,0.5,0.381,2.2635
+single starting point,0.5,0.421,2.1525
+single starting point,0.5,0.461,2.0552
+single starting point,0.5,0.501,1.9692
+single starting point,0.5,0.541,1.8928
+single starting point,0.5,0.581,1.8245
+single starting point,0.5,0.621,1.763
+single starting point,0.5,0.661,1.7074
+single starting point,0.5,0.701,1.6568
+single starting point,0.5,0.741,1.6106
+single starting point,0.5,0.781,1.5683
+single starting point,0.5,0.821,1.5292
+single starting point,0.5,0.861,1.4932
+single starting point,0.5,0.901,1.4598
+single starting point,0.5,0.942,1.428
+single starting point,0.5,0.982,1.3991
+single starting point,0.5,1.022,1.3721
+single starting point,0.5,1.062,1.3469
+single starting point,0.5,1.102,1.3231
+single starting point,0.5,1.142,1.3008
+single starting point,0.5,1.182,1.2797
+single starting point,0.5,1.222,1.2598
+single starting point,0.5,1.262,1.2409
+single starting point,0.5,1.302,1.2231
+single starting point,0.5,1.342,1.2062
+single starting point,0.5,1.382,1.1901
+single starting point,0.5,1.422,1.1747
+single starting point,0.5,1.462,1.1601
+single starting point,0.5,1.502,1.1462
+single starting point,0.5,1.543,1.1325
+single starting point,0.5,1.583,1.1198
+single starting point,0.5,1.623,1.1077
+single starting point,0.5,1.663,1.096
+single starting point,0.5,1.703,1.0848
+single starting point,0.5,1.743,1.074
+single starting point,0.5,1.783,1.0637
+single starting point,0.5,1.823,1.0537
+single starting point,0.5,1.863,1.0441
+single starting point,0.5,1.903,1.0349
+single starting point,0.5,1.943,1.026
+single starting point,0.5,1.983,1.0174
+single starting point,0.5,2.023,1.0092
+single starting point,0.5,2.063,1.0012
+single starting point,0.5,2.103,0.99341
+single starting point,0.5,2.144,0.98574
+single starting point,0.5,2.184,0.9785
+single starting point,0.5,2.224,0.97148
+single starting point,0.5,2.264,0.96468
+single starting point,0.5,2.304,0.95809
+single starting point,0.5,2.344,0.95169
+single starting point,0.5,2.384,0.94549
+single starting point,0.5,2.424,0.93946
+single starting point,0.5,2.464,0.93361
+single starting point,0.5,2.504,0.92791
+single starting point,0.5,2.544,0.92238
+single starting point,0.5,2.584,0.917
+single starting point,0.5,2.624,0.91176
+single starting point,0.5,2.664,0.90666
+single starting point,0.5,2.704,0.90169
+single starting point,0.5,2.745,0.89673
+single starting point,0.5,2.785,0.89201
+single starting point,0.5,2.825,0.88742
+single starting point,0.5,2.865,0.88293
+single starting point,0.5,2.905,0.87856
+single starting point,0.5,2.945,0.87429
+single starting point,0.5,2.985,0.87012
+single starting point,0.5,3.025,0.86605
+single starting point,0.5,3.065,0.86207
+single starting point,0.5,3.105,0.85818
+single starting point,0.5,3.145,0.85438
+single starting point,0.5,3.185,0.85067
+single starting point,0.5,3.225,0.84703
+single starting point,0.5,3.265,0.84348
+single starting point,0.5,3.305,0.84
+single starting point,0.5,3.346,0.83651
+single starting point,0.5,3.386,0.83318
+single starting point,0.5,3.426,0.82992
+single starting point,0.5,3.466,0.82672
+single starting point,0.5,3.506,0.82359
+single starting point,0.5,3.546,0.82052
+single starting point,0.5,3.586,0.81751
+single starting point,0.5,3.626,0.81457
+single starting point,0.5,3.666,0.81168
+single starting point,0.5,3.706,0.80884
+single starting point,0.5,3.746,0.80606
+single starting point,0.5,3.786,0.80333
+single starting point,0.5,3.826,0.80065
+single starting point,0.5,3.866,0.79802
+single starting point,0.5,3.906,0.79544
+single starting point,0.5,3.947,0.79284
+single starting point,0.5,3.987,0.79035
+single starting point,0.5,4.027,0.78791
+single starting point,0.5,4.067,0.78551
+single starting point,0.5,4.107,0.78315
+single starting point,0.5,4.147,0.78083
+single starting point,0.5,4.187,0.77855
+single starting point,0.5,4.227,0.77631
+single starting point,0.5,4.267,0.77411
+single starting point,0.5,4.307,0.77194
+single starting point,0.5,4.347,0.76981
+single starting point,0.5,4.387,0.76771
+single starting point,0.5,4.427,0.76565
+single starting point,0.5,4.467,0.76362
+single starting point,0.5,4.507,0.76162
+single starting point,0.5,4.548,0.75961
+single starting point,0.5,4.588,0.75767
+single starting point,0.5,4.628,0.75577
+single starting point,0.5,4.668,0.75389
+single starting point,0.5,4.708,0.75204
+single starting point,0.5,4.748,0.75023
+single starting point,0.5,4.788,0.74843
+single starting point,0.5,4.828,0.74667
+single starting point,0.5,4.868,0.74493
+single starting point,0.5,4.908,0.74322
+single starting point,0.5,4.948,0.74153
+single starting point,0.5,4.988,0.73986
+single starting point,0.5,5.028,0.73822
+single starting point,0.5,5.068,0.73661
+single starting point,0.5,5.108,0.73501
+single starting point,0.5,5.149,0.7334
+single starting point,0.5,5.189,0.73185
+single starting point,0.5,5.229,0.73032
+single starting point,0.5,5.269,0.72881
+single starting point,0.5,5.309,0.72733
+single starting point,0.5,5.349,0.72586
+single starting point,0.5,5.389,0.72441
+single starting point,0.5,5.429,0.72298
+single starting point,0.5,5.469,0.72157
+single starting point,0.5,5.509,0.72018
+single starting point,0.5,5.549,0.71881
+single starting point,0.5,5.589,0.71745
+single starting point,0.5,5.629,0.71612
+single starting point,0.5,5.669,0.71479
+single starting point,0.5,5.709,0.71349
+single starting point,0.5,5.75,0.71217
+single starting point,0.5,5.79,0.7109
+single starting point,0.5,5.83,0.70964
+single starting point,0.5,5.87,0.7084
+single starting point,0.5,5.91,0.70718
+single starting point,0.5,5.95,0.70597
+single starting point,0.5,5.99,0.70477
+single starting point,0.5,6.03,0.70359
+single starting point,0.5,6.07,0.70242
+single starting point,0.5,6.11,0.70127
+single starting point,0.5,6.15,0.70013
+single starting point,0.5,6.19,0.699
+single starting point,0.5,6.23,0.69789
+single starting point,0.5,6.27,0.69679
+single starting point,0.5,6.311,0.69567
+single starting point,0.5,6.351,0.6946
+single starting point,0.5,6.391,0.69353
+single starting point,0.5,6.431,0.69248
+single starting point,0.5,6.471,0.69144
+single starting point,0.5,6.511,0.69041
+single starting point,0.5,6.551,0.6894
+single starting point,0.5,6.591,0.68839
+single starting point,0.5,6.631,0.6874
+single starting point,0.5,6.671,0.68641
+single starting point,0.5,6.711,0.68544
+single starting point,0.5,6.751,0.68448
+single starting point,0.5,6.791,0.68353
+single starting point,0.5,6.831,0.68258
+single starting point,0.5,6.871,0.68165
+single starting point,0.5,6.912,0.68071
+single starting point,0.5,6.952,0.67979
+single starting point,0.5,6.992,0.67889
+single starting point,0.5,7.032,0.678
+single starting point,0.5,7.072,0.67711
+single starting point,0.5,7.112,0.67624
+single starting point,0.5,7.152,0.67537
+single starting point,0.5,7.192,0.67451
+single starting point,0.5,7.232,0.67366
+single starting point,0.5,7.272,0.67282
+single starting point,0.5,7.312,0.67199
+single starting point,0.5,7.352,0.67117
+single starting point,0.5,7.392,0.67035
+single starting point,0.5,7.432,0.66954
+single starting point,0.5,7.472,0.66874
+single starting point,0.5,7.513,0.66793
+single starting point,0.5,7.553,0.66714
+single starting point,0.5,7.593,0.66637
+single starting point,0.5,7.633,0.6656
+single starting point,0.5,7.673,0.66483
+single starting point,0.5,7.713,0.66408
+single starting point,0.5,7.753,0.66333
+single starting point,0.5,7.793,0.66259
+single starting point,0.5,7.833,0.66186
+single starting point,0.5,7.873,0.66113
+single starting point,0.5,7.913,0.66041
+single starting point,0.5,7.953,0.65969
+single starting point,0.5,7.993,0.65899
+single starting point,0.5,8.033,0.65829
+single starting point,0.5,8.073,0.65759
+single starting point,0.5,8.114,0.65688
+single starting point,0.5,8.154,0.6562
+single starting point,0.5,8.194,0.65553
+single starting point,0.5,8.234,0.65486
+single starting point,0.5,8.274,0.65419
+single starting point,0.5,8.314,0.65353
+single starting point,0.5,8.354,0.65288
+single starting point,0.5,8.394,0.65223
+single starting point,0.5,8.434,0.65159
+single starting point,0.5,8.474,0.65096
+single starting point,0.5,8.514,0.65033
+single starting point,0.5,8.554,0.6497
+single starting point,0.5,8.594,0.64908
+single starting point,0.5,8.634,0.64847
+single starting point,0.5,8.674,0.64786
+single starting point,0.5,8.715,0.64724
+single starting point,0.5,8.755,0.64664
+single starting point,0.5,8.795,0.64604
+single starting point,0.5,8.835,0.64546
+single starting point,0.5,8.875,0.64487
+single starting point,0.5,8.915,0.64429
+single starting point,0.5,8.955,0.64372
+single starting point,0.5,8.995,0.64315
+single starting point,0.5,9.035,0.64258
+single starting point,0.5,9.075,0.64202
+single starting point,0.5,9.115,0.64146
+single starting point,0.5,9.155,0.64091
+single starting point,0.5,9.195,0.64037
+single starting point,0.5,9.235,0.63982
+single starting point,0.5,9.275,0.63928
+single starting point,0.5,9.316,0.63874
+single starting point,0.5,9.356,0.63821
+single starting point,0.5,9.396,0.63768
+single starting point,0.5,9.436,0.63716
+single starting point,0.5,9.476,0.63664
+single starting point,0.5,9.516,0.63613
+single starting point,0.5,9.556,0.63562
+single starting point,0.5,9.596,0.63511
+single starting point,0.5,9.636,0.63461
+single starting point,0.5,9.676,0.63411
+single starting point,0.5,9.716,0.63361
+single starting point,0.5,9.756,0.63312
+single starting point,0.5,9.796,0.63263
+single starting point,0.5,9.836,0.63215
+single starting point,0.5,9.876,0.63167
+single starting point,0.5,9.917,0.63118
+single starting point,0.5,9.957,0.63071
+single starting point,0.5,9.997,0.63024
+single starting point,1,0.06,0.017214
+single starting point,1,0.1,0.22069
+single starting point,1,0.14,0.55339
+single starting point,1,0.18,0.8464
+single starting point,1,0.22,1.0572
+single starting point,1,0.26,1.1972
+single starting point,1,0.3,1.286
+single starting point,1,0.341,1.3408
+single starting point,1,0.381,1.3704
+single starting point,1,0.421,1.3843
+single starting point,1,0.461,1.3875
+single starting point,1,0.501,1.3837
+single starting point,1,0.541,1.3751
+single starting point,1,0.581,1.3633
+single starting point,1,0.621,1.3495
+single starting point,1,0.661,1.3344
+single starting point,1,0.701,1.3187
+single starting point,1,0.741,1.3025
+single starting point,1,0.781,1.2863
+single starting point,1,0.821,1.2702
+single starting point,1,0.861,1.2543
+single starting point,1,0.901,1.2388
+single starting point,1,0.942,1.2232
+single starting point,1,0.982,1.2085
+single starting point,1,1.022,1.1942
+single starting point,1,1.062,1.1803
+single starting point,1,1.102,1.1669
+single starting point,1,1.142,1.154
+single starting point,1,1.182,1.1414
+single starting point,1,1.222,1.1293
+single starting point,1,1.262,1.1176
+single starting point,1,1.302,1.1063
+single starting point,1,1.342,1.0954
+single starting point,1,1.382,1.0849
+single starting point,1,1.422,1.0747
+single starting point,1,1.462,1.0649
+single starting point,1,1.502,1.0554
+single starting point,1,1.543,1.0459
+single starting point,1,1.583,1.037
+single starting point,1,1.623,1.0284
+single starting point,1,1.663,1.0201
+single starting point,1,1.703,1.012
+single starting point,1,1.743,1.0042
+single starting point,1,1.783,0.99657
+single starting point,1,1.823,0.98921
+single starting point,1,1.863,0.98208
+single starting point,1,1.903,0.97515
+single starting point,1,1.943,0.96842
+single starting point,1,1.983,0.96188
+single starting point,1,2.023,0.95554
+single starting point,1,2.063,0.94936
+single starting point,1,2.103,0.94336
+single starting point,1,2.144,0.93738
+single starting point,1,2.184,0.9317
+single starting point,1,2.224,0.92618
+single starting point,1,2.264,0.92079
+single starting point,1,2.304,0.91555
+single starting point,1,2.344,0.91044
+single starting point,1,2.384,0.90546
+single starting point,1,2.424,0.90061
+single starting point,1,2.464,0.89587
+single starting point,1,2.504,0.89125
+single starting point,1,2.544,0.88674
+single starting point,1,2.584,0.88234
+single starting point,1,2.624,0.87804
+single starting point,1,2.664,0.87384
+single starting point,1,2.704,0.86973
+single starting point,1,2.745,0.86562
+single starting point,1,2.785,0.86171
+single starting point,1,2.825,0.85787
+single starting point,1,2.865,0.85412
+single starting point,1,2.905,0.85046
+single starting point,1,2.945,0.84687
+single starting point,1,2.985,0.84335
+single starting point,1,3.025,0.83991
+single starting point,1,3.065,0.83654
+single starting point,1,3.105,0.83325
+single starting point,1,3.145,0.83001
+single starting point,1,3.185,0.82685
+single starting point,1,3.225,0.82374
+single starting point,1,3.265,0.8207
+single starting point,1,3.305,0.81771
+single starting point,1,3.346,0.81471
+single starting point,1,3.386,0.81184
+single starting point,1,3.426,0.80902
+single starting point,1,3.466,0.80626
+single starting point,1,3.506,0.80355
+single starting point,1,3.546,0.80088
+single starting point,1,3.586,0.79827
+single starting point,1,3.626,0.7957
+single starting point,1,3.666,0.79318
+single starting point,1,3.706,0.7907
+single starting point,1,3.746,0.78827
+single starting point,1,3.786,0.78588
+single starting point,1,3.826,0.78353
+single starting point,1,3.866,0.78122
+single starting point,1,3.906,0.77894
+single starting point,1,3.947,0.77665
+single starting point,1,3.987,0.77446
+single starting point,1,4.027,0.7723
+single starting point,1,4.067,0.77017
+single starting point,1,4.107,0.76808
+single starting point,1,4.147,0.76602
+single starting point,1,4.187,0.764
+single starting point,1,4.227,0.76201
+single starting point,1,4.267,0.76004
+single starting point,1,4.307,0.75811
+single starting point,1,4.347,0.75621
+single starting point,1,4.387,0.75434
+single starting point,1,4.427,0.75249
+single starting point,1,4.467,0.75068
+single starting point,1,4.507,0.74889
+single starting point,1,4.548,0.74708
+single starting point,1,4.588,0.74534
+single starting point,1,4.628,0.74363
+single starting point,1,4.668,0.74194
+single starting point,1,4.708,0.74028
+single starting point,1,4.748,0.73864
+single starting point,1,4.788,0.73702
+single starting point,1,4.828,0.73543
+single starting point,1,4.868,0.73386
+single starting point,1,4.908,0.73231
+single starting point,1,4.948,0.73078
+single starting point,1,4.988,0.72927
+single starting point,1,5.028,0.72778
+single starting point,1,5.068,0.72631
+single starting point,1,5.108,0.72486
+single starting point,1,5.149,0.7234
+single starting point,1,5.189,0.72199
+single starting point,1,5.229,0.7206
+single starting point,1,5.269,0.71922
+single starting point,1,5.309,0.71787
+single starting point,1,5.349,0.71653
+single starting point,1,5.389,0.7152
+single starting point,1,5.429,0.7139
+single starting point,1,5.469,0.71261
+single starting point,1,5.509,0.71134
+single starting point,1,5.549,0.71008
+single starting point,1,5.589,0.70884
+single starting point,1,5.629,0.70761
+single starting point,1,5.669,0.7064
+single starting point,1,5.709,0.7052
+single starting point,1,5.75,0.70399
+single starting point,1,5.79,0.70282
+single starting point,1,5.83,0.70166
+single starting point,1,5.87,0.70052
+single starting point,1,5.91,0.69939
+single starting point,1,5.95,0.69828
+single starting point,1,5.99,0.69718
+single starting point,1,6.03,0.69609
+single starting point,1,6.07,0.69501
+single starting point,1,6.11,0.69394
+single starting point,1,6.15,0.69289
+single starting point,1,6.19,0.69185
+single starting point,1,6.23,0.69082
+single starting point,1,6.27,0.6898
+single starting point,1,6.311,0.68877
+single starting point,1,6.351,0.68777
+single starting point,1,6.391,0.68678
+single starting point,1,6.431,0.68581
+single starting point,1,6.471,0.68485
+single starting point,1,6.511,0.68389
+single starting point,1,6.551,0.68295
+single starting point,1,6.591,0.68201
+single starting point,1,6.631,0.68109
+single starting point,1,6.671,0.68017
+single starting point,1,6.711,0.67927
+single starting point,1,6.751,0.67837
+single starting point,1,6.791,0.67749
+single starting point,1,6.831,0.67661
+single starting point,1,6.871,0.67574
+single starting point,1,6.912,0.67486
+single starting point,1,6.952,0.67401
+single starting point,1,6.992,0.67317
+single starting point,1,7.032,0.67233
+single starting point,1,7.072,0.67151
+single starting point,1,7.112,0.67069
+single starting point,1,7.152,0.66988
+single starting point,1,7.192,0.66907
+single starting point,1,7.232,0.66828
+single starting point,1,7.272,0.66749
+single starting point,1,7.312,0.66671
+single starting point,1,7.352,0.66594
+single starting point,1,7.392,0.66518
+single starting point,1,7.432,0.66442
+single starting point,1,7.472,0.66367
+single starting point,1,7.513,0.66291
+single starting point,1,7.553,0.66217
+single starting point,1,7.593,0.66144
+single starting point,1,7.633,0.66072
+single starting point,1,7.673,0.66001
+single starting point,1,7.713,0.6593
+single starting point,1,7.753,0.65859
+single starting point,1,7.793,0.6579
+single starting point,1,7.833,0.65721
+single starting point,1,7.873,0.65652
+single starting point,1,7.913,0.65585
+single starting point,1,7.953,0.65517
+single starting point,1,7.993,0.65451
+single starting point,1,8.033,0.65385
+single starting point,1,8.073,0.65319
+single starting point,1,8.114,0.65253
+single starting point,1,8.154,0.65188
+single starting point,1,8.194,0.65125
+single starting point,1,8.234,0.65062
+single starting point,1,8.274,0.64999
+single starting point,1,8.314,0.64937
+single starting point,1,8.354,0.64875
+single starting point,1,8.394,0.64814
+single starting point,1,8.434,0.64753
+single starting point,1,8.474,0.64693
+single starting point,1,8.514,0.64634
+single starting point,1,8.554,0.64575
+single starting point,1,8.594,0.64516
+single starting point,1,8.634,0.64458
+single starting point,1,8.674,0.644
+single starting point,1,8.715,0.64342
+single starting point,1,8.755,0.64285
+single starting point,1,8.795,0.64229
+single starting point,1,8.835,0.64173
+single starting point,1,8.875,0.64118
+single starting point,1,8.915,0.64063
+single starting point,1,8.955,0.64008
+single starting point,1,8.995,0.63954
+single starting point,1,9.035,0.63901
+single starting point,1,9.075,0.63848
+single starting point,1,9.115,0.63795
+single starting point,1,9.155,0.63743
+single starting point,1,9.195,0.63691
+single starting point,1,9.235,0.63639
+single starting point,1,9.275,0.63588
+single starting point,1,9.316,0.63536
+single starting point,1,9.356,0.63485
+single starting point,1,9.396,0.63435
+single starting point,1,9.436,0.63386
+single starting point,1,9.476,0.63337
+single starting point,1,9.516,0.63288
+single starting point,1,9.556,0.63239
+single starting point,1,9.596,0.63191
+single starting point,1,9.636,0.63143
+single starting point,1,9.676,0.63096
+single starting point,1,9.716,0.63049
+single starting point,1,9.756,0.63002
+single starting point,1,9.796,0.62956
+single starting point,1,9.836,0.6291
+single starting point,1,9.876,0.62864
+single starting point,1,9.917,0.62817
+single starting point,1,9.957,0.62772
+single starting point,1,9.997,0.62728
+single starting point,2,0.18,0.0010545
+single starting point,2,0.22,0.0057683
+single starting point,2,0.26,0.017829
+single starting point,2,0.3,0.039368
+single starting point,2,0.341,0.0711
+single starting point,2,0.381,0.10963
+single starting point,2,0.421,0.15313
+single starting point,2,0.461,0.19922
+single starting point,2,0.501,0.24589
+single starting point,2,0.541,0.29165
+single starting point,2,0.581,0.33551
+single starting point,2,0.621,0.37682
+single starting point,2,0.661,0.41524
+single starting point,2,0.701,0.45066
+single starting point,2,0.741,0.48307
+single starting point,2,0.781,0.51258
+single starting point,2,0.821,0.53935
+single starting point,2,0.861,0.56354
+single starting point,2,0.901,0.58536
+single starting point,2,0.942,0.60548
+single starting point,2,0.982,0.62309
+single starting point,2,1.022,0.63891
+single starting point,2,1.062,0.6531
+single starting point,2,1.102,0.66582
+single starting point,2,1.142,0.6772
+single starting point,2,1.182,0.68738
+single starting point,2,1.222,0.69648
+single starting point,2,1.262,0.70459
+single starting point,2,1.302,0.71183
+single starting point,2,1.342,0.71826
+single starting point,2,1.382,0.72398
+single starting point,2,1.422,0.72904
+single starting point,2,1.462,0.73352
+single starting point,2,1.502,0.73746
+single starting point,2,1.543,0.74101
+single starting point,2,1.583,0.74403
+single starting point,2,1.623,0.74665
+single starting point,2,1.663,0.74892
+single starting point,2,1.703,0.75086
+single starting point,2,1.743,0.75251
+single starting point,2,1.783,0.7539
+single starting point,2,1.823,0.75504
+single starting point,2,1.863,0.75596
+single starting point,2,1.903,0.75668
+single starting point,2,1.943,0.75722
+single starting point,2,1.983,0.75759
+single starting point,2,2.023,0.75782
+single starting point,2,2.063,0.7579
+single starting point,2,2.103,0.75786
+single starting point,2,2.144,0.75771
+single starting point,2,2.184,0.75745
+single starting point,2,2.224,0.7571
+single starting point,2,2.264,0.75667
+single starting point,2,2.304,0.75615
+single starting point,2,2.344,0.75557
+single starting point,2,2.384,0.75492
+single starting point,2,2.424,0.75422
+single starting point,2,2.464,0.75347
+single starting point,2,2.504,0.75266
+single starting point,2,2.544,0.75182
+single starting point,2,2.584,0.75093
+single starting point,2,2.624,0.75001
+single starting point,2,2.664,0.74906
+single starting point,2,2.704,0.74809
+single starting point,2,2.745,0.74706
+single starting point,2,2.785,0.74603
+single starting point,2,2.825,0.74499
+single starting point,2,2.865,0.74392
+single starting point,2,2.905,0.74285
+single starting point,2,2.945,0.74176
+single starting point,2,2.985,0.74065
+single starting point,2,3.025,0.73954
+single starting point,2,3.065,0.73842
+single starting point,2,3.105,0.73729
+single starting point,2,3.145,0.73616
+single starting point,2,3.185,0.73502
+single starting point,2,3.225,0.73388
+single starting point,2,3.265,0.73273
+single starting point,2,3.305,0.73159
+single starting point,2,3.346,0.73041
+single starting point,2,3.386,0.72927
+single starting point,2,3.426,0.72812
+single starting point,2,3.466,0.72698
+single starting point,2,3.506,0.72583
+single starting point,2,3.546,0.72469
+single starting point,2,3.586,0.72356
+single starting point,2,3.626,0.72243
+single starting point,2,3.666,0.7213
+single starting point,2,3.706,0.72017
+single starting point,2,3.746,0.71905
+single starting point,2,3.786,0.71794
+single starting point,2,3.826,0.71683
+single starting point,2,3.866,0.71572
+single starting point,2,3.906,0.71463
+single starting point,2,3.947,0.71351
+single starting point,2,3.987,0.71242
+single starting point,2,4.027,0.71134
+single starting point,2,4.067,0.71027
+single starting point,2,4.107,0.7092
+single starting point,2,4.147,0.70814
+single starting point,2,4.187,0.70709
+single starting point,2,4.227,0.70605
+single starting point,2,4.267,0.70501
+single starting point,2,4.307,0.70398
+single starting point,2,4.347,0.70295
+single starting point,2,4.387,0.70194
+single starting point,2,4.427,0.70093
+single starting point,2,4.467,0.69993
+single starting point,2,4.507,0.69893
+single starting point,2,4.548,0.69792
+single starting point,2,4.588,0.69694
+single starting point,2,4.628,0.69597
+single starting point,2,4.668,0.69501
+single starting point,2,4.708,0.69405
+single starting point,2,4.748,0.6931
+single starting point,2,4.788,0.69216
+single starting point,2,4.828,0.69123
+single starting point,2,4.868,0.6903
+single starting point,2,4.908,0.68938
+single starting point,2,4.948,0.68847
+single starting point,2,4.988,0.68756
+single starting point,2,5.028,0.68666
+single starting point,2,5.068,0.68577
+single starting point,2,5.108,0.68489
+single starting point,2,5.149,0.68399
+single starting point,2,5.189,0.68312
+single starting point,2,5.229,0.68226
+single starting point,2,5.269,0.68141
+single starting point,2,5.309,0.68056
+single starting point,2,5.349,0.67972
+single starting point,2,5.389,0.67888
+single starting point,2,5.429,0.67806
+single starting point,2,5.469,0.67724
+single starting point,2,5.509,0.67642
+single starting point,2,5.549,0.67561
+single starting point,2,5.589,0.67481
+single starting point,2,5.629,0.67402
+single starting point,2,5.669,0.67323
+single starting point,2,5.709,0.67245
+single starting point,2,5.75,0.67166
+single starting point,2,5.79,0.67089
+single starting point,2,5.83,0.67013
+single starting point,2,5.87,0.66937
+single starting point,2,5.91,0.66862
+single starting point,2,5.95,0.66788
+single starting point,2,5.99,0.66714
+single starting point,2,6.03,0.66641
+single starting point,2,6.07,0.66568
+single starting point,2,6.11,0.66496
+single starting point,2,6.15,0.66425
+single starting point,2,6.19,0.66354
+single starting point,2,6.23,0.66283
+single starting point,2,6.27,0.66214
+single starting point,2,6.311,0.66143
+single starting point,2,6.351,0.66074
+single starting point,2,6.391,0.66006
+single starting point,2,6.431,0.65939
+single starting point,2,6.471,0.65872
+single starting point,2,6.511,0.65805
+single starting point,2,6.551,0.65739
+single starting point,2,6.591,0.65674
+single starting point,2,6.631,0.65609
+single starting point,2,6.671,0.65545
+single starting point,2,6.711,0.65481
+single starting point,2,6.751,0.65417
+single starting point,2,6.791,0.65354
+single starting point,2,6.831,0.65292
+single starting point,2,6.871,0.6523
+single starting point,2,6.912,0.65167
+single starting point,2,6.952,0.65106
+single starting point,2,6.992,0.65046
+single starting point,2,7.032,0.64985
+single starting point,2,7.072,0.64926
+single starting point,2,7.112,0.64867
+single starting point,2,7.152,0.64808
+single starting point,2,7.192,0.6475
+single starting point,2,7.232,0.64692
+single starting point,2,7.272,0.64635
+single starting point,2,7.312,0.64578
+single starting point,2,7.352,0.64521
+single starting point,2,7.392,0.64465
+single starting point,2,7.432,0.64409
+single starting point,2,7.472,0.64354
+single starting point,2,7.513,0.64298
+single starting point,2,7.553,0.64243
+single starting point,2,7.593,0.64189
+single starting point,2,7.633,0.64136
+single starting point,2,7.673,0.64083
+single starting point,2,7.713,0.6403
+single starting point,2,7.753,0.63977
+single starting point,2,7.793,0.63925
+single starting point,2,7.833,0.63874
+single starting point,2,7.873,0.63822
+single starting point,2,7.913,0.63771
+single starting point,2,7.953,0.63721
+single starting point,2,7.993,0.6367
+single starting point,2,8.033,0.63621
+single starting point,2,8.073,0.63571
+single starting point,2,8.114,0.63521
+single starting point,2,8.154,0.63472
+single starting point,2,8.194,0.63423
+single starting point,2,8.234,0.63375
+single starting point,2,8.274,0.63327
+single starting point,2,8.314,0.6328
+single starting point,2,8.354,0.63233
+single starting point,2,8.394,0.63186
+single starting point,2,8.434,0.63139
+single starting point,2,8.474,0.63093
+single starting point,2,8.514,0.63047
+single starting point,2,8.554,0.63002
+single starting point,2,8.594,0.62957
+single starting point,2,8.634,0.62912
+single starting point,2,8.674,0.62867
+single starting point,2,8.715,0.62822
+single starting point,2,8.755,0.62778
+single starting point,2,8.795,0.62734
+single starting point,2,8.835,0.62691
+single starting point,2,8.875,0.62648
+single starting point,2,8.915,0.62605
+single starting point,2,8.955,0.62562
+single starting point,2,8.995,0.6252
+single starting point,2,9.035,0.62478
+single starting point,2,9.075,0.62436
+single starting point,2,9.115,0.62395
+single starting point,2,9.155,0.62354
+single starting point,2,9.195,0.62313
+single starting point,2,9.235,0.62272
+single starting point,2,9.275,0.62232
+single starting point,2,9.316,0.62191
+single starting point,2,9.356,0.62151
+single starting point,2,9.396,0.62111
+single starting point,2,9.436,0.62072
+single starting point,2,9.476,0.62033
+single starting point,2,9.516,0.61994
+single starting point,2,9.556,0.61956
+single starting point,2,9.596,0.61917
+single starting point,2,9.636,0.61879
+single starting point,2,9.676,0.61841
+single starting point,2,9.716,0.61804
+single starting point,2,9.756,0.61766
+single starting point,2,9.796,0.61729
+single starting point,2,9.836,0.61692
+single starting point,2,9.876,0.61656
+single starting point,2,9.917,0.61618
+single starting point,2,9.957,0.61582
+single starting point,2,9.997,0.61546
+single starting point,3,0.341,0.00018905
+single starting point,3,0.381,0.0006271
+single starting point,3,0.421,0.0016255
+single starting point,3,0.461,0.0035157
+single starting point,3,0.501,0.0066325
+single starting point,3,0.541,0.01126
+single starting point,3,0.581,0.017592
+single starting point,3,0.621,0.025722
+single starting point,3,0.661,0.035639
+single starting point,3,0.701,0.047248
+single starting point,3,0.741,0.060392
+single starting point,3,0.781,0.074868
+single starting point,3,0.821,0.090453
+single starting point,3,0.861,0.10692
+single starting point,3,0.901,0.12404
+single starting point,3,0.942,0.14205
+single starting point,3,0.982,0.15988
+single starting point,3,1.022,0.1778
+single starting point,3,1.062,0.19566
+single starting point,3,1.102,0.21334
+single starting point,3,1.142,0.23075
+single starting point,3,1.182,0.24779
+single starting point,3,1.222,0.26442
+single starting point,3,1.262,0.28058
+single starting point,3,1.302,0.29623
+single starting point,3,1.342,0.31134
+single starting point,3,1.382,0.32592
+single starting point,3,1.422,0.33994
+single starting point,3,1.462,0.3534
+single starting point,3,1.502,0.36631
+single starting point,3,1.543,0.37898
+single starting point,3,1.583,0.39079
+single starting point,3,1.623,0.40208
+single starting point,3,1.663,0.41287
+single starting point,3,1.703,0.42316
+single starting point,3,1.743,0.43298
+single starting point,3,1.783,0.44234
+single starting point,3,1.823,0.45127
+single starting point,3,1.863,0.45977
+single starting point,3,1.903,0.46787
+single starting point,3,1.943,0.47558
+single starting point,3,1.983,0.48292
+single starting point,3,2.023,0.48991
+single starting point,3,2.063,0.49657
+single starting point,3,2.103,0.5029
+single starting point,3,2.144,0.50908
+single starting point,3,2.184,0.51481
+single starting point,3,2.224,0.52026
+single starting point,3,2.264,0.52545
+single starting point,3,2.304,0.53039
+single starting point,3,2.344,0.53509
+single starting point,3,2.384,0.53956
+single starting point,3,2.424,0.54382
+single starting point,3,2.464,0.54787
+single starting point,3,2.504,0.55172
+single starting point,3,2.544,0.55539
+single starting point,3,2.584,0.55888
+single starting point,3,2.624,0.5622
+single starting point,3,2.664,0.56537
+single starting point,3,2.704,0.56837
+single starting point,3,2.745,0.57131
+single starting point,3,2.785,0.57403
+single starting point,3,2.825,0.57662
+single starting point,3,2.865,0.57908
+single starting point,3,2.905,0.58143
+single starting point,3,2.945,0.58366
+single starting point,3,2.985,0.58578
+single starting point,3,3.025,0.5878
+single starting point,3,3.065,0.58972
+single starting point,3,3.105,0.59154
+single starting point,3,3.145,0.59328
+single starting point,3,3.185,0.59493
+single starting point,3,3.225,0.59649
+single starting point,3,3.265,0.59798
+single starting point,3,3.305,0.5994
+single starting point,3,3.346,0.60077
+single starting point,3,3.386,0.60205
+single starting point,3,3.426,0.60326
+single starting point,3,3.466,0.60441
+single starting point,3,3.506,0.6055
+single starting point,3,3.546,0.60653
+single starting point,3,3.586,0.6075
+single starting point,3,3.626,0.60843
+single starting point,3,3.666,0.60931
+single starting point,3,3.706,0.61013
+single starting point,3,3.746,0.61092
+single starting point,3,3.786,0.61166
+single starting point,3,3.826,0.61236
+single starting point,3,3.866,0.61302
+single starting point,3,3.906,0.61364
+single starting point,3,3.947,0.61424
+single starting point,3,3.987,0.61479
+single starting point,3,4.027,0.6153
+single starting point,3,4.067,0.61579
+single starting point,3,4.107,0.61624
+single starting point,3,4.147,0.61667
+single starting point,3,4.187,0.61706
+single starting point,3,4.227,0.61743
+single starting point,3,4.267,0.61777
+single starting point,3,4.307,0.61809
+single starting point,3,4.347,0.61839
+single starting point,3,4.387,0.61866
+single starting point,3,4.427,0.61891
+single starting point,3,4.467,0.61914
+single starting point,3,4.507,0.61935
+single starting point,3,4.548,0.61955
+single starting point,3,4.588,0.61972
+single starting point,3,4.628,0.61987
+single starting point,3,4.668,0.62001
+single starting point,3,4.708,0.62013
+single starting point,3,4.748,0.62023
+single starting point,3,4.788,0.62032
+single starting point,3,4.828,0.6204
+single starting point,3,4.868,0.62046
+single starting point,3,4.908,0.62051
+single starting point,3,4.948,0.62055
+single starting point,3,4.988,0.62057
+single starting point,3,5.028,0.62058
+single starting point,3,5.068,0.62058
+single starting point,3,5.108,0.62057
+single starting point,3,5.149,0.62055
+single starting point,3,5.189,0.62052
+single starting point,3,5.229,0.62048
+single starting point,3,5.269,0.62043
+single starting point,3,5.309,0.62037
+single starting point,3,5.349,0.62031
+single starting point,3,5.389,0.62023
+single starting point,3,5.429,0.62015
+single starting point,3,5.469,0.62006
+single starting point,3,5.509,0.61996
+single starting point,3,5.549,0.61986
+single starting point,3,5.589,0.61975
+single starting point,3,5.629,0.61963
+single starting point,3,5.669,0.61951
+single starting point,3,5.709,0.61938
+single starting point,3,5.75,0.61924
+single starting point,3,5.79,0.61911
+single starting point,3,5.83,0.61896
+single starting point,3,5.87,0.61881
+single starting point,3,5.91,0.61866
+single starting point,3,5.95,0.6185
+single starting point,3,5.99,0.61834
+single starting point,3,6.03,0.61817
+single starting point,3,6.07,0.618
+single starting point,3,6.11,0.61782
+single starting point,3,6.15,0.61765
+single starting point,3,6.19,0.61746
+single starting point,3,6.23,0.61728
+single starting point,3,6.27,0.61709
+single starting point,3,6.311,0.6169
+single starting point,3,6.351,0.6167
+single starting point,3,6.391,0.6165
+single starting point,3,6.431,0.61631
+single starting point,3,6.471,0.6161
+single starting point,3,6.511,0.6159
+single starting point,3,6.551,0.61569
+single starting point,3,6.591,0.61548
+single starting point,3,6.631,0.61528
+single starting point,3,6.671,0.61506
+single starting point,3,6.711,0.61485
+single starting point,3,6.751,0.61463
+single starting point,3,6.791,0.61441
+single starting point,3,6.831,0.6142
+single starting point,3,6.871,0.61397
+single starting point,3,6.912,0.61375
+single starting point,3,6.952,0.61352
+single starting point,3,6.992,0.6133
+single starting point,3,7.032,0.61307
+single starting point,3,7.072,0.61284
+single starting point,3,7.112,0.61262
+single starting point,3,7.152,0.61239
+single starting point,3,7.192,0.61216
+single starting point,3,7.232,0.61193
+single starting point,3,7.272,0.6117
+single starting point,3,7.312,0.61146
+single starting point,3,7.352,0.61123
+single starting point,3,7.392,0.611
+single starting point,3,7.432,0.61076
+single starting point,3,7.472,0.61053
+single starting point,3,7.513,0.61029
+single starting point,3,7.553,0.61005
+single starting point,3,7.593,0.60982
+single starting point,3,7.633,0.60958
+single starting point,3,7.673,0.60934
+single starting point,3,7.713,0.60911
+single starting point,3,7.753,0.60887
+single starting point,3,7.793,0.60863
+single starting point,3,7.833,0.60839
+single starting point,3,7.873,0.60816
+single starting point,3,7.913,0.60792
+single starting point,3,7.953,0.60768
+single starting point,3,7.993,0.60744
+single starting point,3,8.033,0.6072
+single starting point,3,8.073,0.60697
+single starting point,3,8.114,0.60672
+single starting point,3,8.154,0.60649
+single starting point,3,8.194,0.60625
+single starting point,3,8.234,0.60601
+single starting point,3,8.274,0.60577
+single starting point,3,8.314,0.60554
+single starting point,3,8.354,0.6053
+single starting point,3,8.394,0.60506
+single starting point,3,8.434,0.60483
+single starting point,3,8.474,0.60459
+single starting point,3,8.514,0.60436
+single starting point,3,8.554,0.60412
+single starting point,3,8.594,0.60389
+single starting point,3,8.634,0.60365
+single starting point,3,8.674,0.60342
+single starting point,3,8.715,0.60318
+single starting point,3,8.755,0.60294
+single starting point,3,8.795,0.60271
+single starting point,3,8.835,0.60248
+single starting point,3,8.875,0.60225
+single starting point,3,8.915,0.60201
+single starting point,3,8.955,0.60178
+single starting point,3,8.995,0.60155
+single starting point,3,9.035,0.60132
+single starting point,3,9.075,0.60109
+single starting point,3,9.115,0.60086
+single starting point,3,9.155,0.60063
+single starting point,3,9.195,0.6004
+single starting point,3,9.235,0.60017
+single starting point,3,9.275,0.59995
+single starting point,3,9.316,0.59971
+single starting point,3,9.356,0.59949
+single starting point,3,9.396,0.59926
+single starting point,3,9.436,0.59904
+single starting point,3,9.476,0.59881
+single starting point,3,9.516,0.59859
+single starting point,3,9.556,0.59836
+single starting point,3,9.596,0.59814
+single starting point,3,9.636,0.59792
+single starting point,3,9.676,0.5977
+single starting point,3,9.716,0.59748
+single starting point,3,9.756,0.59726
+single starting point,3,9.796,0.59704
+single starting point,3,9.836,0.59682
+single starting point,3,9.876,0.5966
+single starting point,3,9.917,0.59637
+single starting point,3,9.957,0.59616
+single starting point,3,9.997,0.59594
+single starting point,5,0.861,0.00011934
+single starting point,5,0.901,0.00020818
+single starting point,5,0.942,0.00034898
+single starting point,5,0.982,0.00055179
+single starting point,5,1.022,0.00083842
+single starting point,5,1.062,0.0012298
+single starting point,5,1.102,0.0017484
+single starting point,5,1.142,0.0024172
+single starting point,5,1.182,0.0032593
+single starting point,5,1.222,0.0042969
+single starting point,5,1.262,0.0055512
+single starting point,5,1.302,0.007041
+single starting point,5,1.342,0.0087832
+single starting point,5,1.382,0.010792
+single starting point,5,1.422,0.013077
+single starting point,5,1.462,0.015648
+single starting point,5,1.502,0.018508
+single starting point,5,1.543,0.021743
+single starting point,5,1.583,0.025192
+single starting point,5,1.623,0.028928
+single starting point,5,1.663,0.032942
+single starting point,5,1.703,0.037228
+single starting point,5,1.743,0.041773
+single starting point,5,1.783,0.046566
+single starting point,5,1.823,0.051593
+single starting point,5,1.863,0.056839
+single starting point,5,1.903,0.062288
+single starting point,5,1.943,0.067925
+single starting point,5,1.983,0.073732
+single starting point,5,2.023,0.079693
+single starting point,5,2.063,0.085792
+single starting point,5,2.103,0.092013
+single starting point,5,2.144,0.098498
+single starting point,5,2.184,0.10492
+single starting point,5,2.224,0.11141
+single starting point,5,2.264,0.11796
+single starting point,5,2.304,0.12456
+single starting point,5,2.344,0.13119
+single starting point,5,2.384,0.13785
+single starting point,5,2.424,0.14451
+single starting point,5,2.464,0.15117
+single starting point,5,2.504,0.15783
+single starting point,5,2.544,0.16446
+single starting point,5,2.584,0.17106
+single starting point,5,2.624,0.17763
+single starting point,5,2.664,0.18415
+single starting point,5,2.704,0.19063
+single starting point,5,2.745,0.1972
+single starting point,5,2.785,0.20356
+single starting point,5,2.825,0.20985
+single starting point,5,2.865,0.21607
+single starting point,5,2.905,0.22221
+single starting point,5,2.945,0.22828
+single starting point,5,2.985,0.23427
+single starting point,5,3.025,0.24018
+single starting point,5,3.065,0.246
+single starting point,5,3.105,0.25173
+single starting point,5,3.145,0.25738
+single starting point,5,3.185,0.26294
+single starting point,5,3.225,0.26841
+single starting point,5,3.265,0.27378
+single starting point,5,3.305,0.27907
+single starting point,5,3.346,0.2844
+single starting point,5,3.386,0.2895
+single starting point,5,3.426,0.29451
+single starting point,5,3.466,0.29943
+single starting point,5,3.506,0.30427
+single starting point,5,3.546,0.30901
+single starting point,5,3.586,0.31366
+single starting point,5,3.626,0.31823
+single starting point,5,3.666,0.32271
+single starting point,5,3.706,0.3271
+single starting point,5,3.746,0.33141
+single starting point,5,3.786,0.33563
+single starting point,5,3.826,0.33977
+single starting point,5,3.866,0.34383
+single starting point,5,3.906,0.34781
+single starting point,5,3.947,0.3518
+single starting point,5,3.987,0.35562
+single starting point,5,4.027,0.35936
+single starting point,5,4.067,0.36303
+single starting point,5,4.107,0.36662
+single starting point,5,4.147,0.37014
+single starting point,5,4.187,0.37359
+single starting point,5,4.227,0.37697
+single starting point,5,4.267,0.38028
+single starting point,5,4.307,0.38352
+single starting point,5,4.347,0.38669
+single starting point,5,4.387,0.3898
+single starting point,5,4.427,0.39285
+single starting point,5,4.467,0.39583
+single starting point,5,4.507,0.39876
+single starting point,5,4.548,0.40169
+single starting point,5,4.588,0.40449
+single starting point,5,4.628,0.40723
+single starting point,5,4.668,0.40992
+single starting point,5,4.708,0.41256
+single starting point,5,4.748,0.41513
+single starting point,5,4.788,0.41766
+single starting point,5,4.828,0.42013
+single starting point,5,4.868,0.42256
+single starting point,5,4.908,0.42493
+single starting point,5,4.948,0.42726
+single starting point,5,4.988,0.42954
+single starting point,5,5.028,0.43177
+single starting point,5,5.068,0.43395
+single starting point,5,5.108,0.43609
+single starting point,5,5.149,0.43824
+single starting point,5,5.189,0.4403
+single starting point,5,5.229,0.44231
+single starting point,5,5.269,0.44428
+single starting point,5,5.309,0.44622
+single starting point,5,5.349,0.44811
+single starting point,5,5.389,0.44997
+single starting point,5,5.429,0.45178
+single starting point,5,5.469,0.45356
+single starting point,5,5.509,0.45531
+single starting point,5,5.549,0.45702
+single starting point,5,5.589,0.4587
+single starting point,5,5.629,0.46034
+single starting point,5,5.669,0.46195
+single starting point,5,5.709,0.46353
+single starting point,5,5.75,0.46512
+single starting point,5,5.79,0.46663
+single starting point,5,5.83,0.46812
+single starting point,5,5.87,0.46958
+single starting point,5,5.91,0.47101
+single starting point,5,5.95,0.47241
+single starting point,5,5.99,0.47378
+single starting point,5,6.03,0.47513
+single starting point,5,6.07,0.47645
+single starting point,5,6.11,0.47774
+single starting point,5,6.15,0.47901
+single starting point,5,6.19,0.48025
+single starting point,5,6.23,0.48148
+single starting point,5,6.27,0.48267
+single starting point,5,6.311,0.48388
+single starting point,5,6.351,0.48503
+single starting point,5,6.391,0.48616
+single starting point,5,6.431,0.48726
+single starting point,5,6.471,0.48835
+single starting point,5,6.511,0.48941
+single starting point,5,6.551,0.49046
+single starting point,5,6.591,0.49148
+single starting point,5,6.631,0.49249
+single starting point,5,6.671,0.49348
+single starting point,5,6.711,0.49444
+single starting point,5,6.751,0.49539
+single starting point,5,6.791,0.49633
+single starting point,5,6.831,0.49724
+single starting point,5,6.871,0.49814
+single starting point,5,6.912,0.49904
+single starting point,5,6.952,0.4999
+single starting point,5,6.992,0.50075
+single starting point,5,7.032,0.50158
+single starting point,5,7.072,0.5024
+single starting point,5,7.112,0.5032
+single starting point,5,7.152,0.50399
+single starting point,5,7.192,0.50476
+single starting point,5,7.232,0.50551
+single starting point,5,7.272,0.50626
+single starting point,5,7.312,0.50699
+single starting point,5,7.352,0.5077
+single starting point,5,7.392,0.5084
+single starting point,5,7.432,0.50909
+single starting point,5,7.472,0.50977
+single starting point,5,7.513,0.51045
+single starting point,5,7.553,0.51111
+single starting point,5,7.593,0.51175
+single starting point,5,7.633,0.51238
+single starting point,5,7.673,0.51299
+single starting point,5,7.713,0.5136
+single starting point,5,7.753,0.51419
+single starting point,5,7.793,0.51478
+single starting point,5,7.833,0.51535
+single starting point,5,7.873,0.51592
+single starting point,5,7.913,0.51647
+single starting point,5,7.953,0.51701
+single starting point,5,7.993,0.51755
+single starting point,5,8.033,0.51807
+single starting point,5,8.073,0.51859
+single starting point,5,8.114,0.5191
+single starting point,5,8.154,0.5196
+single starting point,5,8.194,0.52009
+single starting point,5,8.234,0.52057
+single starting point,5,8.274,0.52103
+single starting point,5,8.314,0.5215
+single starting point,5,8.354,0.52195
+single starting point,5,8.394,0.52239
+single starting point,5,8.434,0.52283
+single starting point,5,8.474,0.52326
+single starting point,5,8.514,0.52368
+single starting point,5,8.554,0.52409
+single starting point,5,8.594,0.5245
+single starting point,5,8.634,0.5249
+single starting point,5,8.674,0.52529
+single starting point,5,8.715,0.52569
+single starting point,5,8.755,0.52607
+single starting point,5,8.795,0.52644
+single starting point,5,8.835,0.5268
+single starting point,5,8.875,0.52716
+single starting point,5,8.915,0.52751
+single starting point,5,8.955,0.52786
+single starting point,5,8.995,0.5282
+single starting point,5,9.035,0.52853
+single starting point,5,9.075,0.52886
+single starting point,5,9.115,0.52918
+single starting point,5,9.155,0.5295
+single starting point,5,9.195,0.52981
+single starting point,5,9.235,0.53011
+single starting point,5,9.275,0.53041
+single starting point,5,9.316,0.53072
+single starting point,5,9.356,0.531
+single starting point,5,9.396,0.53129
+single starting point,5,9.436,0.53157
+single starting point,5,9.476,0.53184
+single starting point,5,9.516,0.53211
+single starting point,5,9.556,0.53237
+single starting point,5,9.596,0.53263
+single starting point,5,9.636,0.53289
+single starting point,5,9.676,0.53314
+single starting point,5,9.716,0.53338
+single starting point,5,9.756,0.53362
+single starting point,5,9.796,0.53386
+single starting point,5,9.836,0.53409
+single starting point,5,9.876,0.53432
+single starting point,5,9.917,0.53455
+single starting point,5,9.957,0.53477
+single starting point,5,9.997,0.53499

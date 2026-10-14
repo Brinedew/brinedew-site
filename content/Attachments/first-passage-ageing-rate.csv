@@ -1,0 +1,566 @@
+model,age,rate,hazard
+Gompertz law,30,0.1030,0.00040781
+Gompertz law,31,0.1030,0.00045206
+Gompertz law,32,0.1030,0.0005011
+Gompertz law,33,0.1030,0.00055546
+Gompertz law,34,0.1030,0.00061573
+Gompertz law,35,0.1030,0.00068253
+Gompertz law,36,0.1030,0.00075658
+Gompertz law,37,0.1030,0.00083866
+Gompertz law,38,0.1030,0.00092965
+Gompertz law,39,0.1030,0.0010305
+Gompertz law,40,0.1030,0.0011423
+Gompertz law,41,0.1030,0.0012662
+Gompertz law,42,0.1030,0.0014036
+Gompertz law,43,0.1030,0.0015559
+Gompertz law,44,0.1030,0.0017247
+Gompertz law,45,0.1030,0.0019118
+Gompertz law,46,0.1030,0.0021192
+Gompertz law,47,0.1030,0.0023491
+Gompertz law,48,0.1030,0.002604
+Gompertz law,49,0.1030,0.0028865
+Gompertz law,50,0.1030,0.0031997
+Gompertz law,51,0.1030,0.0035468
+Gompertz law,52,0.1030,0.0039316
+Gompertz law,53,0.1030,0.0043582
+Gompertz law,54,0.1030,0.004831
+Gompertz law,55,0.1030,0.0053551
+Gompertz law,56,0.1030,0.0059361
+Gompertz law,57,0.1030,0.0065801
+Gompertz law,58,0.1030,0.007294
+Gompertz law,59,0.1030,0.0080853
+Gompertz law,60,0.1030,0.0089625
+Gompertz law,61,0.1030,0.0099349
+Gompertz law,62,0.1030,0.011013
+Gompertz law,63,0.1030,0.012207
+Gompertz law,64,0.1030,0.013532
+Gompertz law,65,0.1030,0.015
+Gompertz law,66,0.1030,0.016627
+Gompertz law,67,0.1030,0.018431
+Gompertz law,68,0.1030,0.020431
+Gompertz law,69,0.1030,0.022648
+Gompertz law,70,0.1030,0.025105
+Gompertz law,71,0.1030,0.027828
+Gompertz law,72,0.1030,0.030847
+Gompertz law,73,0.1030,0.034194
+Gompertz law,74,0.1030,0.037904
+Gompertz law,75,0.1030,0.042016
+Gompertz law,76,0.1030,0.046574
+Gompertz law,77,0.1030,0.051627
+Gompertz law,78,0.1030,0.057228
+Gompertz law,79,0.1030,0.063437
+Gompertz law,80,0.1030,0.07032
+Gompertz law,81,0.1030,0.077949
+Gompertz law,82,0.1030,0.086405
+Gompertz law,83,0.1030,0.09578
+Gompertz law,84,0.1030,0.10617
+Gompertz law,85,0.1030,0.11769
+Gompertz law,86,0.1030,0.13046
+Gompertz law,87,0.1030,0.14461
+Gompertz law,88,0.1030,0.1603
+Gompertz law,89,0.1030,0.17769
+Gompertz law,90,0.1030,0.19697
+Gompertz law,91,0.1030,0.21834
+Gompertz law,92,0.1030,0.24203
+Gompertz law,93,0.1030,0.26828
+Gompertz law,94,0.1030,0.29739
+Gompertz law,95,0.1030,0.32966
+Gompertz law,96,0.1030,0.36542
+Gompertz law,97,0.1030,0.40507
+Gompertz law,98,0.1030,0.44901
+Gompertz law,99,0.1030,0.49773
+Gompertz law,100,0.1030,0.55173
+Gompertz law,101,0.1030,0.61158
+Gompertz law,102,0.1030,0.67793
+Gompertz law,103,0.1030,0.75148
+Gompertz law,104,0.1030,0.83301
+Gompertz law,105,0.1030,0.92339
+Gompertz law,106,0.1030,1.0236
+Gompertz law,107,0.1030,1.1346
+Gompertz law,108,0.1030,1.2577
+Gompertz law,109,0.1030,1.3942
+Gompertz law,110,0.1030,1.5454
+Gompertz law with gamma frailty,30,0.1029,0.00040781
+Gompertz law with gamma frailty,31,0.1029,0.00045202
+Gompertz law with gamma frailty,32,0.1029,0.00050103
+Gompertz law with gamma frailty,33,0.1029,0.00055534
+Gompertz law with gamma frailty,34,0.1029,0.00061553
+Gompertz law with gamma frailty,35,0.1029,0.00068224
+Gompertz law with gamma frailty,36,0.1029,0.00075617
+Gompertz law with gamma frailty,37,0.1029,0.0008381
+Gompertz law with gamma frailty,38,0.1028,0.0009289
+Gompertz law with gamma frailty,39,0.1028,0.0010295
+Gompertz law with gamma frailty,40,0.1028,0.001141
+Gompertz law with gamma frailty,41,0.1028,0.0012645
+Gompertz law with gamma frailty,42,0.1028,0.0014015
+Gompertz law with gamma frailty,43,0.1027,0.0015531
+Gompertz law with gamma frailty,44,0.1027,0.0017212
+Gompertz law with gamma frailty,45,0.1027,0.0019074
+Gompertz law with gamma frailty,46,0.1027,0.0021136
+Gompertz law with gamma frailty,47,0.1026,0.0023421
+Gompertz law with gamma frailty,48,0.1026,0.0025952
+Gompertz law with gamma frailty,49,0.1025,0.0028755
+Gompertz law with gamma frailty,50,0.1025,0.0031859
+Gompertz law with gamma frailty,51,0.1024,0.0035296
+Gompertz law with gamma frailty,52,0.1024,0.0039102
+Gompertz law with gamma frailty,53,0.1023,0.0043316
+Gompertz law with gamma frailty,54,0.1022,0.0047981
+Gompertz law with gamma frailty,55,0.1022,0.0053143
+Gompertz law with gamma frailty,56,0.1021,0.0058856
+Gompertz law with gamma frailty,57,0.1020,0.0065177
+Gompertz law with gamma frailty,58,0.1018,0.0072169
+Gompertz law with gamma frailty,59,0.1017,0.0079902
+Gompertz law with gamma frailty,60,0.1016,0.0088452
+Gompertz law with gamma frailty,61,0.1014,0.0097903
+Gompertz law with gamma frailty,62,0.1013,0.010835
+Gompertz law with gamma frailty,63,0.1011,0.011988
+Gompertz law with gamma frailty,64,0.1009,0.013262
+Gompertz law with gamma frailty,65,0.1007,0.014668
+Gompertz law with gamma frailty,66,0.1004,0.01622
+Gompertz law with gamma frailty,67,0.1001,0.01793
+Gompertz law with gamma frailty,68,0.0998,0.019816
+Gompertz law with gamma frailty,69,0.0995,0.021893
+Gompertz law with gamma frailty,70,0.0991,0.024179
+Gompertz law with gamma frailty,71,0.0987,0.026693
+Gompertz law with gamma frailty,72,0.0983,0.029457
+Gompertz law with gamma frailty,73,0.0978,0.032492
+Gompertz law with gamma frailty,74,0.0973,0.035821
+Gompertz law with gamma frailty,75,0.0967,0.03947
+Gompertz law with gamma frailty,76,0.0960,0.043463
+Gompertz law with gamma frailty,77,0.0954,0.047829
+Gompertz law with gamma frailty,78,0.0946,0.052595
+Gompertz law with gamma frailty,79,0.0938,0.05779
+Gompertz law with gamma frailty,80,0.0929,0.063443
+Gompertz law with gamma frailty,81,0.0919,0.069583
+Gompertz law with gamma frailty,82,0.0908,0.07624
+Gompertz law with gamma frailty,83,0.0897,0.083442
+Gompertz law with gamma frailty,84,0.0884,0.091214
+Gompertz law with gamma frailty,85,0.0871,0.099582
+Gompertz law with gamma frailty,86,0.0857,0.10857
+Gompertz law with gamma frailty,87,0.0841,0.11819
+Gompertz law with gamma frailty,88,0.0825,0.12846
+Gompertz law with gamma frailty,89,0.0807,0.13938
+Gompertz law with gamma frailty,90,0.0789,0.15096
+Gompertz law with gamma frailty,91,0.0769,0.1632
+Gompertz law with gamma frailty,92,0.0749,0.17607
+Gompertz law with gamma frailty,93,0.0727,0.18956
+Gompertz law with gamma frailty,94,0.0705,0.20363
+Gompertz law with gamma frailty,95,0.0681,0.21825
+Gompertz law with gamma frailty,96,0.0657,0.23336
+Gompertz law with gamma frailty,97,0.0632,0.24891
+Gompertz law with gamma frailty,98,0.0607,0.26482
+Gompertz law with gamma frailty,99,0.0581,0.28104
+Gompertz law with gamma frailty,100,0.0555,0.29746
+Gompertz law with gamma frailty,101,0.0529,0.31402
+Gompertz law with gamma frailty,102,0.0502,0.33063
+Gompertz law with gamma frailty,103,0.0476,0.34719
+Gompertz law with gamma frailty,104,0.0449,0.36362
+Gompertz law with gamma frailty,105,0.0423,0.37984
+Gompertz law with gamma frailty,106,0.0398,0.39577
+Gompertz law with gamma frailty,107,0.0373,0.41132
+Gompertz law with gamma frailty,108,0.0349,0.42644
+Gompertz law with gamma frailty,109,0.0326,0.44107
+Gompertz law with gamma frailty,110,0.0314,0.45515
+Constant drift (inverse Gaussian),32,31.7629,5.7849e-20
+Constant drift (inverse Gaussian),33,11.6740,3.6745e-13
+Constant drift (inverse Gaussian),34,6.1007,7.9839e-10
+Constant drift (inverse Gaussian),35,3.7326,7.3151e-08
+Constant drift (inverse Gaussian),36,2.5025,1.3941e-06
+Constant drift (inverse Gaussian),37,1.7816,1.0911e-05
+Constant drift (inverse Gaussian),38,1.3234,4.9183e-05
+Constant drift (inverse Gaussian),39,1.0145,0.00015395
+Constant drift (inverse Gaussian),40,0.7967,0.0003741
+Constant drift (inverse Gaussian),41,0.6379,0.00075754
+Constant drift (inverse Gaussian),42,0.5187,0.0013398
+Constant drift (inverse Gaussian),43,0.4273,0.0021377
+Constant drift (inverse Gaussian),44,0.3559,0.0031491
+Constant drift (inverse Gaussian),45,0.2993,0.0043561
+Constant drift (inverse Gaussian),46,0.2538,0.0057303
+Constant drift (inverse Gaussian),47,0.2169,0.0072375
+Constant drift (inverse Gaussian),48,0.1866,0.0088424
+Constant drift (inverse Gaussian),49,0.1615,0.010511
+Constant drift (inverse Gaussian),50,0.1406,0.012214
+Constant drift (inverse Gaussian),51,0.1230,0.013924
+Constant drift (inverse Gaussian),52,0.1081,0.01562
+Constant drift (inverse Gaussian),53,0.0955,0.017286
+Constant drift (inverse Gaussian),54,0.0847,0.018908
+Constant drift (inverse Gaussian),55,0.0754,0.020476
+Constant drift (inverse Gaussian),56,0.0674,0.021985
+Constant drift (inverse Gaussian),57,0.0604,0.023429
+Constant drift (inverse Gaussian),58,0.0543,0.024807
+Constant drift (inverse Gaussian),59,0.0490,0.026118
+Constant drift (inverse Gaussian),60,0.0443,0.027361
+Constant drift (inverse Gaussian),61,0.0402,0.028538
+Constant drift (inverse Gaussian),62,0.0365,0.029651
+Constant drift (inverse Gaussian),63,0.0333,0.030701
+Constant drift (inverse Gaussian),64,0.0304,0.031692
+Constant drift (inverse Gaussian),65,0.0278,0.032625
+Constant drift (inverse Gaussian),66,0.0255,0.033505
+Constant drift (inverse Gaussian),67,0.0234,0.034332
+Constant drift (inverse Gaussian),68,0.0215,0.035111
+Constant drift (inverse Gaussian),69,0.0199,0.035845
+Constant drift (inverse Gaussian),70,0.0183,0.036534
+Constant drift (inverse Gaussian),71,0.0169,0.037183
+Constant drift (inverse Gaussian),72,0.0157,0.037794
+Constant drift (inverse Gaussian),73,0.0145,0.038368
+Constant drift (inverse Gaussian),74,0.0135,0.038908
+Constant drift (inverse Gaussian),75,0.0125,0.039417
+Constant drift (inverse Gaussian),76,0.0117,0.039896
+Constant drift (inverse Gaussian),77,0.0109,0.040347
+Constant drift (inverse Gaussian),78,0.0101,0.040771
+Constant drift (inverse Gaussian),79,0.0094,0.041171
+Constant drift (inverse Gaussian),80,0.0088,0.041547
+Constant drift (inverse Gaussian),81,0.0082,0.041902
+Constant drift (inverse Gaussian),82,0.0077,0.042237
+Constant drift (inverse Gaussian),83,0.0072,0.042552
+Constant drift (inverse Gaussian),84,0.0067,0.042849
+Constant drift (inverse Gaussian),85,0.0063,0.043129
+Constant drift (inverse Gaussian),86,0.0059,0.043394
+Constant drift (inverse Gaussian),87,0.0056,0.043643
+Constant drift (inverse Gaussian),88,0.0052,0.043878
+Constant drift (inverse Gaussian),89,0.0049,0.044101
+Constant drift (inverse Gaussian),90,0.0046,0.04431
+Constant drift (inverse Gaussian),91,0.0043,0.044508
+Constant drift (inverse Gaussian),92,0.0041,0.044695
+Constant drift (inverse Gaussian),93,0.0038,0.044871
+Constant drift (inverse Gaussian),94,0.0036,0.045038
+Constant drift (inverse Gaussian),95,0.0034,0.045195
+Constant drift (inverse Gaussian),96,0.0032,0.045344
+Constant drift (inverse Gaussian),97,0.0030,0.045484
+Constant drift (inverse Gaussian),98,0.0028,0.045616
+Constant drift (inverse Gaussian),99,0.0027,0.045741
+Constant drift (inverse Gaussian),100,0.0025,0.045859
+Constant drift (inverse Gaussian),101,0.0024,0.045971
+Constant drift (inverse Gaussian),102,0.0022,0.046076
+Constant drift (inverse Gaussian),103,0.0021,0.046176
+Constant drift (inverse Gaussian),104,0.0020,0.046269
+Constant drift (inverse Gaussian),105,0.0019,0.046358
+Constant drift (inverse Gaussian),106,0.0018,0.046441
+Constant drift (inverse Gaussian),107,0.0016,0.04652
+Constant drift (inverse Gaussian),108,0.0015,0.046594
+Constant drift (inverse Gaussian),109,0.0015,0.046665
+Constant drift (inverse Gaussian),110,0.0014,0.046731
+Saturating removal (Raz 2026, men),30,0.1743,7.2115e-05
+Saturating removal (Raz 2026, men),31,0.1741,8.5844e-05
+Saturating removal (Raz 2026, men),32,0.1736,0.00010214
+Saturating removal (Raz 2026, men),33,0.1732,0.00012149
+Saturating removal (Raz 2026, men),34,0.1727,0.00014442
+Saturating removal (Raz 2026, men),35,0.1722,0.00017161
+Saturating removal (Raz 2026, men),36,0.1718,0.00020382
+Saturating removal (Raz 2026, men),37,0.1713,0.00024196
+Saturating removal (Raz 2026, men),38,0.1708,0.00028709
+Saturating removal (Raz 2026, men),39,0.1702,0.00034046
+Saturating removal (Raz 2026, men),40,0.1697,0.00040353
+Saturating removal (Raz 2026, men),41,0.1691,0.00047803
+Saturating removal (Raz 2026, men),42,0.1686,0.00056597
+Saturating removal (Raz 2026, men),43,0.1680,0.00066969
+Saturating removal (Raz 2026, men),44,0.1674,0.00079195
+Saturating removal (Raz 2026, men),45,0.1668,0.00093595
+Saturating removal (Raz 2026, men),46,0.1661,0.0011054
+Saturating removal (Raz 2026, men),47,0.1654,0.0013048
+Saturating removal (Raz 2026, men),48,0.1648,0.001539
+Saturating removal (Raz 2026, men),49,0.1641,0.001814
+Saturating removal (Raz 2026, men),50,0.1633,0.0021366
+Saturating removal (Raz 2026, men),51,0.1626,0.0025148
+Saturating removal (Raz 2026, men),52,0.1618,0.0029576
+Saturating removal (Raz 2026, men),53,0.1610,0.0034756
+Saturating removal (Raz 2026, men),54,0.1602,0.004081
+Saturating removal (Raz 2026, men),55,0.1593,0.0047879
+Saturating removal (Raz 2026, men),56,0.1584,0.0056123
+Saturating removal (Raz 2026, men),57,0.1575,0.0065727
+Saturating removal (Raz 2026, men),58,0.1566,0.0076904
+Saturating removal (Raz 2026, men),59,0.1556,0.0089895
+Saturating removal (Raz 2026, men),60,0.1546,0.010498
+Saturating removal (Raz 2026, men),61,0.1535,0.012246
+Saturating removal (Raz 2026, men),62,0.1525,0.014271
+Saturating removal (Raz 2026, men),63,0.1513,0.016612
+Saturating removal (Raz 2026, men),64,0.1502,0.019315
+Saturating removal (Raz 2026, men),65,0.1490,0.022432
+Saturating removal (Raz 2026, men),66,0.1478,0.02602
+Saturating removal (Raz 2026, men),67,0.1465,0.030145
+Saturating removal (Raz 2026, men),68,0.1452,0.034878
+Saturating removal (Raz 2026, men),69,0.1438,0.040301
+Saturating removal (Raz 2026, men),70,0.1424,0.046503
+Saturating removal (Raz 2026, men),71,0.1410,0.053584
+Saturating removal (Raz 2026, men),72,0.1395,0.061652
+Saturating removal (Raz 2026, men),73,0.1380,0.07083
+Saturating removal (Raz 2026, men),74,0.1364,0.081249
+Saturating removal (Raz 2026, men),75,0.1348,0.093052
+Saturating removal (Raz 2026, men),76,0.1332,0.1064
+Saturating removal (Raz 2026, men),77,0.1315,0.12145
+Saturating removal (Raz 2026, men),78,0.1298,0.13841
+Saturating removal (Raz 2026, men),79,0.1280,0.15745
+Saturating removal (Raz 2026, men),80,0.1262,0.1788
+Saturating removal (Raz 2026, men),81,0.1244,0.20268
+Saturating removal (Raz 2026, men),82,0.1226,0.22932
+Saturating removal (Raz 2026, men),83,0.1207,0.25898
+Saturating removal (Raz 2026, men),84,0.1188,0.29192
+Saturating removal (Raz 2026, men),85,0.1168,0.32842
+Saturating removal (Raz 2026, men),86,0.1149,0.36876
+Saturating removal (Raz 2026, men),87,0.1129,0.41326
+Saturating removal (Raz 2026, men),88,0.1110,0.46221
+Saturating removal (Raz 2026, men),89,0.1090,0.51594
+Saturating removal (Raz 2026, men),90,0.1070,0.57478
+Saturating removal (Raz 2026, men),91,0.1050,0.63905
+Saturating removal (Raz 2026, men),92,0.1030,0.7091
+Saturating removal (Raz 2026, men),93,0.1010,0.78526
+Saturating removal (Raz 2026, men),94,0.0991,0.86789
+Saturating removal (Raz 2026, men),95,0.0971,0.95732
+Saturating removal (Raz 2026, men),96,0.0952,1.0539
+Saturating removal (Raz 2026, men),97,0.0932,1.158
+Saturating removal (Raz 2026, men),98,0.0913,1.2699
+Saturating removal (Raz 2026, men),99,0.0894,1.3901
+Saturating removal (Raz 2026, men),100,0.0876,1.5187
+Saturating removal (Raz 2026, men),101,0.0858,1.6562
+Saturating removal (Raz 2026, men),102,0.0839,1.8028
+Saturating removal (Raz 2026, men),103,0.0822,1.9589
+Saturating removal (Raz 2026, men),104,0.0804,2.1248
+Saturating removal (Raz 2026, men),105,0.0787,2.3008
+Saturating removal (Raz 2026, men),106,0.0771,2.4872
+Saturating removal (Raz 2026, men),107,0.0754,2.6842
+Saturating removal (Raz 2026, men),108,0.0738,2.8922
+Saturating removal (Raz 2026, men),109,0.0723,3.1113
+Saturating removal (Raz 2026, men),110,0.0715,3.3419
+Saturating removal (Karin 2019),30,0.1317,0.000205
+Saturating removal (Karin 2019),31,0.1316,0.00023387
+Saturating removal (Karin 2019),32,0.1311,0.00026669
+Saturating removal (Karin 2019),33,0.1307,0.000304
+Saturating removal (Karin 2019),34,0.1303,0.00034639
+Saturating removal (Karin 2019),35,0.1299,0.00039451
+Saturating removal (Karin 2019),36,0.1294,0.00044913
+Saturating removal (Karin 2019),37,0.1290,0.00051107
+Saturating removal (Karin 2019),38,0.1285,0.00058129
+Saturating removal (Karin 2019),39,0.1280,0.00066084
+Saturating removal (Karin 2019),40,0.1275,0.00075092
+Saturating removal (Karin 2019),41,0.1270,0.00085284
+Saturating removal (Karin 2019),42,0.1265,0.00096811
+Saturating removal (Karin 2019),43,0.1260,0.0010984
+Saturating removal (Karin 2019),44,0.1254,0.0012455
+Saturating removal (Karin 2019),45,0.1249,0.0014115
+Saturating removal (Karin 2019),46,0.1243,0.0015988
+Saturating removal (Karin 2019),47,0.1237,0.0018098
+Saturating removal (Karin 2019),48,0.1231,0.0020474
+Saturating removal (Karin 2019),49,0.1224,0.0023149
+Saturating removal (Karin 2019),50,0.1218,0.0026155
+Saturating removal (Karin 2019),51,0.1211,0.0029534
+Saturating removal (Karin 2019),52,0.1205,0.0033326
+Saturating removal (Karin 2019),53,0.1197,0.0037579
+Saturating removal (Karin 2019),54,0.1190,0.0042344
+Saturating removal (Karin 2019),55,0.1183,0.0047679
+Saturating removal (Karin 2019),56,0.1175,0.0053647
+Saturating removal (Karin 2019),57,0.1168,0.0060315
+Saturating removal (Karin 2019),58,0.1160,0.0067758
+Saturating removal (Karin 2019),59,0.1152,0.0076059
+Saturating removal (Karin 2019),60,0.1143,0.0085305
+Saturating removal (Karin 2019),61,0.1134,0.0095595
+Saturating removal (Karin 2019),62,0.1126,0.010703
+Saturating removal (Karin 2019),63,0.1117,0.011973
+Saturating removal (Karin 2019),64,0.1107,0.013381
+Saturating removal (Karin 2019),65,0.1098,0.014941
+Saturating removal (Karin 2019),66,0.1088,0.016667
+Saturating removal (Karin 2019),67,0.1078,0.018574
+Saturating removal (Karin 2019),68,0.1068,0.020679
+Saturating removal (Karin 2019),69,0.1058,0.022999
+Saturating removal (Karin 2019),70,0.1047,0.025552
+Saturating removal (Karin 2019),71,0.1037,0.028358
+Saturating removal (Karin 2019),72,0.1026,0.031439
+Saturating removal (Karin 2019),73,0.1015,0.034817
+Saturating removal (Karin 2019),74,0.1004,0.038514
+Saturating removal (Karin 2019),75,0.0992,0.042556
+Saturating removal (Karin 2019),76,0.0981,0.046968
+Saturating removal (Karin 2019),77,0.0969,0.051777
+Saturating removal (Karin 2019),78,0.0957,0.057011
+Saturating removal (Karin 2019),79,0.0945,0.062699
+Saturating removal (Karin 2019),80,0.0933,0.068872
+Saturating removal (Karin 2019),81,0.0921,0.07556
+Saturating removal (Karin 2019),82,0.0908,0.082797
+Saturating removal (Karin 2019),83,0.0896,0.090614
+Saturating removal (Karin 2019),84,0.0884,0.099047
+Saturating removal (Karin 2019),85,0.0871,0.10813
+Saturating removal (Karin 2019),86,0.0859,0.1179
+Saturating removal (Karin 2019),87,0.0846,0.12839
+Saturating removal (Karin 2019),88,0.0833,0.13964
+Saturating removal (Karin 2019),89,0.0821,0.15168
+Saturating removal (Karin 2019),90,0.0809,0.16455
+Saturating removal (Karin 2019),91,0.0796,0.1783
+Saturating removal (Karin 2019),92,0.0784,0.19295
+Saturating removal (Karin 2019),93,0.0771,0.20855
+Saturating removal (Karin 2019),94,0.0759,0.22513
+Saturating removal (Karin 2019),95,0.0747,0.24273
+Saturating removal (Karin 2019),96,0.0735,0.26139
+Saturating removal (Karin 2019),97,0.0723,0.28114
+Saturating removal (Karin 2019),98,0.0711,0.30203
+Saturating removal (Karin 2019),99,0.0699,0.32409
+Saturating removal (Karin 2019),100,0.0687,0.34734
+Saturating removal (Karin 2019),101,0.0676,0.37184
+Saturating removal (Karin 2019),102,0.0664,0.39761
+Saturating removal (Karin 2019),103,0.0653,0.42469
+Saturating removal (Karin 2019),104,0.0642,0.45312
+Saturating removal (Karin 2019),105,0.0631,0.48291
+Saturating removal (Karin 2019),106,0.0621,0.51412
+Saturating removal (Karin 2019),107,0.0610,0.54676
+Saturating removal (Karin 2019),108,0.0600,0.58086
+Saturating removal (Karin 2019),109,0.0590,0.61647
+Saturating removal (Karin 2019),110,0.0585,0.6536
+Linear removal, rising production,30,0.0707,0.002227
+Linear removal, rising production,31,0.0706,0.0023901
+Linear removal, rising production,32,0.0705,0.0025648
+Linear removal, rising production,33,0.0703,0.0027519
+Linear removal, rising production,34,0.0702,0.0029522
+Linear removal, rising production,35,0.0701,0.0031667
+Linear removal, rising production,36,0.0699,0.0033963
+Linear removal, rising production,37,0.0698,0.003642
+Linear removal, rising production,38,0.0696,0.0039049
+Linear removal, rising production,39,0.0695,0.0041861
+Linear removal, rising production,40,0.0693,0.004487
+Linear removal, rising production,41,0.0692,0.0048088
+Linear removal, rising production,42,0.0690,0.0051529
+Linear removal, rising production,43,0.0689,0.0055207
+Linear removal, rising production,44,0.0687,0.005914
+Linear removal, rising production,45,0.0686,0.0063343
+Linear removal, rising production,46,0.0684,0.0067834
+Linear removal, rising production,47,0.0683,0.0072632
+Linear removal, rising production,48,0.0681,0.0077758
+Linear removal, rising production,49,0.0679,0.0083232
+Linear removal, rising production,50,0.0678,0.0089077
+Linear removal, rising production,51,0.0676,0.0095318
+Linear removal, rising production,52,0.0675,0.010198
+Linear removal, rising production,53,0.0673,0.010909
+Linear removal, rising production,54,0.0671,0.011667
+Linear removal, rising production,55,0.0670,0.012476
+Linear removal, rising production,56,0.0668,0.013339
+Linear removal, rising production,57,0.0666,0.01426
+Linear removal, rising production,58,0.0665,0.015241
+Linear removal, rising production,59,0.0663,0.016287
+Linear removal, rising production,60,0.0661,0.017402
+Linear removal, rising production,61,0.0659,0.018589
+Linear removal, rising production,62,0.0658,0.019855
+Linear removal, rising production,63,0.0656,0.021203
+Linear removal, rising production,64,0.0654,0.022638
+Linear removal, rising production,65,0.0652,0.024166
+Linear removal, rising production,66,0.0650,0.025792
+Linear removal, rising production,67,0.0649,0.027523
+Linear removal, rising production,68,0.0647,0.029365
+Linear removal, rising production,69,0.0645,0.031324
+Linear removal, rising production,70,0.0643,0.033408
+Linear removal, rising production,71,0.0641,0.035623
+Linear removal, rising production,72,0.0639,0.037978
+Linear removal, rising production,73,0.0637,0.040482
+Linear removal, rising production,74,0.0635,0.043142
+Linear removal, rising production,75,0.0634,0.045968
+Linear removal, rising production,76,0.0631,0.048969
+Linear removal, rising production,77,0.0630,0.052156
+Linear removal, rising production,78,0.0628,0.05554
+Linear removal, rising production,79,0.0626,0.059131
+Linear removal, rising production,80,0.0624,0.062942
+Linear removal, rising production,81,0.0621,0.066985
+Linear removal, rising production,82,0.0619,0.071273
+Linear removal, rising production,83,0.0617,0.07582
+Linear removal, rising production,84,0.0615,0.080641
+Linear removal, rising production,85,0.0613,0.08575
+Linear removal, rising production,86,0.0611,0.091164
+Linear removal, rising production,87,0.0609,0.0969
+Linear removal, rising production,88,0.0607,0.10297
+Linear removal, rising production,89,0.0605,0.10941
+Linear removal, rising production,90,0.0603,0.11622
+Linear removal, rising production,91,0.0600,0.12342
+Linear removal, rising production,92,0.0598,0.13105
+Linear removal, rising production,93,0.0596,0.13911
+Linear removal, rising production,94,0.0594,0.14764
+Linear removal, rising production,95,0.0592,0.15666
+Linear removal, rising production,96,0.0590,0.16619
+Linear removal, rising production,97,0.0587,0.17627
+Linear removal, rising production,98,0.0585,0.18691
+Linear removal, rising production,99,0.0583,0.19815
+Linear removal, rising production,100,0.0580,0.21001
+Linear removal, rising production,101,0.0578,0.22254
+Linear removal, rising production,102,0.0576,0.23576
+Linear removal, rising production,103,0.0574,0.24971
+Linear removal, rising production,104,0.0571,0.26442
+Linear removal, rising production,105,0.0569,0.27994
+Linear removal, rising production,106,0.0567,0.29629
+Linear removal, rising production,107,0.0564,0.31353
+Linear removal, rising production,108,0.0562,0.33169
+Linear removal, rising production,109,0.0559,0.35081
+Linear removal, rising production,110,0.0558,0.37096
+Series-parallel reliability,30,0.0594,0.0031911
+Series-parallel reliability,31,0.0592,0.0033863
+Series-parallel reliability,32,0.0589,0.0035924
+Series-parallel reliability,33,0.0586,0.0038098
+Series-parallel reliability,34,0.0583,0.004039
+Series-parallel reliability,35,0.0580,0.0042807
+Series-parallel reliability,36,0.0576,0.0045355
+Series-parallel reliability,37,0.0573,0.0048038
+Series-parallel reliability,38,0.0570,0.0050865
+Series-parallel reliability,39,0.0567,0.0053841
+Series-parallel reliability,40,0.0564,0.0056974
+Series-parallel reliability,41,0.0561,0.0060271
+Series-parallel reliability,42,0.0558,0.0063739
+Series-parallel reliability,43,0.0555,0.0067386
+Series-parallel reliability,44,0.0552,0.0071221
+Series-parallel reliability,45,0.0549,0.0075251
+Series-parallel reliability,46,0.0546,0.0079485
+Series-parallel reliability,47,0.0543,0.0083932
+Series-parallel reliability,48,0.0540,0.0088602
+Series-parallel reliability,49,0.0537,0.0093504
+Series-parallel reliability,50,0.0534,0.0098648
+Series-parallel reliability,51,0.0531,0.010405
+Series-parallel reliability,52,0.0528,0.01097
+Series-parallel reliability,53,0.0525,0.011564
+Series-parallel reliability,54,0.0522,0.012186
+Series-parallel reliability,55,0.0520,0.012838
+Series-parallel reliability,56,0.0517,0.013521
+Series-parallel reliability,57,0.0514,0.014236
+Series-parallel reliability,58,0.0511,0.014985
+Series-parallel reliability,59,0.0508,0.015769
+Series-parallel reliability,60,0.0506,0.016589
+Series-parallel reliability,61,0.0503,0.017447
+Series-parallel reliability,62,0.0500,0.018344
+Series-parallel reliability,63,0.0497,0.019282
+Series-parallel reliability,64,0.0495,0.020262
+Series-parallel reliability,65,0.0492,0.021287
+Series-parallel reliability,66,0.0489,0.022357
+Series-parallel reliability,67,0.0486,0.023475
+Series-parallel reliability,68,0.0484,0.024642
+Series-parallel reliability,69,0.0481,0.02586
+Series-parallel reliability,70,0.0478,0.027131
+Series-parallel reliability,71,0.0476,0.028457
+Series-parallel reliability,72,0.0473,0.02984
+Series-parallel reliability,73,0.0471,0.031282
+Series-parallel reliability,74,0.0468,0.032786
+Series-parallel reliability,75,0.0466,0.034352
+Series-parallel reliability,76,0.0463,0.035985
+Series-parallel reliability,77,0.0460,0.037685
+Series-parallel reliability,78,0.0458,0.039455
+Series-parallel reliability,79,0.0455,0.041298
+Series-parallel reliability,80,0.0453,0.043216
+Series-parallel reliability,81,0.0450,0.045212
+Series-parallel reliability,82,0.0448,0.047289
+Series-parallel reliability,83,0.0445,0.049448
+Series-parallel reliability,84,0.0443,0.051693
+Series-parallel reliability,85,0.0440,0.054027
+Series-parallel reliability,86,0.0438,0.056452
+Series-parallel reliability,87,0.0435,0.058972
+Series-parallel reliability,88,0.0433,0.06159
+Series-parallel reliability,89,0.0431,0.064308
+Series-parallel reliability,90,0.0428,0.067129
+Series-parallel reliability,91,0.0426,0.070058
+Series-parallel reliability,92,0.0423,0.073098
+Series-parallel reliability,93,0.0421,0.076251
+Series-parallel reliability,94,0.0419,0.079521
+Series-parallel reliability,95,0.0416,0.082913
+Series-parallel reliability,96,0.0414,0.086429
+Series-parallel reliability,97,0.0412,0.090072
+Series-parallel reliability,98,0.0410,0.093849
+Series-parallel reliability,99,0.0407,0.09776
+Series-parallel reliability,100,0.0405,0.10181
+Series-parallel reliability,101,0.0403,0.10601
+Series-parallel reliability,102,0.0400,0.11035
+Series-parallel reliability,103,0.0398,0.11485
+Series-parallel reliability,104,0.0396,0.1195
+Series-parallel reliability,105,0.0394,0.12431
+Series-parallel reliability,106,0.0391,0.12929
+Series-parallel reliability,107,0.0389,0.13444
+Series-parallel reliability,108,0.0387,0.13976
+Series-parallel reliability,109,0.0385,0.14526
+Series-parallel reliability,110,0.0384,0.15094
