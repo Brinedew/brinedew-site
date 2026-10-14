@@ -1,0 +1,11 @@
+order,label,whole,post,n,lab
+1,"INK-ATTAC, mixed background (Baker 2016)",27,,59,originating
+2,"INK-ATTAC, C57BL/6 (Baker 2016)",24,,51,originating
+3,"p21-high cell removal (Wang 2024)",9,27,88,originating
+4,"Dasatinib + quercetin (Xu 2018)",6.3,36,71,originating
+5,"Procyanidin C1 (Xu 2021)",9.4,64.2,91,originating
+6,"Fisetin (Yousefzadeh 2018)",11,,9,originating
+7,"Fisetin, intermittent, males (ITP)",7,,150,independent
+8,"Fisetin, intermittent, females (ITP)",-1,,134,independent
+9,"Fisetin, continuous, males (ITP)",-5,,142,independent
+10,"Fisetin, continuous, females (ITP)",1,,144,independent
