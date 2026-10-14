@@ -563,6 +563,8 @@ Presence of genetically different cells within the same person due to mutations 
 **Stem cell niche**
 Specialized tissue microenvironment, such as the base of intestinal crypts, that maintains stemness and allows stem cells to undergo proliferation and differentiation.
 
+**[[strehler-mildvan-theory|Strehler–Mildvan correlation]]**
+The tendency of populations with higher early-adult mortality to have a slower exponential rise in mortality with age, so that their mortality curves converge at old ages. Also called the compensation effect of mortality. The convergence is real in human data, but its age is not constant.
 
 ## T
 

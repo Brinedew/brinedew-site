@@ -1,0 +1,22 @@
+group,label,age,se,order
+Strehler and Mildvan's data,"32 countries, about 1950",68.5,,1
+Across populations (Gavrilovs),"rich countries, 1925",73.08,7.22,2
+Across populations (Gavrilovs),"rich countries, 1955",81.02,2.47,3
+Across populations (Gavrilovs),"rich countries, 1985",81.31,2.82,4
+Across populations (Gavrilovs),"rich countries, 2010",90.40,2.53,5
+Across populations (Gavrilovs),"all years, ages 60-85, men",92.13,0.21,6
+Across populations (Gavrilovs),"all years, ages 60-85, women",97.17,0.17,7
+Across regions (Gavrilovs),"Europe, N America, Oceania",96.22,0.34,8
+Across regions (Gavrilovs),"East and Southeast Asia",98.86,1.06,9
+Across regions (Gavrilovs),"Latin America",87.64,0.86,10
+Across regions (Gavrilovs),"Sub-Saharan Africa",84.05,0.67,11
+Across regions (Gavrilovs),"N Africa and W Asia",83.51,0.98,12
+Across regions (Gavrilovs),"Central and South Asia",82.10,1.17,13
+Over time in one country,"US men, 1900-1986",87.41,,14
+Over time in one country,"US women, 1900-1986",108.69,,15
+Over time in one country,"Sweden, 1751-1949",94.3,,16
+Over time in one country,"Sweden, 1985-2023",125.9,,17
+Over time in one country,"France, 1816-1949",82.1,,18
+Over time in one country,"France, 1985-2021",148.6,,19
+Over time in one country,"Netherlands, 1850-1949",92.2,,20
+Over time in one country,"Netherlands, 1985-2021",128.8,,21
