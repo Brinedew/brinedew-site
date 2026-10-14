@@ -146,6 +146,9 @@ Gene editing method that uses a guide RNA (gRNA) to target the Cas9 enzyme t
 **CRISPR screens**
 Large assays that switch genes off or on across many cells via CRISPR to find which genes matter for a chosen trait.
 
+**[[critical-point-model-of-ageing|Critical-point model of ageing]]**
+A model in which ageing is a progressive loss of the ability to recover from perturbations, ending at a critical point where recovery stops. It underlies the claim of a 120–150-year limit to human lifespan, which rests on extrapolating a few age-group averages.
+
 **Crowding pressure**
 Mechanical or spatial constraints that cells experience in a densely packed tissue.
 
