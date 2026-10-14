@@ -1019,7 +1019,9 @@ Strehler and Mildvan proposed that each organism has a "vitality", its capacity 
 
 ### Reliability theory
 
-Leonid and Natalia Gavrilov modelled organisms as systems built from many redundant components that do not themselves age.[^gavrilov2001] Such a system fails more often as its redundant parts are used up. If the system starts life already carrying many defects, as organisms built by development rather than assembly do, its failure rate rises exponentially, following the Gompertz law. A system built nearly free of initial defects, as engineered devices are, fails according to the Weibull law instead. The same theory predicts that the rise must slow and level off once redundancy is exhausted, and that mortality curves of different populations converge with age.[^gavrilov2001]
+*Main article: [[reliability-theory-of-ageing|Reliability theory of ageing]]*
+
+Leonid and Natalia Gavrilov modelled organisms as systems built from many redundant components that do not themselves age.[^gavrilov2001] Such a system fails more often as its redundant parts are used up. They argued that a system starting life with many defects, as organisms built by development do, fails according to the Gompertz law, while one built nearly free of defects, as engineered devices are, fails according to the Weibull law, and that the rise must level off once redundancy is exhausted.[^gavrilov2001] The derivation of the Gompertz law relied on an approximation used outside its range; computed exactly, the model's mortality rate rises with an exponential slope that falls at every age, whereas in human cohorts the slope rises between ages 60 and 90.[^steinsaltz2004]
 
 ### Heterogeneity and selection
 
@@ -1355,6 +1357,8 @@ Figures 1 to 8 were drawn for this article from the Social Security Administrati
 [^wilmoth2000]: Wilmoth JR (2000). "Demography of longevity: past, present, and future trends". *Experimental Gerontology*. 35 (9–10): 1111–1129. [doi:10.1016/S0531-5565(00)00194-7](https://doi.org/10.1016/S0531-5565(00)00194-7)
 
 [^gavrilov2001]: Gavrilov LA, Gavrilova NS (2001). "The reliability theory of aging and longevity". *Journal of Theoretical Biology*. 213 (4): 527–545. [doi:10.1006/jtbi.2001.2430](https://doi.org/10.1006/jtbi.2001.2430)
+
+[^steinsaltz2004]: Steinsaltz D, Evans SN (2004). "Markov mortality models: implications of quasistationarity and varying initial distributions". *Theoretical Population Biology*. 65 (4): 319–337. [doi:10.1016/j.tpb.2003.10.007](https://doi.org/10.1016/j.tpb.2003.10.007)
 
 [^ricklefs2002]: Ricklefs RE, Scheuerlein A (2002). "Biological implications of the Weibull and Gompertz models of aging". *The Journals of Gerontology Series A*. 57 (2): B69–B76. [doi:10.1093/gerona/57.2.B69](https://doi.org/10.1093/gerona/57.2.B69)
 
