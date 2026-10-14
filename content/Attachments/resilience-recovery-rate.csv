@@ -1,0 +1,1283 @@
+signal,kind,form,age,rate
+blood counts,data,,45.1,0.3580
+blood counts,data,,54.8,0.3840
+blood counts,data,,64.8,0.2870
+blood counts,data,,74.9,0.2430
+blood counts,data,,85,0.1880
+blood counts,fit,square root,20,0.4630
+blood counts,fit,square root,21,0.4600
+blood counts,fit,square root,22,0.4570
+blood counts,fit,square root,23,0.4540
+blood counts,fit,square root,24,0.4509
+blood counts,fit,square root,25,0.4478
+blood counts,fit,square root,26,0.4447
+blood counts,fit,square root,27,0.4416
+blood counts,fit,square root,28,0.4385
+blood counts,fit,square root,29,0.4353
+blood counts,fit,square root,30,0.4321
+blood counts,fit,square root,31,0.4289
+blood counts,fit,square root,32,0.4256
+blood counts,fit,square root,33,0.4224
+blood counts,fit,square root,34,0.4191
+blood counts,fit,square root,35,0.4158
+blood counts,fit,square root,36,0.4124
+blood counts,fit,square root,37,0.4090
+blood counts,fit,square root,38,0.4056
+blood counts,fit,square root,39,0.4022
+blood counts,fit,square root,40,0.3988
+blood counts,fit,square root,41,0.3953
+blood counts,fit,square root,42,0.3918
+blood counts,fit,square root,43,0.3882
+blood counts,fit,square root,44,0.3846
+blood counts,fit,square root,45,0.3810
+blood counts,fit,square root,46,0.3774
+blood counts,fit,square root,47,0.3737
+blood counts,fit,square root,48,0.3699
+blood counts,fit,square root,49,0.3662
+blood counts,fit,square root,50,0.3624
+blood counts,fit,square root,51,0.3585
+blood counts,fit,square root,52,0.3547
+blood counts,fit,square root,53,0.3507
+blood counts,fit,square root,54,0.3468
+blood counts,fit,square root,55,0.3427
+blood counts,fit,square root,56,0.3387
+blood counts,fit,square root,57,0.3346
+blood counts,fit,square root,58,0.3304
+blood counts,fit,square root,59,0.3262
+blood counts,fit,square root,60,0.3219
+blood counts,fit,square root,61,0.3176
+blood counts,fit,square root,62,0.3132
+blood counts,fit,square root,63,0.3087
+blood counts,fit,square root,64,0.3042
+blood counts,fit,square root,65,0.2996
+blood counts,fit,square root,66,0.2950
+blood counts,fit,square root,67,0.2902
+blood counts,fit,square root,68,0.2854
+blood counts,fit,square root,69,0.2805
+blood counts,fit,square root,70,0.2756
+blood counts,fit,square root,71,0.2705
+blood counts,fit,square root,72,0.2653
+blood counts,fit,square root,73,0.2600
+blood counts,fit,square root,74,0.2547
+blood counts,fit,square root,75,0.2492
+blood counts,fit,square root,76,0.2435
+blood counts,fit,square root,77,0.2378
+blood counts,fit,square root,78,0.2319
+blood counts,fit,square root,79,0.2258
+blood counts,fit,square root,80,0.2196
+blood counts,fit,square root,81,0.2132
+blood counts,fit,square root,82,0.2066
+blood counts,fit,square root,83,0.1998
+blood counts,fit,square root,84,0.1928
+blood counts,fit,square root,85,0.1855
+blood counts,fit,square root,86,0.1778
+blood counts,fit,square root,87,0.1699
+blood counts,fit,square root,88,0.1615
+blood counts,fit,square root,89,0.1527
+blood counts,fit,square root,90,0.1433
+blood counts,fit,square root,91,0.1333
+blood counts,fit,square root,92,0.1225
+blood counts,fit,square root,93,0.1106
+blood counts,fit,square root,94,0.0973
+blood counts,fit,square root,95,0.0818
+blood counts,fit,square root,96,0.0627
+blood counts,fit,square root,97,0.0341
+blood counts,fit,straight line,20,0.5087
+blood counts,fit,straight line,21,0.5039
+blood counts,fit,straight line,22,0.4991
+blood counts,fit,straight line,23,0.4943
+blood counts,fit,straight line,24,0.4894
+blood counts,fit,straight line,25,0.4846
+blood counts,fit,straight line,26,0.4798
+blood counts,fit,straight line,27,0.4750
+blood counts,fit,straight line,28,0.4701
+blood counts,fit,straight line,29,0.4653
+blood counts,fit,straight line,30,0.4605
+blood counts,fit,straight line,31,0.4557
+blood counts,fit,straight line,32,0.4508
+blood counts,fit,straight line,33,0.4460
+blood counts,fit,straight line,34,0.4412
+blood counts,fit,straight line,35,0.4364
+blood counts,fit,straight line,36,0.4315
+blood counts,fit,straight line,37,0.4267
+blood counts,fit,straight line,38,0.4219
+blood counts,fit,straight line,39,0.4171
+blood counts,fit,straight line,40,0.4122
+blood counts,fit,straight line,41,0.4074
+blood counts,fit,straight line,42,0.4026
+blood counts,fit,straight line,43,0.3978
+blood counts,fit,straight line,44,0.3929
+blood counts,fit,straight line,45,0.3881
+blood counts,fit,straight line,46,0.3833
+blood counts,fit,straight line,47,0.3785
+blood counts,fit,straight line,48,0.3736
+blood counts,fit,straight line,49,0.3688
+blood counts,fit,straight line,50,0.3640
+blood counts,fit,straight line,51,0.3592
+blood counts,fit,straight line,52,0.3543
+blood counts,fit,straight line,53,0.3495
+blood counts,fit,straight line,54,0.3447
+blood counts,fit,straight line,55,0.3399
+blood counts,fit,straight line,56,0.3350
+blood counts,fit,straight line,57,0.3302
+blood counts,fit,straight line,58,0.3254
+blood counts,fit,straight line,59,0.3206
+blood counts,fit,straight line,60,0.3157
+blood counts,fit,straight line,61,0.3109
+blood counts,fit,straight line,62,0.3061
+blood counts,fit,straight line,63,0.3013
+blood counts,fit,straight line,64,0.2964
+blood counts,fit,straight line,65,0.2916
+blood counts,fit,straight line,66,0.2868
+blood counts,fit,straight line,67,0.2820
+blood counts,fit,straight line,68,0.2771
+blood counts,fit,straight line,69,0.2723
+blood counts,fit,straight line,70,0.2675
+blood counts,fit,straight line,71,0.2627
+blood counts,fit,straight line,72,0.2578
+blood counts,fit,straight line,73,0.2530
+blood counts,fit,straight line,74,0.2482
+blood counts,fit,straight line,75,0.2434
+blood counts,fit,straight line,76,0.2385
+blood counts,fit,straight line,77,0.2337
+blood counts,fit,straight line,78,0.2289
+blood counts,fit,straight line,79,0.2241
+blood counts,fit,straight line,80,0.2192
+blood counts,fit,straight line,81,0.2144
+blood counts,fit,straight line,82,0.2096
+blood counts,fit,straight line,83,0.2048
+blood counts,fit,straight line,84,0.1999
+blood counts,fit,straight line,85,0.1951
+blood counts,fit,straight line,86,0.1903
+blood counts,fit,straight line,87,0.1855
+blood counts,fit,straight line,88,0.1806
+blood counts,fit,straight line,89,0.1758
+blood counts,fit,straight line,90,0.1710
+blood counts,fit,straight line,91,0.1662
+blood counts,fit,straight line,92,0.1613
+blood counts,fit,straight line,93,0.1565
+blood counts,fit,straight line,94,0.1517
+blood counts,fit,straight line,95,0.1469
+blood counts,fit,straight line,96,0.1420
+blood counts,fit,straight line,97,0.1372
+blood counts,fit,straight line,98,0.1324
+blood counts,fit,straight line,99,0.1276
+blood counts,fit,straight line,100,0.1227
+blood counts,fit,straight line,101,0.1179
+blood counts,fit,straight line,102,0.1131
+blood counts,fit,straight line,103,0.1083
+blood counts,fit,straight line,104,0.1034
+blood counts,fit,straight line,105,0.0986
+blood counts,fit,straight line,106,0.0938
+blood counts,fit,straight line,107,0.0890
+blood counts,fit,straight line,108,0.0841
+blood counts,fit,straight line,109,0.0793
+blood counts,fit,straight line,110,0.0745
+blood counts,fit,straight line,111,0.0697
+blood counts,fit,straight line,112,0.0648
+blood counts,fit,straight line,113,0.0600
+blood counts,fit,straight line,114,0.0552
+blood counts,fit,straight line,115,0.0504
+blood counts,fit,straight line,116,0.0455
+blood counts,fit,straight line,117,0.0407
+blood counts,fit,straight line,118,0.0359
+blood counts,fit,straight line,119,0.0311
+blood counts,fit,straight line,120,0.0262
+blood counts,fit,straight line,121,0.0214
+blood counts,fit,straight line,122,0.0166
+blood counts,fit,straight line,123,0.0118
+blood counts,fit,straight line,124,0.0069
+blood counts,fit,straight line,125,0.0021
+blood counts,fit,square,20,0.5395
+blood counts,fit,square,21,0.5331
+blood counts,fit,square,22,0.5267
+blood counts,fit,square,23,0.5203
+blood counts,fit,square,24,0.5140
+blood counts,fit,square,25,0.5077
+blood counts,fit,square,26,0.5015
+blood counts,fit,square,27,0.4952
+blood counts,fit,square,28,0.4891
+blood counts,fit,square,29,0.4829
+blood counts,fit,square,30,0.4768
+blood counts,fit,square,31,0.4708
+blood counts,fit,square,32,0.4648
+blood counts,fit,square,33,0.4588
+blood counts,fit,square,34,0.4529
+blood counts,fit,square,35,0.4470
+blood counts,fit,square,36,0.4411
+blood counts,fit,square,37,0.4353
+blood counts,fit,square,38,0.4295
+blood counts,fit,square,39,0.4237
+blood counts,fit,square,40,0.4180
+blood counts,fit,square,41,0.4124
+blood counts,fit,square,42,0.4067
+blood counts,fit,square,43,0.4011
+blood counts,fit,square,44,0.3956
+blood counts,fit,square,45,0.3901
+blood counts,fit,square,46,0.3846
+blood counts,fit,square,47,0.3792
+blood counts,fit,square,48,0.3738
+blood counts,fit,square,49,0.3684
+blood counts,fit,square,50,0.3631
+blood counts,fit,square,51,0.3578
+blood counts,fit,square,52,0.3526
+blood counts,fit,square,53,0.3474
+blood counts,fit,square,54,0.3422
+blood counts,fit,square,55,0.3371
+blood counts,fit,square,56,0.3320
+blood counts,fit,square,57,0.3269
+blood counts,fit,square,58,0.3219
+blood counts,fit,square,59,0.3170
+blood counts,fit,square,60,0.3120
+blood counts,fit,square,61,0.3071
+blood counts,fit,square,62,0.3023
+blood counts,fit,square,63,0.2975
+blood counts,fit,square,64,0.2927
+blood counts,fit,square,65,0.2879
+blood counts,fit,square,66,0.2832
+blood counts,fit,square,67,0.2786
+blood counts,fit,square,68,0.2739
+blood counts,fit,square,69,0.2694
+blood counts,fit,square,70,0.2648
+blood counts,fit,square,71,0.2603
+blood counts,fit,square,72,0.2558
+blood counts,fit,square,73,0.2514
+blood counts,fit,square,74,0.2470
+blood counts,fit,square,75,0.2427
+blood counts,fit,square,76,0.2384
+blood counts,fit,square,77,0.2341
+blood counts,fit,square,78,0.2298
+blood counts,fit,square,79,0.2256
+blood counts,fit,square,80,0.2215
+blood counts,fit,square,81,0.2174
+blood counts,fit,square,82,0.2133
+blood counts,fit,square,83,0.2092
+blood counts,fit,square,84,0.2052
+blood counts,fit,square,85,0.2013
+blood counts,fit,square,86,0.1973
+blood counts,fit,square,87,0.1935
+blood counts,fit,square,88,0.1896
+blood counts,fit,square,89,0.1858
+blood counts,fit,square,90,0.1820
+blood counts,fit,square,91,0.1783
+blood counts,fit,square,92,0.1746
+blood counts,fit,square,93,0.1709
+blood counts,fit,square,94,0.1673
+blood counts,fit,square,95,0.1637
+blood counts,fit,square,96,0.1602
+blood counts,fit,square,97,0.1567
+blood counts,fit,square,98,0.1532
+blood counts,fit,square,99,0.1498
+blood counts,fit,square,100,0.1464
+blood counts,fit,square,101,0.1431
+blood counts,fit,square,102,0.1398
+blood counts,fit,square,103,0.1365
+blood counts,fit,square,104,0.1333
+blood counts,fit,square,105,0.1301
+blood counts,fit,square,106,0.1269
+blood counts,fit,square,107,0.1238
+blood counts,fit,square,108,0.1207
+blood counts,fit,square,109,0.1177
+blood counts,fit,square,110,0.1147
+blood counts,fit,square,111,0.1117
+blood counts,fit,square,112,0.1088
+blood counts,fit,square,113,0.1059
+blood counts,fit,square,114,0.1031
+blood counts,fit,square,115,0.1003
+blood counts,fit,square,116,0.0975
+blood counts,fit,square,117,0.0948
+blood counts,fit,square,118,0.0921
+blood counts,fit,square,119,0.0895
+blood counts,fit,square,120,0.0868
+blood counts,fit,square,121,0.0843
+blood counts,fit,square,122,0.0817
+blood counts,fit,square,123,0.0792
+blood counts,fit,square,124,0.0768
+blood counts,fit,square,125,0.0744
+blood counts,fit,square,126,0.0720
+blood counts,fit,square,127,0.0696
+blood counts,fit,square,128,0.0673
+blood counts,fit,square,129,0.0651
+blood counts,fit,square,130,0.0629
+blood counts,fit,square,131,0.0607
+blood counts,fit,square,132,0.0585
+blood counts,fit,square,133,0.0564
+blood counts,fit,square,134,0.0543
+blood counts,fit,square,135,0.0523
+blood counts,fit,square,136,0.0503
+blood counts,fit,square,137,0.0484
+blood counts,fit,square,138,0.0464
+blood counts,fit,square,139,0.0446
+blood counts,fit,square,140,0.0427
+blood counts,fit,square,141,0.0409
+blood counts,fit,square,142,0.0392
+blood counts,fit,square,143,0.0375
+blood counts,fit,square,144,0.0358
+blood counts,fit,square,145,0.0341
+blood counts,fit,square,146,0.0325
+blood counts,fit,square,147,0.0310
+blood counts,fit,square,148,0.0294
+blood counts,fit,square,149,0.0279
+blood counts,fit,square,150,0.0265
+blood counts,fit,square,151,0.0251
+blood counts,fit,square,152,0.0237
+blood counts,fit,square,153,0.0224
+blood counts,fit,square,154,0.0211
+blood counts,fit,square,155,0.0198
+blood counts,fit,square,156,0.0186
+blood counts,fit,square,157,0.0174
+blood counts,fit,square,158,0.0163
+blood counts,fit,square,159,0.0152
+blood counts,fit,square,160,0.0141
+blood counts,fit,square,161,0.0131
+blood counts,fit,square,162,0.0121
+blood counts,fit,square,163,0.0111
+blood counts,fit,square,164,0.0102
+blood counts,fit,square,165,0.0094
+blood counts,fit,square,166,0.0085
+blood counts,fit,square,167,0.0077
+blood counts,fit,square,168,0.0070
+blood counts,fit,square,169,0.0063
+blood counts,fit,square,170,0.0056
+blood counts,fit,square,171,0.0050
+blood counts,fit,square,172,0.0044
+blood counts,fit,square,173,0.0038
+blood counts,fit,square,174,0.0033
+blood counts,fit,square,175,0.0028
+blood counts,fit,square,176,0.0023
+blood counts,fit,square,177,0.0019
+blood counts,fit,square,178,0.0016
+blood counts,fit,square,179,0.0012
+blood counts,fit,square,180,0.0009
+blood counts,fit,square,181,0.0007
+blood counts,fit,square,182,0.0005
+blood counts,fit,square,183,0.0003
+blood counts,fit,square,184,0.0002
+blood counts,fit,square,185,0.0001
+blood counts,fit,square,186,0.0000
+blood counts,fit,exponential,20,0.5806
+blood counts,fit,exponential,21,0.5715
+blood counts,fit,exponential,22,0.5625
+blood counts,fit,exponential,23,0.5537
+blood counts,fit,exponential,24,0.5450
+blood counts,fit,exponential,25,0.5364
+blood counts,fit,exponential,26,0.5280
+blood counts,fit,exponential,27,0.5197
+blood counts,fit,exponential,28,0.5116
+blood counts,fit,exponential,29,0.5035
+blood counts,fit,exponential,30,0.4956
+blood counts,fit,exponential,31,0.4879
+blood counts,fit,exponential,32,0.4802
+blood counts,fit,exponential,33,0.4727
+blood counts,fit,exponential,34,0.4652
+blood counts,fit,exponential,35,0.4579
+blood counts,fit,exponential,36,0.4508
+blood counts,fit,exponential,37,0.4437
+blood counts,fit,exponential,38,0.4367
+blood counts,fit,exponential,39,0.4299
+blood counts,fit,exponential,40,0.4231
+blood counts,fit,exponential,41,0.4165
+blood counts,fit,exponential,42,0.4099
+blood counts,fit,exponential,43,0.4035
+blood counts,fit,exponential,44,0.3972
+blood counts,fit,exponential,45,0.3909
+blood counts,fit,exponential,46,0.3848
+blood counts,fit,exponential,47,0.3788
+blood counts,fit,exponential,48,0.3728
+blood counts,fit,exponential,49,0.3670
+blood counts,fit,exponential,50,0.3612
+blood counts,fit,exponential,51,0.3555
+blood counts,fit,exponential,52,0.3499
+blood counts,fit,exponential,53,0.3445
+blood counts,fit,exponential,54,0.3390
+blood counts,fit,exponential,55,0.3337
+blood counts,fit,exponential,56,0.3285
+blood counts,fit,exponential,57,0.3233
+blood counts,fit,exponential,58,0.3183
+blood counts,fit,exponential,59,0.3133
+blood counts,fit,exponential,60,0.3083
+blood counts,fit,exponential,61,0.3035
+blood counts,fit,exponential,62,0.2987
+blood counts,fit,exponential,63,0.2940
+blood counts,fit,exponential,64,0.2894
+blood counts,fit,exponential,65,0.2849
+blood counts,fit,exponential,66,0.2804
+blood counts,fit,exponential,67,0.2760
+blood counts,fit,exponential,68,0.2717
+blood counts,fit,exponential,69,0.2674
+blood counts,fit,exponential,70,0.2632
+blood counts,fit,exponential,71,0.2591
+blood counts,fit,exponential,72,0.2550
+blood counts,fit,exponential,73,0.2510
+blood counts,fit,exponential,74,0.2471
+blood counts,fit,exponential,75,0.2432
+blood counts,fit,exponential,76,0.2394
+blood counts,fit,exponential,77,0.2356
+blood counts,fit,exponential,78,0.2319
+blood counts,fit,exponential,79,0.2283
+blood counts,fit,exponential,80,0.2247
+blood counts,fit,exponential,81,0.2212
+blood counts,fit,exponential,82,0.2177
+blood counts,fit,exponential,83,0.2143
+blood counts,fit,exponential,84,0.2109
+blood counts,fit,exponential,85,0.2076
+blood counts,fit,exponential,86,0.2043
+blood counts,fit,exponential,87,0.2011
+blood counts,fit,exponential,88,0.1980
+blood counts,fit,exponential,89,0.1949
+blood counts,fit,exponential,90,0.1918
+blood counts,fit,exponential,91,0.1888
+blood counts,fit,exponential,92,0.1858
+blood counts,fit,exponential,93,0.1829
+blood counts,fit,exponential,94,0.1801
+blood counts,fit,exponential,95,0.1772
+blood counts,fit,exponential,96,0.1744
+blood counts,fit,exponential,97,0.1717
+blood counts,fit,exponential,98,0.1690
+blood counts,fit,exponential,99,0.1664
+blood counts,fit,exponential,100,0.1637
+blood counts,fit,exponential,101,0.1612
+blood counts,fit,exponential,102,0.1586
+blood counts,fit,exponential,103,0.1562
+blood counts,fit,exponential,104,0.1537
+blood counts,fit,exponential,105,0.1513
+blood counts,fit,exponential,106,0.1489
+blood counts,fit,exponential,107,0.1466
+blood counts,fit,exponential,108,0.1443
+blood counts,fit,exponential,109,0.1420
+blood counts,fit,exponential,110,0.1398
+blood counts,fit,exponential,111,0.1376
+blood counts,fit,exponential,112,0.1354
+blood counts,fit,exponential,113,0.1333
+blood counts,fit,exponential,114,0.1312
+blood counts,fit,exponential,115,0.1292
+blood counts,fit,exponential,116,0.1271
+blood counts,fit,exponential,117,0.1251
+blood counts,fit,exponential,118,0.1232
+blood counts,fit,exponential,119,0.1212
+blood counts,fit,exponential,120,0.1193
+blood counts,fit,exponential,121,0.1175
+blood counts,fit,exponential,122,0.1156
+blood counts,fit,exponential,123,0.1138
+blood counts,fit,exponential,124,0.1120
+blood counts,fit,exponential,125,0.1103
+blood counts,fit,exponential,126,0.1085
+blood counts,fit,exponential,127,0.1068
+blood counts,fit,exponential,128,0.1051
+blood counts,fit,exponential,129,0.1035
+blood counts,fit,exponential,130,0.1019
+blood counts,fit,exponential,131,0.1003
+blood counts,fit,exponential,132,0.0987
+blood counts,fit,exponential,133,0.0971
+blood counts,fit,exponential,134,0.0956
+blood counts,fit,exponential,135,0.0941
+blood counts,fit,exponential,136,0.0926
+blood counts,fit,exponential,137,0.0912
+blood counts,fit,exponential,138,0.0898
+blood counts,fit,exponential,139,0.0883
+blood counts,fit,exponential,140,0.0870
+blood counts,fit,exponential,141,0.0856
+blood counts,fit,exponential,142,0.0843
+blood counts,fit,exponential,143,0.0829
+blood counts,fit,exponential,144,0.0816
+blood counts,fit,exponential,145,0.0803
+blood counts,fit,exponential,146,0.0791
+blood counts,fit,exponential,147,0.0778
+blood counts,fit,exponential,148,0.0766
+blood counts,fit,exponential,149,0.0754
+blood counts,fit,exponential,150,0.0742
+blood counts,fit,exponential,151,0.0731
+blood counts,fit,exponential,152,0.0719
+blood counts,fit,exponential,153,0.0708
+blood counts,fit,exponential,154,0.0697
+blood counts,fit,exponential,155,0.0686
+blood counts,fit,exponential,156,0.0675
+blood counts,fit,exponential,157,0.0665
+blood counts,fit,exponential,158,0.0654
+blood counts,fit,exponential,159,0.0644
+blood counts,fit,exponential,160,0.0634
+blood counts,fit,exponential,161,0.0624
+blood counts,fit,exponential,162,0.0614
+blood counts,fit,exponential,163,0.0604
+blood counts,fit,exponential,164,0.0595
+blood counts,fit,exponential,165,0.0586
+blood counts,fit,exponential,166,0.0576
+blood counts,fit,exponential,167,0.0567
+blood counts,fit,exponential,168,0.0558
+blood counts,fit,exponential,169,0.0550
+blood counts,fit,exponential,170,0.0541
+blood counts,fit,exponential,171,0.0532
+blood counts,fit,exponential,172,0.0524
+blood counts,fit,exponential,173,0.0516
+blood counts,fit,exponential,174,0.0508
+blood counts,fit,exponential,175,0.0500
+blood counts,fit,exponential,176,0.0492
+blood counts,fit,exponential,177,0.0484
+blood counts,fit,exponential,178,0.0477
+blood counts,fit,exponential,179,0.0469
+blood counts,fit,exponential,180,0.0462
+blood counts,fit,exponential,181,0.0455
+blood counts,fit,exponential,182,0.0447
+blood counts,fit,exponential,183,0.0440
+blood counts,fit,exponential,184,0.0433
+blood counts,fit,exponential,185,0.0427
+blood counts,fit,exponential,186,0.0420
+blood counts,fit,exponential,187,0.0413
+blood counts,fit,exponential,188,0.0407
+blood counts,fit,exponential,189,0.0401
+blood counts,fit,exponential,190,0.0394
+blood counts,fit,exponential,191,0.0388
+blood counts,fit,exponential,192,0.0382
+blood counts,fit,exponential,193,0.0376
+blood counts,fit,exponential,194,0.0370
+blood counts,fit,exponential,195,0.0364
+blood counts,fit,exponential,196,0.0359
+blood counts,fit,exponential,197,0.0353
+blood counts,fit,exponential,198,0.0347
+blood counts,fit,exponential,199,0.0342
+blood counts,fit,exponential,200,0.0337
+blood counts,fit,exponential,201,0.0331
+blood counts,fit,exponential,202,0.0326
+blood counts,fit,exponential,203,0.0321
+blood counts,fit,exponential,204,0.0316
+blood counts,fit,exponential,205,0.0311
+blood counts,fit,exponential,206,0.0306
+blood counts,fit,exponential,207,0.0301
+blood counts,fit,exponential,208,0.0297
+blood counts,fit,exponential,209,0.0292
+blood counts,fit,exponential,210,0.0287
+blood counts,fit,exponential,211,0.0283
+blood counts,fit,exponential,212,0.0278
+blood counts,fit,exponential,213,0.0274
+blood counts,fit,exponential,214,0.0270
+blood counts,fit,exponential,215,0.0265
+blood counts,fit,exponential,216,0.0261
+blood counts,fit,exponential,217,0.0257
+blood counts,fit,exponential,218,0.0253
+blood counts,fit,exponential,219,0.0249
+blood counts,fit,exponential,220,0.0245
+blood counts,fit,exponential,221,0.0241
+blood counts,fit,exponential,222,0.0238
+blood counts,fit,exponential,223,0.0234
+blood counts,fit,exponential,224,0.0230
+blood counts,fit,exponential,225,0.0227
+blood counts,fit,exponential,226,0.0223
+blood counts,fit,exponential,227,0.0220
+blood counts,fit,exponential,228,0.0216
+blood counts,fit,exponential,229,0.0213
+blood counts,fit,exponential,230,0.0209
+blood counts,fit,exponential,231,0.0206
+blood counts,fit,exponential,232,0.0203
+blood counts,fit,exponential,233,0.0200
+blood counts,fit,exponential,234,0.0197
+blood counts,fit,exponential,235,0.0193
+blood counts,fit,exponential,236,0.0190
+blood counts,fit,exponential,237,0.0187
+blood counts,fit,exponential,238,0.0184
+blood counts,fit,exponential,239,0.0182
+blood counts,fit,exponential,240,0.0179
+blood counts,fit,exponential,241,0.0176
+blood counts,fit,exponential,242,0.0173
+blood counts,fit,exponential,243,0.0170
+blood counts,fit,exponential,244,0.0168
+blood counts,fit,exponential,245,0.0165
+blood counts,fit,exponential,246,0.0163
+blood counts,fit,exponential,247,0.0160
+blood counts,fit,exponential,248,0.0157
+blood counts,fit,exponential,249,0.0155
+blood counts,fit,exponential,250,0.0153
+blood counts,fit,exponential,251,0.0150
+blood counts,fit,exponential,252,0.0148
+blood counts,fit,exponential,253,0.0145
+blood counts,fit,exponential,254,0.0143
+blood counts,fit,exponential,255,0.0141
+blood counts,fit,exponential,256,0.0139
+blood counts,fit,exponential,257,0.0137
+blood counts,fit,exponential,258,0.0134
+blood counts,fit,exponential,259,0.0132
+blood counts,fit,exponential,260,0.0130
+step counts,data,,24.6,0.4200
+step counts,data,,35,0.3890
+step counts,data,,45.1,0.3860
+step counts,data,,54.8,0.2820
+step counts,data,,64.8,0.2870
+step counts,data,,74.5,0.2630
+step counts,fit,square root,20,0.4293
+step counts,fit,square root,21,0.4267
+step counts,fit,square root,22,0.4241
+step counts,fit,square root,23,0.4214
+step counts,fit,square root,24,0.4188
+step counts,fit,square root,25,0.4161
+step counts,fit,square root,26,0.4134
+step counts,fit,square root,27,0.4106
+step counts,fit,square root,28,0.4079
+step counts,fit,square root,29,0.4051
+step counts,fit,square root,30,0.4024
+step counts,fit,square root,31,0.3996
+step counts,fit,square root,32,0.3968
+step counts,fit,square root,33,0.3939
+step counts,fit,square root,34,0.3911
+step counts,fit,square root,35,0.3882
+step counts,fit,square root,36,0.3853
+step counts,fit,square root,37,0.3824
+step counts,fit,square root,38,0.3794
+step counts,fit,square root,39,0.3764
+step counts,fit,square root,40,0.3734
+step counts,fit,square root,41,0.3704
+step counts,fit,square root,42,0.3674
+step counts,fit,square root,43,0.3643
+step counts,fit,square root,44,0.3612
+step counts,fit,square root,45,0.3581
+step counts,fit,square root,46,0.3550
+step counts,fit,square root,47,0.3518
+step counts,fit,square root,48,0.3486
+step counts,fit,square root,49,0.3454
+step counts,fit,square root,50,0.3421
+step counts,fit,square root,51,0.3388
+step counts,fit,square root,52,0.3355
+step counts,fit,square root,53,0.3321
+step counts,fit,square root,54,0.3287
+step counts,fit,square root,55,0.3253
+step counts,fit,square root,56,0.3218
+step counts,fit,square root,57,0.3183
+step counts,fit,square root,58,0.3148
+step counts,fit,square root,59,0.3112
+step counts,fit,square root,60,0.3075
+step counts,fit,square root,61,0.3039
+step counts,fit,square root,62,0.3002
+step counts,fit,square root,63,0.2964
+step counts,fit,square root,64,0.2926
+step counts,fit,square root,65,0.2887
+step counts,fit,square root,66,0.2848
+step counts,fit,square root,67,0.2809
+step counts,fit,square root,68,0.2768
+step counts,fit,square root,69,0.2727
+step counts,fit,square root,70,0.2686
+step counts,fit,square root,71,0.2644
+step counts,fit,square root,72,0.2601
+step counts,fit,square root,73,0.2558
+step counts,fit,square root,74,0.2513
+step counts,fit,square root,75,0.2468
+step counts,fit,square root,76,0.2423
+step counts,fit,square root,77,0.2376
+step counts,fit,square root,78,0.2328
+step counts,fit,square root,79,0.2279
+step counts,fit,square root,80,0.2230
+step counts,fit,square root,81,0.2179
+step counts,fit,square root,82,0.2127
+step counts,fit,square root,83,0.2073
+step counts,fit,square root,84,0.2018
+step counts,fit,square root,85,0.1962
+step counts,fit,square root,86,0.1904
+step counts,fit,square root,87,0.1844
+step counts,fit,square root,88,0.1782
+step counts,fit,square root,89,0.1718
+step counts,fit,square root,90,0.1651
+step counts,fit,square root,91,0.1582
+step counts,fit,square root,92,0.1509
+step counts,fit,square root,93,0.1433
+step counts,fit,square root,94,0.1353
+step counts,fit,square root,95,0.1267
+step counts,fit,square root,96,0.1175
+step counts,fit,square root,97,0.1075
+step counts,fit,square root,98,0.0965
+step counts,fit,square root,99,0.0841
+step counts,fit,square root,100,0.0695
+step counts,fit,square root,101,0.0509
+step counts,fit,square root,102,0.0186
+step counts,fit,straight line,20,0.4399
+step counts,fit,straight line,21,0.4364
+step counts,fit,straight line,22,0.4330
+step counts,fit,straight line,23,0.4296
+step counts,fit,straight line,24,0.4262
+step counts,fit,straight line,25,0.4227
+step counts,fit,straight line,26,0.4193
+step counts,fit,straight line,27,0.4159
+step counts,fit,straight line,28,0.4125
+step counts,fit,straight line,29,0.4090
+step counts,fit,straight line,30,0.4056
+step counts,fit,straight line,31,0.4022
+step counts,fit,straight line,32,0.3988
+step counts,fit,straight line,33,0.3954
+step counts,fit,straight line,34,0.3919
+step counts,fit,straight line,35,0.3885
+step counts,fit,straight line,36,0.3851
+step counts,fit,straight line,37,0.3817
+step counts,fit,straight line,38,0.3782
+step counts,fit,straight line,39,0.3748
+step counts,fit,straight line,40,0.3714
+step counts,fit,straight line,41,0.3680
+step counts,fit,straight line,42,0.3645
+step counts,fit,straight line,43,0.3611
+step counts,fit,straight line,44,0.3577
+step counts,fit,straight line,45,0.3543
+step counts,fit,straight line,46,0.3508
+step counts,fit,straight line,47,0.3474
+step counts,fit,straight line,48,0.3440
+step counts,fit,straight line,49,0.3406
+step counts,fit,straight line,50,0.3371
+step counts,fit,straight line,51,0.3337
+step counts,fit,straight line,52,0.3303
+step counts,fit,straight line,53,0.3269
+step counts,fit,straight line,54,0.3235
+step counts,fit,straight line,55,0.3200
+step counts,fit,straight line,56,0.3166
+step counts,fit,straight line,57,0.3132
+step counts,fit,straight line,58,0.3098
+step counts,fit,straight line,59,0.3063
+step counts,fit,straight line,60,0.3029
+step counts,fit,straight line,61,0.2995
+step counts,fit,straight line,62,0.2961
+step counts,fit,straight line,63,0.2926
+step counts,fit,straight line,64,0.2892
+step counts,fit,straight line,65,0.2858
+step counts,fit,straight line,66,0.2824
+step counts,fit,straight line,67,0.2789
+step counts,fit,straight line,68,0.2755
+step counts,fit,straight line,69,0.2721
+step counts,fit,straight line,70,0.2687
+step counts,fit,straight line,71,0.2653
+step counts,fit,straight line,72,0.2618
+step counts,fit,straight line,73,0.2584
+step counts,fit,straight line,74,0.2550
+step counts,fit,straight line,75,0.2516
+step counts,fit,straight line,76,0.2481
+step counts,fit,straight line,77,0.2447
+step counts,fit,straight line,78,0.2413
+step counts,fit,straight line,79,0.2379
+step counts,fit,straight line,80,0.2344
+step counts,fit,straight line,81,0.2310
+step counts,fit,straight line,82,0.2276
+step counts,fit,straight line,83,0.2242
+step counts,fit,straight line,84,0.2207
+step counts,fit,straight line,85,0.2173
+step counts,fit,straight line,86,0.2139
+step counts,fit,straight line,87,0.2105
+step counts,fit,straight line,88,0.2071
+step counts,fit,straight line,89,0.2036
+step counts,fit,straight line,90,0.2002
+step counts,fit,straight line,91,0.1968
+step counts,fit,straight line,92,0.1934
+step counts,fit,straight line,93,0.1899
+step counts,fit,straight line,94,0.1865
+step counts,fit,straight line,95,0.1831
+step counts,fit,straight line,96,0.1797
+step counts,fit,straight line,97,0.1762
+step counts,fit,straight line,98,0.1728
+step counts,fit,straight line,99,0.1694
+step counts,fit,straight line,100,0.1660
+step counts,fit,straight line,101,0.1625
+step counts,fit,straight line,102,0.1591
+step counts,fit,straight line,103,0.1557
+step counts,fit,straight line,104,0.1523
+step counts,fit,straight line,105,0.1488
+step counts,fit,straight line,106,0.1454
+step counts,fit,straight line,107,0.1420
+step counts,fit,straight line,108,0.1386
+step counts,fit,straight line,109,0.1352
+step counts,fit,straight line,110,0.1317
+step counts,fit,straight line,111,0.1283
+step counts,fit,straight line,112,0.1249
+step counts,fit,straight line,113,0.1215
+step counts,fit,straight line,114,0.1180
+step counts,fit,straight line,115,0.1146
+step counts,fit,straight line,116,0.1112
+step counts,fit,straight line,117,0.1078
+step counts,fit,straight line,118,0.1043
+step counts,fit,straight line,119,0.1009
+step counts,fit,straight line,120,0.0975
+step counts,fit,straight line,121,0.0941
+step counts,fit,straight line,122,0.0906
+step counts,fit,straight line,123,0.0872
+step counts,fit,straight line,124,0.0838
+step counts,fit,straight line,125,0.0804
+step counts,fit,straight line,126,0.0770
+step counts,fit,straight line,127,0.0735
+step counts,fit,straight line,128,0.0701
+step counts,fit,straight line,129,0.0667
+step counts,fit,straight line,130,0.0633
+step counts,fit,straight line,131,0.0598
+step counts,fit,straight line,132,0.0564
+step counts,fit,straight line,133,0.0530
+step counts,fit,straight line,134,0.0496
+step counts,fit,straight line,135,0.0461
+step counts,fit,straight line,136,0.0427
+step counts,fit,straight line,137,0.0393
+step counts,fit,straight line,138,0.0359
+step counts,fit,straight line,139,0.0324
+step counts,fit,straight line,140,0.0290
+step counts,fit,straight line,141,0.0256
+step counts,fit,straight line,142,0.0222
+step counts,fit,straight line,143,0.0188
+step counts,fit,straight line,144,0.0153
+step counts,fit,straight line,145,0.0119
+step counts,fit,straight line,146,0.0085
+step counts,fit,straight line,147,0.0051
+step counts,fit,straight line,148,0.0016
+step counts,fit,square,20,0.4450
+step counts,fit,square,21,0.4410
+step counts,fit,square,22,0.4371
+step counts,fit,square,23,0.4332
+step counts,fit,square,24,0.4293
+step counts,fit,square,25,0.4255
+step counts,fit,square,26,0.4216
+step counts,fit,square,27,0.4178
+step counts,fit,square,28,0.4140
+step counts,fit,square,29,0.4102
+step counts,fit,square,30,0.4064
+step counts,fit,square,31,0.4027
+step counts,fit,square,32,0.3989
+step counts,fit,square,33,0.3952
+step counts,fit,square,34,0.3915
+step counts,fit,square,35,0.3878
+step counts,fit,square,36,0.3842
+step counts,fit,square,37,0.3805
+step counts,fit,square,38,0.3769
+step counts,fit,square,39,0.3733
+step counts,fit,square,40,0.3697
+step counts,fit,square,41,0.3661
+step counts,fit,square,42,0.3625
+step counts,fit,square,43,0.3590
+step counts,fit,square,44,0.3554
+step counts,fit,square,45,0.3519
+step counts,fit,square,46,0.3484
+step counts,fit,square,47,0.3450
+step counts,fit,square,48,0.3415
+step counts,fit,square,49,0.3381
+step counts,fit,square,50,0.3346
+step counts,fit,square,51,0.3312
+step counts,fit,square,52,0.3278
+step counts,fit,square,53,0.3245
+step counts,fit,square,54,0.3211
+step counts,fit,square,55,0.3178
+step counts,fit,square,56,0.3144
+step counts,fit,square,57,0.3111
+step counts,fit,square,58,0.3079
+step counts,fit,square,59,0.3046
+step counts,fit,square,60,0.3013
+step counts,fit,square,61,0.2981
+step counts,fit,square,62,0.2949
+step counts,fit,square,63,0.2917
+step counts,fit,square,64,0.2885
+step counts,fit,square,65,0.2853
+step counts,fit,square,66,0.2822
+step counts,fit,square,67,0.2791
+step counts,fit,square,68,0.2760
+step counts,fit,square,69,0.2729
+step counts,fit,square,70,0.2698
+step counts,fit,square,71,0.2667
+step counts,fit,square,72,0.2637
+step counts,fit,square,73,0.2607
+step counts,fit,square,74,0.2577
+step counts,fit,square,75,0.2547
+step counts,fit,square,76,0.2517
+step counts,fit,square,77,0.2487
+step counts,fit,square,78,0.2458
+step counts,fit,square,79,0.2429
+step counts,fit,square,80,0.2400
+step counts,fit,square,81,0.2371
+step counts,fit,square,82,0.2342
+step counts,fit,square,83,0.2314
+step counts,fit,square,84,0.2286
+step counts,fit,square,85,0.2257
+step counts,fit,square,86,0.2229
+step counts,fit,square,87,0.2202
+step counts,fit,square,88,0.2174
+step counts,fit,square,89,0.2147
+step counts,fit,square,90,0.2119
+step counts,fit,square,91,0.2092
+step counts,fit,square,92,0.2065
+step counts,fit,square,93,0.2038
+step counts,fit,square,94,0.2012
+step counts,fit,square,95,0.1985
+step counts,fit,square,96,0.1959
+step counts,fit,square,97,0.1933
+step counts,fit,square,98,0.1907
+step counts,fit,square,99,0.1882
+step counts,fit,square,100,0.1856
+step counts,fit,square,101,0.1831
+step counts,fit,square,102,0.1806
+step counts,fit,square,103,0.1781
+step counts,fit,square,104,0.1756
+step counts,fit,square,105,0.1731
+step counts,fit,square,106,0.1707
+step counts,fit,square,107,0.1682
+step counts,fit,square,108,0.1658
+step counts,fit,square,109,0.1634
+step counts,fit,square,110,0.1610
+step counts,fit,square,111,0.1587
+step counts,fit,square,112,0.1563
+step counts,fit,square,113,0.1540
+step counts,fit,square,114,0.1517
+step counts,fit,square,115,0.1494
+step counts,fit,square,116,0.1471
+step counts,fit,square,117,0.1449
+step counts,fit,square,118,0.1426
+step counts,fit,square,119,0.1404
+step counts,fit,square,120,0.1382
+step counts,fit,square,121,0.1360
+step counts,fit,square,122,0.1339
+step counts,fit,square,123,0.1317
+step counts,fit,square,124,0.1296
+step counts,fit,square,125,0.1274
+step counts,fit,square,126,0.1253
+step counts,fit,square,127,0.1233
+step counts,fit,square,128,0.1212
+step counts,fit,square,129,0.1192
+step counts,fit,square,130,0.1171
+step counts,fit,square,131,0.1151
+step counts,fit,square,132,0.1131
+step counts,fit,square,133,0.1111
+step counts,fit,square,134,0.1092
+step counts,fit,square,135,0.1072
+step counts,fit,square,136,0.1053
+step counts,fit,square,137,0.1034
+step counts,fit,square,138,0.1015
+step counts,fit,square,139,0.0996
+step counts,fit,square,140,0.0978
+step counts,fit,square,141,0.0959
+step counts,fit,square,142,0.0941
+step counts,fit,square,143,0.0923
+step counts,fit,square,144,0.0905
+step counts,fit,square,145,0.0888
+step counts,fit,square,146,0.0870
+step counts,fit,square,147,0.0853
+step counts,fit,square,148,0.0836
+step counts,fit,square,149,0.0819
+step counts,fit,square,150,0.0802
+step counts,fit,square,151,0.0785
+step counts,fit,square,152,0.0769
+step counts,fit,square,153,0.0752
+step counts,fit,square,154,0.0736
+step counts,fit,square,155,0.0720
+step counts,fit,square,156,0.0705
+step counts,fit,square,157,0.0689
+step counts,fit,square,158,0.0674
+step counts,fit,square,159,0.0658
+step counts,fit,square,160,0.0643
+step counts,fit,square,161,0.0628
+step counts,fit,square,162,0.0614
+step counts,fit,square,163,0.0599
+step counts,fit,square,164,0.0585
+step counts,fit,square,165,0.0571
+step counts,fit,square,166,0.0557
+step counts,fit,square,167,0.0543
+step counts,fit,square,168,0.0529
+step counts,fit,square,169,0.0516
+step counts,fit,square,170,0.0502
+step counts,fit,square,171,0.0489
+step counts,fit,square,172,0.0476
+step counts,fit,square,173,0.0463
+step counts,fit,square,174,0.0451
+step counts,fit,square,175,0.0438
+step counts,fit,square,176,0.0426
+step counts,fit,square,177,0.0414
+step counts,fit,square,178,0.0402
+step counts,fit,square,179,0.0390
+step counts,fit,square,180,0.0379
+step counts,fit,square,181,0.0367
+step counts,fit,square,182,0.0356
+step counts,fit,square,183,0.0345
+step counts,fit,square,184,0.0334
+step counts,fit,square,185,0.0323
+step counts,fit,square,186,0.0313
+step counts,fit,square,187,0.0302
+step counts,fit,square,188,0.0292
+step counts,fit,square,189,0.0282
+step counts,fit,square,190,0.0272
+step counts,fit,square,191,0.0263
+step counts,fit,square,192,0.0253
+step counts,fit,square,193,0.0244
+step counts,fit,square,194,0.0235
+step counts,fit,square,195,0.0226
+step counts,fit,square,196,0.0217
+step counts,fit,square,197,0.0208
+step counts,fit,square,198,0.0200
+step counts,fit,square,199,0.0192
+step counts,fit,square,200,0.0184
+step counts,fit,square,201,0.0176
+step counts,fit,square,202,0.0168
+step counts,fit,square,203,0.0160
+step counts,fit,square,204,0.0153
+step counts,fit,square,205,0.0146
+step counts,fit,square,206,0.0139
+step counts,fit,square,207,0.0132
+step counts,fit,square,208,0.0125
+step counts,fit,square,209,0.0119
+step counts,fit,square,210,0.0112
+step counts,fit,square,211,0.0106
+step counts,fit,square,212,0.0100
+step counts,fit,square,213,0.0094
+step counts,fit,square,214,0.0089
+step counts,fit,square,215,0.0083
+step counts,fit,square,216,0.0078
+step counts,fit,square,217,0.0073
+step counts,fit,square,218,0.0068
+step counts,fit,square,219,0.0063
+step counts,fit,square,220,0.0058
+step counts,fit,square,221,0.0054
+step counts,fit,square,222,0.0050
+step counts,fit,square,223,0.0046
+step counts,fit,square,224,0.0042
+step counts,fit,square,225,0.0038
+step counts,fit,square,226,0.0035
+step counts,fit,square,227,0.0031
+step counts,fit,square,228,0.0028
+step counts,fit,square,229,0.0025
+step counts,fit,square,230,0.0022
+step counts,fit,square,231,0.0019
+step counts,fit,square,232,0.0017
+step counts,fit,square,233,0.0015
+step counts,fit,square,234,0.0012
+step counts,fit,square,235,0.0010
+step counts,fit,square,236,0.0009
+step counts,fit,square,237,0.0007
+step counts,fit,square,238,0.0005
+step counts,fit,square,239,0.0004
+step counts,fit,square,240,0.0003
+step counts,fit,square,241,0.0002
+step counts,fit,square,242,0.0001
+step counts,fit,square,243,0.0001
+step counts,fit,square,244,0.0000
+step counts,fit,square,245,0.0000
+step counts,fit,exponential,20,0.4499
+step counts,fit,exponential,21,0.4453
+step counts,fit,exponential,22,0.4409
+step counts,fit,exponential,23,0.4364
+step counts,fit,exponential,24,0.4320
+step counts,fit,exponential,25,0.4277
+step counts,fit,exponential,26,0.4234
+step counts,fit,exponential,27,0.4191
+step counts,fit,exponential,28,0.4149
+step counts,fit,exponential,29,0.4108
+step counts,fit,exponential,30,0.4066
+step counts,fit,exponential,31,0.4026
+step counts,fit,exponential,32,0.3985
+step counts,fit,exponential,33,0.3945
+step counts,fit,exponential,34,0.3905
+step counts,fit,exponential,35,0.3866
+step counts,fit,exponential,36,0.3827
+step counts,fit,exponential,37,0.3789
+step counts,fit,exponential,38,0.3751
+step counts,fit,exponential,39,0.3713
+step counts,fit,exponential,40,0.3676
+step counts,fit,exponential,41,0.3639
+step counts,fit,exponential,42,0.3602
+step counts,fit,exponential,43,0.3566
+step counts,fit,exponential,44,0.3530
+step counts,fit,exponential,45,0.3495
+step counts,fit,exponential,46,0.3460
+step counts,fit,exponential,47,0.3425
+step counts,fit,exponential,48,0.3390
+step counts,fit,exponential,49,0.3356
+step counts,fit,exponential,50,0.3323
+step counts,fit,exponential,51,0.3289
+step counts,fit,exponential,52,0.3256
+step counts,fit,exponential,53,0.3223
+step counts,fit,exponential,54,0.3191
+step counts,fit,exponential,55,0.3159
+step counts,fit,exponential,56,0.3127
+step counts,fit,exponential,57,0.3096
+step counts,fit,exponential,58,0.3065
+step counts,fit,exponential,59,0.3034
+step counts,fit,exponential,60,0.3003
+step counts,fit,exponential,61,0.2973
+step counts,fit,exponential,62,0.2943
+step counts,fit,exponential,63,0.2914
+step counts,fit,exponential,64,0.2884
+step counts,fit,exponential,65,0.2855
+step counts,fit,exponential,66,0.2827
+step counts,fit,exponential,67,0.2798
+step counts,fit,exponential,68,0.2770
+step counts,fit,exponential,69,0.2742
+step counts,fit,exponential,70,0.2715
+step counts,fit,exponential,71,0.2688
+step counts,fit,exponential,72,0.2661
+step counts,fit,exponential,73,0.2634
+step counts,fit,exponential,74,0.2607
+step counts,fit,exponential,75,0.2581
+step counts,fit,exponential,76,0.2555
+step counts,fit,exponential,77,0.2529
+step counts,fit,exponential,78,0.2504
+step counts,fit,exponential,79,0.2479
+step counts,fit,exponential,80,0.2454
+step counts,fit,exponential,81,0.2429
+step counts,fit,exponential,82,0.2405
+step counts,fit,exponential,83,0.2381
+step counts,fit,exponential,84,0.2357
+step counts,fit,exponential,85,0.2333
+step counts,fit,exponential,86,0.2310
+step counts,fit,exponential,87,0.2286
+step counts,fit,exponential,88,0.2263
+step counts,fit,exponential,89,0.2241
+step counts,fit,exponential,90,0.2218
+step counts,fit,exponential,91,0.2196
+step counts,fit,exponential,92,0.2174
+step counts,fit,exponential,93,0.2152
+step counts,fit,exponential,94,0.2130
+step counts,fit,exponential,95,0.2109
+step counts,fit,exponential,96,0.2088
+step counts,fit,exponential,97,0.2067
+step counts,fit,exponential,98,0.2046
+step counts,fit,exponential,99,0.2025
+step counts,fit,exponential,100,0.2005
+step counts,fit,exponential,101,0.1985
+step counts,fit,exponential,102,0.1965
+step counts,fit,exponential,103,0.1945
+step counts,fit,exponential,104,0.1926
+step counts,fit,exponential,105,0.1906
+step counts,fit,exponential,106,0.1887
+step counts,fit,exponential,107,0.1868
+step counts,fit,exponential,108,0.1849
+step counts,fit,exponential,109,0.1831
+step counts,fit,exponential,110,0.1812
+step counts,fit,exponential,111,0.1794
+step counts,fit,exponential,112,0.1776
+step counts,fit,exponential,113,0.1758
+step counts,fit,exponential,114,0.1741
+step counts,fit,exponential,115,0.1723
+step counts,fit,exponential,116,0.1706
+step counts,fit,exponential,117,0.1689
+step counts,fit,exponential,118,0.1672
+step counts,fit,exponential,119,0.1655
+step counts,fit,exponential,120,0.1638
+step counts,fit,exponential,121,0.1622
+step counts,fit,exponential,122,0.1606
+step counts,fit,exponential,123,0.1589
+step counts,fit,exponential,124,0.1573
+step counts,fit,exponential,125,0.1558
+step counts,fit,exponential,126,0.1542
+step counts,fit,exponential,127,0.1526
+step counts,fit,exponential,128,0.1511
+step counts,fit,exponential,129,0.1496
+step counts,fit,exponential,130,0.1481
+step counts,fit,exponential,131,0.1466
+step counts,fit,exponential,132,0.1451
+step counts,fit,exponential,133,0.1437
+step counts,fit,exponential,134,0.1422
+step counts,fit,exponential,135,0.1408
+step counts,fit,exponential,136,0.1394
+step counts,fit,exponential,137,0.1380
+step counts,fit,exponential,138,0.1366
+step counts,fit,exponential,139,0.1352
+step counts,fit,exponential,140,0.1339
+step counts,fit,exponential,141,0.1325
+step counts,fit,exponential,142,0.1312
+step counts,fit,exponential,143,0.1299
+step counts,fit,exponential,144,0.1286
+step counts,fit,exponential,145,0.1273
+step counts,fit,exponential,146,0.1260
+step counts,fit,exponential,147,0.1247
+step counts,fit,exponential,148,0.1235
+step counts,fit,exponential,149,0.1222
+step counts,fit,exponential,150,0.1210
+step counts,fit,exponential,151,0.1198
+step counts,fit,exponential,152,0.1186
+step counts,fit,exponential,153,0.1174
+step counts,fit,exponential,154,0.1162
+step counts,fit,exponential,155,0.1150
+step counts,fit,exponential,156,0.1139
+step counts,fit,exponential,157,0.1127
+step counts,fit,exponential,158,0.1116
+step counts,fit,exponential,159,0.1105
+step counts,fit,exponential,160,0.1094
+step counts,fit,exponential,161,0.1083
+step counts,fit,exponential,162,0.1072
+step counts,fit,exponential,163,0.1061
+step counts,fit,exponential,164,0.1050
+step counts,fit,exponential,165,0.1040
+step counts,fit,exponential,166,0.1029
+step counts,fit,exponential,167,0.1019
+step counts,fit,exponential,168,0.1009
+step counts,fit,exponential,169,0.0999
+step counts,fit,exponential,170,0.0989
+step counts,fit,exponential,171,0.0979
+step counts,fit,exponential,172,0.0969
+step counts,fit,exponential,173,0.0959
+step counts,fit,exponential,174,0.0950
+step counts,fit,exponential,175,0.0940
+step counts,fit,exponential,176,0.0931
+step counts,fit,exponential,177,0.0921
+step counts,fit,exponential,178,0.0912
+step counts,fit,exponential,179,0.0903
+step counts,fit,exponential,180,0.0894
+step counts,fit,exponential,181,0.0885
+step counts,fit,exponential,182,0.0876
+step counts,fit,exponential,183,0.0867
+step counts,fit,exponential,184,0.0858
+step counts,fit,exponential,185,0.0850
+step counts,fit,exponential,186,0.0841
+step counts,fit,exponential,187,0.0833
+step counts,fit,exponential,188,0.0824
+step counts,fit,exponential,189,0.0816
+step counts,fit,exponential,190,0.0808
+step counts,fit,exponential,191,0.0800
+step counts,fit,exponential,192,0.0792
+step counts,fit,exponential,193,0.0784
+step counts,fit,exponential,194,0.0776
+step counts,fit,exponential,195,0.0768
+step counts,fit,exponential,196,0.0760
+step counts,fit,exponential,197,0.0753
+step counts,fit,exponential,198,0.0745
+step counts,fit,exponential,199,0.0738
+step counts,fit,exponential,200,0.0730
+step counts,fit,exponential,201,0.0723
+step counts,fit,exponential,202,0.0716
+step counts,fit,exponential,203,0.0708
+step counts,fit,exponential,204,0.0701
+step counts,fit,exponential,205,0.0694
+step counts,fit,exponential,206,0.0687
+step counts,fit,exponential,207,0.0680
+step counts,fit,exponential,208,0.0674
+step counts,fit,exponential,209,0.0667
+step counts,fit,exponential,210,0.0660
+step counts,fit,exponential,211,0.0653
+step counts,fit,exponential,212,0.0647
+step counts,fit,exponential,213,0.0640
+step counts,fit,exponential,214,0.0634
+step counts,fit,exponential,215,0.0628
+step counts,fit,exponential,216,0.0621
+step counts,fit,exponential,217,0.0615
+step counts,fit,exponential,218,0.0609
+step counts,fit,exponential,219,0.0603
+step counts,fit,exponential,220,0.0597
+step counts,fit,exponential,221,0.0591
+step counts,fit,exponential,222,0.0585
+step counts,fit,exponential,223,0.0579
+step counts,fit,exponential,224,0.0573
+step counts,fit,exponential,225,0.0567
+step counts,fit,exponential,226,0.0562
+step counts,fit,exponential,227,0.0556
+step counts,fit,exponential,228,0.0550
+step counts,fit,exponential,229,0.0545
+step counts,fit,exponential,230,0.0539
+step counts,fit,exponential,231,0.0534
+step counts,fit,exponential,232,0.0529
+step counts,fit,exponential,233,0.0523
+step counts,fit,exponential,234,0.0518
+step counts,fit,exponential,235,0.0513
+step counts,fit,exponential,236,0.0508
+step counts,fit,exponential,237,0.0503
+step counts,fit,exponential,238,0.0497
+step counts,fit,exponential,239,0.0492
+step counts,fit,exponential,240,0.0488
+step counts,fit,exponential,241,0.0483
+step counts,fit,exponential,242,0.0478
+step counts,fit,exponential,243,0.0473
+step counts,fit,exponential,244,0.0468
+step counts,fit,exponential,245,0.0464
+step counts,fit,exponential,246,0.0459
+step counts,fit,exponential,247,0.0454
+step counts,fit,exponential,248,0.0450
+step counts,fit,exponential,249,0.0445
+step counts,fit,exponential,250,0.0441
+step counts,fit,exponential,251,0.0436
+step counts,fit,exponential,252,0.0432
+step counts,fit,exponential,253,0.0428
+step counts,fit,exponential,254,0.0423
+step counts,fit,exponential,255,0.0419
+step counts,fit,exponential,256,0.0415
+step counts,fit,exponential,257,0.0411
+step counts,fit,exponential,258,0.0406
+step counts,fit,exponential,259,0.0402
+step counts,fit,exponential,260,0.0398
