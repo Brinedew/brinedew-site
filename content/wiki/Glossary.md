@@ -521,6 +521,9 @@ Permanent cell division arrest triggered by telomere shortening after repeated d
 **[[cellular-senescence|SASP]]**
 Senescence-Associated Secretory Phenotype, the signal signature produced by senescent cells, can initiate tissue remodeling or immune cleanup.
 
+**[[saturating-removal-model-of-senescence|Saturating-removal model]]**
+A model in which senescent cells are produced at a rate rising with age and removed at a rate that saturates when they are numerous, with death when their burden crosses a threshold. It fits mouse p16-reporter data and gives Gompertz-like mortality, but its mortality fits use parameters chosen to match the survival data.
+
 **[[scandal-hypothesis|SCANDAL hypothesis]]**
 Speciated by CANcer Development AnimaL, a controversial hypothesis where a lineage of cancer cells can undergo speciation and become a new species.
 
