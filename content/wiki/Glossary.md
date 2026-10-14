@@ -533,8 +533,8 @@ Cells in a state of irreversible proliferation arrest, unable to properly functi
 **Semelparity**
 Life-history strategy where organisms reproduce once and then die, as opposed to iteroparity (multiple reproduction events).
 
-**Senolytic therapy**
-Category of putative anti-aging treatments that selectively eliminate senescent cells accumulated over the lifespan of the organism.
+**[[senolytics|Senolytics]]**
+Drugs that kill senescent cells selectively. They reduce markers of senescence in mice; no randomised trial in people has shown a clinical benefit.
 
 **Share still alive**
 The fraction of a group followed from birth that is still alive at a given age, written $S(x)$.
