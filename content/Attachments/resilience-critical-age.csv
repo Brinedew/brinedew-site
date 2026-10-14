@@ -1,0 +1,9 @@
+signal,form,critical_age,lower,upper,rss
+blood counts,square root,97.4,,,0.00238
+blood counts,straight line,125.4,100.8,234.3,0.00282
+blood counts,square,187.0,,,0.00328
+blood counts,exponential,,,,0.00385
+step counts,square root,102.2,,,0.00294
+step counts,straight line,148.5,114.9,247.9,0.00264
+step counts,square,245.9,,,0.00261
+step counts,exponential,,,,0.00266

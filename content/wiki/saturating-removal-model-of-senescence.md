@@ -692,7 +692,7 @@ Without noise, the burden settles where production equals removal. Figure 1 show
 }
 ```
 
-With noise, individuals cross the threshold at different ages. The slower the removal near equilibrium, the more persistent the fluctuations become, which the authors described as a "critical slowing down": in the reporter data, the correlation between successive measurements in the same mouse rose with age (*P* = 0.0047).[^karin2019]
+With noise, individuals cross the threshold at different ages. The slower the removal near equilibrium, the more persistent the fluctuations become, which the authors described as a "critical slowing down": in the reporter data, the correlation across mice between one measurement and the next rose with age (*P* = 0.0047).[^karin2019] The result depends on the scale. On the logarithm of the signal, which keeps a few very bright mice from dominating the correlation, the same test gives *P* = 0.19; and correlations of this kind also rise with age if mice merely accumulate senescent cells at different rates, without any slowing (see Data and figures).
 
 ## Fitting
 
@@ -814,6 +814,8 @@ The model's other claims do not test whether the burden is senescent cells. The 
 Karin and colleagues published the model in 2019, using reporter data published by Christin Burd, Norman Sharpless and colleagues in 2013.[^karin2019][^burd2013] The Alon group extended it to the incidence of age-related diseases, to parabiosis and to bacterial damage in 2021–2023,[^katzir2021][^karin2021][^yang2023] and in 2026 to the survival curves of species from bacteria to humans.[^raz2026] The alternative model of Kowald, Passos and Kirkwood was published in 2020, and the lineage-tracing measurement of Omori and colleagues in the same year.[^kowald2020][^omori2020]
 
 ## Data and figures
+
+The reanalysis of the correlation between successive measurements uses the source data published with the paper (33 mice, measured every 8 weeks from 8 to 80 weeks of age): Pearson correlations across mice between consecutive measurements, regressed on age, reproduce the published *F* = 16.5 on the original scale and give *F* = 2.1 (*P* = 0.19) on the logarithm of the signal.
 
 Figure 1 is computed from the deterministic part of the model, with the mortality-fit parameters $\eta$ = 0.084 per day per year and $\kappa$ = 0.5; the equilibrium burden is $\kappa\eta t/(\beta - \eta t)$. Figure 2 was computed for this article by simulating the model with the mortality-fit parameters for 20,000 mice at each of seven values of the maximum removal rate, with time steps of half a day and the burden reflected at zero. Mortality rates are deaths in each month divided by mice alive at its start, shown where they are at least 0.002; burden percentiles are shown while at least 200 mice remain alive.
 
