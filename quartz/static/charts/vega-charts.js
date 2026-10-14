@@ -102,7 +102,9 @@ function themeConfig() {
 // panel widths from the chart's own width and stacks side-by-side panels on phones.
 function fitToWidth(spec, width) {
   const fitted = structuredClone(spec)
-  const axisAllowance = 78
+  // A spec with wide row labels (an effect direction plot, a table-like chart) can declare
+  // the room its left axis needs in usermeta.axisAllowance.
+  const axisAllowance = Number(fitted.usermeta?.axisAllowance) || 78
   if (Array.isArray(fitted.hconcat) && width < NARROW) {
     fitted.vconcat = fitted.hconcat
     delete fitted.hconcat
