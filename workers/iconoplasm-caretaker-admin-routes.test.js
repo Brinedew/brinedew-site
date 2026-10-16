@@ -18,7 +18,10 @@ import { blankDatabase, iconoplasmDatabase } from "./test-helpers/account-erasur
 //    between the end and the withdrawal leaves it half done;
 // 5. ending a role whose supervote decides the gene leaves the old winner
 //    published;
-// 6. a cross-site request changes a role.
+// 6. a cross-site request changes a role;
+// 7. a role that ended keeping its texts cannot withdraw them later, so a cut
+//    text stays the readers' text with nobody to fix it (B-1097), or the late
+//    withdrawal runs from a stale version or on a role still open.
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const ADMIN = "account_admin_routes"
 const USER = "account_user_routes1"
@@ -247,6 +250,63 @@ test("4, 5: an end with withdraw takes the texts out of use, and an end with a s
   // A retry after a lost answer finds the work done and settles nothing again.
   h.settled.length = 0
   const retry = await h.act("end", body)
+  assert.equal(retry.body.replayed, true)
+  assert.deepEqual(h.settled, [])
+})
+
+test("7: a role that ended keeping its texts withdraws them later, once", async (t) => {
+  const h = setup(t)
+  h.db.database
+    .prepare(
+      `INSERT INTO icono_caretaker_text_versions
+         (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
+          text, text_sha256, readers_see)
+       VALUES ('version_admin_8101', 'A8101', 'line_admin_8101', 1, ?, ?, 'Cut caretaker wor', ?, 1)`,
+    )
+    .run(USER, ROLE, "1".repeat(64))
+  h.db.database.exec(
+    `UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'version_admin_8101', readers_see = 1`,
+  )
+  const open = await h.act("withdraw", { expected_assignment_version: 1 })
+  assert.equal(open.status, 409, "an open role ends first; withdraw is for ended roles")
+
+  const ended = await h.act("end", {
+    expected_assignment_version: 1,
+    relinquish_policy: "retain",
+    reason: "Test account",
+  })
+  assert.equal(ended.status, 200, JSON.stringify(ended.body))
+  const chosen = () =>
+    h.db.database.prepare(`SELECT chosen_caretaker_version_id AS id FROM icono_gene_texts`).get().id
+  assert.equal(chosen(), "version_admin_8101", "kept texts stay the readers' text")
+
+  const stale = await h.act("withdraw", { expected_assignment_version: 1 })
+  assert.equal(stale.status, 409, "the page's version must be the role's current one")
+  assert.equal(chosen(), "version_admin_8101")
+
+  h.settled.length = 0
+  const withdrawn = await h.act("withdraw", { expected_assignment_version: 2 })
+  assert.equal(withdrawn.status, 200, JSON.stringify(withdrawn.body))
+  assert.equal(withdrawn.body.status, "ended")
+  assert.equal(chosen(), null, "the gene falls back to the factory text")
+  assert.ok(
+    h.db.database.prepare(`SELECT withdrawn_at FROM icono_caretaker_text_versions`).get()
+      .withdrawn_at,
+    "the version is kept, marked withdrawn",
+  )
+  assert.equal(
+    h.db.database
+      .prepare(
+        `SELECT relinquish_policy FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?`,
+      )
+      .get(ROLE).relinquish_policy,
+    "withdraw",
+    "the role records what happened to its texts",
+  )
+  assert.deepEqual(h.settled, ["A8101"], "the gene republishes with its factory text")
+
+  h.settled.length = 0
+  const retry = await h.act("withdraw", { expected_assignment_version: 2 })
   assert.equal(retry.body.replayed, true)
   assert.deepEqual(h.settled, [])
 })
