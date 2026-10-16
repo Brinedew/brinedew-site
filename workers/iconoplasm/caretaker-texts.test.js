@@ -336,40 +336,41 @@ test("9: a role's withdrawal takes all its versions out of use and the gene fall
 
 const hex = (character) => character.repeat(64)
 
+// Seeded the way production writes them: the factory's register route leaves
+// every Drain portrait's asset row legacy_unbound, and the request fulfilment
+// writes the source into a receipt (persistPortraitGenerationReceipt). An
+// earlier seed bound the asset row itself, which production never does, so
+// this test passed while every live candidate showed no link.
 function candidate(db, symbol, assetSha, sourceVersionId) {
-  if (sourceVersionId == null) {
-    db.raw
-      .prepare(
-        `INSERT INTO icono_portrait_assets
-           (gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status)
-         VALUES (?, ?, 'hero', 'thumb', 'draft')`,
-      )
-      .run(symbol, assetSha)
-    return
-  }
   db.raw
     .prepare(
-      `INSERT INTO icono_portrait_assets (
-         gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status,
-         generation_provenance_status, generation_request_id, generation_attempt_id,
-         generation_provider_id, generation_model_id, generation_prompt_sha256,
-         generation_config_sha256, source_gene_id, source_manifestation_id,
-         source_manifestation_revision_id, source_manifestation_body_sha256,
-         source_canonical_selection_id, source_canonical_head_version,
-         source_gene_revision, source_snapshot_sha256
-       ) VALUES (?, ?, 'hero', 'thumb', 'draft', 'bound', ?, ?, 'provider', 'model', ?, ?,
-                 'gene_for_test', 'line_for_test', ?, ?, 'selection_for_test', 1, 1, ?)`,
+      `INSERT INTO icono_portrait_assets
+         (gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, status)
+       VALUES (?, ?, 'hero', 'thumb', 'draft')`,
+    )
+    .run(symbol, assetSha)
+  if (sourceVersionId == null) return
+  db.raw
+    .prepare(
+      `INSERT INTO icono_portrait_generation_provenance (
+         generation_request_id, generation_attempt_id, gene_symbol, asset_sha256,
+         source_gene_id, source_manifestation_id, source_manifestation_revision_id,
+         source_manifestation_body_sha256, source_canonical_selection_id,
+         source_canonical_head_version, source_gene_revision, source_snapshot_sha256,
+         provider_id, model_id, prompt_sha256, generation_config_sha256
+       ) VALUES (?, ?, ?, ?, 'gene_for_test', 'line_for_test', ?, ?, 'selection_for_test',
+                 1, 1, ?, 'provider', 'model', ?, ?)`,
     )
     .run(
-      symbol,
-      assetSha,
       `request_${assetSha.slice(0, 12)}`,
       `attempt_${assetSha.slice(0, 12)}`,
-      hex("1"),
-      hex("2"),
+      symbol,
+      assetSha,
       sourceVersionId,
       hex("3"),
       hex("4"),
+      hex("1"),
+      hex("2"),
     )
 }
 
@@ -397,17 +398,23 @@ test("10: a candidate keeps pointing at the version that made it, for its careta
     .flatMap((line) => line.revisions)
     .find((revision) => revision.manifestation_revision_id === first.body.manifestation_revision_id)
   assert.equal(history.body, "First words.")
-  const pool = h.db.statements.filter((sql) => /icono_portrait_assets/.test(sql))
-  assert.equal(pool.length, 1, "one candidate read per panel")
+  const pool = h.db.statements.filter((sql) => /icono_portrait_generation_provenance/.test(sql))
+  assert.equal(pool.length, 1, "one receipt read per panel")
+  const plan = h.db.raw
+    .prepare(`EXPLAIN QUERY PLAN ${pool[0]}`)
+    .all("MFNG")
+    .map((row) => row.detail)
+    .join(" | ")
+  assert.match(plan, /idx_icono_portrait_generation_provenance_gene/, `no table scan: ${plan}`)
   assert.match(pool[0], /WHERE gene_symbol = \?/)
   assert.doesNotMatch(pool[0], /upper\(|lower\(/i)
 
   h.db.statements.length = 0
   assert.deepEqual((await h.call("GET", "", null, { as: STRANGER })).body, { enabled: false })
   assert.equal(
-    h.db.statements.filter((sql) => /icono_portrait_assets/.test(sql)).length,
+    h.db.statements.filter((sql) => /icono_portrait_generation_provenance/.test(sql)).length,
     0,
-    "a stranger's request never reads the pool",
+    "a stranger's request never reads the receipts",
   )
 })
 

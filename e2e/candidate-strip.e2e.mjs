@@ -8,12 +8,12 @@
 //    the candidate count again.
 // 2. The keys overshoot: with slidesToScroll "auto" one Embla snap holds a page
 //    of frames, so Right can jump a whole page instead of one frame.
-// 3. The counter lies: it names frames that aren't fully in view.
+// 3. Focus moves to a frame the strip doesn't bring fully into view.
 // 4. End and Home don't reach the ends, or Next stays live at the end.
 // 5. Up on a frame does nothing (for a guest it must open the Discord login).
 // 6. The strip eats a vertical wheel, so a reader can't scroll past it.
 // 7. A tile is too narrow for its footer, so buttons sit on top of each other
-//    (the copy button covered the star on a 402 px phone).
+//    (the old copy button covered the star on a 402 px phone).
 // 8. The "soft rise" leaves a loaded image transparent.
 // 9. The page scrolls sideways on a phone.
 //
@@ -45,15 +45,19 @@ function readStrip() {
   return {
     total: frames.length,
     focusIndex: focused ? frames.indexOf(focused) : -1,
-    position: section.querySelector("[data-icono-strip-position]")?.textContent || "",
+    focusInView: (() => {
+      if (!focused) return false
+      const viewport = section.querySelector("[data-icono-strip-viewport]").getBoundingClientRect()
+      const box = focused.getBoundingClientRect()
+      return box.left >= viewport.left - 1 && box.right <= viewport.right + 1
+    })(),
     nextDisabled: !!section.querySelector("[data-icono-strip-next]")?.disabled,
     prevDisabled: !!section.querySelector("[data-icono-strip-prev]")?.disabled,
   }
 }
 
-// The counter follows Embla's in-view events, which land after the scroll
-// animation; on a slow CI runner that can take over a second. Read the strip
-// until `settled(state)` holds or 5 s pass, then return the last reading.
+// Embla's scroll animation can take over a second on a slow CI runner. Read the
+// strip until `settled(state)` holds or 5 s pass, then return the last reading.
 async function settle(page, settled) {
   const deadline = Date.now() + 5_000
   let state = await page.evaluate(readStrip)
@@ -64,9 +68,8 @@ async function settle(page, settled) {
   return state
 }
 
-function counterShows(state, frame) {
-  const [first, last] = state.position.split(" / ")[0].split("–").map(Number)
-  return first <= frame && frame <= (last || first)
+function shows(state, index) {
+  return state.focusIndex === index && state.focusInView
 }
 
 // Every pair of visible controls in a fully shown tile's footer, and any control
@@ -174,25 +177,21 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
 
       await page.screenshot({ path: path.join(OUT, `candidate-strip-${name}.png`), fullPage: true })
 
-      // 2 and 3: Right moves one frame at a time, and the counter follows.
+      // 2 and 3: Right moves one frame at a time, and the strip shows it whole.
       await page.focus(`${STRIP} .icono-candidate-card:first-child .icono-candidate-media-button`)
       let state = await page.evaluate(readStrip)
       assert.equal(state.total, 71)
       assert.equal(state.focusIndex, 0)
-      assert.match(state.position, /^1(–\d+)? \/ 71$/)
       assert.ok(state.prevDisabled)
       for (let step = 1; step <= 4; step += 1) {
         await page.keyboard.press("ArrowRight")
-        state = await settle(page, (state) => counterShows(state, step + 1))
+        state = await settle(page, (state) => shows(state, step))
         assert.equal(
           state.focusIndex,
           step,
           `${name}: Right #${step} landed on ${state.focusIndex}`,
         )
-        assert.ok(
-          counterShows(state, step + 1),
-          `${name}: frame ${step + 1} is focused but the counter reads ${state.position}`,
-        )
+        assert.ok(state.focusInView, `${name}: frame ${step + 1} is focused but not fully in view`)
       }
       await page.keyboard.press("ArrowLeft")
       state = await page.evaluate(readStrip)
@@ -200,12 +199,12 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
 
       // 4: End and Home reach the ends.
       await page.keyboard.press("End")
-      state = await settle(page, (state) => counterShows(state, 71) && state.nextDisabled)
+      state = await settle(page, (state) => shows(state, 70) && state.nextDisabled)
       assert.equal(state.focusIndex, 70)
-      assert.match(state.position, /71 \/ 71$/)
+      assert.ok(state.focusInView, `${name}: End left the last frame out of view`)
       assert.ok(state.nextDisabled, `${name}: Next is live at the end`)
       await page.keyboard.press("Home")
-      state = await settle(page, (state) => counterShows(state, 1) && state.prevDisabled)
+      state = await settle(page, (state) => shows(state, 0) && state.prevDisabled)
       assert.equal(state.focusIndex, 0)
       assert.ok(state.prevDisabled)
 

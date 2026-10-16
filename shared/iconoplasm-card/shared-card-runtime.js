@@ -1952,33 +1952,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     )
   }
 
-  function candidatePortraitUrl(candidate, preferredSize, resolveUrl) {
-    var item = candidate || {}
-    var fullUrl = String(item.full_url || "").trim()
-    var mediumUrl = String(item.medium_url || "").trim()
-    var thumbUrl = String(item.thumb_url || "").trim()
-    var rawUrl =
-      preferredSize === "medium"
-        ? mediumUrl || thumbUrl || fullUrl
-        : preferredSize === "thumb"
-          ? thumbUrl || mediumUrl || fullUrl
-          : fullUrl || mediumUrl || thumbUrl
-    if (!rawUrl || typeof resolveUrl !== "function") return rawUrl
-    try {
-      return String(resolveUrl(rawUrl) || rawUrl)
-    } catch (_error) {
-      return rawUrl
-    }
-  }
-
-  function candidateEmulsionLabel(candidate) {
-    var item = candidate || {}
-    var emulsionId = String(item.emulsion_id || "").trim()
-    var label = String(item.emulsion_label || "").trim()
-    var artistId = String(item.artist_id || "").trim()
-    return displayEmulsionCode(emulsionId) || label || (artistId ? "Emulsion " + artistId : "")
-  }
-
   function displayEmulsionCode(rawEmulsionId) {
     return String(rawEmulsionId || "").trim()
   }
@@ -2002,112 +1975,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         : '') +
       '</div></section>'
     )
-  }
-
-  function renderCandidateGalleryHtml(geneDetail, options) {
-    var gene = geneDetail || {}
-    var opts = options || {}
-    var candidates = Array.isArray(gene.portrait_candidates) ? gene.portrait_candidates : []
-    var visibleCandidates = []
-    for (var i = 0; i < candidates.length; i += 1) {
-      var candidate = candidates[i]
-      if (!candidate || candidate.is_current) continue
-      if (!candidatePortraitUrl(candidate, "medium", opts.resolvePortraitUrl)) continue
-      visibleCandidates.push(candidate)
-    }
-    if (!visibleCandidates.length) return renderCandidateGalleryStatusHtml(gene)
-
-    var symbol = normalizedSymbol(gene.symbol || gene.canonical_symbol)
-    var gridClass =
-      visibleCandidates.length === 1
-        ? "icono-candidate-grid icono-candidate-grid--single"
-        : "icono-candidate-grid"
-    var html =
-      '<section class="icono-candidate-gallery" data-icono-public-candidates>' +
-      '<div class="icono-candidate-gallery-heading"><h2>Other candidate images <span class="icono-candidate-count">' +
-      visibleCandidates.length + '</span></h2></div>' +
-      '<div class="' +
-      gridClass +
-      '" data-icono-lightbox>'
-
-    for (var j = 0; j < visibleCandidates.length; j += 1) {
-      var item = visibleCandidates[j]
-      var mediumUrl = candidatePortraitUrl(item, "medium", opts.resolvePortraitUrl)
-      var fullUrl = candidatePortraitUrl(item, "full", opts.resolvePortraitUrl) || mediumUrl
-      var width = Number(item.width || item.image_width || 4) || 4
-      var height = Number(item.height || item.image_height || 5) || 5
-      var assetSha = String(item.asset_sha256 || "").trim().toLowerCase()
-      var candidateImageId = Number(item.candidate_image_id || 0)
-      var visionId = String(item.vision_id || "").trim()
-      var sampleLabel = String(item.sample_label || "").trim()
-      var emulsionLabel = candidateEmulsionLabel(item)
-      var voteAttrs = 'data-icono-candidate-vote-box="' + escapeHtml(assetSha) + '"'
-      if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
-        voteAttrs +=
-          ' data-icono-candidate-image-id="' +
-          escapeHtml(String(Math.round(candidateImageId))) +
-          '"'
-      }
-      if (visionId) voteAttrs += ' data-icono-vision-id="' + escapeHtml(visionId) + '"'
-
-      var toolbarMarkup = ""
-      if (sampleLabel || emulsionLabel) {
-        toolbarMarkup = '<div class="icono-candidate-toolbar-meta">'
-        if (sampleLabel) {
-          toolbarMarkup +=
-            '<div class="icono-candidate-toolbar-pair"><span>Sample</span><strong>' +
-            escapeHtml(sampleLabel) +
-            "</strong></div>"
-        }
-        if (emulsionLabel) {
-          toolbarMarkup +=
-            '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' +
-            escapeHtml(emulsionLabel) +
-            "</strong></div>"
-        }
-        toolbarMarkup += "</div>"
-      }
-
-      html +=
-        '<article class="icono-candidate-card" style="--width:' +
-        escapeHtml(String(width)) +
-        ";--height:" +
-        escapeHtml(String(height)) +
-        ';" data-icono-candidate-asset="' +
-        escapeHtml(assetSha) +
-        '">' +
-        '<button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' +
-        escapeHtml(fullUrl) +
-        '" data-icono-pswp-alt="' +
-        escapeHtml(symbol) +
-        ' candidate blot" data-pswp-width="' +
-        escapeHtml(String(width)) +
-        '" data-pswp-height="' +
-        escapeHtml(String(height)) +
-        '" aria-label="Open candidate blot for ' +
-        escapeHtml(symbol) +
-        '">' +
-        '<span class="icono-candidate-media"><img src="' +
-        escapeHtml(mediumUrl) +
-        '" data-iconoplasm-role="candidate-blot" data-gene-symbol="' +
-        escapeHtml(symbol) +
-        '" alt="' +
-        escapeHtml(symbol) +
-        ' candidate blot" loading="lazy" decoding="async" fetchpriority="low" width="' +
-        escapeHtml(String(width)) +
-        '" height="' +
-        escapeHtml(String(height)) +
-        '"></span></button>' +
-        '<div class="icono-candidate-footer">' +
-        voteBoxMarkup(voteAttrs) +
-        toolbarMarkup +
-        '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' +
-        escapeHtml(assetSha) +
-        '" aria-label="Candidate actions"></div>' +
-        "</div></article>"
-    }
-
-    return html + "</div></section>"
   }
 
   function voteBoxMarkup(extraAttrs, options) {
@@ -2158,6 +2025,11 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       attrs +
       ">" +
       firstButton +
+      // A candidate tile shows its score between the two buttons, only when it is
+      // above zero (owner, 2026-10-16: "just the number and plus sign before it").
+      (opts.showScore
+        ? '<span class="icono-vote-score" data-icono-vote-score aria-hidden="true"></span>'
+        : "") +
       secondButton +
       "</div>"
     )
@@ -2191,6 +2063,11 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
     if (!statsEl) {
       box.setAttribute("title", voteSummaryDetails(snapshot))
+    }
+    var scoreEl = box.querySelector("[data-icono-vote-score]")
+    if (scoreEl) {
+      var score = Number(snapshot.image_score || 0)
+      scoreEl.textContent = score > 0 ? "+" + score : ""
     }
     // A paused box (the server said "not now", see wireVoteBox) is dimmed and marked
     // aria-disabled, not `disabled`: a disabled button swallows the tap, and the tap is what
@@ -2314,6 +2191,15 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var candidateRef = "a:" + symbol + "|" + assetSha
     var storedSnapshot = readStoredVoteSnapshot(candidateRef)
     if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot)
+    // The gene's published tally, so a deferred box shows the real score before the
+    // reader votes. It is not a primed snapshot: a vote still fetches the reader's own.
+    else if (cfg.publicTally) {
+      var up = Math.max(0, Number(cfg.publicTally.image_upvotes || 0))
+      var down = Math.max(0, Number(cfg.publicTally.image_downvotes || 0))
+      state.snapshot.image_upvotes = up
+      state.snapshot.image_downvotes = down
+      state.snapshot.image_score = up - down
+    }
     if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot)
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
@@ -2645,7 +2531,6 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     renderTooltipMetaSkeletonHtml: renderTooltipMetaSkeletonHtml,
     renderTooltipMobileRowGridHtml: renderTooltipMobileRowGridHtml,
     renderTooltipMobileSkeletonHtml: renderTooltipMobileSkeletonHtml,
-    renderCandidateGalleryHtml: renderCandidateGalleryHtml,
     renderCandidateGalleryStatusHtml: renderCandidateGalleryStatusHtml,
     voteBoxMarkup: voteBoxMarkup,
     setVoteBoxState: setVoteBoxState,
