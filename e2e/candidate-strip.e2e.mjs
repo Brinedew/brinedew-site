@@ -18,14 +18,22 @@
 // 9. The page scrolls sideways on a phone.
 //
 // What is real: the built site, TP53's published candidates, Embla, Chrome.
-// The reader is an anonymous guest, so nothing is mocked but the empty
-// signed-in /api/* answers. Screenshots land in artifacts/e2e.
+// The reader is an anonymous guest; the signed-in /api/* answers are mocked,
+// including the 401 a guest's vote gets. Screenshots land in artifacts/e2e.
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { HOST, OUT, VIEWPORTS, launchChrome, routeProduction, startSite } from "./harness.mjs"
+import {
+  HOST,
+  HttpStatus,
+  OUT,
+  VIEWPORTS,
+  launchChrome,
+  routeProduction,
+  startSite,
+} from "./harness.mjs"
 
 const SYMBOL = "TP53"
 const STRIP = "[data-icono-candidate-strip]"
@@ -108,7 +116,17 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
         viewport: { width, height },
         colorScheme: "dark",
       })
-      await routeProduction(context, origin, () => undefined, { session: false })
+      // A guest's vote gets the production answer, 401 AUTH_REQUIRED (the
+      // harness would otherwise answer every signed-in call with {}).
+      await routeProduction(
+        context,
+        origin,
+        (pathname) =>
+          pathname === "/api/iconoplasm/votes/set"
+            ? new HttpStatus(401, { ok: false, code: "AUTH_REQUIRED" })
+            : undefined,
+        { session: false },
+      )
       const page = await context.newPage()
       await page.goto(`${HOST}/gene/${SYMBOL}`)
       await page.waitForSelector(`${STRIP}.is-strip-ready`, { timeout: 30_000 })
@@ -200,8 +218,14 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       // 6: a vertical wheel over the strip scrolls the page.
       await page.evaluate(() => {
         const viewport = document.querySelector("[data-icono-strip-viewport]")
-        window.scrollTo(0, viewport.getBoundingClientRect().top + window.scrollY - 80)
+        // Instant: the site scrolls smoothly, and a scroll still in flight
+        // would pass for the wheel's.
+        window.scrollTo({
+          top: viewport.getBoundingClientRect().top + window.scrollY - 80,
+          behavior: "instant",
+        })
       })
+      await page.waitForTimeout(300)
       const strip = await page.locator(`${STRIP} [data-icono-strip-viewport]`).boundingBox()
       await page.mouse.move(strip.x + strip.width / 2, strip.y + Math.min(strip.height / 2, 200))
       const before = await page.evaluate(() => window.scrollY)
