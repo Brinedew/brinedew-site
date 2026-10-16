@@ -6,6 +6,7 @@
 //
 // Fails if a returning caretaker's button ever shows words other than its final ones
 // while caretaker/me is still on its way.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import test from "node:test"
 

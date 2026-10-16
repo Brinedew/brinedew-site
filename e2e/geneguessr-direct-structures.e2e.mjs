@@ -76,6 +76,7 @@
 // for RCSB and SWISS-MODEL, which send no Cache-Control. Mol* is served from public/static/vendor (the build puts it
 // there, pinned by SHA-256). Needs an installed Chrome. The request counts land in
 // artifacts/e2e/ (E2E_OUT).
+// E2E scope: quartz/static/geneguessr/ quartz/static/vendor/ !workers/iconoplasm
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"

@@ -21,6 +21,7 @@
 //
 // Needs `pnpm run build` (public) and an installed Chrome. The request chains and
 // screenshots land in artifacts/e2e/.
+// E2E scope: quartz content/About.md !quartz/static/iconoplasm/ !quartz/static/geneguessr/
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from "node:fs"

@@ -16,6 +16,7 @@
 //
 // Needs an installed Chrome (CI has it; locally the test skips without it). The
 // requests the page made land in artifacts/e2e/admin-styles-scorecard.json.
+// E2E scope: quartz/static/iconoplasm/admin quartz/static/iconoplasm/caretaker-admin
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"

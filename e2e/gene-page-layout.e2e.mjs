@@ -27,6 +27,7 @@
 // What is real: the built site, TP53's published candidates and tallies,
 // PhotoSwipe, Embla, Chrome. The signed-in reader (an admin who looks after
 // MFNG) is mocked at /api/*. Screenshots land in artifacts/e2e.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import path from "node:path"

@@ -19,6 +19,7 @@
 //  6. Validate makes a request to the Worker (B-934: a paste resolves in the browser from the
 //     static protein index and costs no D1 read and no Worker request)
 // Needs an installed Chrome. A screenshot of each dialog lands in artifacts/e2e/ (E2E_OUT).
+// E2E scope: quartz/static/geneguessr/ quartz/static/vendor/ !workers/iconoplasm
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { mkdirSync, readFileSync, statSync } from "node:fs"

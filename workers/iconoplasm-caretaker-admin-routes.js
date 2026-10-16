@@ -1,7 +1,8 @@
 // B-1065 B2b: the admin's caretaker registry and role actions, on the roles
 // table of the main database (workers/iconoplasm/caretaker-roles.js). The admin
-// page (quartz/static/iconoplasm/caretaker-admin-*.js) keeps its JSON; fields
-// of the old authority it still echoes (head_version, gene_revision) read 0.
+// page (quartz/static/iconoplasm/caretaker-admin-*.js) reads each role's texts
+// in the caretaker panel's own words: "Version N" numbered oldest = 1 across the
+// gene, as History numbers them, and "Original" for the factory's text.
 //
 // Offering a gene to a named person comes back with B-1083; its old route was
 // never declared, so nobody could reach it.
@@ -118,14 +119,43 @@ export async function readCaretakerAdminRegistry(env, raw = {}) {
     throw authorityError("INVALID_ASSIGNMENT_STATUS", "Caretaker assignment status is invalid", 400)
   }
   const cursor = decodeCursor(raw.after)
+  // Per row: the role's versions, its newest one, and the text new images are
+  // drawn from (the gene's chosen version unless it was withdrawn, else the
+  // Original). Each subquery walks one gene's versions by
+  // icono_caretaker_text_versions_by_gene: 175 versions in all on the 10-14 copy.
   const rows = await all(
     db,
     `SELECT a.caretaker_assignment_id, t.gene_id, a.gene_symbol, a.account_id, a.status,
             a.assignment_version, a.terms_version_id, a.relinquish_policy,
             a.created_at, a.started_at, a.suspended_at, a.ended_at, a.updated_at,
-            t.text_id
+            length(t.text) AS original_characters,
+            (SELECT count(*) FROM icono_caretaker_text_versions v
+              WHERE v.gene_symbol = a.gene_symbol
+                AND v.caretaker_assignment_id = a.caretaker_assignment_id) AS version_count,
+            (SELECT count(*) FROM icono_caretaker_text_versions v
+              WHERE v.gene_symbol = a.gene_symbol
+                AND v.caretaker_assignment_id = a.caretaker_assignment_id
+                AND v.withdrawn_at IS NULL) AS kept_version_count,
+            n.version_id AS newest_version_id, length(n.text) AS newest_characters,
+            (SELECT count(*) FROM icono_caretaker_text_versions v
+              WHERE v.gene_symbol = n.gene_symbol
+                AND (v.created_at < n.created_at
+                  OR (v.created_at = n.created_at AND v.version_id <= n.version_id))) AS newest_number,
+            c.caretaker_assignment_id AS chosen_assignment_id, c.account_id AS chosen_account_id,
+            length(c.text) AS chosen_characters,
+            (SELECT count(*) FROM icono_caretaker_text_versions v
+              WHERE v.gene_symbol = c.gene_symbol
+                AND (v.created_at < c.created_at
+                  OR (v.created_at = c.created_at AND v.version_id <= c.version_id))) AS chosen_number
        FROM icono_caretaker_assignments a
        LEFT JOIN icono_gene_texts t ON t.gene_symbol = a.gene_symbol
+       LEFT JOIN icono_caretaker_text_versions c
+         ON c.version_id = t.chosen_caretaker_version_id AND c.withdrawn_at IS NULL
+       LEFT JOIN icono_caretaker_text_versions n ON n.version_id = (
+         SELECT v.version_id FROM icono_caretaker_text_versions v
+          WHERE v.gene_symbol = a.gene_symbol
+            AND v.caretaker_assignment_id = a.caretaker_assignment_id
+          ORDER BY v.created_at DESC, v.version_id DESC LIMIT 1)
       WHERE (? = '' OR a.status = ?)
         AND (? = '' OR a.gene_symbol LIKE ? COLLATE NOCASE
           OR a.account_id LIKE ? COLLATE NOCASE
@@ -153,7 +183,16 @@ export async function readCaretakerAdminRegistry(env, raw = {}) {
     shown.map((row) => row.account_id),
   )
   const page = []
-  for (const row of shown)
+  for (const row of shown) {
+    const chosen = row.chosen_assignment_id
+      ? {
+          kind: "version",
+          number: Number(row.chosen_number),
+          characters: Number(row.chosen_characters),
+          own: row.chosen_assignment_id === row.caretaker_assignment_id,
+          author_label: await caretakerPseudonym(row.chosen_account_id),
+        }
+      : { kind: "original", characters: Number(row.original_characters) || null }
     page.push({
       caretaker_assignment_id: row.caretaker_assignment_id,
       gene_id: row.gene_id || null,
@@ -164,16 +203,22 @@ export async function readCaretakerAdminRegistry(env, raw = {}) {
       status: row.status,
       assignment_version: Number(row.assignment_version),
       terms_version_id: row.terms_version_id || null,
-      entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
       relinquish_policy: row.relinquish_policy || null,
       created_at: row.created_at,
       started_at: row.started_at || null,
       suspended_at: row.suspended_at || null,
       ended_at: row.ended_at || null,
-      head_version: 0,
-      gene_revision: 0,
-      canonical_revision_id: row.text_id || null,
+      versions: {
+        total: Number(row.version_count) || 0,
+        kept: Number(row.kept_version_count) || 0,
+        newest: row.newest_version_id
+          ? { number: Number(row.newest_number), characters: Number(row.newest_characters) }
+          : null,
+      },
+      drawn_from: chosen,
+      original_characters: Number(row.original_characters) || null,
     })
+  }
   const tail = hasMore ? rows[limit - 1] : null
   return Object.freeze({
     ok: true,

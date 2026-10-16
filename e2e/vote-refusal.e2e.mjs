@@ -33,6 +33,7 @@
 // Needs `pnpm run build` (public-iconoplasm-edge), an installed Chrome and the live published
 // gene object for TP53 (as in production). The measurements and screenshots land in
 // artifacts/e2e/ (or E2E_OUT).
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"

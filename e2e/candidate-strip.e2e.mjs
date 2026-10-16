@@ -20,6 +20,7 @@
 // What is real: the built site, TP53's published candidates, Embla, Chrome.
 // The reader is an anonymous guest; the signed-in /api/* answers are mocked,
 // including the 401 a guest's vote gets. Screenshots land in artifacts/e2e.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import path from "node:path"

@@ -22,6 +22,7 @@
 // build is not in the repository), so a viewer shows its own error state; the check is on
 // the requests the page makes. Needs an installed Chrome. The request counts and a
 // screenshot land in artifacts/e2e/.
+// E2E scope: quartz/static/geneguessr/ quartz/static/vendor/ !workers/iconoplasm
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { readFileSync, statSync, mkdirSync, writeFileSync } from "node:fs"

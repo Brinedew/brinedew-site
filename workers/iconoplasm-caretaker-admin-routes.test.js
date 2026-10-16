@@ -22,6 +22,9 @@ import { blankDatabase, iconoplasmDatabase } from "./test-helpers/account-erasur
 // 7. a role that ended keeping its texts cannot withdraw them later, so a cut
 //    text stays the readers' text with nobody to fix it (B-1097), or the late
 //    withdrawal runs from a stale version or on a role still open.
+// 8. the registry names the wrong text as the one new images are drawn from: a
+//    withdrawn version, or a "Version N" numbered differently from History
+//    (oldest = 1 across the gene, other caretakers' versions included).
 const ORIGIN = "https://iconoplasm.brinedew.bio"
 const ADMIN = "account_admin_routes"
 const USER = "account_user_routes1"
@@ -145,7 +148,9 @@ test("1: the registry and the pickers name people by pseudonym and keep their ac
   assert.equal(registry.assignments[0].caretaker_assignment_id, ROLE)
   assert.equal(registry.assignments[0].author_label, label)
   assert.equal(registry.assignments[0].account_status, "active")
-  assert.equal(registry.assignments[0].canonical_revision_id, "text_admin_8101")
+  assert.deepEqual(registry.assignments[0].versions, { total: 0, kept: 0, newest: null })
+  assert.deepEqual(registry.assignments[0].drawn_from, { kind: "original", characters: 14 })
+  assert.equal(registry.assignments[0].original_characters, "Factory words.".length)
   assert.equal(registry.next_cursor, null)
 })
 
@@ -254,16 +259,33 @@ test("4, 5: an end with withdraw takes the texts out of use, and an end with a s
   assert.deepEqual(h.settled, [])
 })
 
-test("7: a role that ended keeping its texts withdraws them later, once", async (t) => {
+test("7, 8: a role that ended keeping its texts rolls them back later, once", async (t) => {
   const h = setup(t)
-  h.db.database
-    .prepare(
-      `INSERT INTO icono_caretaker_text_versions
-         (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
-          text, text_sha256, readers_see)
-       VALUES ('version_admin_8101', 'A8101', 'line_admin_8101', 1, ?, ?, 'Cut caretaker wor', ?, 1)`,
-    )
-    .run(USER, ROLE, "1".repeat(64))
+  const insert = h.db.database.prepare(
+    `INSERT INTO icono_caretaker_text_versions
+       (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
+        text, text_sha256, readers_see, created_at)
+     VALUES (?, 'A8101', ?, 1, ?, ?, ?, ?, 1, ?)`,
+  )
+  // An earlier caretaker's version is History's Version 1, so this role's is 2.
+  insert.run(
+    "version_admin_8100",
+    "line_admin_8100",
+    ADMIN,
+    "assignment_admin_8100",
+    "Earlier words.",
+    "2".repeat(64),
+    "2026-09-01 00:00:00",
+  )
+  insert.run(
+    "version_admin_8101",
+    "line_admin_8101",
+    USER,
+    ROLE,
+    "Cut caretaker wor",
+    "1".repeat(64),
+    "2026-10-02 00:00:00",
+  )
   h.db.database.exec(
     `UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'version_admin_8101', readers_see = 1`,
   )
@@ -279,6 +301,22 @@ test("7: a role that ended keeping its texts withdraws them later, once", async 
   const chosen = () =>
     h.db.database.prepare(`SELECT chosen_caretaker_version_id AS id FROM icono_gene_texts`).get().id
   assert.equal(chosen(), "version_admin_8101", "kept texts stay the readers' text")
+  const row = async () =>
+    (await h.read("caretaker_admin.registry", "/api/iconoplasm/admin/caretakers/registry"))
+      .assignments[0]
+  const before = await row()
+  assert.deepEqual(before.versions, {
+    total: 1,
+    kept: 1,
+    newest: { number: 2, characters: "Cut caretaker wor".length },
+  })
+  assert.deepEqual(before.drawn_from, {
+    kind: "version",
+    number: 2,
+    characters: "Cut caretaker wor".length,
+    own: true,
+    author_label: await caretakerPseudonym(USER),
+  })
 
   const stale = await h.act("withdraw", { expected_assignment_version: 1 })
   assert.equal(stale.status, 409, "the page's version must be the role's current one")
@@ -290,8 +328,11 @@ test("7: a role that ended keeping its texts withdraws them later, once", async 
   assert.equal(withdrawn.body.status, "ended")
   assert.equal(chosen(), null, "the gene falls back to the factory text")
   assert.ok(
-    h.db.database.prepare(`SELECT withdrawn_at FROM icono_caretaker_text_versions`).get()
-      .withdrawn_at,
+    h.db.database
+      .prepare(
+        `SELECT withdrawn_at FROM icono_caretaker_text_versions WHERE version_id = 'version_admin_8101'`,
+      )
+      .get().withdrawn_at,
     "the version is kept, marked withdrawn",
   )
   assert.equal(
@@ -304,6 +345,9 @@ test("7: a role that ended keeping its texts withdraws them later, once", async 
     "the role records what happened to its texts",
   )
   assert.deepEqual(h.settled, ["A8101"], "the gene republishes with its factory text")
+  const after = await row()
+  assert.equal(after.versions.kept, 0, "the version reads as withdrawn")
+  assert.deepEqual(after.drawn_from, { kind: "original", characters: "Factory words.".length })
 
   h.settled.length = 0
   const retry = await h.act("withdraw", { expected_assignment_version: 2 })

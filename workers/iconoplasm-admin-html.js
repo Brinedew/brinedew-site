@@ -59,11 +59,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
     <div class="panel" id="panel-caretakers" role="tabpanel" aria-labelledby="admin-tab-caretakers" hidden>
       <div class="caretaker-admin" data-caretaker-admin>
         <header class="caretaker-admin__header">
-          <div>
-            <h2>Gene caretakers</h2>
-            <p class="small">Inspect every active or ended tenure and make lifecycle changes without editing a caretaker's prose. Users claim available genes from the gene page.</p>
-          </div>
-          <button type="button" class="secondary" data-caretaker-refresh>Reload registry</button>
+          <h2>Gene caretakers</h2>
+          <button type="button" class="secondary" data-caretaker-refresh>Reload</button>
         </header>
         <p class="caretaker-admin__status" data-caretaker-status role="status"></p>
         <form class="caretaker-admin__cooldown" data-caretaker-cooldown>
@@ -76,10 +73,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
 
         <section class="caretaker-admin__registry" aria-labelledby="caretaker-registry-heading">
           <div class="section-head">
-            <div>
-              <h3 id="caretaker-registry-heading">Assignment registry</h3>
-              <p class="small">The registry includes active, suspended, ended, and any legacy pending tenures. Select a row to use state-specific controls.</p>
-            </div>
+            <h3 id="caretaker-registry-heading" class="sr-only">Caretakers</h3>
             <div class="caretaker-admin__filters">
               <label>Find <input type="search" placeholder="Gene or credit label" data-caretaker-registry-query /></label>
               <label>Status
@@ -97,15 +91,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             <div>
               <div class="table-wrap">
                 <table class="caretaker-admin__table">
-                  <thead><tr><th>Gene</th><th>Caretaker</th><th>Status</th><th>Policy</th><th>Started</th><th></th></tr></thead>
-                  <tbody data-caretaker-registry-body><tr><td colspan="6">Open this tab to load the registry.</td></tr></tbody>
+                  <thead><tr><th>Gene</th><th>Caretaker</th><th>Status</th><th>Started</th><th>Ended</th></tr></thead>
+                  <tbody data-caretaker-registry-body></tbody>
                 </table>
               </div>
               <button type="button" class="secondary caretaker-admin__more" data-caretaker-registry-more hidden>Load more</button>
             </div>
             <aside class="caretaker-admin__detail" data-caretaker-detail aria-live="polite">
-              <h3>Select an assignment</h3>
-              <p class="small">Lifecycle controls appear here with their exact consequence and current compare-and-swap version.</p>
+              <h3>Select a caretaker</h3>
             </aside>
           </div>
         </section>
@@ -817,7 +810,6 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <script src="/static/iconoplasm/caretaker-admin-shared.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-registry.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-detail.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
-  <script src="/static/iconoplasm/caretaker-admin-offer.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-cooldown.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
