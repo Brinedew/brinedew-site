@@ -41,7 +41,10 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installIconoplasmLightbox } from "./lightbox.js?v=c176444f4b2570e4"
+import {
+  installIconoplasmLightbox,
+  openIconoplasmImageViewer,
+} from "./lightbox.js?v=fcfbf527a98e6235"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
@@ -153,6 +156,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
   var ICONO_STAR_ICON =
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m10 2.9 2.15 4.35 4.8.7-3.47 3.38.82 4.77-4.3-2.26-4.3 2.26.82-4.77L3.05 7.95l4.8-.7L10 2.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+  var ICONO_PRINT_ICON =
+    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M5.5 7.5V3h9v4.5M5.5 14H4.25a1.5 1.5 0 0 1-1.5-1.5V9a1.5 1.5 0 0 1 1.5-1.5h11.5a1.5 1.5 0 0 1 1.5 1.5v3.5a1.5 1.5 0 0 1-1.5 1.5H14.5M5.5 11.5h9V17h-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
   var ICONO_CHECK_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m5 10.4 3.2 3.1L15 6.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   var ICONO_CLOSE_ICON =
@@ -1215,7 +1220,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         emulsionInfo.emulsionId,
         "icono-emulsion-favorite-button--toolbar",
       ) +
+      renderPrintCopyButtonMarkup(genePayload) +
       "</div>"
+    )
+  }
+
+  // The print copy is the reader's take-home picture, so it sits beside the
+  // star, outside the card's fiction (owner, 2026-10-16: the card's own
+  // "download print copy" line was "too big and out-of-universe").
+  function renderPrintCopyButtonMarkup(genePayload) {
+    var key = normalizedSymbol(genePayload && genePayload.symbol)
+    if (!key) return ""
+    var label = "Print copy of " + key
+    return (
+      '<button type="button" class="icono-emulsion-favorite-button icono-emulsion-favorite-button--toolbar icono-print-copy-button" data-icono-print-copy data-icono-print-copy-symbol="' +
+      esc(key) +
+      '" aria-disabled="true" aria-label="' +
+      esc(label) +
+      '" title="' +
+      esc(label) +
+      '">' +
+      ICONO_PRINT_ICON +
+      "</button>"
     )
   }
 
@@ -1496,12 +1522,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       button.removeAttribute("aria-disabled")
       if (state === "painting") button.setAttribute("aria-busy", "true")
       else button.removeAttribute("aria-busy")
-      button.textContent =
+      var label =
         state === "painting"
-          ? "preparing " + key + " print copy…"
+          ? "Preparing the print copy of " + key + "…"
           : state === "failed"
-            ? "retry " + key + " print copy"
-            : "download " + key + " print copy"
+            ? "The print copy failed. Try again"
+            : "Print copy of " + key
+      button.setAttribute("aria-label", label)
+      button.setAttribute("title", label)
+      button.classList.toggle("has-save-error", state === "failed")
     })
   }
 
@@ -1533,13 +1562,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function openPrintCopyImage(trigger) {
-    if (!trigger || !trigger.closest) return
-    var sourceCard = trigger.closest(".icono-card")
-    if (!sourceCard) return
-    var symbol =
-      String(trigger.getAttribute("data-icono-print-copy-symbol") || "").trim() ||
-      String(sourceCard.getAttribute("data-icono-symbol") || "").trim()
-    var key = normalizedSymbol(symbol)
+    if (!trigger || !trigger.getAttribute) return
+    var key = normalizedSymbol(trigger.getAttribute("data-icono-print-copy-symbol"))
     var card = key ? printCopyCards[key] : null
     if (!card || printCopyRequestState[key] === "painting") return
     setPrintCopyTriggerState(key, "painting")
@@ -1552,24 +1576,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .then(function (canvas) {
         return new Promise(function (resolve, reject) {
           canvas.toBlob(function (blob) {
-            if (blob) resolve(blob)
+            if (blob) resolve({ blob: blob, width: canvas.width, height: canvas.height })
             else reject(new Error("The print copy could not be encoded"))
           }, "image/png")
         })
       })
-      .then(function (blob) {
-        var href = URL.createObjectURL(blob)
-        var link = document.createElement("a")
-        link.href = href
-        link.download = key + "-iconoplasm-print-copy.png"
-        link.hidden = true
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.setTimeout(function () {
-          URL.revokeObjectURL(href)
-        }, 60000)
+      .then(function (painted) {
+        // Shown, not dropped on the reader's disk: the viewer's Download
+        // button saves it by name, and "Save image as" works on the picture.
+        var href = URL.createObjectURL(painted.blob)
         setPrintCopyTriggerState(key, "idle")
+        return openIconoplasmImageViewer({
+          src: href,
+          width: painted.width,
+          height: painted.height,
+          alt: "Print copy of " + key,
+          downloadName: key + "-iconoplasm-print-copy.png",
+        }).then(function (viewer) {
+          viewer.on("destroy", function () {
+            URL.revokeObjectURL(href)
+          })
+        })
       })
       .catch(function (error) {
         console.error("[Iconoplasm] print copy failed:", error)
@@ -5500,7 +5527,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       : '<span class="icono-request-card-empty">' +
         (item.is_preallocated_without_preview ? "First blot" : "No blots yet") +
         "</span>"
-    var imageCount = Number(item.image_count || 0) || 0
+    // Blots are the published portraits: the genes whose canonical portrait
+    // the style drew now, across all its codes, not every image ever drawn in
+    // it (owner, 2026-10-16). The worker attaches canonical_count from the
+    // trigger-kept table (migration 0128); the rollups' live_count is per
+    // vision or per factory code and goes stale, so it only orders the list.
+    var imageCount = Number(item.canonical_count || 0) || 0
     return (
       '<div class="icono-request-card' +
       (isSelected ? " is-selected" : "") +

@@ -137,6 +137,7 @@ import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-
 import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
 import { createIconoplasmCaretakerNotificationHandlers } from "./iconoplasm-caretaker-notifications.js"
 import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
+import { attachStyleCanonicalCounts } from "./iconoplasm/style-canonical-counts.js"
 import {
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
@@ -8936,8 +8937,9 @@ function generationRequestFirstPageOptions(env, url, rows) {
 // B-896: the picker's first page is the same for every player, so it lives on
 // the CDN (picker/v1/styles.json) and an open reads no D1 for it. Sized for a
 // viral day: 6,000 opens at 120 rows each was 720,000 reads; this job reads
-// 121 rows four times an hour, 11,616 a day, whatever the traffic. It writes
-// only when the bytes changed, the leaderboard's pattern (B-965).
+// 121 rows plus two per style for its canonical blots (0128), about 360 four
+// times an hour, about 35,000 a day, whatever the traffic. It writes only when
+// the bytes changed, the leaderboard's pattern (B-965).
 export async function publishRequestPickerObject(env) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
   const url = new URL(`${ICONOPLASM_CANONICAL_ORIGIN}/api/iconoplasm/requests/options`)
@@ -8947,7 +8949,10 @@ export async function publishRequestPickerObject(env) {
     GENERATION_REQUEST_FIRST_PAGE,
   )
   const object = {
-    request_options: generationRequestFirstPageOptions(env, url, firstPage.rows),
+    request_options: await attachStyleCanonicalCounts(
+      env.ICONOPLASM_DB,
+      generationRequestFirstPageOptions(env, url, firstPage.rows),
+    ),
     next_cursor: firstPage.nextCursor,
   }
   const bytes = new TextEncoder().encode(canonicalPublishedJson(object))
@@ -8970,7 +8975,17 @@ export async function publishRequestPickerObject(env) {
   return { ok: true, published: true, ...summary }
 }
 
+// Every picker page leaves through here, so every style card carries its
+// canonical blots (migration 0128), whichever rollup supplied the card.
 async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
+  const page = await readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)
+  return {
+    ...page,
+    options: await attachStyleCanonicalCounts(env.ICONOPLASM_DB, page.options),
+  }
+}
+
+async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
   if (!env.ICONOPLASM_DB) return { options: [], nextCursor: "" }
   const searchQuery = normalizeGenerationRequestOptionSearchQuery(
     url?.searchParams?.get("query") || "",

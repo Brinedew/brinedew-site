@@ -286,11 +286,13 @@ budget day.
 
 ## Requested high-resolution print copies
 
-The print copy is painted in the reader's own browser when they press "download
-print copy". The browser takes the card and portrait the page already holds (read
-from the gene's stable object `genes/v3/<SYMBOL>.json`), copies the portrait's
-pixels 1:1 and bakes the card's name, symbol and shading into them, then saves
-one PNG named for the gene, for example `SOX12-iconoplasm-print-copy.png`. No
+The print copy is painted in the reader's own browser when they press the
+printer button beside the star in the gene toolbar. The browser takes the card and
+portrait the page already holds (read from the gene's stable object
+`genes/v3/<SYMBOL>.json`), copies the portrait's pixels 1:1 and bakes the card's
+name, symbol and shading into them, then shows the PNG in the site's image viewer.
+The viewer's Download button saves it named for the gene, for example
+`SOX12-iconoplasm-print-copy.png`, and "Save image as" works on the picture. No
 server renders, queues, stores or serves it, so a click costs the site no Worker
 request, D1 row or Bunny object, and a viral page cannot spend a meter on it.
 The print copy never selects the current D1 authoring portrait, even during the

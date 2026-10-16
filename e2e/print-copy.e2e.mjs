@@ -1,5 +1,6 @@
 // B-1068: the print copy is painted in the reader's browser. A reader opens a
-// gene page, presses "download <SYMBOL> print copy" and gets one PNG: the
+// gene page, presses the printer button beside the star, sees the print in a
+// viewer, presses its Download button and gets one PNG: the
 // published portrait at its own pixels, with the card's name, symbol and
 // shading baked in, and no border (like every blot).
 //
@@ -15,7 +16,8 @@
 //    print's scale, fewer than 0.5% of pixels may differ by more than 16
 //    levels. Measured 2026-10-11: the painter 0.34%; native Chrome against
 //    native Firefox on the same card 0.53%.
-// 4. The button leads nowhere: no download, or a download with another name.
+// 4. The button leads nowhere: no viewer, no download, or a download with
+//    another name.
 //
 // What is real: the built site, the published card and portrait for KDM6B
 // (a 1536x2048 portrait, so the reference renders at an integer scale), the
@@ -179,14 +181,23 @@ test("print copy: the downloaded PNG is the portrait's own pixels with the card'
     await button.waitFor({ state: "visible", timeout: 30000 })
     await page.waitForFunction(
       (symbol) =>
-        document.querySelector(`[data-icono-print-copy-symbol="${symbol}"]`)?.textContent.trim() ===
-        `download ${symbol} print copy`,
+        document
+          .querySelector(`[data-icono-print-copy-symbol="${symbol}"]`)
+          ?.getAttribute("data-icono-print-copy-state") === "idle",
       SYMBOL,
       { timeout: 30000 },
     )
+    assert.equal(await button.getAttribute("aria-label"), `Print copy of ${SYMBOL}`)
+    await button.click()
+    // The print opens in the viewer first; nothing lands on disk unasked.
+    // PhotoSwipe puts a placeholder div.pswp__img in front of the picture.
+    const viewerImage = page.locator(".pswp img.pswp__img:not(.pswp__img--placeholder)").first()
+    await viewerImage.waitFor({ state: "visible", timeout: 60000 })
+    assert.match(String(await viewerImage.getAttribute("src")), /^blob:/)
+    const saveButton = page.locator(".pswp [data-icono-print-copy-download]")
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60000 }),
-      button.click(),
+      saveButton.click(),
     ])
     assert.equal(download.suggestedFilename(), `${SYMBOL}-iconoplasm-print-copy.png`)
     const printPath = path.join(OUT, `print-copy-${SYMBOL}.png`)
