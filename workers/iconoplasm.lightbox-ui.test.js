@@ -29,7 +29,7 @@ test("shared lightbox uses declared full-image dimensions before thumbnail natur
 })
 
 test("public pages use the shared delegated Iconoplasm lightbox", () => {
-  assert.match(app, /import \{ installIconoplasmLightbox \} from "\.\/lightbox\.js/)
+  assert.match(app, /import \{[^}]*\binstallIconoplasmLightbox\b[^}]*\} from "\.\/lightbox\.js/)
   assert.match(app, /installIconoplasmLightbox\(document\)/)
   assert.match(lightbox, /targetDocument\.addEventListener\("click", handler, true\)/)
   assert.match(lightbox, /event\.target\.closest\("\[data-icono-pswp\]"\)/)
