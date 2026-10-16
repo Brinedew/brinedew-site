@@ -41,11 +41,11 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=eae75bc086b291bd"
+import { installCandidateStrips } from "./candidate-strip.js?v=287b8c510988b339"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
-} from "./lightbox.js?v=fcfbf527a98e6235"
+} from "./lightbox.js?v=6811676792cc67ba"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
@@ -1226,6 +1226,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         emulsionInfo.emulsionId,
         "icono-emulsion-favorite-button--toolbar",
       ) +
+      '<span class="icono-toolbar-divider" aria-hidden="true"></span>' +
       renderPrintCopyButtonMarkup(genePayload) +
       "</div>"
     )
@@ -4519,6 +4520,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       candidateImageId: opts.candidateImageId || 0,
       deferSnapshot: !!opts.deferSnapshot,
       initialSnapshot: opts.initialSnapshot || null,
+      publicTally: opts.publicTally || null,
       mirrorBoxes: Array.isArray(opts.mirrorBoxes) ? opts.mirrorBoxes : [],
       authenticated: !!opts.authenticated,
       apiBaseUrl: API,
@@ -5098,12 +5100,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .trim()
       .toUpperCase()
     var boxes = container.querySelectorAll("[data-icono-candidate-vote-box]")
+    var tallies = new Map()
+    var published = Array.isArray(genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates
+      : []
+    for (var t = 0; t < published.length; t++) {
+      var sha = String((published[t] && published[t].asset_sha256) || "").toLowerCase()
+      if (sha) tallies.set(sha, published[t])
+    }
     var groups = []
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i]
       var candidateAssetSha = box.getAttribute("data-icono-candidate-vote-box")
       var group = wireVoteBoxGroup([box], symbol, candidateAssetSha, {
         deferSnapshot: true,
+        publicTally: tallies.get(String(candidateAssetSha || "").toLowerCase()) || null,
         visionId: box.getAttribute("data-icono-vision-id") || "",
         candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
       })
@@ -5118,6 +5129,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!targets.length || !symbol || !assetSha) return null
     var handle = wireVoteBox(targets[0], symbol, assetSha, {
       deferSnapshot: opts.deferSnapshot !== false,
+      publicTally: opts.publicTally || null,
       mirrorBoxes: targets.slice(1),
       visionId: opts.visionId || "",
       candidateImageId: opts.candidateImageId || 0,
@@ -5854,10 +5866,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
+  // Menu rows close their menu; the tile menu's copy row opens its form instead.
   document.addEventListener("click", function (event) {
     var item =
-      event.target && event.target.closest && event.target.closest(".icono-toolbar-menu button")
-    var menu = item && item.closest(".icono-toolbar-menu")
+      event.target &&
+      event.target.closest &&
+      event.target.closest(".icono-toolbar-menu button, .icono-candidate-menu > button")
+    var menu = item && item.closest(".icono-toolbar-menu, .icono-candidate-menu")
     if (menu && menu.matches(":popover-open")) menu.hidePopover()
   })
 
@@ -9349,11 +9364,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html =
       '<section class="icono-candidate-gallery icono-candidate-strip" data-icono-candidate-strip>' +
       '<div class="icono-candidate-gallery-heading">' +
-      '<h2 id="icono-candidate-strip-title">Other candidate images <span class="icono-candidate-count">' +
+      '<h2 id="icono-candidate-strip-title" class="icono-section-label">Candidates<span class="icono-section-count">' +
       visibleCandidates.length +
       "</span></h2>" +
       '<div class="icono-candidate-strip-nav" data-icono-strip-nav hidden>' +
-      '<span class="icono-candidate-strip-position" data-icono-strip-position aria-live="polite"></span>' +
       '<button type="button" class="icono-button icono-button--icon" data-icono-strip-prev aria-label="Previous candidates" title="Previous candidates">' +
       ICONO_STRIP_CHEVRON_LEFT +
       "</button>" +
@@ -9379,20 +9393,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var visionId = String((candidate && candidate.vision_id) || "").trim()
       var sampleLabel = String((candidate && candidate.sample_label) || "").trim()
       var emulsionInfo = emulsionDisplayInfo(candidate)
-      var sampleToolbarMarkup = sampleLabel
-        ? '<div class="icono-candidate-toolbar-pair"><span>Sample</span><strong>' +
-          esc(sampleLabel) +
-          "</strong></div>"
-        : ""
-      var emulsionToolbarMarkup = emulsionInfo.primary
-        ? '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' +
-          esc(emulsionInfo.primary) +
-          "</strong></div>" +
-          renderEmulsionFavoriteButtonMarkup(
+      // B-1096: the footer shows four controls (approve, reject, favourite, More);
+      // the ids and the rarer actions live in the More menu, like the overflow
+      // menu on an Unsplash or Pinterest tile.
+      var menuMetaMarkup =
+        (sampleLabel
+          ? '<div class="icono-candidate-menu-pair"><span>Sample</span><strong>' +
+            esc(sampleLabel) +
+            "</strong></div>"
+          : "") +
+        (emulsionInfo.primary
+          ? '<div class="icono-candidate-menu-pair"><span>Emulsion</span><strong>' +
+            esc(emulsionInfo.primary) +
+            "</strong></div>"
+          : "")
+      var favoriteMarkup = emulsionInfo.primary
+        ? renderEmulsionFavoriteButtonMarkup(
             emulsionInfo.emulsionId,
             "icono-emulsion-favorite-button--toolbar",
           )
         : ""
+      var menuKey = (assetSha || "tile-" + i).replace(/[^a-z0-9-]/g, "")
+      var menuId = "icono-candidate-menu-" + menuKey
+      var menuAnchor = "--icono-candidate-more-" + menuKey.slice(0, 24)
       var voteAttrs = 'data-icono-candidate-vote-box="' + esc(assetSha) + '"'
       if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
         voteAttrs +=
@@ -9407,8 +9430,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         // approve/reject vote buttons. The "Remove" label stays as accessible text inside a
         // .icono-visually-hidden span so screen readers still announce the destructive verb.
         removeMarkup =
-          '<div class="icono-candidate-admin-actions">' +
-          '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--remove icono-candidate-remove-button" data-icono-candidate-remove="true" data-icono-symbol="' +
+          '<button type="button" class="icono-candidate-menu-item icono-candidate-menu-item--remove icono-candidate-remove-button" data-icono-candidate-remove="true" data-icono-symbol="' +
           esc(genePayload.symbol) +
           '" data-icono-asset-sha256="' +
           esc(assetSha) +
@@ -9422,14 +9444,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(genePayload.symbol) +
           '" title="Remove candidate blot">' +
           ICONO_TRASH_ICON +
-          '<span class="icono-visually-hidden">Remove</span>' +
-          "</button>" +
-          "</div>"
+          "<span>Remove</span>" +
+          "</button>"
       }
       // B-612: the candidate edit entry is authenticated-only; guests get no
       // button and therefore never reach authenticated provider state.
       var editMarkup = currentUser
-        ? '<button type="button" class="icono-candidate-action-btn icono-candidate-action-btn--edit icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
+        ? '<button type="button" class="icono-candidate-menu-item icono-image-edit-open" data-icono-edit-source="candidate" data-icono-source-symbol="' +
           esc(genePayload.symbol) +
           '" data-icono-source-asset-sha256="' +
           esc(assetSha) +
@@ -9451,7 +9472,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(genePayload.symbol) +
           '" title="Edit candidate blot">' +
           ICONO_EDIT_ICON +
-          '<span class="icono-visually-hidden">Edit candidate blot</span>' +
+          "<span>Edit candidate blot</span>" +
           "</button>"
         : ""
       html +=
@@ -9487,34 +9508,41 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</span>" +
         "</button>" +
         '<div class="icono-candidate-footer">' +
-        voteBoxMarkup(voteAttrs) +
-        (sampleToolbarMarkup || emulsionToolbarMarkup
-          ? '<div class="icono-candidate-toolbar-meta">' +
-            sampleToolbarMarkup +
-            emulsionToolbarMarkup +
-            "</div>"
-          : "") +
+        voteBoxMarkup(voteAttrs, { showScore: true }) +
+        '<div class="icono-candidate-toolbar-meta">' +
+        favoriteMarkup +
+        "</div>" +
         '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' +
         esc(assetSha) +
         '">' +
-        removeMarkup +
+        '<button type="button" class="icono-candidate-icon-btn icono-candidate-more" popovertarget="' +
+        esc(menuId) +
+        '" style="anchor-name:' +
+        menuAnchor +
+        '" aria-label="More actions" title="More actions">' +
+        ICONO_MORE_ICON +
+        "</button>" +
+        '<div class="icono-candidate-menu" id="' +
+        esc(menuId) +
+        '" popover style="position-anchor:' +
+        menuAnchor +
+        '">' +
+        (menuMetaMarkup
+          ? '<div class="icono-candidate-menu-meta">' + menuMetaMarkup + "</div>"
+          : "") +
         editMarkup +
-        // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics, but the
-        // summary is rendered as a circular icon control. The visible "Copy to gene" string
-        // is preserved inside .icono-visually-hidden so screen-reader users still find
-        // the label, while the form opens as a floating
-        // popover that does not push the candidate card height.
+        // B-467: "Copy to gene" stays a <details>/<summary> for keyboard semantics;
+        // its form opens inside the menu.
         '<details class="icono-candidate-copy-panel">' +
-        '<summary class="icono-candidate-action-btn icono-candidate-action-btn--copy" aria-label="Copy to gene" title="Copy to gene">' +
+        '<summary class="icono-candidate-menu-item">' +
         ICONO_BRANCH_ICON +
-        '<span class="icono-visually-hidden">Copy to gene</span>' +
+        "<span>Copy to gene</span>" +
         "</summary>" +
         '<form class="icono-request-form icono-candidate-copy-popover" data-icono-candidate-copy-form data-icono-source-symbol="' +
         esc(genePayload.symbol) +
         '" data-icono-asset-sha256="' +
         esc(assetSha) +
         '">' +
-        '<label class="icono-candidate-copy-popover-label">Copy to gene</label>' +
         '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
         '<input type="hidden" data-icono-candidate-copy-target value="">' +
         '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy blot to selected gene" title="Copy blot">' +
@@ -9525,6 +9553,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
         "</form>" +
         "</details>" +
+        removeMarkup +
+        "</div>" +
         "</div>" +
         "</div>" +
         "</article>"
@@ -9877,6 +9907,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       toolbarHost.innerHTML = renderCanonicalToolbarMarkup(genePayload)
       toolbarHost.setAttribute("data-icono-island-signature", toolbarSignature)
     }
+    if (toolbarHost) fitCanonicalToolbar(toolbarHost.querySelector("[data-icono-canonical-rail]"))
     var suggestHost = container.querySelector("[data-icono-suggest-island]")
     if (suggestHost && suggestHost.getAttribute("data-icono-island-signature") !== authSignature) {
       suggestHost.innerHTML = buildSuggestSectionMarkup(genePayload.symbol)
@@ -9886,8 +9917,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     hydrateServerCandidateActionIslands(container, genePayload)
   }
 
+  // B-1096: the toolbar folds its rarer actions (edit, switch or claim) into the
+  // More menu only when the whole row does not fit, the "priority+" pattern of
+  // GitHub's and Gmail's toolbars. A width breakpoint cannot know which controls
+  // this viewer has: a signed-in caretaker's row is 160 px longer than a guest's.
+  function fitCanonicalToolbar(rail) {
+    if (!rail || rail._iconoFitToolbar) return
+    var fit = function () {
+      if (!rail.isConnected || !rail.clientWidth) return
+      // Measured start-aligned: a row that overflows its start edge has no
+      // scrollWidth to show for it.
+      rail.classList.remove("is-collapsed")
+      rail.classList.add("is-measuring")
+      var overflows = rail.scrollWidth > rail.clientWidth + 1
+      rail.classList.remove("is-measuring")
+      if (overflows) rail.classList.add("is-collapsed")
+    }
+    rail._iconoFitToolbar = fit
+    if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe(rail)
+    // The claim button arrives after its own fetch and changes the row's length.
+    new MutationObserver(fit).observe(rail, { childList: true, subtree: true })
+    fit()
+  }
+
   function wireGeneContent(container, genePayload) {
     if (!container || !genePayload) return
+    var rails = container.querySelectorAll("[data-icono-canonical-rail]")
+    for (var r = 0; r < rails.length; r += 1) fitCanonicalToolbar(rails[r])
     var candidateRetry = container.querySelector("[data-icono-candidates-retry]")
     if (candidateRetry && !candidateRetry.hasAttribute("data-icono-wired")) {
       candidateRetry.setAttribute("data-icono-wired", "true")
@@ -10031,7 +10087,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderSuggestList(listEl, comments, countEl) {
     if (!listEl) return
     var list = Array.isArray(comments) ? comments : []
-    if (countEl) countEl.textContent = list.length ? " · " + list.length : ""
+    if (countEl) {
+      countEl.textContent = list.length ? String(list.length) : ""
+      countEl.hidden = !list.length
+    }
     if (!list.length) {
       listEl.innerHTML = '<p class="icono-suggest-empty">No comments yet.</p>'
       return
@@ -10174,7 +10233,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<section id="gene-comments" class="icono-suggest" data-icono-suggest="' +
       safe +
       '">' +
-      '<div class="icono-suggest-lab">Comments<span data-icono-suggest-count></span></div>' +
+      '<h2 class="icono-section-label">Comments<span class="icono-section-count" data-icono-suggest-count hidden></span></h2>' +
       composer +
       '<div class="icono-suggest-list" data-icono-suggest-list></div>' +
       "</section>"
