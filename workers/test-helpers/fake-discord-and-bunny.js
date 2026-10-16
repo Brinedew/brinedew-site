@@ -88,6 +88,14 @@ export class FakeNetwork {
     const method = String(init.method || "GET").toUpperCase()
     if (target.host === "discord.com") return this.discord(method, target, init)
     if (target.host === "storage.bunnycdn.com") return this.bunny(method, target, init)
+    if (target.host === "cdn.discordapp.com") {
+      // A picture: the four bytes of a PNG signature, enough for a data: URI.
+      this.calls.push(`discord-cdn ${method} ${target.pathname}`)
+      return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      })
+    }
     return this.original(url, init)
   }
 
