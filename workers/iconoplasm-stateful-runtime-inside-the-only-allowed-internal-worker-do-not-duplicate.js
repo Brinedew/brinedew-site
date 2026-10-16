@@ -7140,9 +7140,10 @@ async function refreshGeneCommentsCache(env, symbol, ctx) {
 }
 
 // Account erasure rewrites the public object itself, before the rows, with the rows' new name.
+// Everyone else's pictures come from the copy already published, not from Discord again.
 export async function publishErasedGeneComments(env, symbol, rename) {
   const rows = await geneCommunityComments(env, symbol, { limit: 50 })
-  return publishGeneCommentsObject(env, symbol, rows.map(rename))
+  return publishGeneCommentsObject(env, symbol, rows.map(rename), { avatars: "reuse" })
 }
 
 function candidateGenerationCommunityCommentsSnapshot(comments, { limit = 12 } = {}) {

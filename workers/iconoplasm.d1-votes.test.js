@@ -1926,6 +1926,29 @@ test("B-1101: a gene's public comments copy follows every post, edit and delete"
   assert.equal(last.status, 200)
   assert.deepEqual(publicCopy(), { symbol: "A1BG", count: 0, comments: [] })
 
+  // G6: a commenter's picture is embedded, so a guest makes no /api/avatar request and never
+  // contacts Discord; it is fetched once however many comments its author wrote.
+  const avatar = encodeURIComponent("https://cdn.discordapp.com/avatars/42/face.png")
+  for (const body of ["First of two.", "Second of two."]) {
+    db.exec(
+      "INSERT INTO icono_gene_comments (gene_symbol, user_id, username, avatar_url, body, status) VALUES ('A1BG', 'reader-4', 'pictured', ?, ?, 'visible')",
+      `/api/avatar?src=${avatar}`,
+      body,
+    )
+  }
+  const pictured = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    body: { symbol: "A1BG", body: "A comment that publishes the copy." },
+    bindings: bunny,
+  })
+  assert.equal(pictured.status, 200)
+  const withPictures = publicCopy().comments.filter((comment) => comment.username === "pictured")
+  assert.equal(withPictures.length, 2)
+  for (const comment of withPictures) {
+    assert.match(comment.avatar_url, /^data:image\/png;base64,/)
+  }
+  assert.doesNotMatch(JSON.stringify(publicCopy()), /\/api\/avatar|cdn\.discordapp\.com/)
+  assert.equal(network.callsTo("discord-cdn").length, 1, "one fetch for one author")
+
   // G5: with storage refusing every write, the comment is still saved and answered 200.
   const original = globalThis.fetch
   globalThis.fetch = (input, init) =>

@@ -169,6 +169,26 @@ test(
           .first(),
       }
 
+      // TP53's public copy as the site published it before the request, both people pictured.
+      const tp53Rows = (
+        await iconoplasm
+          .prepare(
+            "SELECT id, username FROM icono_gene_comments WHERE gene_symbol = 'TP53' AND status = 'visible'",
+          )
+          .all()
+      ).results
+      const PICTURE = "data:image/png;base64,iVBORw=="
+      world.network.storeObject(
+        "comments/v1/TP53.json",
+        Buffer.from(
+          JSON.stringify({
+            symbol: "TP53",
+            count: tp53Rows.length,
+            comments: tp53Rows.map((row) => ({ ...row, avatar_url: PICTURE, body: "" })),
+          }),
+        ),
+      )
+
       const requests = []
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const { account, erasure } = await eraseBrinedewAccountOnRequest(
@@ -286,12 +306,22 @@ test(
         assert.ok(text.includes(label), `${gene}'s public copy shows the label`)
       }
       assert.deepEqual(
-        publicCopy("TP53").comments.map((comment) => [comment.username, comment.body]),
+        publicCopy("TP53").comments.map((comment) => [
+          comment.username,
+          comment.body,
+          comment.avatar_url,
+        ]),
         [
-          [OTHER_NAME, "Bob on TP53"],
-          [label, "Alice on TP53"],
-          [label, "Alice before the mirror"],
+          // Bob keeps the picture the copy already had, with no Discord fetch for it; hers is gone.
+          [OTHER_NAME, "Bob on TP53", PICTURE],
+          [label, "Alice on TP53", ""],
+          [label, "Alice before the mirror", ""],
         ],
+      )
+      assert.equal(
+        world.network.calls.some((call) => call.startsWith("discord-cdn")),
+        false,
+        "erasure fetches nobody's picture",
       )
     } finally {
       world.network.restore()

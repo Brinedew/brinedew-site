@@ -259,10 +259,10 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
     const rows = rowsFrom(found)
     if (!rows.length) return true
     const symbols = [...new Set(rows.map((row) => String(row.gene_symbol || "")).filter(Boolean))]
-    // Step 3's price, kept back from the Discord calls: per gene, one D1 read and a PUT with its
-    // read-back, with a retry's worth of room.
+    // Step 3's price, kept back from the Discord calls: per gene, one D1 read, and a read of the
+    // copy already published (for everyone else's pictures), a PUT and its read-back.
     const publish = services?.publishGeneComments
-    const publishFetches = publish ? symbols.length * 3 : 0
+    const publishFetches = publish ? symbols.length * 4 : 0
     const publishCalls = publish ? symbols.length : 0
     if (budget.fetches < publishFetches || budget.calls < 2 + publishCalls) return false
     if (env.KV && services?.geneCommentsCacheKey) {
@@ -313,7 +313,7 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
             renamed.has(Number(row.id)) ? { ...row, username: context.label, avatar_url: "" } : row,
           )
           budget.calls -= 1
-          budget.fetches -= 2
+          budget.fetches -= 3
         }
       }
       const results = await db.batch(

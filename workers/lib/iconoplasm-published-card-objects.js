@@ -66,7 +66,7 @@ export const REQUEST_PICKER_OBJECT_LIMIT = 512 * 1024
 // (workers/lib/gene-comments-publication.js builds it). 50 comments of at most
 // 2,000 characters each, with their names and avatar addresses, fit in 256 KiB.
 export const GENE_COMMENTS_OBJECT_PREFIX = "comments/v1"
-export const GENE_COMMENTS_OBJECT_LIMIT = 256 * 1024
+export const GENE_COMMENTS_OBJECT_LIMIT = 512 * 1024
 
 export function geneCommentsObjectKey(symbol) {
   const clean = String(symbol || "")
