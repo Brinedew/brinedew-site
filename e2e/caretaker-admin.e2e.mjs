@@ -22,6 +22,7 @@
 //
 // Needs an installed Chrome (CI has it; locally the test skips without it).
 // Screenshots land in artifacts/e2e/.
+// E2E scope: quartz/static/iconoplasm/admin quartz/static/iconoplasm/caretaker-admin
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { mkdirSync, readFileSync } from "node:fs"
@@ -101,6 +102,8 @@ function serveAdmin() {
 test("the Caretakers tab names texts in History's words and rolls a role back once", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
+  // An open browser keeps the file running until CI's step limit (2026-10-16).
+  t.after(() => browser.close())
   mkdirSync(OUT, { recursive: true })
   const server = serveAdmin()
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -187,8 +190,15 @@ test("the Caretakers tab names texts in History's words and rolls a role back on
     // 4. The cut version carries the mark; the Original's length sits beside it.
     const texts = () =>
       detail.locator(".caretaker-admin__text").evaluateAll((items) =>
+        // Each part's own words, not innerText: the badge's capitals are CSS.
         items.map((item) => ({
-          text: item.innerText.replace(/\s+/g, " ").trim(),
+          text: Array.from(item.children, (part) =>
+            part.tagName === "svg" ? "" : part.textContent,
+          )
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim(),
           source: item.dataset.source === "true",
         })),
       )
