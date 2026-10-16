@@ -171,6 +171,11 @@ test("1, 2, 3, 6: one caretaker per gene and per person, a retry claims once, a 
   const later = await h.call("GET", "WEE1/claim")
   assert.equal(later.body.claim.mode, "switch")
   assert.equal(later.body.claim.switch_from.canonical_symbol, "MFNG")
+  // The switch dialog pre-checks its terms box from this.
+  assert.equal(
+    later.body.claim.switch_from.terms_version_id,
+    later.body.claim.terms.terms_version_id,
+  )
   const stale = await h.claim("WEE1", "claim_alice_wee1_0002")
   assert.equal(stale.status, 409, "a page that does not name the role it leaves is refused")
   const switched = await h.claim("WEE1", "claim_alice_wee1_0003", {
