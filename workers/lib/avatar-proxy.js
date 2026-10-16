@@ -36,8 +36,10 @@ export function extractAvatarUpstreamFromRequest(url) {
 // so a reader who is not signed in never contacts Discord and makes no `/api/avatar` request.
 // A 24 px circle at twice the pixel density, in Discord's own sizes (a power of two from 16).
 const AVATAR_SIZE = 64
-// A 64 px avatar is 3 to 8 KB as a PNG, about 11 KB once in base64.
-export const AVATAR_BYTE_LIMIT = 8 * 1024
+// A 64 px avatar is 3 to 9 KB as a PNG (spoony1628's, on ERBB2, is 8,886 bytes: an 8 KiB cap
+// showed his initial instead). 16 KiB is about 22 KB in base64: five fit the board's 128 KiB and
+// sixteen fit a gene's comments copy (1 MiB) beside fifty long comments.
+export const AVATAR_BYTE_LIMIT = 16 * 1024
 const AVATAR_TIMEOUT_MS = 3000
 const AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
 
