@@ -41,7 +41,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=287b8c510988b339"
+import { installCandidateStrips } from "./candidate-strip.js?v=9b20b8b18121a2b7"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -10379,17 +10379,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
 
-    html += renderCandidateGallery(g)
-
     html += publicManifestationMarkup(g)
 
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
+
+    // Order (owner, 2026-10-17): the conversation about this gene comes before
+    // the pile of other candidates, and the Discord invite closes the page.
+    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
+
+    html += renderCandidateGallery(g)
 
     html +=
       '<section class="icono-gene-discord-card" data-icono-discord-island>' +
       buildGeneDiscordInviteMarkup() +
       "</section>"
-    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
 
     container.innerHTML = html
     wireGeneContent(container, g)

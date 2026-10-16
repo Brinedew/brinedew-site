@@ -241,6 +241,31 @@ function shownScores() {
 }
 
 // Runs in the page: the index of the first tile fully inside the strip.
+// The tile that shows the most of itself. The strip drags freely (owner,
+// 2026-10-17), so after a drag it can rest with no tile fully in view.
+function mostShownTile() {
+  const viewport = document.querySelector("[data-icono-strip-viewport]").getBoundingClientRect()
+  let best = -1
+  let shown = 0
+  ;[...document.querySelectorAll(".icono-candidate-grid > .icono-candidate-card")].forEach(
+    (tile, index) => {
+      const b = tile.getBoundingClientRect()
+      const width = Math.min(b.right, viewport.right) - Math.max(b.left, viewport.left)
+      if (width > shown) {
+        shown = width
+        best = index
+      }
+    },
+  )
+  return best
+}
+
+// The track's sideways offset; it stops changing once a drag's glide ends.
+function trackOffset() {
+  const track = document.querySelector("[data-icono-candidate-strip] .icono-candidate-grid")
+  return new DOMMatrixReadOnly(getComputedStyle(track).transform).m41
+}
+
 function firstWholeTile() {
   const viewport = document.querySelector("[data-icono-strip-viewport]").getBoundingClientRect()
   return [...document.querySelectorAll(".icono-candidate-grid > .icono-candidate-card")].findIndex(
@@ -384,21 +409,48 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
             await page.mouse.move(b.x + b.width * 0.8 - step * (b.width * 0.06), b.y + b.height / 2)
           }
           await page.mouse.up()
-          await page.waitForTimeout(700)
+          // Let the glide end before reading where the strip rests.
+          {
+            const deadline = Date.now() + 5_000
+            let last = await page.evaluate(trackOffset)
+            for (;;) {
+              await page.waitForTimeout(200)
+              const now = await page.evaluate(trackOffset)
+              if (Math.abs(now - last) < 0.5 || Date.now() > deadline) break
+              last = now
+            }
+          }
           assert.equal(
             await page.locator(".pswp").count(),
             0,
             `${name}: ending a drag opened the viewer`,
           )
 
-          const whole = await page.evaluate(firstWholeTile)
-          const target = page
-            .locator(`${STRIP} .icono-candidate-grid > .icono-candidate-card`)
-            .nth(whole)
-            .locator(".icono-candidate-media-button")
-          await target.click()
+          // Click the shown part of that tile with the mouse: a locator click
+          // would first scroll a half-shown tile into view, moving the strip
+          // under Embla.
+          const shown = await page.evaluate(mostShownTile)
+          const point = await page.evaluate((index) => {
+            const viewport = document
+              .querySelector("[data-icono-strip-viewport]")
+              .getBoundingClientRect()
+            const media = document
+              .querySelectorAll(".icono-candidate-grid > .icono-candidate-card")
+              [index].querySelector(".icono-candidate-media-button")
+              .getBoundingClientRect()
+            const left = Math.max(media.left, viewport.left)
+            const right = Math.min(media.right, viewport.right)
+            return { x: (left + right) / 2, y: media.top + media.height / 2 }
+          }, shown)
+          await page.mouse.click(point.x, point.y)
           await page.waitForSelector(".pswp--open", { timeout: 5_000 })
-          await target.click({ force: true, timeout: 2_000 }).catch(() => {})
+          // A second press on the same tile while the viewer is open.
+          await page.evaluate((index) => {
+            document
+              .querySelectorAll(".icono-candidate-grid > .icono-candidate-card")
+              [index].querySelector(".icono-candidate-media-button")
+              .click()
+          }, shown)
           await page.waitForTimeout(500)
           assert.equal(
             await page.locator(".pswp").count(),

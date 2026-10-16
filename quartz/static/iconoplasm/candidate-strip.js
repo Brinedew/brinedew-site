@@ -4,8 +4,8 @@
 // Carousel, the engine behind shadcn/ui's Carousel, moves the track; its wheel
 // plugin turns sideways trackpad swipes into strip movement.
 //
-// Keys, with focus anywhere in the strip: Left and Right move one frame,
-// Up approves and Down rejects the frame in focus, Home and End jump to the
+// Keys, with focus anywhere in the strip: Left and Right move one frame and
+// bring it to the middle, Up approves and Down rejects the frame in focus, Home and End jump to the
 // ends, Enter opens the frame in the viewer (the frame is a button).
 //
 // Until Embla loads, the strip is a plain native scroller (CSS), so every
@@ -81,6 +81,20 @@ function installStrip(section) {
   var next = section.querySelector("[data-icono-strip-next]")
   var progress = section.querySelector("[data-icono-strip-progress]")
 
+  // The snap that shows this frame. With align "center" every frame has its
+  // own snap except near the ends, where containScroll folds the frames that
+  // can't be centred into the first or last snap.
+  function snapOf(api, index) {
+    var registry = api.internalEngine().slideRegistry
+    for (var snap = 0; snap < registry.length; snap += 1) {
+      if (registry[snap].indexOf(index) >= 0) return snap
+    }
+    return 0
+  }
+
+  // The focused frame always moves to the middle of the strip, so the reader's
+  // eye stays put while the frames slide under it (owner, 2026-10-17: the
+  // selected picture drifted to the edge, then the strip jumped a page).
   function focusFrame(index) {
     var list = frames(track)
     if (!list.length) return
@@ -90,19 +104,10 @@ function installStrip(section) {
     target.focus({ preventScroll: true })
     var api = state.api
     if (!api) {
-      list[clamped].scrollIntoView({ block: "nearest", inline: "nearest" })
+      list[clamped].scrollIntoView({ block: "nearest", inline: "center" })
       return
     }
-    if (api.slidesInView().indexOf(clamped) >= 0) return
-    // Embla scrolls by snap, and with slidesToScroll "auto" one snap holds a
-    // page of frames; its slide registry says which snap holds this frame.
-    var registry = api.internalEngine().slideRegistry
-    for (var snap = 0; snap < registry.length; snap += 1) {
-      if (registry[snap].indexOf(clamped) >= 0) {
-        api.scrollTo(snap)
-        return
-      }
-    }
+    api.scrollTo(snapOf(api, clamped))
   }
 
   section.addEventListener("keydown", function (event) {
@@ -146,10 +151,13 @@ function installStrip(section) {
       var api = module.EmblaCarousel(
         viewport,
         {
-          align: "start",
+          // A drag rests where the reader lets go, with momentum, instead of
+          // springing to the nearest page of frames (owner, 2026-10-17: "it
+          // never really stays in the same place you dragged").
+          dragFree: true,
+          align: "center",
           containScroll: "trimSnaps",
-          slidesToScroll: "auto",
-          skipSnaps: true,
+          slidesToScroll: 1,
           // A frame counts as shown only when (almost) all of it is: the peeking
           // one is next, and the counter reads only whole frames.
           inViewThreshold: 0.95,
@@ -180,13 +188,40 @@ function installStrip(section) {
         progress.style.transform = "scaleX(" + value + ")"
       }
 
+      // Prev and Next turn a page: the frame nearest the middle moves by as
+      // many frames as the strip fits, so a reader with 71 frames isn't
+      // clicking 71 times, and a drag that rested between frames still turns
+      // a whole page.
+      function page(direction) {
+        var list = frames(track)
+        if (!list.length) return
+        var box = viewport.getBoundingClientRect()
+        var middle = box.left + box.width / 2
+        var nearest = 0
+        var best = Infinity
+        for (var i = 0; i < list.length; i += 1) {
+          var rect = list[i].getBoundingClientRect()
+          var distance = Math.abs(rect.left + rect.width / 2 - middle)
+          if (distance < best) {
+            best = distance
+            nearest = i
+          }
+        }
+        var step =
+          list.length > 1
+            ? list[1].getBoundingClientRect().left - list[0].getBoundingClientRect().left
+            : box.width
+        var perPage = Math.max(1, Math.floor(box.width / Math.max(1, step)))
+        var to = Math.max(0, Math.min(list.length - 1, nearest + direction * perPage))
+        api.scrollTo(snapOf(api, to))
+      }
       if (prev)
         prev.addEventListener("click", function () {
-          api.scrollPrev()
+          page(-1)
         })
       if (next)
         next.addEventListener("click", function () {
-          api.scrollNext()
+          page(1)
         })
       api.on("select", sync)
       api.on("slidesInView", sync)
