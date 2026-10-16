@@ -5684,26 +5684,6 @@ a.icono-clan-ae:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
-.icono-suggest-btn {
-  padding: 0.5rem 0.86rem;
-  border-radius: var(--icono-control-radius);
-  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--ui-border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--light));
-  color: color-mix(in srgb, var(--dark) 85%, var(--accent) 15%);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 0.15s var(--icono-ease-out);
-}
-.icono-suggest-btn:hover {
-  background: color-mix(in srgb, var(--accent) 18%, var(--light));
-}
-.icono-suggest-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
 .icono-suggest-err {
   margin: 0.4rem 0 0;
   font-family: "IBM Plex Mono", monospace;
@@ -5712,8 +5692,8 @@ a.icono-clan-ae:hover {
 }
 .icono-suggest-signin {
   margin: 0;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 1.1875rem;
   color: var(--darkgray);
 }
 .icono-suggest-list {
@@ -5847,4 +5827,294 @@ a.icono-clan-ae:hover {
     1rem/1.65 "Special Elite",
     Georgia,
     serif;
+}
+
+/* ───────── B-1095: the candidate strip ─────────
+   A gene's other candidates sit in one sideways strip (candidate-strip.js moves
+   it with Embla Carousel), so the page is the same height at 3 candidates or 300.
+   Before the script arrives the viewport is a native scroller; once Embla runs it
+   clips sideways only, so a tile's copy-to-gene popover can still hang below. */
+.icono-candidate-strip {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+.icono-candidate-strip .icono-candidate-gallery-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.icono-candidate-strip .icono-candidate-gallery-heading h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icono-candidate-strip-nav {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.icono-candidate-strip-nav[hidden] {
+  display: none;
+}
+
+.icono-candidate-strip-position {
+  margin-inline-end: 0.3rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-candidate-strip-viewport {
+  margin-inline: -0.3rem;
+  padding-inline: 0.3rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+/* overflow: clip is not a scroll container, so without inline-size containment
+   the track's width would become the page's minimum width (a 13 px sideways
+   scroll at 360 px). */
+.icono-candidate-strip.is-strip-ready .icono-candidate-strip-viewport {
+  contain: inline-size;
+  overflow-x: clip;
+  overflow-y: visible;
+  scroll-snap-type: none;
+}
+
+.icono-candidate-strip .icono-candidate-grid {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.35rem 0 0.4rem;
+  touch-action: pan-y pinch-zoom;
+}
+
+/* 16rem holds a tile's whole footer (votes, star, and the admin's three
+   actions); at 11.5rem the copy button covered the star on a 402 px phone. */
+.icono-candidate-strip .icono-candidate-card {
+  flex: 0 0 clamp(16rem, 40%, 17.5rem);
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.icono-candidate-strip .icono-candidate-toolbar-meta > .icono-emulsion-favorite-button--toolbar {
+  flex-basis: 2.25rem;
+  width: 2.25rem;
+  min-width: 2.25rem;
+}
+
+.icono-candidate-strip .icono-candidate-copy-panel[open] form.icono-candidate-copy-popover {
+  width: min(280px, 100cqw);
+}
+
+.icono-candidate-strip-progress {
+  height: 2px;
+  margin-top: 0.55rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ui-border) 70%, transparent);
+}
+
+.icono-candidate-strip-progress > span {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--darkgray) 80%, transparent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.icono-candidate-strip:not(.is-strip-ready) .icono-candidate-strip-progress,
+.icono-candidate-strip:has([data-icono-strip-nav][hidden]) .icono-candidate-strip-progress {
+  display: none;
+}
+
+/* "Soft rise" from the Takayu motion reference: blur and transparency resolve
+   together, 900 ms easeOutSine, like a print coming up in the developer tray. */
+.icono-candidate-strip .icono-candidate-media img {
+  transition:
+    opacity 900ms cubic-bezier(0.61, 1, 0.88, 1),
+    filter 900ms cubic-bezier(0.61, 1, 0.88, 1);
+}
+
+.icono-candidate-strip.is-strip-developing .icono-candidate-media img:not(.is-developed) {
+  opacity: 0;
+  filter: blur(6px) saturate(0.35);
+}
+
+/* "Press feedback" from the same reference: 420 ms easeOutCubic, a short
+   shrink that lands like a stamp. */
+@keyframes icono-press-feedback {
+  from {
+    scale: 0.92;
+  }
+  to {
+    scale: 1;
+  }
+}
+
+.icono-candidate-strip .icono-vote-btn.is-pressed {
+  animation: icono-press-feedback 420ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-candidate-strip .icono-candidate-media img {
+    transition: none;
+  }
+
+  .icono-candidate-strip.is-strip-developing .icono-candidate-media img:not(.is-developed) {
+    opacity: 1;
+    filter: none;
+  }
+
+  .icono-candidate-strip .icono-vote-btn.is-pressed {
+    animation: none;
+  }
+}
+
+/* ───────── B-1095: the Discord invite, in Discord's own embed shape ───────── */
+.icono-gene-discord-card {
+  margin-top: 2rem;
+}
+
+.icono-discord-invite {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--icono-radius-lg);
+  background: color-mix(in srgb, var(--ui-bg) 80%, var(--light));
+}
+
+.icono-discord-invite-kicker {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-discord-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.icono-discord-invite-icon {
+  flex: none;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1rem;
+  object-fit: cover;
+}
+
+.icono-discord-invite-main {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.icono-discord-invite-name {
+  overflow: hidden;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dark);
+}
+
+.icono-discord-invite-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.9rem;
+}
+
+.icono-discord-invite-counts[hidden] {
+  display: none;
+}
+
+.icono-discord-invite-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary, var(--darkgray));
+}
+
+/* Discord's own status colours: green is online, grey is a member. */
+.icono-discord-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #80848e;
+}
+
+.icono-discord-dot--online {
+  background: #23a55a;
+}
+
+.icono-discord-invite-faces {
+  display: inline-flex;
+  align-items: center;
+}
+
+.icono-discord-invite-faces[hidden] {
+  display: none;
+}
+
+.icono-discord-invite-faces img {
+  width: 1.4rem;
+  height: 1.4rem;
+  margin-inline-start: -0.4rem;
+  border: 2px solid color-mix(in srgb, var(--ui-bg) 80%, var(--light));
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.icono-discord-invite-faces img:first-child {
+  margin-inline-start: 0;
+}
+
+.icono-discord-invite-join {
+  flex: none;
+}
+
+/* ───────── B-1095: comments ─────────
+   Long comments are read, not glanced at: the body uses the page's reading face
+   (Crimson Pro) at reading size, whole, never clamped. */
+.icono-suggest .icono-suggest-body {
+  margin-top: 0.25rem;
+  /* The gene page's main column is set in IBM Plex Mono, so name the face. */
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 1.1875rem;
+  line-height: 1.5;
+  color: var(--darkgray);
+}
+
+.icono-suggest .icono-suggest-av {
+  background: color-mix(in srgb, var(--dark) 10%, var(--ui-bg));
+  color: var(--darkgray);
+}
+
+.icono-suggest-form .icono-suggest-btn {
+  flex: none;
+}
+
+.icono-suggest-signin a {
+  color: var(--secondary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }

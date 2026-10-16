@@ -40,7 +40,9 @@ const iconoplasmCsp = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com",
-  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com",
+  // B-1095: the gene page reads the Discord invite's live member counts
+  // straight from Discord (CORS allows this origin), so readers cost us nothing.
+  "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com https://discord.com",
   "frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com",
   "worker-src 'self' blob:",
   "form-action 'self'",
