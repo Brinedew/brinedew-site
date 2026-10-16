@@ -24,7 +24,7 @@ import {
 
 const NO_STORE = Object.freeze({ "Cache-Control": "private, no-store" })
 const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
-const ASSIGNMENT_ACTIONS = new Set(["cancel", "suspend", "resume", "end"])
+const ASSIGNMENT_ACTIONS = new Set(["cancel", "suspend", "resume", "end", "withdraw"])
 const ASSIGNMENT_STATUSES = new Set(["pending_acceptance", "active", "suspended", "ended"])
 const RELINQUISH_POLICIES = new Set(["retain", "withdraw"])
 const DEFAULT_PAGE_LIMIT = 50
@@ -273,9 +273,10 @@ function bodyRouteId(body, key, routeId) {
   }
 }
 
-// One admin change of one role. Ending with "withdraw" takes the role's texts
-// out of use after the role ends; it runs again on a retry of the same end, so
-// a lost answer between the two leaves nothing half done.
+// One admin change of one role. Ending with "withdraw", or withdrawing later
+// from a role that ended keeping its texts, takes the role's texts out of use;
+// it runs again on a retry of the same change, so a lost answer between the
+// two leaves nothing half done.
 export async function changeCaretakerRoleAsAdmin(
   env,
   { assignmentId, action, actorAccountId, body },

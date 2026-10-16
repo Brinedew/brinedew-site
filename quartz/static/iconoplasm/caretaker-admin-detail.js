@@ -311,6 +311,38 @@
         controls.appendChild(endForm)
       }
 
+      // B-1097: a tenure that ended keeping its manifestations can withdraw
+      // them later. The words are the end form's own "Withdraw them" choice.
+      if (assignment.status === "ended" && assignment.relinquish_policy === "retain") {
+        var withdrawKey =
+          "withdraw:" + assignment.caretaker_assignment_id + ":" + assignment.assignment_version
+        var withdrawForm = shared.element(
+          "form",
+          "caretaker-admin__action caretaker-admin__action--danger",
+        )
+        shared.append(
+          withdrawForm,
+          shared.element("h4", "", "Withdraw them"),
+          consequence(
+            "They leave public and canonical eligibility, but immutable history and moderation records remain.",
+            "danger",
+          ),
+        )
+        var withdrawButton = actionButton(commandLabel(withdrawKey, "Withdraw them"), "danger")
+        withdrawForm.appendChild(withdrawButton)
+        withdrawForm.addEventListener("submit", function withdrawManifestations(event) {
+          event.preventDefault()
+          performMutation(
+            withdrawKey,
+            "/assignments/" + encodeURIComponent(assignment.caretaker_assignment_id) + "/withdraw",
+            { expected_assignment_version: assignment.assignment_version },
+            withdrawButton,
+            "Caretaker tenure ended with the recorded manifestation policy.",
+          )
+        })
+        controls.appendChild(withdrawForm)
+      }
+
       if (!controls.childNodes.length) {
         controls.appendChild(
           consequence(
