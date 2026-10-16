@@ -19,6 +19,7 @@ import { ERASURE_STEPS } from "./iconoplasm/account-erasure/erasure-steps.js"
 import {
   iconoplasmUserKvKeyScopes,
   postIconoplasmGeneCommentToDiscord,
+  publishErasedGeneComments,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   brinedewFormerAuthorLabel,
@@ -168,6 +169,26 @@ test(
           .first(),
       }
 
+      // TP53's public copy as the site published it before the request, both people pictured.
+      const tp53Rows = (
+        await iconoplasm
+          .prepare(
+            "SELECT id, username FROM icono_gene_comments WHERE gene_symbol = 'TP53' AND status = 'visible'",
+          )
+          .all()
+      ).results
+      const PICTURE = "data:image/png;base64,iVBORw=="
+      world.network.storeObject(
+        "comments/v1/TP53.json",
+        Buffer.from(
+          JSON.stringify({
+            symbol: "TP53",
+            count: tp53Rows.length,
+            comments: tp53Rows.map((row) => ({ ...row, avatar_url: PICTURE, body: "" })),
+          }),
+        ),
+      )
+
       const requests = []
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const { account, erasure } = await eraseBrinedewAccountOnRequest(
@@ -179,6 +200,7 @@ test(
           },
           {
             geneCommentsCacheKey: (symbol) => `iconoplasm:gene-comments:${symbol}`,
+            publishGeneComments: publishErasedGeneComments,
             userKvKeyScopes: iconoplasmUserKvKeyScopes,
           },
         )
@@ -267,6 +289,39 @@ test(
         ).n,
         4,
         "her four public comments stay under the label; the one she removed is gone",
+      )
+
+      // The genes' public comment copies on the CDN, which guests read, carry the label too,
+      // and the other person's comment as it was.
+      const publicCopy = (gene) => {
+        const bytes = world.network.objects.get(`comments/v1/${gene}.json`)
+        assert.ok(bytes, `the public copy of ${gene}'s comments was written`)
+        return JSON.parse(Buffer.from(bytes).toString("utf8"))
+      }
+      for (const gene of ["TP53", "SOX11", "EZH2"]) {
+        const text = JSON.stringify(publicCopy(gene))
+        for (const needle of needles) {
+          assert.equal(text.includes(needle), false, `${gene}'s public copy still names her`)
+        }
+        assert.ok(text.includes(label), `${gene}'s public copy shows the label`)
+      }
+      assert.deepEqual(
+        publicCopy("TP53").comments.map((comment) => [
+          comment.username,
+          comment.body,
+          comment.avatar_url,
+        ]),
+        [
+          // Bob keeps the picture the copy already had, with no Discord fetch for it; hers is gone.
+          [OTHER_NAME, "Bob on TP53", PICTURE],
+          [label, "Alice on TP53", ""],
+          [label, "Alice before the mirror", ""],
+        ],
+      )
+      assert.equal(
+        world.network.calls.some((call) => call.startsWith("discord-cdn")),
+        false,
+        "erasure fetches nobody's picture",
       )
     } finally {
       world.network.restore()

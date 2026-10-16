@@ -27,78 +27,12 @@ import {
   canonicalPublishedJson,
   createPublishedCardObjectStore,
 } from "./iconoplasm-published-card-objects.js"
-import { sanitizeDiscordAvatarUrl } from "./avatar-proxy.js"
+import { discordAvatarDataUri } from "./avatar-proxy.js"
 import { boardEntry, readLeaderboard } from "./leaderboard-streaks.js"
 
 // What the page shows: five rows.
 export const LEADERBOARD_OBJECT_ENTRIES = 5
-// A 24 px circle at twice the pixel density, in Discord's own sizes (a power of two from 16).
-const AVATAR_SIZE = 64
-// A 64 px avatar is 3 to 8 KB as a PNG; five of them in base64 stay under the object's 128 KiB.
-export const AVATAR_BYTE_LIMIT = 8 * 1024
-const AVATAR_TIMEOUT_MS = 3000
-const AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])
 const encoder = new TextEncoder()
-
-async function boundedBytes(response, limit) {
-  if (Number(response.headers.get("content-length")) > limit) {
-    await response.body?.cancel().catch(() => {})
-    return null
-  }
-  const reader = response.body?.getReader()
-  if (!reader) return null
-  const chunks = []
-  let length = 0
-  try {
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      length += value.byteLength
-      if (length > limit) return null
-      chunks.push(value)
-    }
-  } finally {
-    await reader.cancel().catch(() => {})
-  }
-  const bytes = new Uint8Array(length)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
-}
-
-// One avatar as a `data:` URI, or null (no picture, not Discord's host, slow, not an image, too big):
-// the page draws the initial of the name instead, as it does for an account with no picture.
-async function avatarDataUri(rawUrl, fetchImpl) {
-  const safe = sanitizeDiscordAvatarUrl(rawUrl)
-  if (!safe) return null
-  try {
-    const url = new URL(safe)
-    url.searchParams.set("size", String(AVATAR_SIZE))
-    const response = await fetchImpl(url.toString(), {
-      redirect: "manual",
-      signal: AbortSignal.timeout(AVATAR_TIMEOUT_MS),
-      cf: { cacheEverything: true, cacheTtl: 86400 },
-    })
-    const type = String(response.headers.get("content-type") || "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase()
-    if (!response.ok || !AVATAR_TYPES.has(type)) {
-      await response.body?.cancel().catch(() => {})
-      return null
-    }
-    const bytes = await boundedBytes(response, AVATAR_BYTE_LIMIT)
-    if (!bytes?.byteLength) return null
-    let binary = ""
-    for (const byte of bytes) binary += String.fromCharCode(byte)
-    return `data:${type};base64,${btoa(binary)}`
-  } catch {
-    return null
-  }
-}
 
 function sameBytes(left, right) {
   if (left.byteLength !== right.byteLength) return false
@@ -117,7 +51,9 @@ export async function publishLeaderboardObject(
 ) {
   if (!env?.DB) return { ok: false, reason: "missing_db" }
   const rows = await readLeaderboard(env.DB, LEADERBOARD_OBJECT_ENTRIES)
-  const avatars = await Promise.all(rows.map((row) => avatarDataUri(row?.avatar_url, fetchImpl)))
+  const avatars = await Promise.all(
+    rows.map((row) => discordAvatarDataUri(row?.avatar_url, fetchImpl)),
+  )
   const object = { entries: rows.map((row, index) => boardEntry(row, index, avatars[index])) }
   const bytes = encoder.encode(canonicalPublishedJson(object))
   const summary = {

@@ -232,3 +232,64 @@ test("gene page tabs: Overview slices lead into Lore, Comments and Candidates", 
     server.close()
   }
 })
+
+// A reader who is not signed in reads the comments from the gene's CDN object, not the
+// Worker (a gene page view costs no Worker request). Ways this can fail, written before the
+// check: the guest sees "No comments yet." on a gene that has comments (the bug this
+// fixes); the page still asks the Worker; a gene with no object (the CDN's 404) shows an
+// error instead of an empty list.
+test("gene page comments: a guest reads them from the CDN copy", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  try {
+    for (const present of [true, false]) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+      const workerAsked = []
+      await routeProduction(
+        context,
+        origin,
+        (pathname) => {
+          if (pathname.includes("/comments")) workerAsked.push(pathname)
+          return undefined
+        },
+        { session: false },
+      )
+      await context.route(`https://img.brinedew.bio/comments/v1/${SYMBOL}.json`, (route) =>
+        present
+          ? route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              headers: { "Access-Control-Allow-Origin": "*" },
+              body: JSON.stringify({ symbol: SYMBOL, count: COMMENTS.length, comments: COMMENTS }),
+            })
+          : route.fulfill({
+              status: 404,
+              headers: { "Access-Control-Allow-Origin": "*" },
+              body: "Not Found",
+            }),
+      )
+      const page = await context.newPage()
+      await page.goto(`${HOST}/gene/${SYMBOL}`)
+      await page.waitForSelector(`${TABS} [data-icono-suggest-list] > *`, { timeout: 30_000 })
+      const seen = await page.evaluate(readTabs)
+      const empty = await page
+        .locator(`${TABS} .icono-suggest-empty`)
+        .first()
+        .textContent()
+        .catch(() => "")
+      if (present) {
+        assert.equal(seen.commentsShown, 3, "a guest sees the newest three in Overview")
+        assert.equal(seen.tabs.find((tab) => tab.id === "comments").count, "5")
+      } else {
+        assert.equal(seen.commentsShown, 0)
+        assert.equal(empty.trim(), "No comments yet.", "a 404 is an empty list, not an error")
+      }
+      assert.deepEqual(workerAsked, [], "a guest's comments cost no Worker request")
+      await context.close()
+    }
+  } finally {
+    await browser.close()
+    server.close()
+  }
+})

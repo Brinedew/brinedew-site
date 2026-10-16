@@ -55,6 +55,7 @@ import {
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-card-objects.js"
+import { publishGeneCommentsObject } from "./lib/gene-comments-publication.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { isAdmin } from "./admin.js"
@@ -7098,28 +7099,51 @@ function geneCommentsCacheKey(symbol) {
   return `iconoplasm:gene-comments:${normalizeSymbol(symbol || "")}`
 }
 
-// Write-through cache refresh. KV writes are the scarce free-tier resource
-// (1k/day) while D1 reads are abundant (~5M/day), so KV is only ever written from
-// comment mutations (POST/PATCH/DELETE) — never from GET views. This decouples KV
-// write volume from gene-card view volume across the ~19k gene catalog, so a
-// crawler walking every gene costs D1 reads, not KV writes. Genes with no visible
-// comments are never cached (we drop the key) rather than spending a write to
-// memoize emptiness.
-async function refreshGeneCommentsCache(env, symbol) {
-  if (!env?.KV) return
-  const key = geneCommentsCacheKey(symbol)
+// Write-through refresh of a gene's two comment copies after a change, from one D1 read.
+//
+// The KV cache serves the Worker route. KV writes are the scarce free-tier resource (1k/day)
+// while D1 reads are abundant (~5M/day), so KV is only ever written from comment mutations
+// (POST/PATCH/DELETE) — never from GET views. This decouples KV write volume from gene-card view
+// volume across the ~19k gene catalog, so a crawler walking every gene costs D1 reads, not KV
+// writes. Genes with no visible comments are never cached (we drop the key) rather than spending a
+// write to memoize emptiness.
+//
+// The public object on the CDN serves readers who are not signed in
+// (workers/lib/gene-comments-publication.js). It is written after the response, best-effort: the
+// comment is already in D1, and the author reads the Worker route.
+async function refreshGeneCommentsCache(env, symbol, ctx) {
+  let rows
   try {
-    const rows = await geneCommunityComments(env, symbol, { limit: 50 })
-    if (Array.isArray(rows) && rows.length) {
-      await env.KV.put(key, JSON.stringify(rows), {
-        expirationTtl: GENE_COMMENTS_CACHE_TTL_SECONDS,
-      })
-    } else {
-      await env.KV.delete(key)
-    }
+    rows = await geneCommunityComments(env, symbol, { limit: 50 })
   } catch {
-    /* cache refresh best-effort; GET falls back to D1 on miss */
+    return /* cache refresh best-effort; GET falls back to D1 on miss */
   }
+  if (env?.KV) {
+    const key = geneCommentsCacheKey(symbol)
+    try {
+      if (Array.isArray(rows) && rows.length) {
+        await env.KV.put(key, JSON.stringify(rows), {
+          expirationTtl: GENE_COMMENTS_CACHE_TTL_SECONDS,
+        })
+      } else {
+        await env.KV.delete(key)
+      }
+    } catch {
+      /* cache refresh best-effort; GET falls back to D1 on miss */
+    }
+  }
+  const published = publishGeneCommentsObject(env, symbol, rows).catch((error) =>
+    console.warn("[iconoplasm-comments] public copy not written", symbol, error?.message),
+  )
+  if (ctx?.waitUntil) ctx.waitUntil(published)
+  else await published
+}
+
+// Account erasure rewrites the public object itself, before the rows, with the rows' new name.
+// Everyone else's pictures come from the copy already published, not from Discord again.
+export async function publishErasedGeneComments(env, symbol, rename) {
+  const rows = await geneCommunityComments(env, symbol, { limit: 50 })
+  return publishGeneCommentsObject(env, symbol, rows.map(rename), { avatars: "reuse" })
 }
 
 function candidateGenerationCommunityCommentsSnapshot(comments, { limit = 12 } = {}) {
@@ -19514,6 +19538,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
         },
         {
           geneCommentsCacheKey,
+          publishGeneComments: publishErasedGeneComments,
           userKvKeyScopes: iconoplasmUserKvKeyScopes,
           settleGene: (scopedEnv, symbol) =>
             settleGeneAfterVote(scopedEnv, ctx, symbol, { reason: "caretaker_role_erased" }),
@@ -21600,7 +21625,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             )
           }
           // Write-through: recompute the cache from D1 after the edit/delete.
-          await refreshGeneCommentsCache(env, commentSymbol)
+          await refreshGeneCommentsCache(env, commentSymbol, ctx)
           // B-1001: the public Discord copy follows the author's edit or delete, after the
           // response and best-effort, like the original post.
           const mirror = discordMirrorConfig(env)
@@ -21707,7 +21732,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
         }
         // Write-through: recompute the cache from D1 now that the new comment exists.
-        await refreshGeneCommentsCache(env, commentSymbol)
+        await refreshGeneCommentsCache(env, commentSymbol, ctx)
         const comment = {
           id: Number(insertRes?.meta?.last_row_id || 0) || 0,
           username,

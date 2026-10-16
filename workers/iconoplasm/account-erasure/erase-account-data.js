@@ -233,11 +233,14 @@ async function runScanPasses(env, database, steps, context, budget, changedBy) {
 }
 
 // Public comments stay under the anonymous label; a comment its author had already removed goes.
-// Each slice does four things, in this order, so a failure at any point leaves the rows to the next
+// Each slice does these things, in this order, so a failure at any point leaves the rows to the next
 // run: (1) the gene's cached comment list (KV, 24 hours), which carries the old name and avatar, is
 // dropped (a reader that arrives in between reads D1: a GET never fills the cache); (2) the
 // comment's copy in the public Discord channel is rewritten to the label, or deleted for a removed
-// comment (B-992, discord-comment-mirror.js); (3) the rows are rewritten or deleted. The rows are
+// comment (B-992, discord-comment-mirror.js); (3) the gene's public comments object on the CDN
+// (gene-comments-publication.js) is rewritten with the label: it is built from the rows, so it has
+// to go before them, or a failed write would leave the old name public with no row left to find it
+// again; (4) the rows are rewritten or deleted. The rows are
 // the progress: a comment whose Discord post is done but whose row is not is found again, finds
 // no post that names the person, and moves on.
 async function runCommentsStep(env, step, context, budget, services, changedBy, discord) {
@@ -256,6 +259,12 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
     const rows = rowsFrom(found)
     if (!rows.length) return true
     const symbols = [...new Set(rows.map((row) => String(row.gene_symbol || "")).filter(Boolean))]
+    // Step 3's price, kept back from the Discord calls: per gene, one D1 read, and a read of the
+    // copy already published (for everyone else's pictures), a PUT and its read-back.
+    const publish = services?.publishGeneComments
+    const publishFetches = publish ? symbols.length * 4 : 0
+    const publishCalls = publish ? symbols.length : 0
+    if (budget.fetches < publishFetches || budget.calls < 2 + publishCalls) return false
     if (env.KV && services?.geneCommentsCacheKey) {
       if (budget.kv < symbols.length) return false
       for (const symbol of symbols) await env.KV.delete(services.geneCommentsCacheKey(symbol))
@@ -267,7 +276,7 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
     let interrupted = false
     for (const row of rows) {
       if (discord.config) {
-        if (budget.fetches < 2) {
+        if (budget.fetches - publishFetches < 2) {
           interrupted = true
           break
         }
@@ -292,6 +301,21 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
     if (handled.length) {
       const removed = handled.filter((row) => row.status === "deleted").map((row) => row.id)
       const kept = handled.filter((row) => row.status !== "deleted").map((row) => row.id)
+      if (publish) {
+        const renamed = new Set(kept.map(Number))
+        const genes = [
+          ...new Set(
+            handled.filter((row) => row.status !== "deleted").map((row) => row.gene_symbol),
+          ),
+        ]
+        for (const symbol of genes) {
+          await publish(env, symbol, (row) =>
+            renamed.has(Number(row.id)) ? { ...row, username: context.label, avatar_url: "" } : row,
+          )
+          budget.calls -= 1
+          budget.fetches -= 3
+        }
+      }
       const results = await db.batch(
         [
           db
