@@ -15,6 +15,7 @@
 // Needs `pnpm run build` (public-iconoplasm-edge), an installed Chrome and the
 // live published catalog (the sort fields come from it, as in production).
 // The measured orders land in artifacts/e2e/home-collection-sorts.json.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
