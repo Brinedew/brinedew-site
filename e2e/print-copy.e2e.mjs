@@ -190,7 +190,8 @@ test("print copy: the downloaded PNG is the portrait's own pixels with the card'
     assert.equal(await button.getAttribute("aria-label"), `Print copy of ${SYMBOL}`)
     await button.click()
     // The print opens in the viewer first; nothing lands on disk unasked.
-    const viewerImage = page.locator(".pswp .pswp__img").first()
+    // PhotoSwipe puts a placeholder div.pswp__img in front of the picture.
+    const viewerImage = page.locator(".pswp img.pswp__img:not(.pswp__img--placeholder)").first()
     await viewerImage.waitFor({ state: "visible", timeout: 60000 })
     assert.match(String(await viewerImage.getAttribute("src")), /^blob:/)
     const saveButton = page.locator(".pswp [data-icono-print-copy-download]")
