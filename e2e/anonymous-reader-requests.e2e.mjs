@@ -25,6 +25,7 @@
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome. The measured request
 // lists land in artifacts/e2e/anonymous-reader-requests.json.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"

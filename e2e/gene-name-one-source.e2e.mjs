@@ -37,6 +37,7 @@
 // Needs `pnpm run build` (public-iconoplasm-edge for the app shell) and an
 // installed Chrome. The measured titles land in
 // artifacts/e2e/gene-name-one-source.json.
+// E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin iconoplasm-extension/ migrations-iconoplasm/ !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"

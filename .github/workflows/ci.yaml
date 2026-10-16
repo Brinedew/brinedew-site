@@ -147,15 +147,23 @@ jobs:
           PYTHON
           exit "$test_status"
 
-      # B-839: the caretaker dialog is checked in a real browser (the runner's
-      # installed Chrome) by geometry and computed fonts, not CSS regexes.
-      # The step's limit stops a hung browser (the E2E files take about 6
-      # minutes together). No --test-timeout: Node applies it to each whole
-      # file too, and geneguessr-direct-structures alone runs about 310 s.
-      - name: Caretaker dialog geometry (browser E2E)
+      # Browser E2E in the runner's installed Chrome. A run takes only the files
+      # its change can break, plus one swept by run number
+      # (scripts/select-e2e.mjs): all 21 together took 588 s on 2026-10-16, and
+      # production deploys wait for main's run. A manual run, or a change to
+      # the harness, the dependencies or CI, takes them all.
+      # The step's limit stops a hung browser. No --test-timeout: Node applies
+      # it to each whole file too, and geneguessr-direct-structures alone runs
+      # about 310 s.
+      - name: Browser E2E
         if: ${{ steps.scope.outputs.notes_only != 'true' }}
         timeout-minutes: 15
-        run: node --test e2e/*.e2e.mjs
+        env:
+          BASE_SHA: ${{ github.event_name != 'workflow_dispatch' && (github.event.pull_request.base.sha || github.event.before) || '' }}
+        run: |
+          files="$(node scripts/select-e2e.mjs --base "$BASE_SHA" --rotate "$GITHUB_RUN_NUMBER")"
+          echo "E2E files: $files"
+          node --test $files
 
       - name: Upload E2E screenshots and measurements
         if: ${{ always() && steps.scope.outputs.notes_only != 'true' }}

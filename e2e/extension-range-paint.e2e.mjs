@@ -17,6 +17,7 @@
 // The fixtures mirror Wikipedia's markup: div.div-col (column-width) > ul > li,
 // and table.wikitable with a caption and tbody > tr > td.
 // Screenshots land in artifacts/e2e/.
+// E2E scope: iconoplasm-extension/
 import assert from "node:assert/strict"
 import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
