@@ -73,6 +73,11 @@ async function openSwitchDialog(browser, origin, acceptedVersion) {
   return { context, page, dialog, claims }
 }
 
+// The box itself: the middle of the label is the terms link, which opens the terms.
+function termsBox(dialog) {
+  return dialog.locator('[data-icono-caretaker-claim-terms] [part~="control"]')
+}
+
 function readDialog(dialog) {
   return dialog.evaluate((node) => {
     const box = node.querySelector("[data-icono-caretaker-claim-terms]")
@@ -96,7 +101,7 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
       checked: true,
       submitDisabled: false,
     })
-    await accepted.dialog.locator("[data-icono-caretaker-claim-terms]").click()
+    await termsBox(accepted.dialog).click()
     assert.deepEqual(await readDialog(accepted.dialog), {
       hasBox: true,
       checked: false,
@@ -117,7 +122,7 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
       checked: false,
       submitDisabled: true,
     })
-    await older.dialog.locator("[data-icono-caretaker-claim-terms]").click()
+    await termsBox(older.dialog).click()
     assert.equal((await readDialog(older.dialog)).submitDisabled, false)
     await older.context.close()
   } finally {
