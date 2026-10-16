@@ -41,6 +41,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
+import { installCandidateStrips } from "./candidate-strip.js?v=9342b1eb426b6a66"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -1213,7 +1214,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta">' +
       '<div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair">' +
-      "<span>Published</span><strong>" +
+      "<span>Emulsion</span><strong>" +
       esc(emulsionInfo.primary) +
       "</strong></div>" +
       renderEmulsionFavoriteButtonMarkup(
@@ -3631,6 +3632,140 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '" target="_blank" rel="noopener noreferrer">Join Discord</a>' +
       "</article>"
     )
+  }
+
+  // B-1095: the gene page invites every reader, signed in or not, in Discord's
+  // own invite-embed shape (server icon, name, Online and Members counts, Join).
+  // The counts come straight from Discord's public invite endpoint in the
+  // reader's browser (CORS allows this origin), so readers cost us nothing; if
+  // Discord doesn't answer, the invite shows without counts.
+  var DISCORD_INVITE_CODE = "kx8FVzUrpf"
+  var DISCORD_GUILD_ID = "1289484665966563438"
+  var DISCORD_GUILD_ICON = "ab4ef830bb6158e061cc4d6eddeccd22"
+  var DISCORD_COUNTS_CACHE_KEY = "icono-discord-invite-counts"
+  var DISCORD_COUNTS_MAX_AGE_MS = 10 * 60 * 1000
+  var discordCountsPromise = null
+
+  function discordGuildIconUrl(iconHash) {
+    return (
+      "https://cdn.discordapp.com/icons/" +
+      DISCORD_GUILD_ID +
+      "/" +
+      encodeURIComponent(iconHash || DISCORD_GUILD_ICON) +
+      ".png?size=96"
+    )
+  }
+
+  function buildGeneDiscordInviteMarkup() {
+    return (
+      '<div class="icono-discord-invite" data-icono-discord-invite>' +
+      '<div class="icono-discord-invite-kicker">You&#39;ve been invited to join a server</div>' +
+      '<div class="icono-discord-invite-row">' +
+      '<img class="icono-discord-invite-icon" data-icono-discord-icon src="' +
+      esc(discordGuildIconUrl()) +
+      '" alt="" width="48" height="48" loading="lazy" decoding="async">' +
+      '<div class="icono-discord-invite-main">' +
+      '<div class="icono-discord-invite-name">brinedew.bio</div>' +
+      '<div class="icono-discord-invite-counts" data-icono-discord-counts hidden>' +
+      '<span class="icono-discord-invite-count"><i class="icono-discord-dot icono-discord-dot--online"></i><span data-icono-discord-online></span> Online</span>' +
+      '<span class="icono-discord-invite-count"><i class="icono-discord-dot"></i><span data-icono-discord-members></span> Members</span>' +
+      '<span class="icono-discord-invite-faces" data-icono-discord-faces hidden></span>' +
+      "</div>" +
+      "</div>" +
+      '<a class="icono-button icono-button--primary icono-discord-invite-join" href="' +
+      esc(COMMUNITY_URL) +
+      '" target="_blank" rel="noopener noreferrer">Join</a>' +
+      "</div>" +
+      "</div>"
+    )
+  }
+
+  function readCachedDiscordCounts() {
+    try {
+      var cached = JSON.parse(window.sessionStorage.getItem(DISCORD_COUNTS_CACHE_KEY) || "null")
+      if (cached && Date.now() - Number(cached.at || 0) < DISCORD_COUNTS_MAX_AGE_MS) return cached
+    } catch (_error) {}
+    return null
+  }
+
+  function fetchDiscordCounts() {
+    var cached = readCachedDiscordCounts()
+    if (cached) return Promise.resolve(cached)
+    if (discordCountsPromise) return discordCountsPromise
+    discordCountsPromise = fetch(
+      "https://discord.com/api/v10/invites/" + DISCORD_INVITE_CODE + "?with_counts=true",
+      { credentials: "omit" },
+    )
+      .then(function (response) {
+        if (!response.ok) throw new Error("discord invite " + response.status)
+        return response.json()
+      })
+      .then(function (data) {
+        var counts = {
+          at: Date.now(),
+          online: Number(data && data.approximate_presence_count) || 0,
+          members: Number(data && data.approximate_member_count) || 0,
+          icon: String((data && data.guild && data.guild.icon) || ""),
+        }
+        try {
+          window.sessionStorage.setItem(DISCORD_COUNTS_CACHE_KEY, JSON.stringify(counts))
+        } catch (_error) {}
+        return counts
+      })
+      .finally(function () {
+        discordCountsPromise = null
+      })
+    return discordCountsPromise
+  }
+
+  // The faces beside the counts are the people already talking on this gene,
+  // read from the comment list once it has loaded.
+  function syncDiscordInviteFaces(invite, container) {
+    var faces = invite.querySelector("[data-icono-discord-faces]")
+    var list = container.querySelector("[data-icono-suggest-list]")
+    if (!faces || !list) return
+    var seen = Object.create(null)
+    var html = ""
+    var count = 0
+    var images = list.querySelectorAll(".icono-suggest-av img")
+    for (var i = 0; i < images.length && count < 5; i += 1) {
+      var src = images[i].getAttribute("src") || ""
+      if (!src || seen[src]) continue
+      seen[src] = true
+      count += 1
+      html += '<img alt="" loading="lazy" decoding="async" src="' + esc(src) + '">'
+    }
+    faces.innerHTML = html
+    faces.hidden = count === 0
+  }
+
+  function wireGeneDiscordInvite(container) {
+    var invite = container && container.querySelector("[data-icono-discord-invite]")
+    if (!invite || invite.hasAttribute("data-icono-wired")) return
+    invite.setAttribute("data-icono-wired", "true")
+    fetchDiscordCounts()
+      .then(function (counts) {
+        if (!invite.isConnected || !counts || !counts.members) return
+        invite.querySelector("[data-icono-discord-online]").textContent = String(counts.online)
+        invite.querySelector("[data-icono-discord-members]").textContent = String(counts.members)
+        invite.querySelector("[data-icono-discord-counts]").hidden = false
+        if (counts.icon && counts.icon !== DISCORD_GUILD_ICON) {
+          invite.querySelector("[data-icono-discord-icon]").src = discordGuildIconUrl(counts.icon)
+        }
+      })
+      .catch(function () {})
+    var suggestHost = container.querySelector("[data-icono-suggest-island]")
+    if (suggestHost && typeof MutationObserver === "function") {
+      syncDiscordInviteFaces(invite, container)
+      var observer = new MutationObserver(function () {
+        if (!invite.isConnected) {
+          observer.disconnect()
+          return
+        }
+        syncDiscordInviteFaces(invite, container)
+      })
+      observer.observe(suggestHost, { childList: true, subtree: true })
+    }
   }
 
   function buildDiscordActionCardMarkup() {
@@ -9182,6 +9317,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return newElements
   }
 
+  var ICONO_STRIP_CHEVRON_LEFT =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>'
+  var ICONO_STRIP_CHEVRON_RIGHT =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>'
+
   function renderCandidateGallery(genePayload) {
     var candidates = Array.isArray(genePayload && genePayload.portrait_candidates)
       ? genePayload.portrait_candidates
@@ -9199,13 +9339,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       visibleCandidates.length === 1
         ? "icono-candidate-grid icono-candidate-grid--single"
         : "icono-candidate-grid"
+    // B-1095: one sideways strip (candidate-strip.js), never a grid that grows
+    // the page with every candidate.
     var html =
-      '<section class="icono-candidate-gallery">' +
+      '<section class="icono-candidate-gallery icono-candidate-strip" data-icono-candidate-strip>' +
       '<div class="icono-candidate-gallery-heading">' +
-      '<h2>Other candidate images <span class="icono-candidate-count">' +
+      '<h2 id="icono-candidate-strip-title">Other candidate images <span class="icono-candidate-count">' +
       visibleCandidates.length +
       "</span></h2>" +
+      '<div class="icono-candidate-strip-nav" data-icono-strip-nav hidden>' +
+      '<span class="icono-candidate-strip-position" data-icono-strip-position aria-live="polite"></span>' +
+      '<button type="button" class="icono-button icono-button--icon" data-icono-strip-prev aria-label="Previous candidates" title="Previous candidates">' +
+      ICONO_STRIP_CHEVRON_LEFT +
+      "</button>" +
+      '<button type="button" class="icono-button icono-button--icon icono-candidate-strip-next" data-icono-strip-next aria-label="Next candidates" title="Next candidates">' +
+      ICONO_STRIP_CHEVRON_RIGHT +
+      "</button>" +
       "</div>" +
+      "</div>" +
+      '<div class="icono-candidate-strip-viewport" data-icono-strip-viewport role="region" aria-roledescription="carousel" aria-labelledby="icono-candidate-strip-title">' +
       '<div class="' +
       gridClass +
       '" data-icono-lightbox>'
@@ -9372,7 +9524,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</div>" +
         "</article>"
     }
-    html += "</div>" + "</section>"
+    html +=
+      "</div>" +
+      "</div>" +
+      '<div class="icono-candidate-strip-progress" aria-hidden="true"><span data-icono-strip-progress></span></div>' +
+      "</section>"
     return html
   }
 
@@ -9721,11 +9877,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       suggestHost.innerHTML = buildSuggestSectionMarkup(genePayload.symbol)
       suggestHost.setAttribute("data-icono-island-signature", authSignature)
     }
-    var discordHost = container.querySelector("[data-icono-discord-island]")
-    if (discordHost && discordHost.getAttribute("data-icono-island-signature") !== authSignature) {
-      discordHost.innerHTML = buildDiscordActionCardMarkup()
-      discordHost.setAttribute("data-icono-island-signature", authSignature)
-    }
     hydrateCaretakerManifestationIsland(container, genePayload)
     hydrateServerCandidateActionIslands(container, genePayload)
   }
@@ -9789,9 +9940,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     syncServerGenePortraitUrls(container, genePayload)
     hydrateGeneInteractiveIslands(container, genePayload)
     wireGeneVoteControls(container, genePayload)
+    installCandidateStrips(container)
     wireGeneEditImagePanel(container, genePayload)
     wireGeneRequestPanel(container, genePayload)
     wireGeneSuggestions(container, genePayload)
+    wireGeneDiscordInvite(container)
     wirePrintCopyRequests(container, genePayload)
     wireCandidateRemoveButtons(container, genePayload)
     wireCandidateCopyForms(container, genePayload)
@@ -9875,7 +10028,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var list = Array.isArray(comments) ? comments : []
     if (countEl) countEl.textContent = list.length ? " · " + list.length : ""
     if (!list.length) {
-      listEl.innerHTML = '<p class="icono-suggest-empty">No suggestions yet.</p>'
+      listEl.innerHTML = '<p class="icono-suggest-empty">No comments yet.</p>'
       return
     }
     var html = ""
@@ -9909,7 +10062,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     box.innerHTML =
       '<textarea class="icono-suggest-input" maxlength="2000" rows="2"></textarea>' +
       '<div class="icono-suggest-editrow">' +
-      '<button type="button" class="icono-suggest-btn" data-icono-suggest-save>Save</button>' +
+      '<button type="button" class="icono-button icono-button--primary icono-button--small icono-suggest-btn" data-icono-suggest-save>Save</button>' +
       '<button type="button" class="icono-suggest-cancel" data-icono-suggest-cancel>Cancel</button>' +
       "</div>" +
       '<p class="icono-suggest-err" data-icono-suggest-editerr hidden></p>'
@@ -9993,7 +10146,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         item.remove()
         setSuggestCount(listEl, countEl)
         if (listEl && !listEl.querySelector(".icono-suggest-item")) {
-          listEl.innerHTML = '<p class="icono-suggest-empty">No suggestions yet.</p>'
+          listEl.innerHTML = '<p class="icono-suggest-empty">No comments yet.</p>'
         }
       })
       .catch(function (err) {
@@ -10006,15 +10159,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var composer = currentUser
       ? '<form class="icono-suggest-form" data-icono-suggest-form>' +
         '<textarea class="icono-suggest-input" data-icono-suggest-input rows="2" maxlength="2000" placeholder="Suggest a prop, theme, or activity…"></textarea>' +
-        '<button type="submit" class="icono-suggest-btn">Suggest</button>' +
+        '<button type="submit" class="icono-button icono-button--primary icono-suggest-btn">Comment</button>' +
         "</form>" +
         '<p class="icono-suggest-err" data-icono-suggest-err hidden></p>'
-      : '<p class="icono-suggest-signin">Sign in with Discord to suggest a resample.</p>'
+      : '<p class="icono-suggest-signin"><a href="' +
+        esc(voteLoginUrl()) +
+        '">Sign in with Discord</a> to comment.</p>'
     return (
       '<section id="gene-comments" class="icono-suggest" data-icono-suggest="' +
       safe +
       '">' +
-      '<div class="icono-suggest-lab">Suggestions<span data-icono-suggest-count></span></div>' +
+      '<div class="icono-suggest-lab">Comments<span data-icono-suggest-count></span></div>' +
       composer +
       '<div class="icono-suggest-list" data-icono-suggest-list></div>' +
       "</section>"
@@ -10039,8 +10194,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         renderSuggestList(listEl, data && data.comments, countEl)
       })
       .catch(function () {
-        if (listEl)
-          listEl.innerHTML = '<p class="icono-suggest-empty">Could not load suggestions.</p>'
+        if (listEl) listEl.innerHTML = '<p class="icono-suggest-empty">Could not load comments.</p>'
       })
     var form = sec.querySelector("[data-icono-suggest-form]")
     if (form && form.getAttribute("data-wired") !== "true") {
@@ -10157,11 +10311,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
-    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
     html +=
       '<section class="icono-gene-discord-card" data-icono-discord-island>' +
-      buildDiscordActionCardMarkup() +
+      buildGeneDiscordInviteMarkup() +
       "</section>"
+    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
 
     container.innerHTML = html
     wireGeneContent(container, g)
