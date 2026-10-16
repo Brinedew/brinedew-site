@@ -36,8 +36,9 @@ import { discordAvatarDataUri, discordAvatarSource } from "./avatar-proxy.js"
 // Authors pictured per write, newest comments first; the rest show their initial, as an account
 // with no picture does. Cloudflare's own limits set it: a free-plan invocation may make 50
 // subrequests, and a comment post already spends about ten on the Discord copy, the caretaker's
-// message and this object's PUT and read-back with their retries. Sixteen pictures of up to 11 KB
-// also keep fifty long comments under the object's 512 KiB.
+// message and this object's PUT and read-back with their retries. Sixteen pictures of up to 22 KB
+// (352 KB) beside fifty 2,000-character comments in a three-byte script (300 KB) stay under the
+// object's 1 MiB; a typical gene's copy is a few dozen KB.
 export const GENE_COMMENTS_PICTURED_AUTHORS = 16
 
 // What a guest may see of one comment row (the rows carry user_id for the Worker's ownership
