@@ -8,8 +8,9 @@ import {
 // Storage: one stable object per gene (genes/v3/<SYMBOL>.json), the catalog
 // object (catalog/v3/index.json), GeneGuessr's "Top Streaks" board
 // (leaderboard/v1/top.json, B-965), and the style picker's first page
-// (picker/v1/styles.json, B-896). Readers outside the Worker fetch them from
-// the CDN. ARCHITECTURE FENCE [IPD-011].
+// (picker/v1/styles.json, B-896), and each gene's comments for readers who are
+// not signed in (comments/v1/<SYMBOL>.json). Readers outside the Worker fetch
+// them from the CDN. ARCHITECTURE FENCE [IPD-011].
 // A deployment without object storage cannot hold any published object.
 // Distinguish that definitive absence from a transient read failure so
 // readers can report an unknown identity instead of a retryable outage.
@@ -60,10 +61,33 @@ export const LEADERBOARD_OBJECT_LIMIT = 128 * 1024
 export const REQUEST_PICKER_OBJECT_KEY = "picker/v1/styles.json"
 export const REQUEST_PICKER_OBJECT_LIMIT = 512 * 1024
 
+// Each gene's visible comments, the answer a guest gets from GET
+// /api/iconoplasm/genes/<SYMBOL>/comments without the ownership flags
+// (workers/lib/gene-comments-publication.js builds it). 50 comments of at most
+// 2,000 characters each, with their names and avatar addresses, fit in 256 KiB.
+export const GENE_COMMENTS_OBJECT_PREFIX = "comments/v1"
+export const GENE_COMMENTS_OBJECT_LIMIT = 512 * 1024
+
+export function geneCommentsObjectKey(symbol) {
+  const clean = String(symbol || "")
+    .trim()
+    .toUpperCase()
+  if (!SYMBOL.test(clean)) throw new Error("Invalid gene comments object symbol")
+  return `${GENE_COMMENTS_OBJECT_PREFIX}/${clean}.json`
+}
+
 function stableGeneObjectIdentity(key) {
   if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
   if (key === REQUEST_PICKER_OBJECT_KEY) return { symbol: "", limit: REQUEST_PICKER_OBJECT_LIMIT }
   if (key === LEADERBOARD_OBJECT_KEY) return { symbol: "", limit: LEADERBOARD_OBJECT_LIMIT }
+  // A comments object is rewritten, never deleted (its symbol is not a gene object's).
+  if (typeof key === "string" && key.startsWith(`${GENE_COMMENTS_OBJECT_PREFIX}/`)) {
+    const symbol = key.slice(GENE_COMMENTS_OBJECT_PREFIX.length + 1, -".json".length)
+    if (!key.endsWith(".json") || !SYMBOL.test(symbol)) {
+      throw new Error("Invalid gene comments object key")
+    }
+    return { symbol: "", limit: GENE_COMMENTS_OBJECT_LIMIT }
+  }
   const prefix = `${STABLE_GENE_OBJECT_PREFIX}/`
   if (typeof key !== "string" || !key.startsWith(prefix) || !key.endsWith(".json"))
     throw new Error("Invalid stable gene object key")

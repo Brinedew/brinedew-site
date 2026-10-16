@@ -741,11 +741,18 @@ test("an unpublished job's result images leave the storage with the job; publish
     assert.equal(world.network.objects.has(key), false, `${key} is still public`)
   // Everything else is exactly where it was: the portraits that were published (including the
   // hash a job shared with a published portrait, B-993's shared-key case), the other person's
-  // image, the gene object a job row named, and the oddly keyed job's own full rendition.
+  // image, the gene object a job row named, and the oddly keyed job's own full rendition. The
+  // only new objects are the public comment copies of the genes she commented on, rewritten
+  // under the label (B-1101).
+  const written = ["comments/v1/EZH2.json", "comments/v1/SOX11.json", "comments/v1/TP53.json"]
   assert.deepEqual(
     [...world.network.objects.keys()].sort(),
-    [...before].filter((key) => !gone.has(key)).sort(),
+    [...[...before].filter((key) => !gone.has(key)), ...written].sort(),
   )
+  for (const key of written) {
+    const text = Buffer.from(world.network.objects.get(key)).toString("utf8")
+    assert.equal(text.includes(ERASED_NAME), false, `${key} still names her`)
+  }
   assert.equal(world.network.objects.has("genes/v3/TP53.json"), true)
   for (const key of renditionKeys(IMAGE.bob)) assert.equal(world.network.objects.has(key), true)
   for (const key of renditionKeys("c".repeat(64))) {
