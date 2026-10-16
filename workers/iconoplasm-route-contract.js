@@ -626,7 +626,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     apiHandler: "caretaker_admin.mutate",
     id: "caretaker_admin_assignment_action",
     match: pattern(
-      /^\/api\/iconoplasm\/admin\/caretakers\/assignments\/([^/]+)\/(cancel|suspend|resume|end)$/,
+      /^\/api\/iconoplasm\/admin\/caretakers\/assignments\/([^/]+)\/(cancel|suspend|resume|end|withdraw)$/,
       ["assignment_id", "action"],
     ),
     methods: POST,
