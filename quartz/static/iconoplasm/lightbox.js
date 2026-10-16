@@ -132,3 +132,58 @@ export function installIconoplasmLightbox(documentRef) {
   installedDocuments.set(targetDocument, cleanup)
   return cleanup
 }
+
+// One picture, opened on demand (the print copy). PhotoSwipe's own download
+// button pattern (photoswipe.com/adding-ui-elements) saves it by name;
+// right-click "Save image as" works on the picture too.
+export function openIconoplasmImageViewer(options, documentRef) {
+  var targetDocument = documentRef || document
+  var item = {
+    src: options.src,
+    width: options.width,
+    height: options.height,
+    alt: options.alt || "",
+  }
+  return ensurePhotoSwipe(targetDocument).then(function (PhotoSwipe) {
+    var pswp = new PhotoSwipe({
+      dataSource: [item],
+      index: 0,
+      bgOpacity: 0.92,
+      wheelToZoom: true,
+      mouseMovePan: true,
+      loop: false,
+      imageClickAction: "zoom",
+      tapAction: "toggle-controls",
+      bgClickAction: "close",
+      showHideAnimationType: "fade",
+      paddingFn: function () {
+        return { top: 28, bottom: 28, left: 28, right: 28 }
+      },
+    })
+    if (options.downloadName) {
+      pswp.on("uiRegister", function () {
+        pswp.ui.registerElement({
+          name: "download-button",
+          order: 8,
+          isButton: true,
+          tagName: "a",
+          title: "Download",
+          ariaLabel: "Download " + options.downloadName,
+          html: {
+            isCustomSVG: true,
+            inner:
+              '<path d="M20.5 14.3 17.1 18V10h-2.2v7.9l-3.4-3.6L10 16l6 6.1 6-6.1ZM23 23H9v2h14Z" id="pswp__icn-download"/>',
+            outlineID: "pswp__icn-download",
+          },
+          onInit: function (el) {
+            el.setAttribute("download", options.downloadName)
+            el.setAttribute("data-icono-print-copy-download", "")
+            el.href = item.src
+          },
+        })
+      })
+    }
+    pswp.init()
+    return pswp
+  })
+}

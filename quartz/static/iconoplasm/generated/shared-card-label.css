@@ -1403,30 +1403,6 @@
   letter-spacing: 0.02em;
 }
 
-.icono-label-print-copy-request {
-  display: block;
-  inline-size: max-content;
-  max-inline-size: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  font-weight: 700;
-  text-align: left;
-}
-
-.icono-label-print-copy-request[aria-disabled="true"] {
-  cursor: default;
-}
-
-.icono-label-print-copy-request:focus-visible {
-  outline: 1px solid currentColor;
-  outline-offset: 0.12em;
-}
-
 .icono-card--variant-lab-label .iconoplasm-tooltip-symbol,
 .icono-card--variant-lab-label .iconoplasm-tooltip-name,
 .icono-card--variant-lab-label .iconoplasm-tooltip-meta,
