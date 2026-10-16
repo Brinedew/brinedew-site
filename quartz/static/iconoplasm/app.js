@@ -10,7 +10,7 @@ import {
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
 import { createRequestInbox } from "./request-inbox.js?v=ead3daaa304d2208"
-import { portraitDelivery } from "./portrait-delivery.js?v=30e670f98fbabf8f"
+import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=30e670f98fbabf8f"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
@@ -10260,7 +10260,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var listEl = sec.querySelector("[data-icono-suggest-list]")
     var commentsPath = "/api/iconoplasm/genes/" + encodeURIComponent(symbol) + "/comments"
     if (!currentUser) {
-      renderSuggestList(listEl, [])
+      // A guest reads the gene's public comments object from the CDN, not the Worker: a gene
+      // page view costs no Worker request, and one per view would spend the free plan's daily
+      // allowance on a busy day (workers/lib/gene-comments-publication.js). No object means
+      // nobody has commented yet.
+      fetch(IMAGE_ORIGIN + "/comments/v1/" + encodeURIComponent(symbol) + ".json")
+        .then(function (response) {
+          if (response.status === 404) return { comments: [] }
+          if (!response.ok) throw new Error("Comments object answered " + response.status)
+          return response.json()
+        })
+        .then(function (data) {
+          renderSuggestList(listEl, data && data.comments)
+        })
+        .catch(function () {
+          if (listEl)
+            listEl.innerHTML = '<p class="icono-suggest-empty">Could not load comments.</p>'
+        })
       return
     }
     fetchAuthedJSON(commentsPath)

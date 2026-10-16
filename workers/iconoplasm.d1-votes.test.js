@@ -1841,6 +1841,120 @@ test("29: gene comments hide hidden ones, need a sign-in to write, and only the 
   )
 })
 
+// B-1101: readers who are not signed in read a gene's comments from a CDN object, because a
+// gene page view costs no Worker request. Failure modes, written before the code:
+// G1. The public copy carries an account id, an ownership flag or a hidden comment.
+// G2. A post, an edit or a delete leaves the public copy stale.
+// G3. Deleting the last comment leaves the old text in public instead of an empty list.
+// G5. Storage being down turns a comment that was saved into an error for its author.
+// (G4, an erased name left in public, is in iconoplasm-account-erasure-d1.test.js.)
+test("B-1101: a gene's public comments copy follows every post, edit and delete", async (t) => {
+  const network = new FakeNetwork()
+  network.install()
+  t.after(() => network.restore())
+  const db = new SqliteD1()
+  db.exec(
+    "INSERT INTO icono_gene_comments (gene_symbol, user_id, username, body, status) VALUES ('A1BG', 'reader-3', 'hidden-user', 'This hidden prompt should never render.', 'hidden')",
+  )
+  const bunny = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  }
+  const KEY = "comments/v1/A1BG.json"
+  const publicCopy = () => JSON.parse(Buffer.from(network.objects.get(KEY)).toString("utf8"))
+  const bodies = () => publicCopy().comments.map((comment) => comment.body)
+  const commentsPath = "/api/iconoplasm/genes/A1BG/comments"
+
+  const posted = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    body: { symbol: "A1BG", body: "Please add a lab stamp." },
+    bindings: bunny,
+  })
+  assert.equal(posted.status, 200, JSON.stringify(posted.payload))
+  const other = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    body: { symbol: "A1BG", body: "Keep the pen." },
+    user: { user_id: "reader-2", username: "other" },
+    bindings: bunny,
+  })
+  assert.equal(other.status, 200)
+  // G1, G2: the copy is what a guest's API answer would be, newest first, with nothing private.
+  assert.deepEqual(bodies(), ["Keep the pen.", "Please add a lab stamp."])
+  assert.equal(publicCopy().symbol, "A1BG")
+  assert.equal(publicCopy().count, 2)
+  const text = JSON.stringify(publicCopy())
+  assert.doesNotMatch(text, /reader-1|reader-2|user_id|is_own|hidden/)
+  const guestApi = await routeRequest(db, "GET", "/api/iconoplasm/comments/gene/A1BG", {
+    user: {},
+  })
+  assert.deepEqual(
+    publicCopy().comments.map((comment) => [comment.id, comment.username, comment.body]),
+    guestApi.payload.comments.map((comment) => [comment.id, comment.username, comment.body]),
+  )
+
+  // G2: an edit and a delete reach the copy.
+  const mine = db.rows(
+    "SELECT id FROM icono_gene_comments WHERE body = 'Please add a lab stamp.'",
+  )[0].id
+  const edited = await routeRequest(db, "PATCH", commentsPath, {
+    body: { id: mine, body: "Please add a lab stamp, please." },
+    bindings: bunny,
+  })
+  assert.equal(edited.status, 200)
+  assert.deepEqual(bodies(), ["Keep the pen.", "Please add a lab stamp, please."])
+  const refused = await routeRequest(db, "DELETE", commentsPath, {
+    body: { id: mine },
+    user: { user_id: "reader-2" },
+    bindings: bunny,
+  })
+  assert.equal(refused.status, 403)
+  assert.equal(publicCopy().count, 2, "a refused delete changes nothing in public")
+  assert.equal(
+    (await routeRequest(db, "DELETE", commentsPath, { body: { id: mine }, bindings: bunny }))
+      .status,
+    200,
+  )
+  assert.deepEqual(bodies(), ["Keep the pen."])
+
+  // G3: the last comment's delete leaves an empty list, not the old text.
+  const theirs = db.rows("SELECT id FROM icono_gene_comments WHERE body = 'Keep the pen.'")[0].id
+  const last = await routeRequest(db, "DELETE", commentsPath, {
+    body: { id: theirs },
+    user: { user_id: "reader-2", username: "other" },
+    bindings: bunny,
+  })
+  assert.equal(last.status, 200)
+  assert.deepEqual(publicCopy(), { symbol: "A1BG", count: 0, comments: [] })
+
+  // G5: with storage refusing every write, the comment is still saved and answered 200.
+  const original = globalThis.fetch
+  globalThis.fetch = (input, init) =>
+    String(input?.url || input).includes("storage.bunnycdn.com")
+      ? Promise.resolve(new Response("down", { status: 503 }))
+      : original(input, init)
+  t.after(() => {
+    globalThis.fetch = original
+  })
+  const warn = console.warn
+  console.warn = () => {}
+  try {
+    const saved = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+      body: { symbol: "A1BG", body: "Written while storage is down." },
+      bindings: bunny,
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.payload))
+  } finally {
+    console.warn = warn
+    globalThis.fetch = original
+  }
+  assert.equal(
+    db.rows(
+      "SELECT COUNT(*) AS n FROM icono_gene_comments WHERE body = 'Written while storage is down.'",
+    )[0].n,
+    1,
+  )
+})
+
 // B-1001. Failure modes, written before the code:
 // 1. An author edits a comment and the public Discord copy keeps the old text.
 // 2. An author deletes a comment and its Discord copy stays.
