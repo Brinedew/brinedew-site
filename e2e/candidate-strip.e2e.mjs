@@ -6,9 +6,10 @@
 // Ways this can fail, written before the check:
 // 1. The strip falls back to a grid, or Embla never loads: the page grows with
 //    the candidate count again.
-// 2. The keys overshoot: with slidesToScroll "auto" one Embla snap holds a page
-//    of frames, so Right can jump a whole page instead of one frame.
-// 3. Focus moves to a frame the strip doesn't bring fully into view.
+// 2. The keys overshoot: Right jumps a whole page instead of one frame.
+// 3. Focus moves to a frame the strip doesn't bring fully into view, or leaves
+//    it off to one side instead of in the middle (owner, 2026-10-17: "the
+//    selected picture doesn't really stay in the center").
 // 4. End and Home don't reach the ends, or Next stays live at the end.
 // 5. Up on a frame does nothing (for a guest it must open the Discord login).
 // 6. The strip eats a vertical wheel, so a reader can't scroll past it.
@@ -16,6 +17,9 @@
 //    (the old copy button covered the star on a 402 px phone).
 // 8. The "soft rise" leaves a loaded image transparent.
 // 9. The page scrolls sideways on a phone.
+// 10. A drag springs to a page boundary when the reader lets go, instead of
+//     resting where it was dropped (owner, 2026-10-17: "it never really stays
+//     in the same place you dragged").
 //
 // What is real: the built site, TP53's published candidates, Embla, Chrome.
 // The reader is an anonymous guest; the signed-in /api/* answers are mocked,
@@ -52,6 +56,13 @@ function readStrip() {
       const box = focused.getBoundingClientRect()
       return box.left >= viewport.left - 1 && box.right <= viewport.right + 1
     })(),
+    // How far the focused frame's middle sits from the strip's middle.
+    offCentre: (() => {
+      if (!focused) return null
+      const viewport = section.querySelector("[data-icono-strip-viewport]").getBoundingClientRect()
+      const box = focused.getBoundingClientRect()
+      return box.left + box.width / 2 - (viewport.left + viewport.width / 2)
+    })(),
     nextDisabled: !!section.querySelector("[data-icono-strip-next]")?.disabled,
     prevDisabled: !!section.querySelector("[data-icono-strip-prev]")?.disabled,
   }
@@ -71,6 +82,16 @@ async function settle(page, settled) {
 
 function shows(state, index) {
   return state.focusIndex === index && state.focusInView
+}
+
+function centred(state, index) {
+  return shows(state, index) && Math.abs(state.offCentre) <= 8
+}
+
+// The track's sideways offset, which Embla moves with a transform.
+function trackOffset() {
+  const track = document.querySelector("[data-icono-candidate-strip] .icono-candidate-grid")
+  return new DOMMatrixReadOnly(getComputedStyle(track).transform).m41
 }
 
 // Every pair of visible controls in a fully shown tile's footer, and any control
@@ -178,7 +199,7 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
 
       await page.screenshot({ path: path.join(OUT, `candidate-strip-${name}.png`), fullPage: true })
 
-      // 2 and 3: Right moves one frame at a time, and the strip shows it whole.
+      // 2 and 3: Right moves one frame at a time and brings it to the middle.
       await page.focus(`${STRIP} .icono-candidate-card:first-child .icono-candidate-media-button`)
       let state = await page.evaluate(readStrip)
       assert.equal(state.total, 71)
@@ -186,13 +207,17 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       assert.ok(state.prevDisabled)
       for (let step = 1; step <= 4; step += 1) {
         await page.keyboard.press("ArrowRight")
-        state = await settle(page, (state) => shows(state, step))
+        state = await settle(page, (state) => centred(state, step))
         assert.equal(
           state.focusIndex,
           step,
           `${name}: Right #${step} landed on ${state.focusIndex}`,
         )
         assert.ok(state.focusInView, `${name}: frame ${step + 1} is focused but not fully in view`)
+        assert.ok(
+          Math.abs(state.offCentre) <= 8,
+          `${name}: frame ${step + 1} sits ${Math.round(state.offCentre)} px off the middle`,
+        )
       }
       await page.keyboard.press("ArrowLeft")
       state = await page.evaluate(readStrip)
@@ -208,6 +233,31 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       state = await settle(page, (state) => shows(state, 0) && state.prevDisabled)
       assert.equal(state.focusIndex, 0)
       assert.ok(state.prevDisabled)
+
+      // 10: a slow drag, held still and let go, rests where it was dropped.
+      {
+        const box = await page.locator(`${STRIP} [data-icono-strip-viewport]`).boundingBox()
+        const y = box.y + Math.min(box.height / 2, 100)
+        const x0 = box.x + box.width * 0.75
+        await page.mouse.move(x0, y)
+        await page.mouse.down()
+        for (let moved = 0; moved <= 137; moved += 4) {
+          await page.mouse.move(x0 - moved, y)
+          await page.waitForTimeout(30)
+        }
+        await page.waitForTimeout(300)
+        const held = await page.evaluate(trackOffset)
+        await page.mouse.up()
+        await page.waitForTimeout(1500)
+        const rested = await page.evaluate(trackOffset)
+        assert.ok(held < -100, `${name}: the drag moved the strip only ${held} px`)
+        assert.ok(
+          Math.abs(rested - held) <= 2,
+          `${name}: the strip moved from ${held} to ${rested} px after the drag was let go`,
+        )
+        await page.keyboard.press("Home")
+        await settle(page, (state) => shows(state, 0) && state.prevDisabled)
+      }
 
       // 5: Up approves the focused frame; a guest is asked to log in.
       await page.keyboard.press("ArrowUp")
