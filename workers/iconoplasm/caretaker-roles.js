@@ -443,6 +443,19 @@ const TRANSITIONS = Object.freeze({
     set: `status = 'suspended', suspended_at = ?, suspension_reason = ?`,
     args: (now, _actor, { reason }) => [now, reason],
   },
+  // B-1097: a role that ended keeping its texts can still withdraw them later,
+  // for a gene left with nobody to look after them (ADO, NUP214 and RGS3 kept
+  // texts cut at 4,000 characters by an old editor cap). The recorded policy
+  // becomes "withdraw" and the admin route then runs the same withdrawal an
+  // end with "withdraw" runs.
+  withdraw: {
+    from: ["ended"],
+    to: "ended",
+    set: `relinquish_policy = 'withdraw'`,
+    args: () => [],
+    // Ended before and after, so a replay is told apart by the policy.
+    reached: (role) => role.status === "ended" && role.relinquish_policy === "withdraw",
+  },
   resume: {
     from: ["suspended"],
     to: "active",
@@ -517,7 +530,8 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
   if (!role || (input.ownerAccountId && role.account_id !== input.ownerAccountId))
     throw authorityError("ASSIGNMENT_NOT_FOUND", "Caretaker assignment was not found", 404)
   const changed = Number(results?.[0]?.meta?.changes || 0) === 1
-  if (!changed && role.status !== transition?.to)
+  const reached = transition?.reached ?? ((row) => row.status === transition?.to)
+  if (!changed && !reached(role))
     throw authorityError(
       "ASSIGNMENT_VERSION_CONFLICT",
       "The caretaker role changed; reload and try again",
