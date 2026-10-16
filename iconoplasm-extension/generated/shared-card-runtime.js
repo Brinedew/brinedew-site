@@ -10474,26 +10474,6 @@
       var attrs = extraAttrs ? " " + extraAttrs : "";
       return '<div class="iconoplasm-tooltip-mobile-rowgrid iconoplasm-tooltip-mobile-rowgrid--skeleton"' + attrs + '><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line"></span></div></div><div class="iconoplasm-tooltip-mobile-row"><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--character"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div><div class="iconoplasm-tooltip-mobile-cell iconoplasm-tooltip-mobile-cell--molecular"><span class="iconoplasm-tooltip-skeleton-line iconoplasm-tooltip-skeleton-line--short"></span></div></div></div>';
     }
-    function candidatePortraitUrl(candidate, preferredSize, resolveUrl) {
-      var item = candidate || {};
-      var fullUrl = String(item.full_url || "").trim();
-      var mediumUrl = String(item.medium_url || "").trim();
-      var thumbUrl = String(item.thumb_url || "").trim();
-      var rawUrl = preferredSize === "medium" ? mediumUrl || thumbUrl || fullUrl : preferredSize === "thumb" ? thumbUrl || mediumUrl || fullUrl : fullUrl || mediumUrl || thumbUrl;
-      if (!rawUrl || typeof resolveUrl !== "function") return rawUrl;
-      try {
-        return String(resolveUrl(rawUrl) || rawUrl);
-      } catch (_error) {
-        return rawUrl;
-      }
-    }
-    function candidateEmulsionLabel(candidate) {
-      var item = candidate || {};
-      var emulsionId = String(item.emulsion_id || "").trim();
-      var label = String(item.emulsion_label || "").trim();
-      var artistId = String(item.artist_id || "").trim();
-      return displayEmulsionCode(emulsionId) || label || (artistId ? "Emulsion " + artistId : "");
-    }
     function displayEmulsionCode(rawEmulsionId) {
       return String(rawEmulsionId || "").trim();
     }
@@ -10504,52 +10484,6 @@
         return candidate && !candidate.is_current;
       });
       return '<section class="icono-candidate-gallery icono-candidate-gallery--status" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Other candidate images</h2></div><div class="icono-candidate-availability"><p data-icono-candidates-status role="status">' + (unavailable ? "Candidate images are temporarily unavailable." : "No other candidate images yet.") + "</p>" + (unavailable ? '<button type="button" class="icono-candidates-retry" data-icono-candidates-retry>Try again</button>' : "") + "</div></section>";
-    }
-    function renderCandidateGalleryHtml(geneDetail, options) {
-      var gene = geneDetail || {};
-      var opts = options || {};
-      var candidates = Array.isArray(gene.portrait_candidates) ? gene.portrait_candidates : [];
-      var visibleCandidates = [];
-      for (var i = 0; i < candidates.length; i += 1) {
-        var candidate = candidates[i];
-        if (!candidate || candidate.is_current) continue;
-        if (!candidatePortraitUrl(candidate, "medium", opts.resolvePortraitUrl)) continue;
-        visibleCandidates.push(candidate);
-      }
-      if (!visibleCandidates.length) return renderCandidateGalleryStatusHtml(gene);
-      var symbol = normalizedSymbol(gene.symbol || gene.canonical_symbol);
-      var gridClass = visibleCandidates.length === 1 ? "icono-candidate-grid icono-candidate-grid--single" : "icono-candidate-grid";
-      var html = '<section class="icono-candidate-gallery" data-icono-public-candidates><div class="icono-candidate-gallery-heading"><h2>Other candidate images <span class="icono-candidate-count">' + visibleCandidates.length + '</span></h2></div><div class="' + gridClass + '" data-icono-lightbox>';
-      for (var j = 0; j < visibleCandidates.length; j += 1) {
-        var item = visibleCandidates[j];
-        var mediumUrl = candidatePortraitUrl(item, "medium", opts.resolvePortraitUrl);
-        var fullUrl = candidatePortraitUrl(item, "full", opts.resolvePortraitUrl) || mediumUrl;
-        var width = Number(item.width || item.image_width || 4) || 4;
-        var height = Number(item.height || item.image_height || 5) || 5;
-        var assetSha = String(item.asset_sha256 || "").trim().toLowerCase();
-        var candidateImageId = Number(item.candidate_image_id || 0);
-        var visionId = String(item.vision_id || "").trim();
-        var sampleLabel = String(item.sample_label || "").trim();
-        var emulsionLabel = candidateEmulsionLabel(item);
-        var voteAttrs = 'data-icono-candidate-vote-box="' + escapeHtml(assetSha) + '"';
-        if (Number.isFinite(candidateImageId) && candidateImageId > 0) {
-          voteAttrs += ' data-icono-candidate-image-id="' + escapeHtml(String(Math.round(candidateImageId))) + '"';
-        }
-        if (visionId) voteAttrs += ' data-icono-vision-id="' + escapeHtml(visionId) + '"';
-        var toolbarMarkup = "";
-        if (sampleLabel || emulsionLabel) {
-          toolbarMarkup = '<div class="icono-candidate-toolbar-meta">';
-          if (sampleLabel) {
-            toolbarMarkup += '<div class="icono-candidate-toolbar-pair"><span>Sample</span><strong>' + escapeHtml(sampleLabel) + "</strong></div>";
-          }
-          if (emulsionLabel) {
-            toolbarMarkup += '<div class="icono-candidate-toolbar-pair"><span>Emulsion</span><strong>' + escapeHtml(emulsionLabel) + "</strong></div>";
-          }
-          toolbarMarkup += "</div>";
-        }
-        html += '<article class="icono-candidate-card" style="--width:' + escapeHtml(String(width)) + ";--height:" + escapeHtml(String(height)) + ';" data-icono-candidate-asset="' + escapeHtml(assetSha) + '"><button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' + escapeHtml(fullUrl) + '" data-icono-pswp-alt="' + escapeHtml(symbol) + ' candidate blot" data-pswp-width="' + escapeHtml(String(width)) + '" data-pswp-height="' + escapeHtml(String(height)) + '" aria-label="Open candidate blot for ' + escapeHtml(symbol) + '"><span class="icono-candidate-media"><img src="' + escapeHtml(mediumUrl) + '" data-iconoplasm-role="candidate-blot" data-gene-symbol="' + escapeHtml(symbol) + '" alt="' + escapeHtml(symbol) + ' candidate blot" loading="lazy" decoding="async" fetchpriority="low" width="' + escapeHtml(String(width)) + '" height="' + escapeHtml(String(height)) + '"></span></button><div class="icono-candidate-footer">' + voteBoxMarkup(voteAttrs) + toolbarMarkup + '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' + escapeHtml(assetSha) + '" aria-label="Candidate actions"></div></div></article>';
-      }
-      return html + "</div></section>";
     }
     function voteBoxMarkup(extraAttrs, options) {
       var attrs = extraAttrs ? " " + extraAttrs : "";
@@ -10564,7 +10498,9 @@
       var rejectInner = isLabel ? '<span class="icono-vote-btn-copy-stack">' + rejectArrow + '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span></span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject") : ICONO_CROSS_ICON;
       var firstButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>";
       var secondButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>";
-      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + '" data-icono-vote-box' + attrs + ">" + firstButton + secondButton + "</div>";
+      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + '" data-icono-vote-box' + attrs + ">" + firstButton + // A candidate tile shows its score between the two buttons, only when it is
+      // above zero (owner, 2026-10-16: "just the number and plus sign before it").
+      (opts.showScore ? '<span class="icono-vote-score" data-icono-vote-score aria-hidden="true"></span>' : "") + secondButton + "</div>";
     }
     function voteSummaryText(snapshot) {
       return String(Number((snapshot || {}).image_score || 0));
@@ -10592,6 +10528,11 @@
       }
       if (!statsEl) {
         box.setAttribute("title", voteSummaryDetails(snapshot));
+      }
+      var scoreEl = box.querySelector("[data-icono-vote-score]");
+      if (scoreEl) {
+        var score = Number(snapshot.image_score || 0);
+        scoreEl.textContent = score > 0 ? "+" + score : "";
       }
       if (paused) box.setAttribute("data-icono-vote-paused", "");
       else box.removeAttribute("data-icono-vote-paused");
@@ -10689,6 +10630,13 @@
       var candidateRef = "a:" + symbol + "|" + assetSha;
       var storedSnapshot = readStoredVoteSnapshot(candidateRef);
       if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot);
+      else if (cfg.publicTally) {
+        var up = Math.max(0, Number(cfg.publicTally.image_upvotes || 0));
+        var down = Math.max(0, Number(cfg.publicTally.image_downvotes || 0));
+        state.snapshot.image_upvotes = up;
+        state.snapshot.image_downvotes = down;
+        state.snapshot.image_score = up - down;
+      }
       if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot);
       var candidateImageId = Number(cfg.candidateImageId || 0);
       if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0;
@@ -10971,7 +10919,6 @@
       renderTooltipMetaSkeletonHtml,
       renderTooltipMobileRowGridHtml,
       renderTooltipMobileSkeletonHtml,
-      renderCandidateGalleryHtml,
       renderCandidateGalleryStatusHtml,
       voteBoxMarkup,
       setVoteBoxState,

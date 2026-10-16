@@ -43,6 +43,12 @@ function isTypingTarget(node) {
   )
 }
 
+// A tile's More menu is a popover: it floats in the top layer but stays inside
+// the frame in the DOM, so its drags and keys would otherwise reach the strip.
+function isMenuTarget(node) {
+  return !!(node && node.closest && node.closest("[popover]"))
+}
+
 // "Soft rise" (Takayu motion reference): blur and transparency resolve together
 // over 900 ms, easeOutSine, the way a print comes up in the developer tray.
 function developImages(track) {
@@ -73,7 +79,6 @@ function installStrip(section) {
   var nav = section.querySelector("[data-icono-strip-nav]")
   var prev = section.querySelector("[data-icono-strip-prev]")
   var next = section.querySelector("[data-icono-strip-next]")
-  var position = section.querySelector("[data-icono-strip-position]")
   var progress = section.querySelector("[data-icono-strip-progress]")
 
   function focusFrame(index) {
@@ -102,7 +107,7 @@ function installStrip(section) {
 
   section.addEventListener("keydown", function (event) {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
-    if (isTypingTarget(event.target)) return
+    if (isTypingTarget(event.target) || isMenuTarget(event.target)) return
     var frame = frameOf(event.target)
     var list = frames(track)
     var index = frame ? list.indexOf(frame) : -1
@@ -150,9 +155,9 @@ function installStrip(section) {
           inViewThreshold: 0.95,
           duration: reduced ? 10 : 30,
           // Frames hold their own buttons and popovers; a drag that starts on a
-          // text field or the copy form must stay a text selection.
+          // text field or in a tile's menu must stay a text selection.
           watchDrag: function (_api, event) {
-            return !isTypingTarget(event.target)
+            return !isTypingTarget(event.target) && !isMenuTarget(event.target)
           },
         },
         [module.WheelGesturesPlugin()],
@@ -160,21 +165,9 @@ function installStrip(section) {
       state.api = api
       section.classList.add("is-strip-ready")
 
+      // Where the reader is shows in the progress line under the strip, not as
+      // a "1-2 / 71" counter (owner, 2026-10-16: the counter is distracting).
       function sync() {
-        var total = api.slideNodes().length
-        var inView = api
-          .slidesInView()
-          .slice()
-          .sort(function (a, b) {
-            return a - b
-          })
-        // Mid-flight on a phone no frame is wholly in view; keep the last
-        // reading rather than flashing "1 / 71".
-        if (position && (inView.length || !position.textContent)) {
-          var first = inView.length ? inView[0] + 1 : 1
-          var last = inView.length ? inView[inView.length - 1] + 1 : first
-          position.textContent = (first === last ? first : first + "–" + last) + " / " + total
-        }
         if (prev) prev.disabled = !api.canScrollPrev()
         if (next) next.disabled = !api.canScrollNext()
         if (nav) nav.hidden = !api.canScrollPrev() && !api.canScrollNext()

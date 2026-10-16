@@ -68,6 +68,23 @@ function measureSourceDimensions(url) {
   return imageDimensionsPromiseCache[resolvedUrl]
 }
 
+// One viewer at a time: a second click while one is open (or still loading
+// PhotoSwipe) does nothing. On 2026-10-16 fast clicks stacked viewers.
+var activeViewer = null
+var openingViewer = false
+
+function adoptViewer(pswp) {
+  activeViewer = pswp
+  pswp.on("destroy", function () {
+    if (activeViewer === pswp) activeViewer = null
+  })
+  return pswp
+}
+
+function viewerBusy() {
+  return openingViewer || !!activeViewer
+}
+
 export function installIconoplasmLightbox(documentRef) {
   var targetDocument = documentRef || document
   if (installedDocuments.has(targetDocument)) return installedDocuments.get(targetDocument)
@@ -78,22 +95,30 @@ export function installIconoplasmLightbox(documentRef) {
     var gallery = trigger.closest("[data-icono-lightbox]")
     if (!gallery || !targetDocument.documentElement.contains(gallery)) return
     event.preventDefault()
-    event.stopPropagation()
+    if (viewerBusy()) return
     var triggers = Array.from(gallery.querySelectorAll("[data-icono-pswp]"))
     var items = triggers.map(function (item) {
       var dimensions = lightboxDimensionsForTrigger(item)
+      var thumb = item.querySelector ? item.querySelector("img") : null
       return {
         src: item.getAttribute("data-icono-pswp-src"),
+        // The tile's own picture shows at once while the full one loads.
+        msrc: thumb ? thumb.currentSrc || thumb.src : undefined,
         width: dimensions.width,
         height: dimensions.height,
+        known: item.hasAttribute("data-pswp-width") && item.hasAttribute("data-pswp-height"),
         alt: item.getAttribute("data-icono-pswp-alt") || item.getAttribute("aria-label") || "",
       }
     })
     var index = Math.max(0, triggers.indexOf(trigger))
-    void Promise.all([
-      ensurePhotoSwipe(targetDocument),
-      measureSourceDimensions(items[index] && items[index].src),
-    ])
+    openingViewer = true
+    // Measure the full picture only when the page doesn't know its size; the
+    // gene's published sizes are on every candidate tile.
+    var measure =
+      items[index] && !items[index].known
+        ? measureSourceDimensions(items[index].src)
+        : Promise.resolve(null)
+    void Promise.all([ensurePhotoSwipe(targetDocument), measure])
       .then(function (results) {
         var measured = results[1]
         if (measured && measured.width > 0 && measured.height > 0 && items[index]) {
@@ -114,19 +139,28 @@ export function installIconoplasmLightbox(documentRef) {
           tapAction: "toggle-controls",
           bgClickAction: "close",
           showHideAnimationType: "fade",
+          showAnimationDuration: 200,
+          hideAnimationDuration: 200,
           paddingFn: function () {
             return { top: 28, bottom: 28, left: 28, right: 28 }
           },
         })
+        adoptViewer(pswp)
         pswp.init()
       })
       .catch(function (error) {
         console.error("[Iconoplasm] failed to load PhotoSwipe:", error)
       })
+      .finally(function () {
+        openingViewer = false
+      })
   }
-  targetDocument.addEventListener("click", handler, true)
+  // Bubble phase, not capture: the candidate strip's carousel cancels the
+  // click that ends a drag, and a capture listener here would run first and
+  // open the picture the pointer happened to be on.
+  targetDocument.addEventListener("click", handler)
   var cleanup = function () {
-    targetDocument.removeEventListener("click", handler, true)
+    targetDocument.removeEventListener("click", handler)
     installedDocuments.delete(targetDocument)
   }
   installedDocuments.set(targetDocument, cleanup)
@@ -144,6 +178,7 @@ export function openIconoplasmImageViewer(options, documentRef) {
     height: options.height,
     alt: options.alt || "",
   }
+  if (activeViewer) activeViewer.close()
   return ensurePhotoSwipe(targetDocument).then(function (PhotoSwipe) {
     var pswp = new PhotoSwipe({
       dataSource: [item],
@@ -183,6 +218,7 @@ export function openIconoplasmImageViewer(options, documentRef) {
         })
       })
     }
+    adoptViewer(pswp)
     pswp.init()
     return pswp
   })
