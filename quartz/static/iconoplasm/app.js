@@ -5527,10 +5527,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       : '<span class="icono-request-card-empty">' +
         (item.is_preallocated_without_preview ? "First blot" : "No blots yet") +
         "</span>"
-    // Blots are the published portraits: count the images that are some
-    // gene's canonical portrait now, not every image ever drawn in the style
-    // (owner, 2026-10-16). live_count is that number (icono_publish_state).
-    var imageCount = Number(item.live_count || 0) || 0
+    // Blots are the published portraits: the genes whose canonical portrait
+    // the style drew now, across all its codes, not every image ever drawn in
+    // it (owner, 2026-10-16). The worker attaches canonical_count from the
+    // trigger-kept table (migration 0128); the rollups' live_count is per
+    // vision or per factory code and goes stale, so it only orders the list.
+    var imageCount = Number(item.canonical_count || 0) || 0
     return (
       '<div class="icono-request-card' +
       (isSelected ? " is-selected" : "") +
