@@ -19,6 +19,8 @@
 // 10. The toolbar folds into ⋮ when it fits, or overflows when it doesn't.
 // 11. Ending a drag on a portrait opens the viewer; a second click stacks a
 //     second viewer.
+// 12. A tile loses the asset attribute the caretaker's "Made from version N"
+//     link hangs on.
 //
 // What is real: the built site, TP53's published candidates and tallies,
 // PhotoSwipe, Embla, Chrome. The signed-in reader (an admin who looks after
@@ -280,6 +282,15 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
           fit.collapsed,
           `${name}: the toolbar's ⋮ shows=${fit.moreShown} while folded=${fit.collapsed}`,
         )
+
+        // 12: every tile names its picture, which the caretaker's "Made from
+        // version N" link needs (B-1095's strip dropped it and the links vanished).
+        const unnamed = await page.$$eval(
+          `${STRIP} .icono-candidate-grid > .icono-candidate-card`,
+          (tiles) =>
+            tiles.filter((tile) => !tile.getAttribute("data-icono-candidate-asset")).length,
+        )
+        assert.equal(unnamed, 0, `${name}: ${unnamed} tiles lack data-icono-candidate-asset`)
 
         // 8: a guest sees the published tally.
         if (reader === "guest") {

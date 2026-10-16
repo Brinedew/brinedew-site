@@ -9480,7 +9480,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         width +
         ";--height:" +
         height +
-        ';">' +
+        // The caretaker's "Made from version N" link finds its tile by this
+        // (caretaker-candidate-sources.js).
+        ';" data-icono-candidate-asset="' +
+        esc(assetSha) +
+        '">' +
         '<button type="button" class="icono-candidate-media-button" data-icono-pswp data-icono-pswp-src="' +
         esc(fullUrl) +
         '" data-icono-pswp-alt="' +
