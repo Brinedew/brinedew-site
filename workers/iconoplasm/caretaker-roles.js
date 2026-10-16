@@ -206,6 +206,9 @@ export async function readClaimAvailability(
           canonical_symbol: accountRole.gene_symbol,
           assignment_version: Number(accountRole.assignment_version),
           gene_revision: 0,
+          // The switch dialog pre-checks its terms box only when this role already
+          // accepted the version on offer.
+          terms_version_id: accountRole.terms_version_id,
         }
       : null
   let reason = null

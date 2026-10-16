@@ -121,12 +121,18 @@ export async function routeProduction(
       if (url.pathname.startsWith("/api/public/")) return route.continue()
       return json({})
     }
-    const local = await fetch(`${localOrigin}${url.pathname}`)
-    return route.fulfill({
-      status: local.status,
-      contentType: local.headers.get("content-type") || undefined,
-      body: Buffer.from(await local.arrayBuffer()),
-    })
+    // A page can still be loading a module when its test closes the context and the
+    // local server; that late fetch fails, and unhandled it failed a passing test (#652).
+    try {
+      const local = await fetch(`${localOrigin}${url.pathname}`)
+      return await route.fulfill({
+        status: local.status,
+        contentType: local.headers.get("content-type") || undefined,
+        body: Buffer.from(await local.arrayBuffer()),
+      })
+    } catch {
+      return route.abort().catch(() => {})
+    }
   })
 }
 

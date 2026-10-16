@@ -557,17 +557,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   esc(symbol) +
                   ". What you wrote for " +
                   esc(switchFrom.canonical_symbol) +
-                  ' stays in its history.</p><p>Switching accepts the <a href="'
+                  " stays in its history.</p>" +
+                  '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
+                  (switchFrom.terms_version_id === terms.terms_version_id ? " checked" : "") +
+                  '>I accept the <a href="'
                 : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
               esc(terms.document_url) +
               '" target="_blank" rel="noopener">' +
               esc(terms.display_label || "caretaker terms") +
-              (switchFrom ? "</a>.</p>" : "</a>.</sl-checkbox>") +
+              "</a>.</sl-checkbox>" +
               '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
               "</form>",
             footer:
               '<button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit' +
-              (switchFrom ? "" : " disabled") +
+              (switchFrom && switchFrom.terms_version_id === terms.terms_version_id
+                ? ""
+                : " disabled") +
               ">" +
               esc(actionLabel) +
               "</button>",
@@ -604,7 +609,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           termsCheckbox?.addEventListener(eventName, syncClaimSubmitState)
         })
         submit?.addEventListener("click", function () {
-          if ((!switchFrom && !termsCheckbox?.checked) || submit.disabled) return
+          if (!termsCheckbox?.checked || submit.disabled) return
           submit.disabled = true
           status.hidden = false
           status.textContent = switchFrom ? "Switching caretaker gene…" : "Claiming caretaking…"
