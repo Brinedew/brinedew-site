@@ -837,10 +837,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-canonical-toolbar-pair strong {
-  overflow: hidden;
   color: var(--dark);
   font-weight: 500;
-  text-overflow: ellipsis;
 }
 
 .icono-toolbar-divider {
@@ -890,7 +888,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 /* Collapsed (set by fitCanonicalToolbar in app.js when the row does not fit):
-   the More menu holds the rarer actions, and the id may truncate. */
+   the More menu holds the rarer actions. Tight (the row still does not fit, or
+   there was nothing to fold): the published id goes, as it does on a very
+   narrow card, because the card above already prints it. An id cut to "A…"
+   says nothing. */
+.icono-gene-toolbar-rail.is-tight .icono-canonical-toolbar-pair {
+  display: none;
+}
+
 .icono-gene-toolbar-rail.is-collapsed .icono-toolbar-more {
   display: inline-flex;
 }
@@ -923,9 +928,10 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   margin-inline-end: 0;
 }
 
-/* Expanded, nothing may shrink, so an overflowing row shows up as overflow. */
-.icono-gene-toolbar-rail:not(.is-collapsed) .icono-canonical-toolbar-meta,
-.icono-gene-toolbar-rail:not(.is-collapsed) .icono-canonical-toolbar-actions > * {
+/* Nothing in the bar shrinks, so a row that does not fit shows up as overflow
+   and fitCanonicalToolbar folds or drops something instead of squeezing it. */
+.icono-gene-toolbar-rail .icono-canonical-toolbar-meta,
+.icono-gene-toolbar-rail .icono-canonical-toolbar-actions > * {
   flex-shrink: 0;
 }
 

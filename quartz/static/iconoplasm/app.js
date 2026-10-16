@@ -9931,11 +9931,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!rail.isConnected || !rail.clientWidth) return
       // Measured start-aligned: a row that overflows its start edge has no
       // scrollWidth to show for it.
-      rail.classList.remove("is-collapsed")
+      rail.classList.remove("is-collapsed", "is-tight")
       rail.classList.add("is-measuring")
-      var overflows = rail.scrollWidth > rail.clientWidth + 1
+      var overflows = function () {
+        return rail.scrollWidth > rail.clientWidth + 1
+      }
+      if (overflows()) {
+        rail.classList.add("is-collapsed")
+        // A guest's row has nothing to fold; a caretaker's may still not fit.
+        if (overflows()) rail.classList.add("is-tight")
+      }
       rail.classList.remove("is-measuring")
-      if (overflows) rail.classList.add("is-collapsed")
     }
     rail._iconoFitToolbar = fit
     if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe(rail)

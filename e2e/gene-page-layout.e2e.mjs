@@ -16,7 +16,9 @@
 // 8. A score shows that isn't the published tally, or shows when it isn't
 //    positive.
 // 9. ⋮ opens nothing, or its menu leaves the window, or Escape leaves it open.
-// 10. The toolbar folds into ⋮ when it fits, or overflows when it doesn't.
+// 10. The toolbar folds into ⋮ when it fits, or overflows when it doesn't; a ⋮
+//     shows with nothing in it, or none shows while actions are folded; the
+//     folded row still overflows, or squeezes an item (the id cut to "A…").
 // 11. Ending a drag on a portrait opens the viewer; a second click stacks a
 //     second viewer.
 // 12. A tile loses the asset attribute the caretaker's "Made from version N"
@@ -208,13 +210,25 @@ function layoutProblems() {
 function toolbarFit() {
   const rail = document.querySelector(".icono-gene-toolbar-rail")
   const collapsed = rail.classList.contains("is-collapsed")
-  rail.classList.remove("is-collapsed")
+  const tight = rail.classList.contains("is-tight")
+  rail.classList.remove("is-collapsed", "is-tight")
   rail.classList.add("is-measuring")
   const overflows = rail.scrollWidth > rail.clientWidth + 1
   rail.classList.remove("is-measuring")
   if (collapsed) rail.classList.add("is-collapsed")
+  if (tight) rail.classList.add("is-tight")
   const more = rail.querySelector(".icono-toolbar-more")
-  return { collapsed, overflows, moreShown: !!more && more.checkVisibility() }
+  const clipped = [...rail.querySelectorAll("button, .icono-canonical-toolbar-pair")]
+    .filter((el) => el.checkVisibility() && el.scrollWidth > el.clientWidth + 1)
+    .map((el) => (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 24))
+  return {
+    collapsed,
+    overflows,
+    foldable: rail.querySelectorAll(".icono-toolbar-menu button").length > 0,
+    moreShown: !!more && more.checkVisibility(),
+    stillOverflows: rail.scrollWidth > rail.clientWidth + 1,
+    clipped,
+  }
 }
 
 // Runs in the page: each tile's shown score next to its vote box's asset.
@@ -279,9 +293,12 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
         )
         assert.equal(
           fit.moreShown,
-          fit.collapsed,
-          `${name}: the toolbar's ⋮ shows=${fit.moreShown} while folded=${fit.collapsed}`,
+          fit.collapsed && fit.foldable,
+          `${name}: the toolbar's ⋮ shows=${fit.moreShown}, folded=${fit.collapsed}, ` +
+            `something to fold=${fit.foldable}`,
         )
+        assert.equal(fit.stillOverflows, false, `${name}: the toolbar still overflows`)
+        assert.deepEqual(fit.clipped, [], `${name}: toolbar items cut short`)
 
         // 12: every tile names its picture, which the caretaker's "Made from
         // version N" link needs (B-1095's strip dropped it and the links vanished).
