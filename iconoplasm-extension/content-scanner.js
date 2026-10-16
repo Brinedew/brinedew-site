@@ -171,7 +171,9 @@
           while (
             nextNode &&
             processed < maxNodesPerSlice &&
-            now() - startedAt < 4 &&
+            // Every slice wraps at least one node, so a slow host turn (GC,
+            // a busy page) can't make an idle callback that does nothing.
+            (now() - startedAt < 4 || processed === 0) &&
             (documentRef.readyState === "complete" ||
               processed === 0 ||
               !deadline ||
