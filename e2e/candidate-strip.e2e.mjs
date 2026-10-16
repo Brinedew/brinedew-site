@@ -43,6 +43,24 @@ function readStrip() {
   }
 }
 
+// The counter follows Embla's in-view events, which land after the scroll
+// animation; on a slow CI runner that can take over a second. Read the strip
+// until `settled(state)` holds or 5 s pass, then return the last reading.
+async function settle(page, settled) {
+  const deadline = Date.now() + 5_000
+  let state = await page.evaluate(readStrip)
+  while (!settled(state) && Date.now() < deadline) {
+    await page.waitForTimeout(100)
+    state = await page.evaluate(readStrip)
+  }
+  return state
+}
+
+function counterShows(state, frame) {
+  const [first, last] = state.position.split(" / ")[0].split("–").map(Number)
+  return first <= frame && frame <= (last || first)
+}
+
 // Every pair of visible controls in a fully shown tile's footer, and any control
 // that leaves its tile.
 function footerCollisions() {
@@ -147,16 +165,14 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       assert.ok(state.prevDisabled)
       for (let step = 1; step <= 4; step += 1) {
         await page.keyboard.press("ArrowRight")
-        await page.waitForTimeout(450)
-        state = await page.evaluate(readStrip)
+        state = await settle(page, (state) => counterShows(state, step + 1))
         assert.equal(
           state.focusIndex,
           step,
           `${name}: Right #${step} landed on ${state.focusIndex}`,
         )
-        const [first, last] = state.position.split(" / ")[0].split("–").map(Number)
         assert.ok(
-          first <= step + 1 && step + 1 <= (last || first),
+          counterShows(state, step + 1),
           `${name}: frame ${step + 1} is focused but the counter reads ${state.position}`,
         )
       }
@@ -166,14 +182,12 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
 
       // 4: End and Home reach the ends.
       await page.keyboard.press("End")
-      await page.waitForTimeout(900)
-      state = await page.evaluate(readStrip)
+      state = await settle(page, (state) => counterShows(state, 71) && state.nextDisabled)
       assert.equal(state.focusIndex, 70)
       assert.match(state.position, /71 \/ 71$/)
       assert.ok(state.nextDisabled, `${name}: Next is live at the end`)
       await page.keyboard.press("Home")
-      await page.waitForTimeout(900)
-      state = await page.evaluate(readStrip)
+      state = await settle(page, (state) => counterShows(state, 1) && state.prevDisabled)
       assert.equal(state.focusIndex, 0)
       assert.ok(state.prevDisabled)
 

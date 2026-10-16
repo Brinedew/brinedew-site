@@ -41,7 +41,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=9342b1eb426b6a66"
+import { installCandidateStrips } from "./candidate-strip.js?v=eae75bc086b291bd"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,

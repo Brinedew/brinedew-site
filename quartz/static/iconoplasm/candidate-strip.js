@@ -168,9 +168,11 @@ function installStrip(section) {
           .sort(function (a, b) {
             return a - b
           })
-        var first = inView.length ? inView[0] + 1 : 1
-        var last = inView.length ? inView[inView.length - 1] + 1 : first
-        if (position) {
+        // Mid-flight on a phone no frame is wholly in view; keep the last
+        // reading rather than flashing "1 / 71".
+        if (position && (inView.length || !position.textContent)) {
+          var first = inView.length ? inView[0] + 1 : 1
+          var last = inView.length ? inView[inView.length - 1] + 1 : first
           position.textContent = (first === last ? first : first + "–" + last) + " / " + total
         }
         if (prev) prev.disabled = !api.canScrollPrev()
