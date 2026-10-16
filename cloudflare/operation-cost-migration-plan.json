@@ -15,11 +15,11 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0128_style_canonical_counts.sql": {
+    "iconoplasm/0129_generation_provenance_by_gene.sql": {
       "online": true,
       "prediction": {
-        "rows_read": 110000,
-        "rows_written": 14000,
+        "rows_read": 2000,
+        "rows_written": 2000,
         "requests": 1
       }
     }

@@ -46,9 +46,21 @@
   --icono-ring-soft: color-mix(in srgb, var(--dark) 10%, transparent);
   --icono-ring-image: color-mix(in srgb, var(--light) 72%, var(--dark) 12%);
   --icono-action-font: "IBM Plex Mono", monospace;
-  --icono-action-height: 2.55rem;
-  --icono-action-padding: 0.56rem 0.92rem;
-  --icono-action-font-size: 0.82rem;
+  /* B-1096: one sizing system. Every control is 40 px tall (an icon button is a
+     40 px square), every glyph is 16 px (GitHub Primer's octicon size), every
+     button label is 13 px, and every gap is a step of the 4 px grid. The live
+     page on 2026-10-16 had controls of 36, 37.7, 37.8, 40.8 and 44 px and icons
+     of 16, 16.3, 16.8 and 20 px in two rows; the layout check in
+     e2e/gene-page-layout.e2e.mjs fails a change that brings that back. */
+  --icono-space-1: 0.25rem;
+  --icono-space-2: 0.5rem;
+  --icono-space-3: 0.75rem;
+  --icono-space-4: 1rem;
+  --icono-control-size: 2.5rem;
+  --icono-icon-size: 1rem;
+  --icono-action-height: var(--icono-control-size);
+  --icono-action-padding: 0 var(--icono-space-4);
+  --icono-action-font-size: 0.8125rem;
   --icono-action-border: color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
   --icono-action-border-hover: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
   --icono-action-secondary-bg: color-mix(in srgb, var(--ui-bg) 82%, var(--light) 18%);
@@ -81,7 +93,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.42rem;
+  gap: var(--icono-space-2);
   min-height: var(--icono-action-height);
   max-width: 100%;
   margin: 0;
@@ -109,8 +121,8 @@
 
 .icono-button svg {
   flex: none;
-  width: 1.02rem;
-  height: 1.02rem;
+  width: var(--icono-icon-size);
+  height: var(--icono-icon-size);
 }
 
 .icono-button:hover:not(:disabled) {
@@ -774,18 +786,23 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   width: 100%;
 }
 
+/* B-1096 (mockup D2): the toolbar is the card's bottom edge, not a second
+   floating box. Same width, no gap, no top border, the card's shadow. */
+.icono-gene-lead:has(> [data-icono-canonical-toolbar-island]) {
+  gap: 0;
+}
+
 .icono-gene-toolbar-rail {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 3.6rem;
-  padding: 0.5rem 0.6rem 0.5rem 0.75rem;
-  margin-top: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 84%, var(--dark) 16%);
-  border-radius: var(--icono-radius-lg);
-  background: color-mix(in srgb, var(--light) 96%, white 4%);
-  box-shadow: 0 6px 18px rgba(27, 18, 11, 0.04);
+  gap: var(--icono-space-2);
+  padding: var(--icono-space-2) var(--icono-space-2) var(--icono-space-2) var(--icono-space-4);
+  border: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
+  border-top: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--dark) 4%, var(--light));
+  box-shadow: 0 10px 24px rgba(53, 38, 27, 0.1);
 }
 
 /* The panel is only a grouping in markup; its meta and actions are row items. */
@@ -793,30 +810,63 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: contents;
 }
 
-.icono-canonical-edit-btn {
-  flex-basis: 2.35rem;
-  width: 2.35rem;
-  min-width: 2.35rem;
-  height: 2.35rem;
-  min-height: 2.35rem;
-}
-
+/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, New candidate. */
 .icono-canonical-toolbar-meta {
-  flex: 1 1 auto;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--icono-space-2);
   min-width: 0;
 }
 
 .icono-canonical-toolbar-pair {
-  max-width: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--icono-space-1);
+  min-width: 0;
+  white-space: nowrap;
+  font: 400 var(--icono-action-font-size) / 1 var(--icono-action-font);
+}
+
+.icono-canonical-toolbar-pair span {
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-canonical-toolbar-pair span::after {
+  content: ":";
+}
+
+.icono-canonical-toolbar-pair strong {
+  color: var(--dark);
+  font-weight: 500;
+}
+
+.icono-toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 1.5rem;
+  background: color-mix(in srgb, var(--dark) 18%, transparent);
 }
 
 .icono-canonical-toolbar-actions {
   display: flex;
-  flex: none;
+  flex: 1 1 auto;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.45rem;
-  margin-inline-start: auto;
+  justify-content: flex-end;
+  gap: var(--icono-space-2);
+  min-width: 0;
+}
+
+/* The edit button follows the print button; the labelled actions sit at the end.
+   Every item in the bar is one 8 px gap from the next. */
+.icono-toolbar-menu:not(:popover-open) > .icono-gene-edit-panel {
+  order: -1;
+  margin-inline-end: auto;
+}
+
+.icono-gene-toolbar-rail .icono-button--icon {
+  flex: none;
 }
 
 /* Wide bar: the More menu's items sit inline and the ... button is not needed. */
@@ -837,22 +887,52 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: none;
 }
 
-@container (max-width: 34rem) {
+/* Collapsed (set by fitCanonicalToolbar in app.js when the row does not fit):
+   the More menu holds the rarer actions. Tight (the row still does not fit, or
+   there was nothing to fold): the published id goes, as it does on a very
+   narrow card, because the card above already prints it. An id cut to "A…"
+   says nothing. */
+.icono-gene-toolbar-rail.is-tight .icono-canonical-toolbar-pair {
+  display: none;
+}
+
+.icono-gene-toolbar-rail.is-collapsed .icono-toolbar-more {
+  display: inline-flex;
+}
+
+.icono-gene-toolbar-rail:not(.is-collapsed) .icono-toolbar-more {
+  display: none;
+}
+
+.icono-gene-toolbar-rail.is-collapsed
+  .icono-canonical-toolbar-actions:not(:has(.icono-toolbar-menu button))
   .icono-toolbar-more {
-    display: inline-flex;
-  }
+  display: none;
+}
 
-  .icono-canonical-toolbar-actions:not(:has(.icono-toolbar-menu button)) .icono-toolbar-more {
-    display: none;
-  }
+.icono-gene-toolbar-rail.is-collapsed .icono-toolbar-menu:not(:popover-open) {
+  display: none;
+}
 
-  .icono-toolbar-menu:not(:popover-open) {
-    display: none;
-  }
+.icono-gene-toolbar-rail.is-collapsed
+  .icono-caretaker-identity--toolbar
+  .icono-caretaker-identity__name {
+  display: none;
+}
 
-  .icono-caretaker-identity--toolbar .icono-caretaker-identity__name {
-    display: none;
-  }
+.icono-gene-toolbar-rail.is-measuring .icono-canonical-toolbar-actions {
+  justify-content: flex-start;
+}
+
+.icono-gene-toolbar-rail.is-measuring .icono-gene-edit-panel {
+  margin-inline-end: 0;
+}
+
+/* Nothing in the bar shrinks, so a row that does not fit shows up as overflow
+   and fitCanonicalToolbar folds or drops something instead of squeezing it. */
+.icono-gene-toolbar-rail .icono-canonical-toolbar-meta,
+.icono-gene-toolbar-rail .icono-canonical-toolbar-actions > * {
+  flex-shrink: 0;
 }
 
 /* Very narrow: the published id is already printed on the card above. */
@@ -2491,7 +2571,7 @@ img-comparison-slider.rendered [slot="second"] {
   min-height: calc(100% - 0.8rem);
   padding: var(--icono-action-padding);
   border: 1px solid var(--icono-action-border);
-  border-radius: var(--icono-radius-pill);
+  border-radius: var(--icono-control-radius);
   background: var(--icono-action-secondary-bg);
   color: var(--dark);
   font-family: var(--icono-action-font);
@@ -2573,14 +2653,6 @@ img-comparison-slider.rendered [slot="second"] {
   border-radius: var(--icono-radius-lg);
   background: color-mix(in srgb, var(--light) 96%, white 4%);
   box-shadow: 0 18px 32px rgba(28, 22, 14, 0.16);
-}
-
-.icono-candidate-copy-popover-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--dark) 64%, var(--secondary) 36%);
 }
 
 .icono-candidate-copy-panel .icono-request-picker-input {
@@ -4337,13 +4409,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: balance;
 }
 
-.icono-candidate-count {
-  margin-left: 0.35rem;
-  color: var(--gray);
-  font-size: 0.9em;
-  font-weight: normal;
-}
-
 .icono-candidate-gallery--status {
   content-visibility: visible;
   contain-intrinsic-size: none;
@@ -4456,112 +4521,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   box-shadow: inset 0 0 0 1px var(--icono-ring-image);
 }
 
-/* B-838: a tile's footer is one row: votes, the Sample/Emulsion ids, star and
-   actions. Image grids (Unsplash, Civitai) keep tiles to icons; ids are shown only
-   when the tile is wide enough to hold them. They used to shrink to 0 px and print
-   "SAMPLE" over "EMULSION" on two-column tablets. */
-.icono-candidate-card {
-  container: candidate-tile / inline-size;
-}
-
-@container candidate-tile (max-width: 22rem) {
-  .icono-candidate-footer .icono-candidate-toolbar-pair {
-    display: none;
-  }
-}
-
-.icono-candidate-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 0.44rem;
-  margin-top: 0.45rem;
-  min-width: 0;
-  width: 100%;
-}
-
-.icono-candidate-footer .icono-vote-box {
-  flex: 0 0 4.9rem;
-  width: 4.9rem;
-  min-width: 4.9rem;
-  grid-template-columns: repeat(2, 2.45rem);
-}
-
-.icono-candidate-footer .icono-vote-btn {
-  width: 2.45rem;
-  min-width: 2.45rem;
-  padding-inline: 0;
-}
-
-.icono-candidate-toolbar-meta {
-  display: inline-flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-  gap: 0.5rem;
-}
-
-.icono-candidate-toolbar-pair {
-  display: inline-grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.04rem;
-  min-width: 0;
-  max-width: 12rem;
-  line-height: 1;
-}
-
-.icono-candidate-toolbar-pair span {
-  grid-column: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.56rem;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
-}
-
-.icono-candidate-toolbar-pair strong {
-  grid-column: 1;
-  overflow: hidden;
-  color: var(--dark);
-  font-family: "Special Elite", Georgia, serif;
-  font-size: 0.83rem;
-  font-weight: 400;
-  line-height: 1.12;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.icono-candidate-toolbar-meta > .icono-emulsion-favorite-button--toolbar {
-  flex: 0 0 2.75rem;
-}
-
-.icono-candidate-secondary-actions {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  gap: 0.4rem;
-  min-width: 0;
-  margin-inline-start: auto;
-  /* Reserve the two public controls before client hydration without permanently
-     charging every footer for the admin-only remove control. The admin rail
-     still grows to its natural three-control width when that control exists. */
-  min-inline-size: 4.9rem;
-  min-block-size: 2.25rem;
-  position: relative;
-}
-
-.icono-candidate-admin-actions {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
 /* Source: B-467 — compact action rail for candidate blots.
    The remove and copy controls used to be wide pill buttons with text labels. They now share
    a circular icon button shape so they read as a single rail next to the approve/reject vote
@@ -4612,19 +4571,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   background: color-mix(in srgb, var(--light) 76%, white 24%);
   color: var(--dark);
   transform: translateY(-1px);
-}
-
-.icono-candidate-action-btn--remove {
-  border-color: color-mix(in srgb, #8f2b24 38%, var(--ui-border) 62%);
-  background: color-mix(in srgb, #fff4f2 86%, white 14%);
-  color: #7c221d;
-}
-
-.icono-candidate-action-btn--remove:hover:not(:disabled),
-.icono-candidate-action-btn--remove:focus-visible:not(:disabled) {
-  background: color-mix(in srgb, #ffe6e1 88%, white 12%);
-  border-color: color-mix(in srgb, #8f2b24 56%, var(--ui-border) 44%);
-  color: #7c221d;
 }
 
 /* Compatibility shim: legacy .icono-candidate-remove-button rules read by older snapshots/tests
@@ -5344,10 +5290,6 @@ html[data-theme="dark"] .icono-card--brick {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .icono-candidate-footer {
-    align-items: center;
-  }
-
   .icono-toolbar-link {
     width: auto;
     justify-content: flex-start;
@@ -5653,14 +5595,6 @@ a.icono-clan-ae:hover {
   padding-top: 1.2rem;
   border-top: 1px solid var(--ui-border);
 }
-.icono-suggest-lab {
-  margin-bottom: 9px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
-}
 .icono-suggest-form {
   display: flex;
   gap: 8px;
@@ -5861,18 +5795,9 @@ a.icono-clan-ae:hover {
   display: none;
 }
 
-.icono-candidate-strip-position {
-  margin-inline-end: 0.3rem;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--secondary, var(--darkgray));
-}
-
+/* Flush with the card's edges: a tile cut by the strip is cut exactly where the
+   card and toolbar end (it used to run 5 px past them). */
 .icono-candidate-strip-viewport {
-  margin-inline: -0.3rem;
-  padding-inline: 0.3rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
@@ -5897,22 +5822,24 @@ a.icono-clan-ae:hover {
   touch-action: pan-y pinch-zoom;
 }
 
-/* 16rem holds a tile's whole footer (votes, star, and the admin's three
-   actions); at 11.5rem the copy button covered the star on a 402 px phone. */
+/* 16rem holds a tile's footer (votes, star and ⋮) with room for the score. */
 .icono-candidate-strip .icono-candidate-card {
   flex: 0 0 clamp(16rem, 40%, 17.5rem);
   min-width: 0;
   scroll-snap-align: start;
 }
 
-.icono-candidate-strip .icono-candidate-toolbar-meta > .icono-emulsion-favorite-button--toolbar {
-  flex-basis: 2.25rem;
-  width: 2.25rem;
-  min-width: 2.25rem;
+/* One frame shape for every tile, so footers line up across the row. Portraits
+   come at 7:9 and 3:4 (TP53: 52 and 18 of 71); 7:9 crops a 3:4 one by about
+   3.5%, taken from the bottom, and the viewer shows the whole image. */
+.icono-candidate-strip .icono-candidate-media {
+  aspect-ratio: 7 / 9;
 }
 
-.icono-candidate-strip .icono-candidate-copy-panel[open] form.icono-candidate-copy-popover {
-  width: min(280px, 100cqw);
+.icono-candidate-strip .icono-candidate-media img {
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0;
 }
 
 .icono-candidate-strip-progress {
@@ -6117,4 +6044,307 @@ a.icono-clan-ae:hover {
   color: var(--secondary);
   text-decoration: underline;
   text-underline-offset: 0.15em;
+}
+
+/* ───────── B-1096: gene page controls on one sizing system ─────────
+   Mockup D2 (Website/artifacts/toolbar-mockups-2026-10-16). Every control below
+   is --icono-control-size tall, every glyph --icono-icon-size, every gap a
+   --icono-space step; e2e/gene-page-layout.e2e.mjs measures the live geometry. */
+
+/* Icon-only controls without a frame: the star, print, edit and More buttons. */
+.icono-gene-toolbar-rail .icono-emulsion-favorite-button--toolbar,
+.icono-candidate-footer .icono-emulsion-favorite-button--toolbar,
+.icono-canonical-toolbar-actions .icono-canonical-edit-btn,
+.icono-gene-toolbar-rail .icono-toolbar-more,
+.icono-candidate-icon-btn {
+  appearance: none;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--icono-control-size);
+  min-width: var(--icono-control-size);
+  height: var(--icono-control-size);
+  min-height: var(--icono-control-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--icono-control-radius);
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+  cursor: pointer;
+  transform: none;
+}
+
+.icono-gene-toolbar-rail .icono-emulsion-favorite-button--toolbar svg,
+.icono-candidate-footer .icono-emulsion-favorite-button--toolbar svg,
+.icono-canonical-toolbar-actions .icono-canonical-edit-btn svg,
+.icono-candidate-icon-btn svg {
+  width: var(--icono-icon-size);
+  height: var(--icono-icon-size);
+}
+
+.icono-canonical-toolbar-actions .icono-canonical-edit-btn:hover:not(:disabled),
+.icono-gene-toolbar-rail .icono-toolbar-more:hover,
+.icono-candidate-icon-btn:hover,
+.icono-candidate-icon-btn:focus-visible {
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+  color: var(--dark);
+  transform: none;
+}
+
+.icono-candidate-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Tile footer: approve, score, reject, star, and More on the trailing edge. */
+.icono-candidate-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--icono-space-2);
+  margin-top: var(--icono-space-2);
+  min-width: 0;
+}
+
+.icono-candidate-footer .icono-vote-box {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  height: var(--icono-control-size);
+  grid-template-columns: repeat(2, calc(var(--icono-control-size) - 1px));
+}
+
+.icono-candidate-footer .icono-vote-btn {
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  gap: var(--icono-space-1);
+}
+
+/* The score sits in the gap between the two glyphs and never moves them. */
+.icono-vote-score {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  transform: translateX(-50%);
+  color: var(--icono-vote-muted);
+  font: 500 0.6875rem / 1 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.icono-vote-score:empty {
+  display: none;
+}
+
+.icono-candidate-footer .icono-candidate-toolbar-meta {
+  display: flex;
+  align-items: center;
+}
+
+.icono-candidate-footer .icono-candidate-toolbar-meta:empty {
+  display: none;
+}
+
+.icono-candidate-secondary-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  /* Holds the More button's place before the signed-in actions hydrate. */
+  min-inline-size: var(--icono-control-size);
+  min-block-size: var(--icono-control-size);
+  margin-inline-start: auto;
+}
+
+/* A tile's More menu: the same panel as the toolbar's, anchored to its button. */
+.icono-candidate-menu:popover-open {
+  display: grid;
+  gap: var(--icono-space-1);
+  box-sizing: border-box;
+  width: 16rem;
+  max-width: calc(100vw - 2 * var(--icono-space-4));
+  padding: var(--icono-space-1);
+  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
+  border-radius: var(--icono-radius-lg);
+  background: var(--light);
+  color: var(--dark);
+  box-shadow: 0 12px 32px rgba(15, 10, 6, 0.22);
+}
+
+@supports (anchor-name: --a) {
+  .icono-candidate-menu:popover-open {
+    inset: auto;
+    margin: var(--icono-space-1) 0 0;
+    /* Below the button, growing leftwards from its right edge. */
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block;
+  }
+}
+
+.icono-candidate-menu-meta {
+  display: grid;
+  gap: var(--icono-space-1);
+  padding: var(--icono-space-2) var(--icono-space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--dark) 12%, transparent);
+}
+
+.icono-candidate-menu-pair {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--icono-space-3);
+  min-width: 0;
+  font: 400 var(--icono-action-font-size) / 1.25 var(--icono-action-font);
+}
+
+.icono-candidate-menu-pair span {
+  color: var(--secondary, var(--darkgray));
+}
+
+.icono-candidate-menu-pair strong {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icono-candidate-menu-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--icono-space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--icono-control-size);
+  padding: 0 var(--icono-space-3);
+  border: 0;
+  border-radius: var(--icono-control-radius);
+  background: transparent;
+  color: var(--dark);
+  font: 500 var(--icono-action-font-size) / 1.2 var(--icono-action-font);
+  text-align: start;
+  list-style: none;
+  cursor: pointer;
+}
+
+.icono-candidate-menu-item::-webkit-details-marker {
+  display: none;
+}
+
+.icono-candidate-menu-item svg {
+  flex: none;
+  width: var(--icono-icon-size);
+  height: var(--icono-icon-size);
+}
+
+.icono-candidate-menu-item:hover:not(:disabled),
+.icono-candidate-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--dark) 8%, transparent);
+}
+
+.icono-candidate-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.icono-candidate-menu-item--remove {
+  color: var(--icono-reject);
+}
+
+.icono-candidate-menu-item--remove:hover:not(:disabled),
+.icono-candidate-menu-item--remove:focus-visible {
+  background: color-mix(in srgb, var(--icono-reject) 10%, transparent);
+}
+
+/* Copy to gene opens its form inside the menu, under its row. */
+.icono-candidate-menu .icono-candidate-copy-panel[open] form.icono-candidate-copy-popover {
+  position: static;
+  width: auto;
+  margin: 0;
+  padding: var(--icono-space-1) var(--icono-space-3) var(--icono-space-3);
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Section labels: Candidates and Comments read the same, with a boxed count. */
+h2.icono-section-label {
+  display: flex;
+  align-items: center;
+  gap: var(--icono-space-2);
+  margin: 0;
+  color: var(--dark);
+  font: 500 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.icono-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 var(--icono-space-1);
+  border: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
+  color: var(--secondary, var(--darkgray));
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.icono-section-count[hidden] {
+  display: none;
+}
+
+.icono-suggest h2.icono-section-label {
+  margin-bottom: var(--icono-space-3);
+}
+
+.icono-candidate-strip .icono-candidate-gallery-heading {
+  min-height: var(--icono-control-size);
+  margin-bottom: var(--icono-space-3);
+}
+
+.icono-candidate-strip-nav {
+  gap: var(--icono-space-2);
+}
+
+.icono-candidate-media-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.icono-candidate-menu .icono-candidate-copy-panel summary.icono-candidate-menu-item {
+  justify-content: flex-start;
+}
+
+/* The copy form's field and button use the same 40 px control size. The field
+   keeps 16 px text: smaller input text makes iOS Safari zoom the page on focus. */
+.icono-candidate-menu .icono-candidate-copy-popover .icono-request-picker-input {
+  box-sizing: border-box;
+  min-height: var(--icono-control-size);
+  height: var(--icono-control-size);
+  padding: 0 var(--icono-space-3);
+}
+
+.icono-candidate-menu .icono-candidate-copy-popover .icono-request-inline-submit {
+  box-sizing: border-box;
+  min-height: var(--icono-control-size);
+  height: var(--icono-control-size);
+  gap: var(--icono-space-2);
+}
+
+.icono-candidate-menu .icono-candidate-copy-popover .icono-request-inline-submit svg {
+  width: var(--icono-icon-size);
+  height: var(--icono-icon-size);
 }
