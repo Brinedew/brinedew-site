@@ -7,18 +7,10 @@
 
   function createState() {
     return {
-      entitlementPolicyVersion: "",
-      terms: [],
       registry: [],
       nextCursor: "",
       selectedAssignmentId: "",
-      selectedGene: null,
-      selectedAccount: null,
       registryRequestSequence: 0,
-      geneRequestSequence: 0,
-      accountRequestSequence: 0,
-      commandIds: new Map(),
-      offerBusy: false,
     }
   }
 
@@ -42,14 +34,6 @@
     context.refs = {
       status: query(context, "[data-caretaker-status]"),
       refresh: query(context, "[data-caretaker-refresh]"),
-      policy: query(context, "[data-caretaker-policy]"),
-      geneQuery: query(context, "[data-caretaker-gene-query]"),
-      geneResults: query(context, "[data-caretaker-gene-results]"),
-      geneSelection: query(context, "[data-caretaker-gene-selection]"),
-      accountQuery: query(context, "[data-caretaker-account-query]"),
-      accountResults: query(context, "[data-caretaker-account-results]"),
-      accountSelection: query(context, "[data-caretaker-account-selection]"),
-      offer: query(context, "[data-caretaker-offer]"),
       registryQuery: query(context, "[data-caretaker-registry-query]"),
       registryStatus: query(context, "[data-caretaker-registry-status]"),
       registryBody: query(context, "[data-caretaker-registry-body]"),
@@ -174,16 +158,14 @@
     context.timers.delete(timer)
   }
 
-  function formatDate(value) {
-    if (!value) return "Not yet"
+  function formatDay(value) {
+    if (!value) return ""
     var date = new Date(value)
     if (Number.isNaN(date.getTime())) return String(value)
     return new Intl.DateTimeFormat(undefined, {
       year: "numeric",
       month: "short",
       day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
     }).format(date)
   }
 
@@ -200,35 +182,6 @@
     return labels[String(raw || "")] || String(raw || "Unknown").replaceAll("_", " ")
   }
 
-  function secureCommandId() {
-    if (global.crypto && typeof global.crypto.randomUUID === "function") {
-      return global.crypto.randomUUID()
-    }
-    if (!global.crypto || typeof global.crypto.getRandomValues !== "function") {
-      throw new Error("This browser cannot create a secure caretaker command ID.")
-    }
-    var bytes = new Uint8Array(16)
-    global.crypto.getRandomValues(bytes)
-    bytes[6] = (bytes[6] & 15) | 64
-    bytes[8] = (bytes[8] & 63) | 128
-    var hex = Array.from(bytes, function toHex(value) {
-      return value.toString(16).padStart(2, "0")
-    }).join("")
-    return [
-      hex.slice(0, 8),
-      hex.slice(8, 12),
-      hex.slice(12, 16),
-      hex.slice(16, 20),
-      hex.slice(20),
-    ].join("-")
-  }
-
-  function isActiveTerms(term) {
-    if (!term || term.retired_at) return false
-    var effectiveAt = Date.parse(String(term.effective_at || ""))
-    return Number.isFinite(effectiveAt) && effectiveAt <= Date.now()
-  }
-
   var modules = global.IconoplasmCaretakerAdminModules || Object.create(null)
   modules.shared = Object.freeze({
     SEARCH_DELAY_MS: SEARCH_DELAY_MS,
@@ -239,13 +192,11 @@
     createContext: createContext,
     createState: createState,
     element: element,
-    formatDate: formatDate,
-    isActiveTerms: isActiveTerms,
+    formatDay: formatDay,
     later: later,
     readableError: readableError,
     replace: replace,
     request: request,
-    secureCommandId: secureCommandId,
     setStatus: setStatus,
     statusLabel: statusLabel,
   })

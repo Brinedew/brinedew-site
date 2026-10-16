@@ -2,41 +2,21 @@
   "use strict"
 
   var modules = global.IconoplasmCaretakerAdminModules
-  if (!modules || !modules.shared || !modules.registry || !modules.detail || !modules.offer) {
+  if (!modules || !modules.shared || !modules.registry || !modules.detail) {
     throw new Error("Caretaker admin modules must load before the caretaker admin facade.")
   }
 
   var shared = modules.shared
   var context = shared.createContext()
-  var registryController
   var detailController
-  var offerController
-
-  registryController = modules.registry.create(context, {
+  var registryController = modules.registry.create(context, {
     renderDetail: function renderDetail() {
       detailController.render()
-    },
-    renderOfferState: function renderOfferState() {
-      offerController.renderState()
     },
   })
   detailController = modules.detail.create(context, {
     loadRegistry: function loadRegistry(options) {
       return registryController.load(options)
-    },
-    renderOfferState: function renderOfferState() {
-      offerController.renderState()
-    },
-  })
-  offerController = modules.offer.create(context, {
-    commandLabel: function commandLabel(actionKey, normalLabel) {
-      return detailController.commandLabel(actionKey, normalLabel)
-    },
-    loadRegistry: function loadRegistry(options) {
-      return registryController.load(options)
-    },
-    performMutation: function performMutation(actionKey, path, body, button, acceptedMessage) {
-      return detailController.performMutation(actionKey, path, body, button, acceptedMessage)
     },
   })
 
@@ -49,11 +29,9 @@
     context.root = nextRoot
     context.state = shared.createState()
     shared.collectRefs(context)
-    offerController.bindEvents()
-    registryController.renderPolicy()
-    offerController.renderState()
+    registryController.bindEvents()
     if (modules.cooldown) modules.cooldown.bind(nextRoot)
-    Promise.allSettled([registryController.loadTerms(), registryController.load()])
+    registryController.load()
     return true
   }
 
