@@ -10,6 +10,10 @@
 //
 // Until Embla loads, the strip is a plain native scroller (CSS), so every
 // frame stays reachable even if the module never arrives.
+//
+// B-1101: the strip is the Overview tab's slice of the candidates. In the
+// Candidates tab Embla stands down and the same frames lay out as a full grid;
+// back in Overview it picks up at the frame the reader left.
 
 var emblaModulePromise = null
 
@@ -70,11 +74,10 @@ function developImages(track) {
 }
 
 function installStrip(section) {
-  if (section._iconoCandidateStrip) return
   var viewport = section.querySelector("[data-icono-strip-viewport]")
   var track = viewport && viewport.querySelector(".icono-candidate-grid")
   if (!track) return
-  var state = { api: null }
+  var state = { api: null, loading: false, startSnap: 0, refresh: null }
   section._iconoCandidateStrip = state
   var nav = section.querySelector("[data-icono-strip-nav]")
   var prev = section.querySelector("[data-icono-strip-prev]")
@@ -141,104 +144,147 @@ function installStrip(section) {
     vote.classList.add("is-pressed")
   })
 
+  // Prev and Next turn a page: the frame nearest the middle moves by as
+  // many frames as the strip fits, so a reader with 71 frames isn't
+  // clicking 71 times, and a drag that rested between frames still turns
+  // a whole page.
+  function page(direction) {
+    var api = state.api
+    if (!api) return
+    var list = frames(track)
+    if (!list.length) return
+    var box = viewport.getBoundingClientRect()
+    var middle = box.left + box.width / 2
+    var nearest = 0
+    var best = Infinity
+    for (var i = 0; i < list.length; i += 1) {
+      var rect = list[i].getBoundingClientRect()
+      var distance = Math.abs(rect.left + rect.width / 2 - middle)
+      if (distance < best) {
+        best = distance
+        nearest = i
+      }
+    }
+    var step =
+      list.length > 1
+        ? list[1].getBoundingClientRect().left - list[0].getBoundingClientRect().left
+        : box.width
+    var perPage = Math.max(1, Math.floor(box.width / Math.max(1, step)))
+    var to = Math.max(0, Math.min(list.length - 1, nearest + direction * perPage))
+    api.scrollTo(snapOf(api, to))
+  }
+  if (prev)
+    prev.addEventListener("click", function () {
+      page(-1)
+    })
+  if (next)
+    next.addEventListener("click", function () {
+      page(1)
+    })
+
   developImages(track)
   section.classList.add("is-strip-developing")
 
-  loadEmbla()
-    .then(function (module) {
-      if (!section.isConnected) return
-      var reduced = prefersReducedMotion()
-      var api = module.EmblaCarousel(
-        viewport,
-        {
-          // A drag rests where the reader lets go, with momentum, instead of
-          // springing to the nearest page of frames (owner, 2026-10-17: "it
-          // never really stays in the same place you dragged").
-          dragFree: true,
-          align: "center",
-          containScroll: "trimSnaps",
-          slidesToScroll: 1,
-          // A frame counts as shown only when (almost) all of it is: the peeking
-          // one is next, and the counter reads only whole frames.
-          inViewThreshold: 0.95,
-          duration: reduced ? 10 : 30,
-          // Frames hold their own buttons and popovers; a drag that starts on a
-          // text field or in a tile's menu must stay a text selection.
-          watchDrag: function (_api, event) {
-            return !isTypingTarget(event.target) && !isMenuTarget(event.target)
-          },
+  function mount() {
+    if (state.api || state.loading) return
+    state.loading = true
+    loadEmbla()
+      .then(function (module) {
+        state.loading = false
+        if (!section.isConnected || !wantsCarousel(section)) return
+        create(module)
+      })
+      .catch(function () {
+        state.loading = false
+        // The native scroller stays; nothing is lost but the arrows.
+        if (nav) nav.hidden = true
+      })
+  }
+
+  function unmount() {
+    var api = state.api
+    if (!api) return
+    state.startSnap = api.selectedScrollSnap()
+    state.api = null
+    api.destroy()
+    section.classList.remove("is-strip-ready")
+    if (progress) progress.style.transform = ""
+  }
+
+  state.refresh = function () {
+    if (wantsCarousel(section)) mount()
+    else unmount()
+  }
+  state.refresh()
+
+  function create(module) {
+    var reduced = prefersReducedMotion()
+    var api = module.EmblaCarousel(
+      viewport,
+      {
+        // A drag rests where the reader lets go, with momentum, instead of
+        // springing to the nearest page of frames (owner, 2026-10-17: "it
+        // never really stays in the same place you dragged").
+        dragFree: true,
+        align: "center",
+        containScroll: "trimSnaps",
+        slidesToScroll: 1,
+        // A frame counts as shown only when (almost) all of it is: the peeking
+        // one is next, and the counter reads only whole frames.
+        inViewThreshold: 0.95,
+        duration: reduced ? 10 : 30,
+        startIndex: state.startSnap,
+        // Frames hold their own buttons and popovers; a drag that starts on a
+        // text field or in a tile's menu must stay a text selection.
+        watchDrag: function (_api, event) {
+          return !isTypingTarget(event.target) && !isMenuTarget(event.target)
         },
-        [module.WheelGesturesPlugin()],
-      )
-      state.api = api
-      section.classList.add("is-strip-ready")
+      },
+      [module.WheelGesturesPlugin()],
+    )
+    state.api = api
+    section.classList.add("is-strip-ready")
 
-      // Where the reader is shows in the progress line under the strip, not as
-      // a "1-2 / 71" counter (owner, 2026-10-16: the counter is distracting).
-      function sync() {
-        if (prev) prev.disabled = !api.canScrollPrev()
-        if (next) next.disabled = !api.canScrollNext()
-        if (nav) nav.hidden = !api.canScrollPrev() && !api.canScrollNext()
-        developImages(track)
-      }
+    // Where the reader is shows in the progress line under the strip, not as
+    // a "1-2 / 71" counter (owner, 2026-10-16: the counter is distracting).
+    function sync() {
+      if (prev) prev.disabled = !api.canScrollPrev()
+      if (next) next.disabled = !api.canScrollNext()
+      if (nav) nav.hidden = !api.canScrollPrev() && !api.canScrollNext()
+      developImages(track)
+    }
 
-      function syncProgress() {
-        if (!progress) return
-        var value = Math.max(0, Math.min(1, api.scrollProgress()))
-        progress.style.transform = "scaleX(" + value + ")"
-      }
+    function syncProgress() {
+      if (!progress) return
+      var value = Math.max(0, Math.min(1, api.scrollProgress()))
+      progress.style.transform = "scaleX(" + value + ")"
+    }
 
-      // Prev and Next turn a page: the frame nearest the middle moves by as
-      // many frames as the strip fits, so a reader with 71 frames isn't
-      // clicking 71 times, and a drag that rested between frames still turns
-      // a whole page.
-      function page(direction) {
-        var list = frames(track)
-        if (!list.length) return
-        var box = viewport.getBoundingClientRect()
-        var middle = box.left + box.width / 2
-        var nearest = 0
-        var best = Infinity
-        for (var i = 0; i < list.length; i += 1) {
-          var rect = list[i].getBoundingClientRect()
-          var distance = Math.abs(rect.left + rect.width / 2 - middle)
-          if (distance < best) {
-            best = distance
-            nearest = i
-          }
-        }
-        var step =
-          list.length > 1
-            ? list[1].getBoundingClientRect().left - list[0].getBoundingClientRect().left
-            : box.width
-        var perPage = Math.max(1, Math.floor(box.width / Math.max(1, step)))
-        var to = Math.max(0, Math.min(list.length - 1, nearest + direction * perPage))
-        api.scrollTo(snapOf(api, to))
-      }
-      if (prev)
-        prev.addEventListener("click", function () {
-          page(-1)
-        })
-      if (next)
-        next.addEventListener("click", function () {
-          page(1)
-        })
-      api.on("select", sync)
-      api.on("slidesInView", sync)
-      api.on("reInit", sync)
-      api.on("reInit", syncProgress)
-      api.on("scroll", syncProgress)
-      sync()
-      syncProgress()
-    })
-    .catch(function () {
-      // The native scroller stays; nothing is lost but the arrows.
-      if (nav) nav.hidden = true
-    })
+    api.on("select", sync)
+    api.on("slidesInView", sync)
+    api.on("reInit", sync)
+    api.on("reInit", syncProgress)
+    api.on("scroll", syncProgress)
+    sync()
+    syncProgress()
+  }
 }
 
+// Embla measures the frames and wires dragging only on a shown strip, and the
+// Candidates tab wants the grid, not the carousel.
+function wantsCarousel(section) {
+  if (section.closest('[data-icono-gene-selected="candidates"]')) return false
+  return section.checkVisibility ? section.checkVisibility() : !!section.offsetParent
+}
+
+// Safe to call again: a strip already installed only re-checks whether it
+// should be a carousel right now (after a tab switch).
 export function installCandidateStrips(root) {
   if (!root || !root.querySelectorAll) return
   var sections = root.querySelectorAll("[data-icono-candidate-strip]")
-  for (var i = 0; i < sections.length; i += 1) installStrip(sections[i])
+  for (var i = 0; i < sections.length; i += 1) {
+    var state = sections[i]._iconoCandidateStrip
+    if (state) state.refresh()
+    else installStrip(sections[i])
+  }
 }

@@ -5752,13 +5752,16 @@ a.icono-clan-ae:hover {
   font-size: clamp(1.25rem, 2.5vw, 1.65rem);
 }
 
+/* Lore is read, not glanced at: the reading serif at about 65 characters a
+   line, not the typewriter face. */
 .icono-public-manifestation__body {
-  max-width: 72ch;
+  max-width: 38em;
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  color: var(--dark);
   font:
-    1rem/1.65 "Special Elite",
+    1.1875rem/1.55 "Crimson Pro",
     Georgia,
     serif;
 }
@@ -5903,6 +5906,185 @@ a.icono-clan-ae:hover {
   .icono-candidate-strip .icono-vote-btn.is-pressed {
     animation: none;
   }
+}
+
+/* ───────── B-1101: gene page tabs ─────────
+   GitHub's repository tabs: the labels sit on one rule and the open one is
+   underlined in the accent. Overview is the page as it was, each section cut to
+   a slice; every other tab is one section, whole. */
+.icono-gene-tabs {
+  margin-top: 1.9rem;
+}
+
+.icono-gene-tablist {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(var(--icono-space-3), 3.4vw, 1.75rem);
+  border-bottom: 1px solid var(--ui-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-margin-top: var(--icono-space-3);
+}
+
+.icono-gene-tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.icono-gene-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--icono-space-2);
+  min-height: var(--icono-control-size);
+  margin: 0 0 -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: color-mix(in srgb, var(--dark) 58%, transparent);
+  font: 500 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* Four labels and a count need about 361 px at full spacing; a 360 px phone
+   has about 328. Tighter tracking fits them in about 300. */
+@media (max-width: 30rem) {
+  .icono-gene-tablist {
+    gap: 10px;
+  }
+
+  .icono-gene-tab {
+    letter-spacing: 0.06em;
+  }
+}
+
+.icono-gene-tab:hover,
+.icono-gene-tab[aria-selected="true"] {
+  color: var(--dark);
+}
+
+.icono-gene-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+}
+
+.icono-gene-tab:focus-visible,
+.icono-gene-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-gene-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.4rem, 3vw, 2rem);
+  padding-top: clamp(1rem, 2.5vw, 1.4rem);
+}
+
+.icono-gene-part[hidden] {
+  display: none;
+}
+
+/* Overview's slices are divided by a rule, like the sections they were. */
+.icono-gene-part:not([hidden]) ~ .icono-gene-part:not([hidden]) {
+  padding-top: clamp(1rem, 2vw, 1.4rem);
+  border-top: 1px solid var(--ui-border);
+}
+
+.icono-gene-tabpanel .icono-public-manifestation,
+.icono-gene-tabpanel .icono-suggest,
+.icono-gene-tabpanel .icono-candidate-gallery {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.icono-gene-tabpanel .icono-public-manifestation h2 {
+  margin: 0 0 var(--icono-space-3);
+  color: var(--dark);
+  font: 500 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* One section open: its tab already names it. */
+.icono-gene-tabs:not([data-icono-gene-selected="overview"]) .icono-gene-part h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The slices. Overview shows four lines of lore and the newest three comments
+   (GENE_OVERVIEW_COMMENTS in app.js); the strip is already a slice. */
+.icono-gene-tabs[data-icono-gene-selected="overview"] .icono-public-manifestation__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.icono-gene-tabs[data-icono-gene-selected="overview"]
+  [data-icono-suggest-list]
+  > .icono-suggest-item:nth-child(n + 4) {
+  display: none;
+}
+
+.icono-gene-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--icono-control-size);
+  margin-top: var(--icono-space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 var(--icono-action-font-size) / 1 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.icono-gene-more:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.icono-gene-more[hidden] {
+  display: none;
+}
+
+/* The Candidates tab: every frame at once in a grid (candidate-strip.js stands
+   Embla down). 11rem is the narrowest a tile's footer fits: all 71 of TP53's
+   fit at 176 px, and at 168 px they spill 8 px. That is three across on a
+   desktop and two on a 402 px phone. */
+.icono-gene-tabs[data-icono-gene-selected="candidates"] .icono-candidate-gallery-heading {
+  display: contents;
+}
+
+.icono-gene-tabs[data-icono-gene-selected="candidates"] .icono-candidate-strip-nav,
+.icono-gene-tabs[data-icono-gene-selected="candidates"] .icono-candidate-strip-progress {
+  display: none;
+}
+
+.icono-gene-tabs[data-icono-gene-selected="candidates"] .icono-candidate-strip-viewport {
+  overflow: visible;
+  scroll-snap-type: none;
+}
+
+.icono-gene-tabs[data-icono-gene-selected="candidates"]
+  .icono-candidate-strip
+  .icono-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
+  gap: 1.25rem 0.85rem;
+  padding: 0;
+  touch-action: auto;
 }
 
 /* ───────── B-1095: the Discord invite, in Discord's own embed shape ───────── */
