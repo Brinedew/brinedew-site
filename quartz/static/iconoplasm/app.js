@@ -41,7 +41,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=9b20b8b18121a2b7"
+import { installCandidateStrips } from "./candidate-strip.js?v=1c9ba5afd836054b"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -9952,6 +9952,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function wireGeneContent(container, genePayload) {
     if (!container || !genePayload) return
+    syncGeneTabs(container)
     var rails = container.querySelectorAll("[data-icono-canonical-rail]")
     for (var r = 0; r < rails.length; r += 1) fitCanonicalToolbar(rails[r])
     var candidateRetry = container.querySelector("[data-icono-candidates-retry]")
@@ -10094,20 +10095,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function renderSuggestList(listEl, comments, countEl) {
+  function renderSuggestList(listEl, comments) {
     if (!listEl) return
     var list = Array.isArray(comments) ? comments : []
-    if (countEl) {
-      countEl.textContent = list.length ? String(list.length) : ""
-      countEl.hidden = !list.length
-    }
-    if (!list.length) {
-      listEl.innerHTML = '<p class="icono-suggest-empty">No comments yet.</p>'
-      return
-    }
     var html = ""
     for (var i = 0; i < list.length; i++) html += renderSuggestItemMarkup(list[i])
-    listEl.innerHTML = html
+    listEl.innerHTML = html || '<p class="icono-suggest-empty">No comments yet.</p>'
+    setSuggestCount(listEl)
   }
 
   function suggestErrText(err) {
@@ -10116,10 +10110,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function setSuggestCount(listEl, countEl) {
-    if (!countEl) return
-    var n = listEl ? listEl.querySelectorAll(".icono-suggest-item").length : 0
-    countEl.textContent = n ? " · " + n : ""
+  // The count shows on the Comments heading and on the Comments tab.
+  function setSuggestCount(listEl) {
+    var tabs = listEl && listEl.closest("[data-icono-gene-tabs]")
+    if (!tabs) return
+    var n = listEl.querySelectorAll(".icono-suggest-item").length
+    var chips = tabs.querySelectorAll("[data-icono-suggest-count]")
+    for (var i = 0; i < chips.length; i += 1) {
+      chips[i].textContent = n ? String(n) : ""
+      chips[i].hidden = !n
+    }
+    syncGeneSliceLinks(tabs)
   }
 
   function startSuggestEdit(item) {
@@ -10206,7 +10207,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
   }
 
-  function deleteSuggest(item, path, listEl, countEl) {
+  function deleteSuggest(item, path, listEl) {
     if (!item) return
     var id = Number(item.getAttribute("data-icono-suggest-id") || 0) || 0
     if (!id) return
@@ -10218,10 +10219,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
       .then(function () {
         item.remove()
-        setSuggestCount(listEl, countEl)
         if (listEl && !listEl.querySelector(".icono-suggest-item")) {
           listEl.innerHTML = '<p class="icono-suggest-empty">No comments yet.</p>'
         }
+        setSuggestCount(listEl)
       })
       .catch(function (err) {
         window.alert(suggestErrText(err))
@@ -10257,15 +10258,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var symbol = normalizedSymbol(g.symbol)
     if (!symbol) return
     var listEl = sec.querySelector("[data-icono-suggest-list]")
-    var countEl = sec.querySelector("[data-icono-suggest-count]")
     var commentsPath = "/api/iconoplasm/genes/" + encodeURIComponent(symbol) + "/comments"
     if (!currentUser) {
-      renderSuggestList(listEl, [], countEl)
+      renderSuggestList(listEl, [])
       return
     }
     fetchAuthedJSON(commentsPath)
       .then(function (data) {
-        renderSuggestList(listEl, data && data.comments, countEl)
+        renderSuggestList(listEl, data && data.comments)
       })
       .catch(function () {
         if (listEl) listEl.innerHTML = '<p class="icono-suggest-empty">Could not load comments.</p>'
@@ -10303,7 +10303,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             var empty = listEl.querySelector(".icono-suggest-empty")
             if (empty) listEl.innerHTML = ""
             listEl.insertAdjacentHTML("afterbegin", renderSuggestItemMarkup(item))
-            setSuggestCount(listEl, countEl)
+            setSuggestCount(listEl)
           })
           .catch(function (err) {
             if (errEl) {
@@ -10329,7 +10329,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         } else if (t.closest("[data-icono-suggest-save]")) {
           saveSuggestEdit(t.closest(".icono-suggest-item"), commentsPath)
         } else if (t.closest("[data-icono-suggest-del]")) {
-          deleteSuggest(t.closest(".icono-suggest-item"), commentsPath, listEl, countEl)
+          deleteSuggest(t.closest(".icono-suggest-item"), commentsPath, listEl)
         }
       })
     }
@@ -10359,18 +10359,239 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var markup = publicManifestationMarkup(g)
     if (!markup) {
       if (current) current.remove()
+      syncGeneTabs(container)
       return
     }
     var template = document.createElement("template")
     template.innerHTML = markup
     var replacement = template.content.firstElementChild
     if (!replacement) return
-    if (current) {
-      current.replaceWith(replacement)
-      return
+    if (current) current.replaceWith(replacement)
+    else {
+      var part = container.querySelector('[data-icono-gene-part="lore"]')
+      if (part) part.insertBefore(replacement, part.firstChild)
     }
-    var lead = container.querySelector(".icono-gene-lead")
-    if (lead) lead.insertAdjacentElement("afterend", replacement)
+    syncGeneTabs(container)
+  }
+
+  // B-1101: the gene's sections sit under the lead card as tabs. Overview is the
+  // page as it was, each section cut to a slice that ends in a way into its own
+  // tab, the way a GitHub or Reddit profile's Overview shows a little of each
+  // tab (owner, 2026-10-17: "A compressed slice from other tabs"). A tab shows
+  // only when its section has something in it, like GitHub hiding a
+  // repository's Wiki tab while the wiki is off.
+  var GENE_TABS = [
+    { id: "overview", label: "Overview" },
+    { id: "lore", label: "Lore" },
+    { id: "comments", label: "Comments" },
+    { id: "candidates", label: "Candidates" },
+  ]
+  // #gene-comments is the address caretaker notifications link to.
+  var GENE_TAB_HASHES = {
+    "#overview": "overview",
+    "#lore": "lore",
+    "#comments": "comments",
+    "#gene-comments": "comments",
+    "#candidates": "candidates",
+  }
+  // Overview shows the newest comments; the rest wait in the Comments tab.
+  var GENE_OVERVIEW_COMMENTS = 3
+
+  function geneTabHasContent(tabs, id) {
+    if (id === "overview" || id === "comments") return true
+    var part = tabs.querySelector('[data-icono-gene-part="' + id + '"]')
+    if (!part) return false
+    if (id === "lore") return !!part.querySelector(".icono-public-manifestation")
+    return !!part.querySelector("[data-icono-candidate-strip], [data-icono-candidates-retry]")
+  }
+
+  function geneTabButtons(tabs) {
+    return Array.prototype.slice.call(tabs.querySelectorAll("[data-icono-gene-tab]"))
+  }
+
+  // The "Read more" and "See all" links under each Overview slice show only
+  // when the slice actually leaves something out.
+  function syncGeneSliceLinks(tabs) {
+    var overview = tabs.getAttribute("data-icono-gene-selected") === "overview"
+    var lore = tabs.querySelector('[data-icono-gene-more="lore"]')
+    if (lore) {
+      var body = tabs.querySelector(".icono-public-manifestation__body")
+      lore.hidden = !overview || !body || body.scrollHeight <= body.clientHeight + 1
+    }
+    var comments = tabs.querySelector('[data-icono-gene-more="comments"]')
+    if (comments) {
+      var n = tabs.querySelectorAll("[data-icono-suggest-list] > .icono-suggest-item").length
+      comments.hidden = !overview || n <= GENE_OVERVIEW_COMMENTS
+    }
+    var candidates = tabs.querySelector('[data-icono-gene-more="candidates"]')
+    if (candidates) {
+      var frames = tabs.querySelectorAll(
+        "[data-icono-candidate-strip] .icono-candidate-grid > .icono-candidate-card",
+      ).length
+      candidates.hidden = !overview || frames < 2
+    }
+  }
+
+  function selectGeneTab(tabs, id, options) {
+    var opts = options || {}
+    tabs.setAttribute("data-icono-gene-selected", id)
+    var buttons = geneTabButtons(tabs)
+    for (var i = 0; i < buttons.length; i += 1) {
+      var on = buttons[i].getAttribute("data-icono-gene-tab") === id
+      buttons[i].setAttribute("aria-selected", on ? "true" : "false")
+      buttons[i].tabIndex = on ? 0 : -1
+      if (on && opts.focus) buttons[i].focus()
+    }
+    var panel = tabs.querySelector("[data-icono-gene-tabpanel]")
+    if (panel) panel.setAttribute("aria-labelledby", "icono-gene-tab-" + id)
+    var parts = tabs.querySelectorAll("[data-icono-gene-part]")
+    for (var j = 0; j < parts.length; j += 1) {
+      var partId = parts[j].getAttribute("data-icono-gene-part")
+      parts[j].hidden = !geneTabHasContent(tabs, partId) || (id !== "overview" && partId !== id)
+    }
+    // The strip is a carousel in Overview and a full grid in its own tab.
+    installCandidateStrips(tabs)
+    syncGeneSliceLinks(tabs)
+    if (opts.updateHash) {
+      // Replace, not push: switching tabs is not a page the Back button returns to.
+      var hash = id === "overview" ? "" : "#" + id
+      window.history.replaceState(
+        window.history.state,
+        "",
+        window.location.pathname + window.location.search + hash,
+      )
+    }
+    // Arriving from a link or a slice's "See all", the open section must be on
+    // screen: on a phone TP53's tab row starts 1,473 px down a 640 px screen.
+    if (opts.reveal) {
+      var list = tabs.querySelector("[data-icono-gene-tablist]")
+      var top = list ? list.getBoundingClientRect().top : 0
+      if (list && (top < 0 || top > window.innerHeight / 2)) list.scrollIntoView({ block: "start" })
+    }
+  }
+
+  // A link to #gene-comments lands on the open tab. The lead card fills in
+  // after the tabs render (on a phone TP53's grows from 549 to 1,303 px within
+  // 200 ms), so the tab row is kept in view while the page settles, until the
+  // reader moves the page themselves.
+  function revealGeneTabsOnArrival(tabs) {
+    var list = tabs.querySelector("[data-icono-gene-tablist]")
+    if (!list) return
+    var reveal = function () {
+      list.scrollIntoView({ block: "start", behavior: "instant" })
+    }
+    reveal()
+    if (typeof ResizeObserver !== "function" || !tabs.parentElement) return
+    var observer = new ResizeObserver(reveal)
+    var inputs = ["wheel", "touchstart", "pointerdown", "keydown"]
+    var stop = function () {
+      observer.disconnect()
+      for (var i = 0; i < inputs.length; i += 1) window.removeEventListener(inputs[i], stop, true)
+    }
+    observer.observe(tabs.parentElement)
+    for (var i = 0; i < inputs.length; i += 1) {
+      window.addEventListener(inputs[i], stop, { capture: true, passive: true })
+    }
+    window.setTimeout(stop, 4000)
+  }
+
+  function syncGeneTabs(container) {
+    var tabs = container && container.querySelector("[data-icono-gene-tabs]")
+    if (!tabs) return
+    var list = tabs.querySelector("[data-icono-gene-tablist]")
+    var present = []
+    for (var i = 0; i < GENE_TABS.length; i += 1) {
+      var def = GENE_TABS[i]
+      var button = list.querySelector('[data-icono-gene-tab="' + def.id + '"]')
+      if (!geneTabHasContent(tabs, def.id)) {
+        if (button) button.remove()
+        continue
+      }
+      present.push(def.id)
+      if (!button) {
+        button = document.createElement("button")
+        button.type = "button"
+        button.className = "icono-gene-tab"
+        button.id = "icono-gene-tab-" + def.id
+        button.setAttribute("role", "tab")
+        button.setAttribute("data-icono-gene-tab", def.id)
+        button.setAttribute("aria-controls", "icono-gene-tabpanel")
+        button.innerHTML =
+          esc(def.label) +
+          (def.id === "comments"
+            ? '<span class="icono-section-count" data-icono-suggest-count hidden></span>'
+            : def.id === "candidates"
+              ? '<span class="icono-section-count" data-icono-candidate-count hidden></span>'
+              : "")
+      }
+      list.appendChild(button)
+    }
+    var candidateCount = list.querySelector("[data-icono-candidate-count]")
+    if (candidateCount) {
+      var frames = tabs.querySelectorAll(
+        "[data-icono-candidate-strip] .icono-candidate-grid > .icono-candidate-card",
+      ).length
+      candidateCount.textContent = frames ? String(frames) : ""
+      candidateCount.hidden = !frames
+    }
+    var first = tabs.getAttribute("data-icono-wired") !== "true"
+    var fromHash = first ? GENE_TAB_HASHES[String(window.location.hash || "").toLowerCase()] : ""
+    var wanted = tabs.getAttribute("data-icono-gene-selected") || fromHash || "overview"
+    selectGeneTab(tabs, present.indexOf(wanted) >= 0 ? wanted : "overview")
+    if (fromHash) revealGeneTabsOnArrival(tabs)
+    if (!first) return
+    tabs.setAttribute("data-icono-wired", "true")
+    tabs.addEventListener("click", function (event) {
+      var target =
+        event.target.closest &&
+        event.target.closest("[data-icono-gene-tab], [data-icono-gene-more]")
+      if (!target || !tabs.contains(target)) return
+      var id =
+        target.getAttribute("data-icono-gene-tab") || target.getAttribute("data-icono-gene-more")
+      // A tab tap leaves the page where it is; "See all" brings the tab up.
+      selectGeneTab(tabs, id, {
+        updateHash: true,
+        reveal: target.hasAttribute("data-icono-gene-more"),
+      })
+    })
+    // WAI-ARIA tabs with automatic activation: Left and Right move between the
+    // tabs, Home and End jump to the ends.
+    list.addEventListener("keydown", function (event) {
+      var buttons = geneTabButtons(tabs)
+      var index = buttons.indexOf(document.activeElement)
+      if (index < 0 || !buttons.length) return
+      var next = -1
+      if (event.key === "ArrowRight") next = (index + 1) % buttons.length
+      else if (event.key === "ArrowLeft") next = (index - 1 + buttons.length) % buttons.length
+      else if (event.key === "Home") next = 0
+      else if (event.key === "End") next = buttons.length - 1
+      if (next < 0) return
+      event.preventDefault()
+      selectGeneTab(tabs, buttons[next].getAttribute("data-icono-gene-tab"), {
+        focus: true,
+        updateHash: true,
+      })
+    })
+    // The lore clamp depends on the reading face, which can arrive late.
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () {
+        if (tabs.isConnected) syncGeneSliceLinks(tabs)
+      })
+    }
+  }
+
+  function genePartMarkup(id, inner, moreLabel) {
+    return (
+      '<div class="icono-gene-part" data-icono-gene-part="' +
+      id +
+      '">' +
+      inner +
+      '<button type="button" class="icono-gene-more" data-icono-gene-more="' +
+      id +
+      '" hidden>' +
+      esc(moreLabel) +
+      "</button></div>"
+    )
   }
 
   function renderGeneContent(container, g) {
@@ -10379,15 +10600,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     html += "<div data-icono-canonical-toolbar-island>" + renderCanonicalToolbarMarkup(g) + "</div>"
     html += "</section>"
 
-    html += publicManifestationMarkup(g)
-
     html += '<div class="icono-caretaker-island" data-icono-caretaker-island hidden></div>'
 
-    // Order (owner, 2026-10-17): the conversation about this gene comes before
-    // the pile of other candidates, and the Discord invite closes the page.
-    html += "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>"
-
-    html += renderCandidateGallery(g)
+    // Order (owner, 2026-10-17): lore, then the conversation about this gene,
+    // then the pile of other candidates; the Discord invite closes the page.
+    html +=
+      '<div class="icono-gene-tabs" data-icono-gene-tabs>' +
+      '<div class="icono-gene-tablist" role="tablist" aria-label="' +
+      esc(normalizedSymbol(g.symbol) || g.symbol || "") +
+      '" data-icono-gene-tablist></div>' +
+      '<div class="icono-gene-tabpanel" id="icono-gene-tabpanel" role="tabpanel" data-icono-gene-tabpanel>' +
+      genePartMarkup("lore", publicManifestationMarkup(g), "Read more") +
+      genePartMarkup(
+        "comments",
+        "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>",
+        "See all",
+      ) +
+      genePartMarkup("candidates", renderCandidateGallery(g), "See all") +
+      "</div></div>"
 
     html +=
       '<section class="icono-gene-discord-card" data-icono-discord-island>' +
