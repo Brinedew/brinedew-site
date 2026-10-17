@@ -28,7 +28,9 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 //    version, a legacy image gets an invented source, the sources reach a
 //    stranger, or the lookup reads another gene's pool;
 // 11. History names a caretaker by their account, or two caretakers alike, or
-//    a removed account by its old name.
+//    a removed account by its old name;
+// 12. (B-1106) a new caretaker cannot show the gene's original text, or their
+//    first save hides a text readers could see.
 
 const ORIGIN = "https://iconoplasm.test"
 const CARETAKER = "account_caretaker_0001"
@@ -267,6 +269,24 @@ test("7: the card is rebuilt only when what readers see changes", async (t) => {
     ).status,
     400,
   )
+})
+
+test("12: the switch shows the original text; a new caretaker's first save keeps it shown", async (t) => {
+  const h = await harness(t)
+  const shown = await h.call("POST", "/manifestations/factory/page-visibility", {
+    visible: true,
+    command_id: "cmd_visible_00000000000000000000012",
+  })
+  assert.equal(shown.status, 200)
+  assert.deepEqual(h.published, ["MFNG"])
+  let text = await readGeneText(h.db, "MFNG")
+  assert.equal(text.origin, "factory")
+  assert.equal(text.readers_see, true)
+  await h.save("A caretaker's MFNG.")
+  text = await readGeneText(h.db, "MFNG")
+  assert.equal(text.origin, "caretaker")
+  assert.equal(text.readers_see, true)
+  assert.deepEqual(h.published, ["MFNG", "MFNG"])
 })
 
 test("8: the panel keeps the chosen and factory texts beyond History's first page, and Tags stay per gene", async (t) => {
