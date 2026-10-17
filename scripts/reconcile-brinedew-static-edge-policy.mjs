@@ -38,7 +38,11 @@ export async function loadStaticEdgePolicy() {
 // Pages project (Curvarium). Each custom domain belongs to exactly one.
 export function pagesProjects(policy) {
   return [
-    { project: policy.pagesProject, target: policy.pagesTarget, domains: policy.pagesCustomDomains },
+    {
+      project: policy.pagesProject,
+      target: policy.pagesTarget,
+      domains: policy.pagesCustomDomains,
+    },
     ...(policy.otherPagesProjects || []),
   ]
 }
