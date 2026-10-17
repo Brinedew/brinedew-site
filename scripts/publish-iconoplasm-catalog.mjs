@@ -244,6 +244,32 @@ function sha256(bytes) {
 export const REPUBLISH_BATCH_SYMBOLS = 4
 export const REPUBLISH_RETRY_DELAYS_MS = Object.freeze([2000, 5000])
 
+// B-1090: the extension and the developers' bulk file read a separate release
+// (the scanner artifact and catalog JSONL behind /api/public/v1/metadata). Its
+// recognition data is each gene's symbol, name and colour (plus UniProt and
+// aliases, which change with them), so it is rebuilt when those change, not on
+// every portrait vote: portraits reach the extension from each card on hover.
+export function recognitionChanged(previousRows, rows) {
+  if (!previousRows) return true
+  const key = (row) => JSON.stringify([row[0], row[1], row[3]])
+  if (previousRows.length !== rows.length) return true
+  const before = new Set(previousRows.map(key))
+  return rows.some((row) => !before.has(key(row)))
+}
+
+async function postCatalogRelease() {
+  const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/catalog/publish`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  })
+  const body = await response.json().catch(() => null)
+  return { ok: response.ok && body?.ok === true, status: response.status, body }
+}
+
 async function postRepublish(symbols) {
   const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
     method: "POST",
@@ -414,6 +440,23 @@ async function main() {
   receipt.result = receipt.cdn.verified
     ? "published"
     : "uploaded, CDN not yet serving the new bytes"
+  if (recognitionChanged(previous?.genes || null, genes)) {
+    const release = await postCatalogRelease().catch((error) => ({
+      ok: false,
+      status: 0,
+      body: { error: String(error) },
+    }))
+    receipt.extension_release = {
+      ok: release.ok,
+      status: release.status,
+      gene_count: release.body?.gene_count ?? null,
+      current_hash: release.body?.current_hash ?? null,
+      error: release.ok ? null : String(release.body?.error || "").slice(0, 300),
+    }
+    // A release that refuses fails the run, so it can't sit frozen behind a
+    // green job again.
+    if (!release.ok) process.exitCode = 1
+  }
   finish(receipt)
   if (!receipt.cdn.verified) process.exitCode = 1
 }
