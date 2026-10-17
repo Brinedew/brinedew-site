@@ -48,6 +48,8 @@ function dossier() {
       gene_revision: 9,
       canonical_selection_id: "selection_4",
       canonical_revision_id: "revision_1",
+      manifestation_id: "manifestation_own",
+      public_page_visible: false,
     },
     manifestations: [
       {
@@ -536,6 +538,45 @@ test("the Settings visibility switch uses manifestation and gene CAS versions", 
   assert.equal(body.expected_manifestation_version, 2)
   assert.equal(body.expected_gene_revision, 9)
   assert.deepEqual(refreshes, ["TP53"])
+})
+
+// B-1106: a caretaker who just took a gene has written nothing, but the gene
+// already has its original text. The switch shows that text.
+test("the visibility switch shows the original text before the caretaker writes", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const fresh = () => {
+    const value = dossier()
+    value.manifestations = value.manifestations.filter((item) => !item.author_is_viewer)
+    value.head.manifestation_id = "manifestation_seed"
+    return value
+  }
+  const calls = []
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      if ((init?.method || "GET") === "GET") return fresh()
+      calls.push({ path, body: JSON.parse(init.body) })
+      return { ok: true }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const toggle = host.querySelector("[data-icono-caretaker-visibility]")
+  assert.equal(toggle.disabled, false)
+  toggle.checked = true
+  toggle.dispatchEvent(new Event("change", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const mutation = calls.find((call) => call.path.endsWith("/page-visibility"))
+  assert.ok(mutation)
+  assert.match(mutation.path, /\/manifestations\/manifestation_seed\/page-visibility$/)
+  assert.equal(mutation.body.visible, true)
 })
 
 test("an uncertain save retry reuses the same command ID", async () => {

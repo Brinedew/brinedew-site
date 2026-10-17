@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
+} from "./caretaker-manifestations-model.js?v=de638e47ba183354"
 import { dialogMarkup } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 
 // B-740: attribute payloads must not rely on the mounted escaper covering
@@ -716,7 +716,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   const rows = lineageRows(dossier, esc)
   body += '<div class="icono-caretaker-settings">'
   if (editable) {
-    const visible = own?.public_page_visible === true
+    // B-1106: the switch shows or hides the text the gene uses now, which for
+    // a new caretaker is the original text or the previous caretaker's.
+    const visible = dossier.head?.public_page_visible === true
     body +=
       '<section class="icono-settings-group" aria-label="Gene page">' +
       '<div class="icono-setting-row"><div class="icono-setting-row__text">' +
@@ -724,7 +726,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       "<p>Readers see your prose under the card. Tags always stay private.</p></div>" +
       '<label class="icono-caretaker-switch"><input type="checkbox" role="switch" aria-labelledby="icono-caretaker-visibility-title" data-icono-caretaker-visibility' +
       (visible ? " checked" : "") +
-      (own ? "" : " disabled") +
+      (dossier.head?.manifestation_id ? "" : " disabled") +
       '><span aria-hidden="true"></span></label></div>' +
       rows.restore +
       "</section>"
