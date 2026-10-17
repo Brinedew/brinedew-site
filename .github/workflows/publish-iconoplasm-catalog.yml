@@ -7,7 +7,9 @@ name: Publish Iconoplasm catalog
 # canonical-affecting publish event lands; the hourly schedule is a backstop
 # only (B-893: GitHub schedules fire 4 to 11 times a day here). Each run is
 # incremental: it reads the previous object from the CDN, the publish events
-# since that object's watermark, and only the changed genes from D1.
+# since that object's watermark, and only the changed genes from D1. When a
+# gene's symbol, name or UniProt changed, it also releases the public API's
+# catalogue itself (scripts/release-iconoplasm-catalog.mjs, B-1090).
 on:
   repository_dispatch:
     types: [iconoplasm-catalog]
@@ -17,6 +19,10 @@ on:
     inputs:
       full:
         description: "Rebuild every gene instead of the dirty set"
+        type: boolean
+        default: false
+      release:
+        description: "Also release the public API catalogue (resolve, search, extension, dump) when no gene name changed"
         type: boolean
         default: false
 
@@ -62,7 +68,7 @@ jobs:
         run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
 
       - name: Publish catalog/v3/index.json
-        run: node scripts/publish-iconoplasm-catalog.mjs ${{ (inputs.full == true) && '--full' || '' }}
+        run: node scripts/publish-iconoplasm-catalog.mjs ${{ (inputs.full == true) && '--full' || '' }} ${{ (inputs.release == true) && '--release' || '' }}
 
       - name: Upload publication receipt
         if: ${{ always() }}
