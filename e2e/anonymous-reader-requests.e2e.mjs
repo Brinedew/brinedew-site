@@ -14,7 +14,10 @@
 //     Worker request (B-846);
 //  3. the page never loaded at all and the empty request list is a vacuous pass: the home shell
 //     must mount, and the gene page must load its card from the CDN's stable gene object;
-//  4. the analytics beacon loads before a visitor in a consent country has answered, or after
+//  4. a gene page's Discord invite card asks discord.com or cdn.discordapp.com anything, which
+//     hands every guest's address to Discord against the privacy page (B-1102): its counts and
+//     icon come from the CDN object community/v1/discord.json;
+//  5. the analytics beacon loads before a visitor in a consent country has answered, or after
 //     "No thanks", or never loads for a visitor who accepted or lives outside the consent
 //     countries (the prompt decision is made in the page, from /cdn-cgi/trace).
 //
@@ -110,6 +113,14 @@ async function routeCdn(context) {
       const object = await cdnObject(pathname)
       return route.fulfill({ ...object, headers: cors })
     }
+    if (pathname === "/community/v1/discord.json") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: cors,
+        body: JSON.stringify({ icon: null, members: 31, online: 5 }),
+      })
+    }
     return route.fulfill({ status: 200, contentType: "image/webp", headers: cors, body: TINY_WEBP })
   })
 }
@@ -147,8 +158,12 @@ test("an anonymous reader on the home page and on a gene page sends the Worker n
         const page = await context.newPage()
         const workerBound = []
         const cdn = []
+        const discord = []
         page.on("request", (request) => {
           const url = request.url()
+          if (/(^|\.)(discord\.com|discordapp\.com|discord\.gg)$/.test(new URL(url).host)) {
+            discord.push(url)
+          }
           if (reachesWorker(url)) workerBound.push(`${request.method()} ${new URL(url).pathname}`)
           if (new URL(url).host === CDN_HOST) cdn.push(new URL(url).pathname)
         })
@@ -167,13 +182,21 @@ test("an anonymous reader on the home page and on a gene page sends the Worker n
         // Lazy work (starter cards, deferred hydration, idle prefetch) starts after first paint.
         await page.waitForLoadState("networkidle")
         await page.waitForTimeout(5_000)
-        report.push({ where, workerBound, cdn: [...new Set(cdn)] })
+        report.push({ where, workerBound, cdn: [...new Set(cdn)], discord })
 
         // 3. The gene page really loaded its card from the published object.
         if (pagePath !== "/") {
           assert.ok(
             cdn.includes("/genes/v3/TP53.json"),
             `${where}: the stable gene object was not read from the CDN (${cdn.join(", ")})`,
+          )
+        }
+        // 4. Nothing to Discord.
+        assert.deepEqual(discord, [], `${where}: a guest's browser contacted Discord`)
+        if (pagePath !== "/") {
+          assert.ok(
+            cdn.includes("/community/v1/discord.json"),
+            `${where}: the invite card did not read its counts from the CDN (${cdn.join(", ")})`,
           )
         }
         // 1 and 2. Nothing the meter counts.
