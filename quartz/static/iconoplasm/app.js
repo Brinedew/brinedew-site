@@ -3636,14 +3636,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // B-1095: the gene page invites every reader in Discord's own invite-embed
-  // shape (server icon, name, Online and Members counts, Join). B-1102: the
-  // counts and the icon come from a CDN object a cron step writes
-  // (workers/lib/discord-invite-publication.js), and the first icon is our own
-  // copy, so a reader's browser never contacts Discord, as the privacy page
-  // says. B-1103: a signed-in reader already on the server sees no invite.
-  var DISCORD_INVITE_OBJECT_URL = "https://img.brinedew.bio/community/v1/discord.json"
-  var DISCORD_SERVER_ICON_URL = "/static/iconoplasm/discord-server-icon.png"
+  // B-1095: the gene page invites every reader, signed in or not, in Discord's
+  // own invite-embed shape (server icon, name, Online and Members counts, Join).
+  // The counts come straight from Discord's public invite endpoint in the
+  // reader's browser (CORS allows this origin), so readers cost us nothing; if
+  // Discord doesn't answer, the invite shows without counts. B-1103: a
+  // signed-in reader already on the server sees no invite.
+  var DISCORD_INVITE_CODE = "kx8FVzUrpf"
+  var DISCORD_GUILD_ID = "1289484665966563438"
+  var DISCORD_GUILD_ICON = "ab4ef830bb6158e061cc4d6eddeccd22"
+  var DISCORD_COUNTS_CACHE_KEY = "icono-discord-invite-counts"
+  var DISCORD_COUNTS_MAX_AGE_MS = 10 * 60 * 1000
   var discordCountsPromise = null
 
   function readerIsOnDiscordServer() {
@@ -3658,13 +3661,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     for (var i = 0; i < cards.length; i += 1) cards[i].hidden = member
   }
 
+  function discordGuildIconUrl(iconHash) {
+    return (
+      "https://cdn.discordapp.com/icons/" +
+      DISCORD_GUILD_ID +
+      "/" +
+      encodeURIComponent(iconHash || DISCORD_GUILD_ICON) +
+      ".png?size=96"
+    )
+  }
+
   function buildGeneDiscordInviteMarkup() {
     return (
       '<div class="icono-discord-invite" data-icono-discord-invite>' +
       '<div class="icono-discord-invite-kicker">You&#39;ve been invited to join a server</div>' +
       '<div class="icono-discord-invite-row">' +
       '<img class="icono-discord-invite-icon" data-icono-discord-icon src="' +
-      esc(DISCORD_SERVER_ICON_URL) +
+      esc(discordGuildIconUrl()) +
       '" alt="" width="48" height="48" loading="lazy" decoding="async">' +
       '<div class="icono-discord-invite-main">' +
       '<div class="icono-discord-invite-name">brinedew.bio</div>' +
@@ -3682,16 +3695,40 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  function readCachedDiscordCounts() {
+    try {
+      var cached = JSON.parse(window.sessionStorage.getItem(DISCORD_COUNTS_CACHE_KEY) || "null")
+      if (cached && Date.now() - Number(cached.at || 0) < DISCORD_COUNTS_MAX_AGE_MS) return cached
+    } catch (_error) {}
+    return null
+  }
+
   function fetchDiscordCounts() {
+    var cached = readCachedDiscordCounts()
+    if (cached) return Promise.resolve(cached)
     if (discordCountsPromise) return discordCountsPromise
-    discordCountsPromise = fetch(DISCORD_INVITE_OBJECT_URL, { credentials: "omit" })
+    discordCountsPromise = fetch(
+      "https://discord.com/api/v10/invites/" + DISCORD_INVITE_CODE + "?with_counts=true",
+      { credentials: "omit" },
+    )
       .then(function (response) {
-        if (!response.ok) throw new Error("discord invite object " + response.status)
+        if (!response.ok) throw new Error("discord invite " + response.status)
         return response.json()
       })
-      .catch(function (error) {
+      .then(function (data) {
+        var counts = {
+          at: Date.now(),
+          online: Number(data && data.approximate_presence_count) || 0,
+          members: Number(data && data.approximate_member_count) || 0,
+          icon: String((data && data.guild && data.guild.icon) || ""),
+        }
+        try {
+          window.sessionStorage.setItem(DISCORD_COUNTS_CACHE_KEY, JSON.stringify(counts))
+        } catch (_error) {}
+        return counts
+      })
+      .finally(function () {
         discordCountsPromise = null
-        throw error
       })
     return discordCountsPromise
   }
@@ -3729,8 +3766,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         invite.querySelector("[data-icono-discord-online]").textContent = String(counts.online)
         invite.querySelector("[data-icono-discord-members]").textContent = String(counts.members)
         invite.querySelector("[data-icono-discord-counts]").hidden = false
-        if (/^data:image\/(png|jpeg|webp|gif);base64,/.test(String(counts.icon || ""))) {
-          invite.querySelector("[data-icono-discord-icon]").src = counts.icon
+        if (counts.icon && counts.icon !== DISCORD_GUILD_ICON) {
+          invite.querySelector("[data-icono-discord-icon]").src = discordGuildIconUrl(counts.icon)
         }
       })
       .catch(function () {})
