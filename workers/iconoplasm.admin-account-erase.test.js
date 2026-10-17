@@ -339,7 +339,6 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
       body: "Bob on TP53",
     },
   ])
-  assert.equal(world.kv.map.has("iconoplasm:gene-comments:TP53"), false)
   const portraits = rows(
     world.iconoplasm,
     "SELECT asset_sha256, created_by, emulsion_id FROM icono_portrait_assets ORDER BY asset_sha256",

@@ -543,12 +543,6 @@ export async function seedWorld() {
   ]) {
     insert(iconoplasm, "icono_gene_comments", commentColumns(...comment))
   }
-  for (const gene of ["TP53", "SOX11"]) {
-    kv.map.set(
-      `iconoplasm:gene-comments:${gene}`,
-      JSON.stringify([{ user_id: ERASED_USER, username: ERASED_NAME, body: "cached" }]),
-    )
-  }
 
   // Requests: one with no output, one cancelled, one fulfilled, one delivering, one quarantined.
   const open = seedRequest(iconoplasm, {

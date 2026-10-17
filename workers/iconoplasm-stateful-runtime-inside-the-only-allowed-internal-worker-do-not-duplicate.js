@@ -7090,47 +7090,16 @@ async function geneCommunityComments(env, symbol, { limit = 50 } = {}) {
   }))
 }
 
-// Cache is kept warm write-through on mutation, so it can live a long time; GET
-// views never repopulate it, so the TTL only bounds how long a quiet gene's entry
-// lingers before falling back to D1.
-const GENE_COMMENTS_CACHE_TTL_SECONDS = 60 * 60 * 24
-
-function geneCommentsCacheKey(symbol) {
-  return `iconoplasm:gene-comments:${normalizeSymbol(symbol || "")}`
-}
-
-// Write-through refresh of a gene's two comment copies after a change, from one D1 read.
-//
-// The KV cache serves the Worker route. KV writes are the scarce free-tier resource (1k/day)
-// while D1 reads are abundant (~5M/day), so KV is only ever written from comment mutations
-// (POST/PATCH/DELETE) — never from GET views. This decouples KV write volume from gene-card view
-// volume across the ~19k gene catalog, so a crawler walking every gene costs D1 reads, not KV
-// writes. Genes with no visible comments are never cached (we drop the key) rather than spending a
-// write to memoize emptiness.
-//
-// The public object on the CDN serves readers who are not signed in
-// (workers/lib/gene-comments-publication.js). It is written after the response, best-effort: the
-// comment is already in D1, and the author reads the Worker route.
-async function refreshGeneCommentsCache(env, symbol, ctx) {
+// After a post, edit or delete, the gene's public copy on the CDN is rewritten for readers who are
+// not signed in (workers/lib/gene-comments-publication.js). It is written after the response,
+// best-effort: the comment is already in D1, and signed-in readers, the author among them, read
+// the rows from there.
+async function publishGeneCommentsAfterChange(env, symbol, ctx) {
   let rows
   try {
     rows = await geneCommunityComments(env, symbol, { limit: 50 })
   } catch {
-    return /* cache refresh best-effort; GET falls back to D1 on miss */
-  }
-  if (env?.KV) {
-    const key = geneCommentsCacheKey(symbol)
-    try {
-      if (Array.isArray(rows) && rows.length) {
-        await env.KV.put(key, JSON.stringify(rows), {
-          expirationTtl: GENE_COMMENTS_CACHE_TTL_SECONDS,
-        })
-      } else {
-        await env.KV.delete(key)
-      }
-    } catch {
-      /* cache refresh best-effort; GET falls back to D1 on miss */
-    }
+    return /* the next change rewrites the copy */
   }
   const published = publishGeneCommentsObject(env, symbol, rows).catch((error) =>
     console.warn("[iconoplasm-comments] public copy not written", symbol, error?.message),
@@ -19537,7 +19506,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
           skipDiscordMirror: payload?.skip_discord_mirror === true,
         },
         {
-          geneCommentsCacheKey,
           publishGeneComments: publishErasedGeneComments,
           userKvKeyScopes: iconoplasmUserKvKeyScopes,
           settleGene: (scopedEnv, symbol) =>
@@ -21510,26 +21478,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         if (request.method === "GET" || request.method === "HEAD") {
           const sessionUser = await iconoplasmSessionUser(request, env)
           const sessionUserId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : ""
-          const commentsCacheKey = geneCommentsCacheKey(commentSymbol)
-          // The KV value caches the raw rows (incl. user_id) — server-internal only.
-          // The per-request response below strips user_id and adds is_own, so the
-          // cache stays user-agnostic while ownership is resolved per caller.
-          //
-          // This GET path is intentionally read-only against KV: it never writes on
-          // a miss. KV writes are the scarce free-tier resource and must not scale
-          // with view volume across 19k genes. The cache is populated write-through
-          // on mutation (see refreshGeneCommentsCache); a miss simply reads D1.
-          let rawComments = null
-          if (env.KV) {
-            try {
-              rawComments = await env.KV.get(commentsCacheKey, "json")
-            } catch {
-              rawComments = null
-            }
-          }
-          if (!Array.isArray(rawComments)) {
-            rawComments = await geneCommunityComments(env, commentSymbol, { limit: 50 })
-          }
+          // Signed-in readers come here; guests read the CDN copy. One covering-index search,
+          // so a view reads only the rows it shows (at most 50). The rows carry user_id, which
+          // is stripped below after it decides is_own.
+          const rawComments = await geneCommunityComments(env, commentSymbol, { limit: 50 })
           const comments = rawComments.map((r) => ({
             id: Number(r?.id || 0) || 0,
             username: r?.username || "Anonymous",
@@ -21624,8 +21576,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               }),
             )
           }
-          // Write-through: recompute the cache from D1 after the edit/delete.
-          await refreshGeneCommentsCache(env, commentSymbol, ctx)
+          await publishGeneCommentsAfterChange(env, commentSymbol, ctx)
           // B-1001: the public Discord copy follows the author's edit or delete, after the
           // response and best-effort, like the original post.
           const mirror = discordMirrorConfig(env)
@@ -21731,8 +21682,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
-        // Write-through: recompute the cache from D1 now that the new comment exists.
-        await refreshGeneCommentsCache(env, commentSymbol, ctx)
+        await publishGeneCommentsAfterChange(env, commentSymbol, ctx)
         const comment = {
           id: Number(insertRes?.meta?.last_row_id || 0) || 0,
           username,
