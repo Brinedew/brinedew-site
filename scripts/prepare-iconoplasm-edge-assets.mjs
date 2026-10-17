@@ -361,7 +361,7 @@ export async function writeIconoplasmGeneIndexPages({ outputRoot, publishedGenes
 <ul>
 ${letterLinks}
 </ul>
-<p><a href="/caretakers">Caretakers</a></p>`,
+<p><a href="/clans">Clans</a> · <a href="/caretakers">Caretakers</a></p>`,
     }),
     "utf8",
   )

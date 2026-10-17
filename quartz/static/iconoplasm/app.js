@@ -11137,7 +11137,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var discoveredCount = Number(data && data.discovered_clan_count) || revealed.length
     var pct = total > 0 ? Math.round((discoveredCount / total) * 100) : 0
     return (
-      '<h1 class="icono-clans-title">Clans</h1>' +
       '<div class="icono-clans-count">' +
       discoveredCount +
       "</div>" +
@@ -11190,6 +11189,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     head.innerHTML = clanHeadMarkup(data)
     body.innerHTML = ""
+    var tabs = document.querySelector("[data-icono-registry-tabs]")
+    if (tabs && total > 0) tabs.innerHTML = registryTabsMarkup("clans", { clans: total })
 
     if (!revealed.length) {
       body.innerHTML = isGuest
@@ -11272,7 +11273,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<header class="icono-clans-page-header"><div class="icono-nav"><a href="/" data-icono-nav>' +
       ICONO_ARROW_LEFT +
       "Archive</a></div></header>" +
-      '<main class="icono-clans-page-main" id="icono-main">' +
+      '<main class="icono-registry icono-clans-page-main" id="icono-main">' +
+      '<h1 class="icono-registry-title">Clans</h1>' +
+      "<div data-icono-registry-tabs>" +
+      registryTabsMarkup("clans") +
+      "</div>" +
       '<section class="icono-clans" id="icono-clans-content" aria-busy="true">' +
       '<div class="icono-clans-head" id="icono-clans-head"></div>' +
       '<div id="icono-clans-body">' +
@@ -11341,7 +11346,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function registryTabsMarkup(tab, geneCount, caretakerCount) {
+  // Genes, Clans and Caretakers are three ways to browse the same catalogue:
+  // alphabetically, by protein family and by who looks after each gene. A tab
+  // shows its count only where the page already knows it.
+  function registryTabsMarkup(tab, counts) {
+    counts = counts || {}
     function tabLink(id, href, label, count) {
       var active = tab === id
       return (
@@ -11363,8 +11372,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     return (
       '<nav class="icono-registry-tabs" aria-label="Genes and caretakers">' +
-      tabLink("genes", "/genes", "Genes", geneCount) +
-      tabLink("caretakers", "/caretakers", "Caretakers", caretakerCount) +
+      tabLink("genes", "/genes", "Genes", counts.genes) +
+      tabLink("clans", "/clans", "Clans", counts.clans) +
+      tabLink("caretakers", "/caretakers", "Caretakers", counts.caretakers) +
       "</nav>"
     )
   }
@@ -11538,7 +11548,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       (route.tab === "caretakers" ? "Caretakers" : "Genes") +
       "</h1>" +
       "<div data-icono-registry-tabs>" +
-      registryTabsMarkup(route.tab, null, null) +
+      registryTabsMarkup(route.tab) +
       "</div>" +
       '<section class="icono-registry-body" data-icono-registry-body aria-busy="true"></section>' +
       "</main>"
@@ -11554,11 +11564,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (window.location.pathname !== path || !body.isConnected) return
         var genes = results[0]
         var caretakers = results[1] || []
-        root.querySelector("[data-icono-registry-tabs]").innerHTML = registryTabsMarkup(
-          route.tab,
-          genes.length,
-          results[1] ? caretakers.length : null,
-        )
+        root.querySelector("[data-icono-registry-tabs]").innerHTML = registryTabsMarkup(route.tab, {
+          genes: genes.length,
+          caretakers: results[1] ? caretakers.length : null,
+        })
         body.setAttribute("aria-busy", "false")
         if (route.tab === "caretakers") {
           if (!results[1]) {
@@ -11580,7 +11589,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // The phone switcher mirrors the desktop sidebar's IconoplasmPageSwitcher
-  // (Archive, Genes, Clans, Studio).
+  // (Archive, Genes, Studio). Clans and Caretakers are tabs inside Genes.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
     if (!root || !root.parentNode) return
@@ -11592,20 +11601,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     bar.innerHTML =
       '<a href="/" class="icono-page-tab" data-icono-nav data-icono-switch="archive">Archive</a>' +
       '<a href="/genes" class="icono-page-tab" data-icono-nav data-icono-switch="genes">Genes</a>' +
-      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>' +
       '<a href="/studio" class="icono-page-tab" data-icono-nav data-icono-switch="studio">Studio</a>'
     root.parentNode.insertBefore(bar, root)
   }
 
   function syncPageSwitcher(route) {
     var active =
-      route && route.page === "genes"
+      route && (route.page === "genes" || route.page === "clans")
         ? "genes"
-        : route && route.page === "clans"
-          ? "clans"
-          : route && route.page === "studio"
-            ? "studio"
-            : "archive"
+        : route && route.page === "studio"
+          ? "studio"
+          : "archive"
     var tabs = document.querySelectorAll("[data-icono-page-switcher] [data-icono-switch]")
     for (var i = 0; i < tabs.length; i++) {
       var tab = tabs[i]
