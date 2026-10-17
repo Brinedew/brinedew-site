@@ -6802,7 +6802,17 @@ body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
   color: color-mix(in srgb, var(--dark) 78%, transparent);
 }
 .icono-registry-caretaker {
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+.icono-registry-caretaker-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
 }
 .icono-registry-person {
   display: inline-flex;
@@ -6883,6 +6893,9 @@ body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
   .icono-registry-table td {
     padding-left: 0.35rem;
     padding-right: 0.35rem;
+  }
+  .icono-registry-name {
+    overflow-wrap: anywhere;
   }
   .icono-caretaker-entry {
     grid-template-columns: 1fr auto;

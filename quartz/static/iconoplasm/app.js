@@ -11381,8 +11381,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         esc(gene.symbol) +
         '</a></td><td class="icono-registry-name">' +
         esc(gene.full_name) +
-        '</td><td class="icono-registry-caretaker">' +
-        (person ? registryPersonMarkup(person, 20) : "") +
+        (person
+          ? '<span class="icono-registry-caretaker"><span class="icono-registry-caretaker-label">Caretaker</span>' +
+            registryPersonMarkup(person, 20) +
+            "</span>"
+          : "") +
         "</td></tr>"
     }
     return html
@@ -11425,7 +11428,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</nav>" +
       '<p class="icono-registry-status" data-icono-registry-status aria-live="polite"></p>' +
       '<table class="icono-registry-table"><thead><tr><th scope="col">Symbol</th><th scope="col">Name</th>' +
-      '<th scope="col">Caretaker</th></tr></thead><tbody data-icono-registry-rows></tbody></table>'
+      "</tr></thead><tbody data-icono-registry-rows></tbody></table>"
     var rows = body.querySelector("[data-icono-registry-rows]")
     var status = body.querySelector("[data-icono-registry-status]")
     var lettersNav = body.querySelector(".icono-registry-letters")
