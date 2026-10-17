@@ -8,7 +8,9 @@
 //    has no skeleton stand-in.
 // 2. A box the reader can see on arrival moves by more than a pixel.
 // 3. A box below the fold moves by more than real genes differ from each other
-//    (15 px on a phone: WEE1's card 1,286 px, TP53's 1,271 on 2026-10-17).
+//    (one wrapped line: on a phone WEE1's card is 1,286 px and TP53's 1,271 in
+//    Windows Chrome on 2026-10-17; in CI's Linux Chrome the gap is 15.7 px, so
+//    the allowance is 20).
 // 4. The skeleton shows a value, a pen mark or a picture that isn't this gene's.
 // 5. The skeleton can be focused or clicked.
 //
@@ -107,7 +109,7 @@ test("the gene page skeleton holds the loaded page's boxes", async (t) => {
         continue
       }
       const seen = b.y < loaded.fold
-      const slack = seen ? 1 : 15
+      const slack = seen ? 1 : 20
       for (const key of ["x", "y", "width"]) {
         if (Math.abs(a[key] - b[key]) > slack)
           problems.push(
@@ -117,7 +119,7 @@ test("the gene page skeleton holds the loaded page's boxes", async (t) => {
       // A box the reader sees whole keeps its height too; one that runs past the
       // fold may differ below it.
       const bottom = Math.max(a.y + a.height, b.y + b.height)
-      const heightSlack = bottom <= loaded.fold ? 1 : 15
+      const heightSlack = bottom <= loaded.fold ? 1 : 20
       if (Math.abs(a.height - b.height) > heightSlack)
         problems.push(
           `${name} height: skeleton ${a.height.toFixed(1)}, loaded ${b.height.toFixed(1)}`,
