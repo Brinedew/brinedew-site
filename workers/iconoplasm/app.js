@@ -194,7 +194,8 @@ async function factoryAuth(c, next) {
 // the vote route, which parses any body as JSON. Hono's csrf guard refuses
 // exactly that kind unless it comes from one of our sites or an installed
 // extension. A request with no cookie (the Drain, scripts with the admin token,
-// webhooks) can't ride a reader's session, so it skips the guard.
+// webhooks) can't ride a reader's session, so it skips the guard. The refusal
+// is the same JSON the admin policy routes already answer with.
 const OUR_SITES = /^https:\/\/([a-z0-9-]+\.)*brinedew\.bio$/
 const crossSiteGuard = csrf({
   secFetchSite: ["same-origin", "same-site", "none"],
@@ -202,7 +203,24 @@ const crossSiteGuard = csrf({
 })
 async function refuseCrossSiteCookieMutation(c, next) {
   if (!c.req.header("cookie")) return next()
-  return crossSiteGuard(c, next)
+  let allowed = false
+  try {
+    await crossSiteGuard(c, async () => {
+      allowed = true
+    })
+  } catch (error) {
+    if (!(error instanceof HTTPException)) throw error
+  }
+  if (!allowed) {
+    return c.json(
+      {
+        code: "cross_site_request_forbidden",
+        error: "Another site can't send this request with your sign-in",
+      },
+      403,
+    )
+  }
+  return next()
 }
 
 // A data_maintenance release pauses every D1 writer.
