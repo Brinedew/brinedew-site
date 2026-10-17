@@ -63,7 +63,6 @@ test("publication handler registry is immutable and domain-complete", () => {
   const handlers = createIconoplasmAdminPublicationHandlers(publicationServices())
   assert.equal(Object.isFrozen(handlers), true)
   assert.deepEqual(Object.keys(handlers).sort(), [
-    "admin_publication.catalog_publish",
     "admin_publication.catalog_reconcile",
     "admin_publication.catalog_state",
     "admin_publication.catalog_upsert",

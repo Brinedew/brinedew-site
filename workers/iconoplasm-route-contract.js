@@ -970,12 +970,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_publication.catalog_reconcile",
   ),
   adminApiContract(
-    "admin_catalog_publish",
-    "/catalog/publish",
-    POST,
-    "admin_publication.catalog_publish",
-  ),
-  adminApiContract(
     "admin_essence_upsert",
     "/essence/upsert",
     POST,

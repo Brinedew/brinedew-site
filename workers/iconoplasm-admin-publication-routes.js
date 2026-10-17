@@ -45,7 +45,6 @@ const REQUIRED_SERVICE_NAMES = Object.freeze([
   "normalizeEssencePayload",
   "normalizeSymbol",
   "prepareGeneEssenceUpsertStatement",
-  "publishCatalogArtifact",
   "rebuildSharedGeneDiscoveryRollup",
   "sanitizeText",
   "syncAdminReadModels",
@@ -71,7 +70,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     normalizeEssencePayload,
     normalizeSymbol,
     prepareGeneEssenceUpsertStatement,
-    publishCatalogArtifact,
     rebuildSharedGeneDiscoveryRollup,
     sanitizeText,
     syncAdminReadModels,
@@ -312,26 +310,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
     )
   }
 
-  async function catalogPublish({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_catalog_publish_403", json({ error: "Unauthorized" }, 403))
-    if (!env.ICONOPLASM_DB)
-      return done(
-        "admin_catalog_publish_500",
-        json({ error: "ICONOPLASM_DB binding missing" }, 500),
-      )
-    if (!env.KV)
-      return done("admin_catalog_publish_500", json({ error: "KV binding missing" }, 500))
-    try {
-      return done("admin_catalog_publish", json(await publishCatalogArtifact(env), 200, NO_STORE))
-    } catch (error) {
-      return done(
-        "admin_catalog_publish_400",
-        json({ error: String(error?.message || error || "Catalog publish failed") }, 400),
-      )
-    }
-  }
-
   async function essenceUpsert({ request, env, done }) {
     if (!(await isAdmin(request, env)))
       return done("admin_essence_upsert_403", json({ error: "Unauthorized" }, 403))
@@ -435,7 +413,6 @@ export function createIconoplasmAdminPublicationHandlers(services) {
   }
 
   return Object.freeze({
-    "admin_publication.catalog_publish": catalogPublish,
     "admin_publication.catalog_reconcile": catalogReconcile,
     "admin_publication.catalog_state": catalogState,
     "admin_publication.catalog_upsert": catalogUpsert,
