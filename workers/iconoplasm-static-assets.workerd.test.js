@@ -326,13 +326,15 @@ test(
 //  1. A stateful Worker entry (the runtime or the containment quarantine shell)
 //     still imports something that no longer exists, so the Worker fails to
 //     load and every /api route goes down with it.
-//  2. robots.txt -> sitemap.xml no longer lists every catalog gene, or lists a
-//     URL this host does not serve (/genes, /sitemaps/...), so a crawler either
-//     misses genes or keeps fetching dead URLs.
-//  3. An old /genes or /genes/<range> link (a search result, a backlink) lands
-//     on a 404 or the bare app shell instead of a 301 to the Archive.
-//  4. A request for /genes*, /robots.txt, /sitemap.xml or /llms.txt reaches the
-//     Worker (or /sitemaps/* does, in production). That spends a metered
+//  2. robots.txt -> sitemap.xml no longer lists every catalog gene and the
+//     /genes letter pages, or lists a URL this host does not serve
+//     (/sitemaps/...), so a crawler either misses genes or keeps fetching dead URLs.
+//  3. /genes or /genes/<letter> (B-1098: where agents and readers look for the
+//     whole list) answers anything but a static page linking every gene, or an
+//     old /genes/<range> address answers 200 under a URL nobody publishes.
+//  4. A request for /genes, /genes/<letter>, /robots.txt, /sitemap.xml or
+//     /llms.txt reaches the Worker (or /genes/<range> and /sitemaps/* do, in
+//     production). That spends a metered
 //     request per crawler fetch and answers with whatever the Worker does for
 //     unknown paths. During containment every unknown path reaches the
 //     quarantine shell by design; there a retired range sitemap must not read
@@ -382,7 +384,12 @@ test(
         staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio/gene/${symbol}</loc>`),
         `sitemap.xml must list ${symbol}`,
       )
-    assert.doesNotMatch(staticSitemap, /\/sitemaps\/|\/genes\b/)
+    assert.doesNotMatch(staticSitemap, /\/sitemaps\//)
+    for (const pathname of ["/genes", "/genes/T", "/genes/A", "/genes/Z"])
+      assert.ok(
+        staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio${pathname}</loc>`),
+        `sitemap.xml must list ${pathname}`,
+      )
     const robots = await readFile(path.join(outputRoot, "robots.txt"), "utf8")
     assert.match(robots, /^Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml$/m)
     assert.match(robots, /User-agent: GPTBot\nDisallow: \//)
@@ -421,7 +428,7 @@ test(
         try {
           for (const pathname of [
             "/genes",
-            "/genes/",
+            "/genes/T",
             "/genes/TO-TR",
             "/sitemap.xml",
             "/sitemaps/pages.xml",
@@ -442,17 +449,25 @@ test(
               content_type: contentType,
               worker_invoked: response.status === 599,
             })
-            // 4
-            if (topology === "production" || !pathname.startsWith("/sitemaps/"))
+            // 4: during containment every unknown path, a retired range included,
+            // reaches the quarantine shell by design.
+            const retired = pathname.startsWith("/sitemaps/") || pathname === "/genes/TO-TR"
+            if (topology === "production" || !retired)
               assert.notEqual(response.status, 599, `${topology} ${pathname} invoked the Worker`)
             // 3
-            if (pathname.startsWith("/genes")) {
-              assert.equal(response.status, 301, `${topology} ${pathname}`)
-              assert.equal(
-                new URL(response.headers.get("location"), "https://x.test").pathname,
-                "/",
-              )
+            if (pathname === "/genes") {
+              assert.equal(response.status, 200, `${topology} ${pathname}`)
+              assert.match(contentType, /html/)
+              assert.match(body, /href="\/genes\/T"/)
+              assert.match(body, /href="\/caretakers"/)
             }
+            if (pathname === "/genes/T") {
+              assert.equal(response.status, 200, `${topology} ${pathname}`)
+              assert.match(body, /href="\/gene\/TP53"/)
+              assert.doesNotMatch(body, /\/gene\/A1BG/)
+            }
+            if (pathname === "/genes/TO-TR" && topology === "production")
+              assert.equal(response.status, 404, `${topology} ${pathname}`)
             // 2 and 5
             if (pathname === "/sitemap.xml") assert.equal(body, staticSitemap, topology)
             if (pathname === "/llms.txt") assert.equal(body, staticLlms, topology)

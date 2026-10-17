@@ -597,7 +597,7 @@ var IconoplasmPageSwitcher = ({
   const slug2 = fileData.slug ?? "";
   const isIconoplasmPage = slug2.startsWith("apps/iconoplasm");
   if (!isIconoplasmPage) return null;
-  const activeTab = slug2 === "" || slug2 === "/" ? "archive" : slug2.startsWith("clans") ? "clans" : slug2.startsWith("studio") ? "studio" : slug2.startsWith("wiki/Tutorial") ? "tutorial" : void 0;
+  const activeTab = slug2 === "" || slug2 === "/" ? "archive" : slug2.startsWith("genes") || slug2.startsWith("clans") || slug2.startsWith("caretakers") ? "genes" : slug2.startsWith("studio") ? "studio" : slug2.startsWith("wiki/Tutorial") ? "tutorial" : void 0;
   return /* @__PURE__ */ u2(
     "nav",
     {
@@ -619,12 +619,12 @@ var IconoplasmPageSwitcher = ({
         /* @__PURE__ */ u2(
           "a",
           {
-            href: "/clans",
-            class: classNames("icono-page-tab", activeTab === "clans" && "is-active"),
+            href: "/genes",
+            class: classNames("icono-page-tab", activeTab === "genes" && "is-active"),
             "data-icono-nav": true,
-            "data-icono-switch": "clans",
-            "aria-current": activeTab === "clans" ? "page" : void 0,
-            children: "Clans"
+            "data-icono-switch": "genes",
+            "aria-current": activeTab === "genes" ? "page" : void 0,
+            children: "Genes"
           }
         ),
         /* @__PURE__ */ u2(
