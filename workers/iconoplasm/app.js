@@ -8,6 +8,7 @@ import { drizzle } from "drizzle-orm/d1"
 import { Hono } from "hono"
 import { bearerAuth } from "hono/bearer-auth"
 import { bodyLimit } from "hono/body-limit"
+import { csrf } from "hono/csrf"
 import { HTTPException } from "hono/http-exception"
 // Zod's slim build (B-1070): the full one was 772 KiB of the Worker's 6.5 MB,
 // evaluated by every cold isolate to check two routes' bodies.
@@ -185,6 +186,43 @@ async function factoryAuth(c, next) {
   return bearerAuth({ token })(c, next)
 }
 
+// B-417: the session cookie is SameSite=None so that every brinedew.bio
+// subdomain's API receives it, which also means a page on any other site can
+// send a signed-in reader's cookie. Our CORS answer (Allow-Origin "*", no
+// credentials) stops the JSON kind of request, but a form or text/plain POST
+// skips the preflight and still runs: until 2026-10-17 such a request reached
+// the vote route, which parses any body as JSON. Hono's csrf guard refuses
+// exactly that kind unless it comes from one of our sites or an installed
+// extension. A request with no cookie (the Drain, scripts with the admin token,
+// webhooks) can't ride a reader's session, so it skips the guard. The refusal
+// is the same JSON the admin policy routes already answer with.
+const OUR_SITES = /^https:\/\/([a-z0-9-]+\.)*brinedew\.bio$/
+const crossSiteGuard = csrf({
+  secFetchSite: ["same-origin", "same-site", "none"],
+  origin: (origin) => OUR_SITES.test(origin) || /^(chrome|moz)-extension:\/\//.test(origin),
+})
+async function refuseCrossSiteCookieMutation(c, next) {
+  if (!c.req.header("cookie")) return next()
+  let allowed = false
+  try {
+    await crossSiteGuard(c, async () => {
+      allowed = true
+    })
+  } catch (error) {
+    if (!(error instanceof HTTPException)) throw error
+  }
+  if (!allowed) {
+    return c.json(
+      {
+        code: "cross_site_request_forbidden",
+        error: "Another site can't send this request with your sign-in",
+      },
+      403,
+    )
+  }
+  return next()
+}
+
 // A data_maintenance release pauses every D1 writer.
 async function outsideMaintenance(c, next) {
   if (c.env?.ICONOPLASM_SCHEMA_TRANSITION === "1")
@@ -206,6 +244,7 @@ export function createIconoplasmApp({
       "createIconoplasmApp needs isAdmin: admin routes are priced once authorized",
     )
   const app = new Hono()
+  app.use("*", refuseCrossSiteCookieMutation)
 
   // Batch work stops at 85% of a wall and a reader's own action runs to it
   // (shared/iconoplasm-d1-budget-policy.js), so no caller (the Drain, a sweep
