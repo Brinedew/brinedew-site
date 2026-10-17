@@ -183,7 +183,11 @@ test("home, gallery and search read the one stable catalog object (B-898)", asyn
   assert.equal(metrics.get("A1BG").weight_kg, 54.3)
   assert.equal(metrics.get("A1BG").image_score, 1)
   assert.equal((await reader.metadata()).card_snapshot_version, "catalog-v3:320152")
-  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`])
+  assert.deepEqual(requests, [
+    `${BUNNY}/catalog/v3/index.json`,
+    // The first search also asks for the alias file; its 404 leaves search on symbol and name.
+    `${BUNNY}/catalog/v3/aliases.json`,
+  ])
 })
 
 test("a missing or malformed stable catalog is a reader error and the next call retries (B-898)", async () => {
@@ -201,7 +205,11 @@ test("a missing or malformed stable catalog is a reader error and the next call 
   await assert.rejects(reader.search("tumor"), /Invalid published Iconoplasm catalog/)
   body = stableCatalogFixture()
   assert.equal((await reader.search("tumor")).genes[0].symbol, "TP53")
-  assert.equal(requests.length, 3, "a failed read is not remembered; the next call retries")
+  assert.equal(
+    requests.filter((url) => url.endsWith("/catalog/v3/index.json")).length,
+    3,
+    "a failed read is not remembered; the next call retries",
+  )
 })
 
 test("a brick batch is answered from the stable catalog rows (B-898)", async () => {
@@ -250,4 +258,58 @@ test("an exact full name ranks first, like an exact symbol", async () => {
   const found = await reader.search("insulin", { limit: 12 })
   assert.equal(found.genes[0].symbol, "INS")
   assert.equal((await reader.search("INS", { limit: 12 })).genes[0].symbol, "INS")
+})
+
+// 2026-10-17, the live search box: "HER2" and "PD-L1" answered "No results", "p21" listed
+// PAK1 first and "p53" listed PDRG1 above TP53, because search matched only the symbol and
+// the full name. Real catalogue rows and HGNC aliases (alias and previous symbols).
+test("the names biologists type find their gene, ahead of genes whose name merely starts with them", async () => {
+  const row = (symbol, name) => [symbol, name, "", "#888888", 0, null, 10, 1, 1990, ""]
+  const genes = [
+    row("CD274", "CD274 molecule"),
+    row("CDKN1A", "cyclin dependent kinase inhibitor 1A"),
+    row("ERBB2", "erb-b2 receptor tyrosine kinase 2"),
+    row("PAK1", "p21 (RAC1) activated kinase 1"),
+    row("PDRG1", "p53 and DNA damage regulated 1"),
+    row("TNFAIP8L2", "TNF alpha induced protein 8 like 2"),
+    row("TP53", "tumor protein p53"),
+  ]
+  const aliases = {
+    CD274: ["B7-H", "B7-H1", "B7H1", "PD-L1", "PDCD1LG1", "PDL1"],
+    CDKN1A: ["CAP20", "CDKN1", "CIP1", "P21", "p21CIP1", "p21Cip1/Waf1", "SDI1", "WAF1"],
+    ERBB2: ["c-ERB-2", "c-ERB2", "CD340", "HER-2", "HER2", "MLN-19", "NEU", "NGL"],
+    TNFAIP8L2: ["TIPE2"],
+    TP53: ["LFS1", "p53"],
+  }
+  const { reader } = recordingReader((parsed) => {
+    if (parsed.pathname === "/catalog/v3/index.json")
+      return new Response(
+        JSON.stringify({
+          schema: 3,
+          generated_at: "2026-10-17T00:00:00.000Z",
+          watermark_event_id: 1,
+          genes,
+        }),
+        { status: 200 },
+      )
+    if (parsed.pathname === "/catalog/v3/aliases.json")
+      return new Response(JSON.stringify({ schema: 1, aliases }), { status: 200 })
+    return new Response(null, { status: 404 })
+  })
+  const first = async (query) => (await reader.search(query, { limit: 12 })).genes[0]?.symbol
+  assert.equal(await first("HER2"), "ERBB2")
+  assert.equal(await first("PD-L1"), "CD274")
+  assert.equal(await first("pdl1"), "CD274", "punctuation and case do not matter")
+  assert.equal(await first("p21"), "CDKN1A")
+  assert.equal(await first("p53"), "TP53")
+  assert.equal(
+    await first("TIPE2"),
+    "TNFAIP8L2",
+    "HGNC's current symbol finds a gene the catalogue keeps under its old one",
+  )
+  assert.equal(await first("ERBB2"), "ERBB2", "an exact symbol still comes first")
+  assert.deepEqual(
+    (await reader.search("p21", { limit: 12 })).genes.map((gene) => gene.symbol),
+    ["CDKN1A", "PAK1"],
+  )
 })
