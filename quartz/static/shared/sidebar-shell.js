@@ -255,37 +255,8 @@ export function mountSidebarStack(options) {
 
     var markup = String(panel.markup || "")
     if (!preserveExisting || section._brdSidebarMarkup !== markup) {
-      var scrollPositions = []
-      var preserveScrollSelector = String(panel.preserveScrollSelector || "").trim()
-      if (preserveExisting && preserveScrollSelector) {
-        var scrollElements = section.querySelectorAll(preserveScrollSelector)
-        for (var scrollIndex = 0; scrollIndex < scrollElements.length; scrollIndex++) {
-          var scrollElement = scrollElements[scrollIndex]
-          var scrollGroup = scrollElement.closest("[data-icono-request-group]")
-          scrollPositions.push({
-            key: scrollGroup
-              ? String(scrollGroup.getAttribute("data-icono-request-group") || scrollIndex)
-              : String(scrollIndex),
-            top: Number(scrollElement.scrollTop || 0),
-          })
-        }
-      }
       section.innerHTML = markup
       section._brdSidebarMarkup = markup
-      if (scrollPositions.length && preserveScrollSelector) {
-        var nextScrollElements = section.querySelectorAll(preserveScrollSelector)
-        for (var nextIndex = 0; nextIndex < nextScrollElements.length; nextIndex++) {
-          var nextScrollElement = nextScrollElements[nextIndex]
-          var nextScrollGroup = nextScrollElement.closest("[data-icono-request-group]")
-          var nextKey = nextScrollGroup
-            ? String(nextScrollGroup.getAttribute("data-icono-request-group") || nextIndex)
-            : String(nextIndex)
-          var saved = scrollPositions.find(function (position) {
-            return position.key === nextKey
-          })
-          if (saved) nextScrollElement.scrollTop = saved.top
-        }
-      }
     }
 
     var expectedAtIndex = stack.children[i] || null

@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=ead3daaa304d2208"
+import { createRequestInbox } from "./request-inbox.js?v=2464d95f6cfd0a20"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=30e670f98fbabf8f"
 import {
   createEmulsionFavoriteStore,
@@ -2875,7 +2875,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         id: "icono-request-inbox-panel",
         className: "brd-sidebar-panel--request-inbox",
         markup: requestInboxMarkup,
-        preserveScrollSelector: ".icono-request-inbox__group-body",
       })
     }
     var stack = mountSidebarStack({

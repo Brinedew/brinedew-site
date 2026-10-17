@@ -129,14 +129,7 @@ function mapReadyNotification(row, portraitUrlForAsset) {
 
 export async function readRequestNotificationInbox(
   env,
-  {
-    requesterUserId,
-    limit = 50,
-    openRequests = [],
-    openCount = 0,
-    cancelledCount = 0,
-    portraitUrlForAsset,
-  } = {},
+  { requesterUserId, limit = 50, openRequests = [], openCount = 0, portraitUrlForAsset } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, status: 500, error: "ICONOPLASM_DB binding missing" }
@@ -166,7 +159,6 @@ export async function readRequestNotificationInbox(
     unread_group_count: positiveInteger(countRow?.unread_group_count),
     ready_group_count: Math.max(positiveInteger(countRow?.ready_group_count), ready.length ? 1 : 0),
     open_count: Math.max(positiveInteger(openCount), pending.length),
-    cancelled_count: positiveInteger(cancelledCount),
     ready_requests: ready.map((row) => mapReadyNotification(row, portraitUrlForAsset)),
     open_requests: pending.map((row) => {
       const symbol = geneSymbol(row?.gene_symbol)

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
 import test from "node:test"
 
 import {
@@ -142,14 +141,11 @@ class NotificationStatement {
         unread_group_count: unreadGroups.size,
       }
     }
-    if (this.sql.includes("AS open_count") && this.sql.includes("AS cancelled_count")) {
+    if (this.sql.includes("COUNT(*) AS open_count")) {
       const requesterUserId = String(this.args[0] || "")
       const rows = this.db.openRequests.filter((row) => row.requester_user_id === requesterUserId)
       return {
         open_count: rows.filter((row) => ["open", "delivery_pending"].includes(row.status)).length,
-        cancelled_count: this.db.cancelledRequests.filter(
-          (row) => row.requester_user_id === requesterUserId,
-        ).length,
       }
     }
     return null
@@ -304,7 +300,7 @@ class NotificationStatement {
 }
 
 class NotificationDb {
-  constructor(notifications = [], openRequests = [], readyRequests = null, cancelledRequests = []) {
+  constructor(notifications = [], openRequests = [], readyRequests = null) {
     this.notifications = notifications
     this.openRequests = openRequests
     this.readyRequests = Array.isArray(readyRequests)
@@ -328,7 +324,6 @@ class NotificationDb {
             fulfilled_asset_sha256: row.fulfilled_asset_sha256,
             fulfilled_vision_id: row.fulfilled_vision_id,
           }))
-    this.cancelledRequests = cancelledRequests
   }
 
   prepare(sql) {
@@ -1137,7 +1132,6 @@ test("request inbox shows unread results only, one entry per gene with its batch
       unread_group_count: 8,
       ready_group_count: 15,
       open_count: 0,
-      cancelled_count: 1,
       ready_requests: readyRequests,
       open_requests: [],
     }),
@@ -1157,9 +1151,15 @@ test("request inbox shows unread results only, one entry per gene with its batch
   assert.match(markup, />\+3<\/span>/)
   assert.match(markup, /class="icono-thumbnail-viewport-image"/)
   assert.doesNotMatch(markup, /<em>ready<\/em>|Completed|View all|Random default/)
-  assert.match(markup, /data-icono-request-group="ready" open/)
-  assert.match(markup, /group-count">7<\/span>/)
-  assert.match(markup, /Cancelled <span>1<\/span>/)
+  // Ready and Waiting are tabs; Ready opens because it has results, with its gene count.
+  assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*data-icono-request-tab="ready"/)
+  assert.match(
+    markup,
+    /Ready<span class="icono-request-inbox__count icono-request-inbox__count--new">7</,
+  )
+  assert.match(markup, /data-icono-request-group="ready">/)
+  assert.match(markup, /data-icono-request-group="waiting" hidden>/)
+  assert.doesNotMatch(markup, /sl-details|Cancelled/)
 })
 
 // B-1029: a result is seen once its gene page opens, however the person got there.
@@ -1181,7 +1181,6 @@ test("opening a gene page marks its results seen; a receipt click only navigates
     unread_count: 1,
     ready_count: 1,
     open_count: 0,
-    cancelled_count: 0,
     ready_requests: [unreadHpn],
     open_requests: [],
   }
@@ -1277,7 +1276,6 @@ test("account switch and remount discard stale responses from both inbox feeds",
       unread_group_count: 1,
       ready_group_count: 1,
       open_count: 0,
-      cancelled_count: 0,
       ready_requests: [
         {
           request_id: symbol === "OLD" ? 1 : 2,
@@ -1366,26 +1364,4 @@ test("account switch and remount discard stale responses from both inbox feeds",
   assert.match(inbox.caretakerPanelMarkup(), /REMOUNT_NEW/)
   assert.doesNotMatch(inbox.panelMarkup(), /REMOUNT_OLD/)
   assert.doesNotMatch(inbox.caretakerPanelMarkup(), /REMOUNT_OLD/)
-})
-
-test("every Shoelace component used by the request inbox has a deployable public entry", () => {
-  for (const component of ["details", "badge"]) {
-    const entry = new URL(
-      `../quartz/static/iconoplasm/vendor/shoelace/cdn/components/${component}/${component}.js`,
-      import.meta.url,
-    )
-    assert.equal(existsSync(entry), true, `missing Shoelace ${component} entry`)
-    const source = readFileSync(entry, "utf8")
-    const imports = [...source.matchAll(/from "([^\"]+)"|import "([^\"]+)"/g)].map(
-      (match) => match[1] || match[2],
-    )
-    assert.ok(imports.length > 0, `Shoelace ${component} entry has no module imports`)
-    for (const importedPath of imports) {
-      assert.equal(
-        existsSync(new URL(importedPath, entry)),
-        true,
-        `Shoelace ${component} entry references missing ${importedPath}`,
-      )
-    }
-  }
 })
