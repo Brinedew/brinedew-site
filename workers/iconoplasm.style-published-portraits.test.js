@@ -12,6 +12,7 @@ import {
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const MIGRATION = "0130_style_published_portraits.sql"
+const DROP = "0131_drop_style_canonical_counts.sql"
 const require = createRequire(import.meta.url)
 
 // The production schema just before 0130, with every trigger it carries.
@@ -51,6 +52,17 @@ async function assertExact(db, label) {
 }
 
 const sha = (n) => `printf('%064x', ${n})`
+
+// A migration's price, statement by statement, as D1 reports it.
+function priceOf(results) {
+  return results.reduce(
+    (sum, result) => ({
+      rows_read: sum.rows_read + (result.meta.rows_read || 0),
+      rows_written: sum.rows_written + (result.meta.rows_written || 0),
+    }),
+    { rows_read: 0, rows_written: 0 },
+  )
+}
 
 test("a style's published portraits stay exact through every write that moves a portrait, at a measured price", async () => {
   const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -124,13 +136,7 @@ test("a style's published portraits stay exact through every write that moves a 
     const applied = await db.batch(
       migrationStatements(MIGRATIONS, MIGRATION).map((sql) => db.prepare(sql)),
     )
-    const price = applied.reduce(
-      (sum, result) => ({
-        rows_read: sum.rows_read + (result.meta.rows_read || 0),
-        rows_written: sum.rows_written + (result.meta.rows_written || 0),
-      }),
-      { rows_read: 0, rows_written: 0 },
-    )
+    const price = priceOf(applied)
     await assertExact(db, "backfill")
     const backfilled = await db
       .prepare("SELECT COUNT(*) blots FROM icono_style_published_portraits")
@@ -335,10 +341,43 @@ test("a style's published portraits stay exact through every write that moves a 
     )
     assert.equal(drawn.meta.rows_written, drawnBefore.meta.rows_written, "drawing")
 
+    // 0131 retires 0128's counts once the code that read them is gone. Its
+    // price must fit the plan too, and 0130's table must stay exact without
+    // 0128's triggers beside it. Measured: a switch wrote 2 rows before 0130,
+    // 4 with 0128 and 0130 together, 3 after 0131.
+    const dropPrice = priceOf(
+      await db.batch(migrationStatements(MIGRATIONS, DROP).map((sql) => db.prepare(sql))),
+    )
+    const dropPrediction = plan.migrations[`iconoplasm/${DROP}`]?.prediction
+    if (dropPrediction) {
+      assert.ok(dropPrice.rows_read <= dropPrediction.rows_read, `drop read ${dropPrice.rows_read}`)
+      assert.ok(
+        dropPrice.rows_written <= dropPrediction.rows_written,
+        `drop wrote ${dropPrice.rows_written}`,
+      )
+    }
+    const leftover = await db
+      .prepare("SELECT COUNT(*) AS n FROM sqlite_schema WHERE name LIKE '%style_canonical%'")
+      .first()
+    assert.equal(leftover.n, 0, "0128's table and triggers are gone")
+    const lean = await db
+      .prepare(
+        `UPDATE icono_publish_state SET current_asset_sha256 = ${sha(3000)} WHERE gene_symbol = 'G3000'`,
+      )
+      .run()
+    await assertExact(db, "switch after 0131")
+    assert.equal(
+      lean.meta.rows_written,
+      switched.meta.rows_written - 1,
+      `switch wrote ${lean.meta.rows_written} after 0131, ${switched.meta.rows_written} before`,
+    )
+
     console.log(
       "style published portraits receipts",
       JSON.stringify({
         migration: price,
+        drop: dropPrice,
+        leanSwitch: lean.meta.rows_written,
         switch: [switchBefore.meta.rows_written, switched.meta.rows_written],
         drawn: [drawnBefore.meta.rows_written, drawn.meta.rows_written],
         page: page.meta,
