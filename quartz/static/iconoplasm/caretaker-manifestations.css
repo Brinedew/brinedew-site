@@ -495,10 +495,17 @@
   cursor: pointer;
 }
 
-.icono-caretaker-switch input {
+/* B-1106: [role] outranks the panel's faded-disabled-input rule, which used to
+   draw this hidden checkbox beside the track. */
+.icono-caretaker-switch input[role="switch"] {
   position: absolute;
   opacity: 0;
   pointer-events: none;
+}
+
+.icono-caretaker-switch input:disabled + span {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .icono-caretaker-switch span {

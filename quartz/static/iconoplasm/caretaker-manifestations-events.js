@@ -1,11 +1,8 @@
-import {
-  ownManifestation,
-  revisionById,
-} from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
+import { revisionById } from "./caretaker-manifestations-model.js?v=de638e47ba183354"
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=d29ae7ed94735d65"
+} from "./caretaker-manifestations-view.js?v=2d3f41205f4df342"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -284,15 +281,19 @@ export function createCaretakerManifestationEventWiring({
       const state = mounted.get(host)
       const control = event.target.closest?.("[data-icono-caretaker-visibility]")
       if (!state || !control) return
-      const own = ownManifestation(state.dossier)
-      if (!own) return
+      // B-1106: the text the gene uses now, whoever wrote it.
+      const currentId = state.dossier.head?.manifestation_id
+      if (!currentId) return
+      const current = (state.dossier.manifestations || []).find(
+        (item) => item.manifestation_id === currentId,
+      )
       void mutate(
         state,
-        `/manifestations/${encodeURIComponent(own.manifestation_id)}/page-visibility`,
+        `/manifestations/${encodeURIComponent(currentId)}/page-visibility`,
         {
           visible: control.checked,
           expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-          expected_manifestation_version: Number(own.row_version || 0),
+          expected_manifestation_version: Number(current?.row_version || 0),
           expected_gene_revision: Number(state.dossier.head.gene_revision || 0),
         },
         {
