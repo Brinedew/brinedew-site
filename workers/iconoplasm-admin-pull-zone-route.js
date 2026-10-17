@@ -1,4 +1,5 @@
-// B-898: THE ONLY writer of the Bunny pull zone's settings. The policy lives in
+// B-898: THE ONLY writer of the Bunny pull zone's settings, and the only reader of the Bunny
+// account (balance, charges, storage size; B-1087). The policy lives in
 // bunny/the-only-iconoplasm-pull-zone-policy.json; the deploy sends it here
 // (scripts/reconcile-iconoplasm-pull-zone.mjs) and this route applies it with
 // the Worker's BUNNY_ACCOUNT_API_KEY, which exists nowhere else. Never change
@@ -276,5 +277,82 @@ export function createIconoplasmAdminPullZoneHandlers(services) {
     )
   }
 
-  return Object.freeze({ "admin_publication.pull_zone_reconcile": reconcile })
+  // B-1087: what the account costs and holds, for the daily balance check
+  // (.github/workflows/check-bunny-balance.yml). Bunny takes every service offline four days
+  // after the prepaid balance goes negative, and the balance is topped up by hand. Only the
+  // numbers leave: never payment or card fields.
+  async function account({ request, env, done }) {
+    if (!(await isAdmin(request, env))) {
+      return done(
+        "admin_publication_bunny_account_403",
+        json({ error: "Unauthorized" }, 403, NO_STORE),
+      )
+    }
+    const accountKey = String(env?.BUNNY_ACCOUNT_API_KEY || "").trim()
+    if (!accountKey) {
+      return done(
+        "admin_publication_bunny_account_503",
+        json({ error: "BUNNY_ACCOUNT_API_KEY is not configured" }, 503, NO_STORE),
+      )
+    }
+    const headers = { AccessKey: accountKey, Accept: "application/json" }
+    const [billingResponse, zonesResponse] = await Promise.all([
+      fetchImpl(`${BUNNY_API}/billing`, { method: "GET", headers }),
+      fetchImpl(`${BUNNY_API}/storagezone`, { method: "GET", headers }),
+    ])
+    if (!billingResponse.ok || !zonesResponse.ok) {
+      await billingResponse.body?.cancel().catch(() => {})
+      await zonesResponse.body?.cancel().catch(() => {})
+      return done(
+        "admin_publication_bunny_account_502",
+        json(
+          {
+            error: `Bunny account read failed (billing ${billingResponse.status}, storage ${zonesResponse.status})`,
+          },
+          502,
+          NO_STORE,
+        ),
+      )
+    }
+    const billing = await billingResponse.json().catch(() => ({}))
+    const zones = await zonesResponse.json().catch(() => [])
+    const money = (value) => Math.round(Number(value || 0) * 10000) / 10000
+    const traffic = [
+      "MonthlyChargesEUTraffic",
+      "MonthlyChargesUSTraffic",
+      "MonthlyChargesASIATraffic",
+      "MonthlyChargesAFTraffic",
+      "MonthlyChargesSATraffic",
+    ].reduce((sum, field) => sum + Number(billing?.[field] || 0), 0)
+    return done(
+      "admin_publication_bunny_account",
+      json(
+        {
+          ok: true,
+          balance_usd: money(billing?.Balance),
+          this_month_charges_usd: money(billing?.ThisMonthCharges),
+          this_month_storage_usd: money(billing?.MonthlyChargesStorage),
+          this_month_traffic_usd: money(traffic),
+          this_month_bandwidth_bytes: Number(billing?.MonthlyBandwidthUsed || 0),
+          storage_zones: (Array.isArray(zones) ? zones : []).map((zone) => ({
+            name: String(zone?.Name || ""),
+            storage_used_bytes: Number(zone?.StorageUsed || 0),
+            files_stored: Number(zone?.FilesStored || 0),
+            region: String(zone?.Region || ""),
+            replication_regions: (Array.isArray(zone?.ReplicationRegions)
+              ? zone.ReplicationRegions
+              : []
+            ).map(String),
+          })),
+        },
+        200,
+        NO_STORE,
+      ),
+    )
+  }
+
+  return Object.freeze({
+    "admin_publication.pull_zone_reconcile": reconcile,
+    "admin_publication.bunny_account": account,
+  })
 }
