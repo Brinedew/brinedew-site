@@ -538,6 +538,54 @@ test("the Settings visibility switch uses manifestation and gene CAS versions", 
   assert.deepEqual(refreshes, ["TP53"])
 })
 
+// B-1106: a caretaker who just took a gene has written nothing yet. The
+// switch must still flip, and their first save must carry the choice.
+test("the visibility switch works before the first save and the save carries it", async () => {
+  const { document, Event } = parseHTML('<div id="host"></div>')
+  globalThis.document = document
+  const fresh = () => {
+    const value = dossier()
+    value.manifestations = value.manifestations.filter((item) => !item.author_is_viewer)
+    return value
+  }
+  const calls = []
+  const panel = createCaretakerManifestationPanel({
+    fetchJSON: async function (path, init) {
+      if ((init?.method || "GET") === "GET") return fresh()
+      calls.push({ path, body: JSON.parse(init.body) })
+      return { manifestation_revision_id: "revision_first", manifestation_derivative_id: "d" }
+    },
+    escapeHtml,
+    storage: null,
+  })
+  const host = document.getElementById("host")
+  await panel.mount(host, {
+    symbol: "TP53",
+    currentUser: { account_id: "acct_1" },
+    authResolved: true,
+  })
+  const toggle = host.querySelector("[data-icono-caretaker-visibility]")
+  assert.equal(toggle.disabled, false)
+  toggle.checked = true
+  toggle.dispatchEvent(new Event("change", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(
+    calls.some((call) => call.path.endsWith("/page-visibility")),
+    false,
+  )
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "A first text of my own."
+  prose.dispatchEvent(new Event("input", { bubbles: true }))
+  const tags = host.querySelector("[data-icono-caretaker-tags]")
+  tags.value = "linen coat"
+  tags.dataset.fieldsJson = JSON.stringify({ outfit: ["linen coat"] })
+  tags.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  const save = calls.find((call) => call.path.endsWith("/saves"))
+  assert.ok(save)
+  assert.equal(save.body.visible, true)
+})
+
 test("an uncertain save retry reuses the same command ID", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document

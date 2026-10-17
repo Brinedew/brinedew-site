@@ -445,6 +445,10 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
   const db = rolesDb(env)
   const { gene, assignment } = await requireSteward(db, geneLocator, accountId)
   const commandId = readCommandId(body)
+  // B-1106: a caretaker can set "Show on the gene page" before writing a word;
+  // the first save of a new line carries that choice. Later saves keep the
+  // line's own flag.
+  const firstReadersSee = body?.visible === true ? 1 : 0
   let prose
   try {
     prose = normalizeManifestationProse(body.prose)
@@ -496,7 +500,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
   const statements = [
     // Numbered within the line in the statement itself; UNIQUE (line_id, version)
     // makes two racing saves end with one winner. A new version keeps the line's
-    // readers-see flag.
+    // readers-see flag; a new line starts from the caretaker's switch.
     db
       .prepare(
         `INSERT INTO icono_caretaker_text_versions
@@ -504,7 +508,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
             text, text_sha256, tags, fields_json, readers_see, created_at)
          SELECT ?, ?, ?, COALESCE(MAX(version), 0) + 1, ?, ?, ?, ?, ?, ?,
                 COALESCE((SELECT readers_see FROM icono_caretaker_text_versions
-                           WHERE line_id = ? ORDER BY version DESC LIMIT 1), 0), ?
+                           WHERE line_id = ? ORDER BY version DESC LIMIT 1), ?), ?
            FROM icono_caretaker_text_versions WHERE line_id = ?`,
       )
       .bind(
@@ -518,6 +522,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
         tags,
         fieldsJson,
         lineId,
+        firstReadersSee,
         at,
         lineId,
       ),

@@ -716,7 +716,9 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   const rows = lineageRows(dossier, esc)
   body += '<div class="icono-caretaker-settings">'
   if (editable) {
-    const visible = own?.public_page_visible === true
+    // B-1106: before the caretaker's first save there is no text yet, but the
+    // switch still works: the first save carries the choice.
+    const visible = own ? own.public_page_visible === true : options.pendingVisible === true
     body +=
       '<section class="icono-settings-group" aria-label="Gene page">' +
       '<div class="icono-setting-row"><div class="icono-setting-row__text">' +
@@ -724,7 +726,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       "<p>Readers see your prose under the card. Tags always stay private.</p></div>" +
       '<label class="icono-caretaker-switch"><input type="checkbox" role="switch" aria-labelledby="icono-caretaker-visibility-title" data-icono-caretaker-visibility' +
       (visible ? " checked" : "") +
-      (own ? "" : " disabled") +
       '><span aria-hidden="true"></span></label></div>' +
       rows.restore +
       "</section>"

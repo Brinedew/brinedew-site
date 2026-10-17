@@ -5,7 +5,7 @@ import {
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=d29ae7ed94735d65"
+} from "./caretaker-manifestations-view.js?v=e3a671e69c72ef2f"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -285,7 +285,12 @@ export function createCaretakerManifestationEventWiring({
       const control = event.target.closest?.("[data-icono-caretaker-visibility]")
       if (!state || !control) return
       const own = ownManifestation(state.dossier)
-      if (!own) return
+      if (!own) {
+        // B-1106: nothing written yet, so nothing to show; the first save
+        // carries the choice.
+        state.pendingVisible = control.checked
+        return
+      }
       void mutate(
         state,
         `/manifestations/${encodeURIComponent(own.manifestation_id)}/page-visibility`,
