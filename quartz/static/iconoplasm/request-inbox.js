@@ -26,7 +26,6 @@ export function createRequestInbox({
     unread_group_count: 0,
     ready_group_count: 0,
     open_count: 0,
-    cancelled_count: 0,
     ready_requests: [],
     open_requests: [],
     caretaker_loaded: false,
@@ -130,7 +129,6 @@ export function createRequestInbox({
     state.unread_group_count = 0
     state.ready_group_count = 0
     state.open_count = 0
-    state.cancelled_count = 0
     state.ready_requests = []
     state.open_requests = []
     state.caretaker_loaded = false
@@ -184,7 +182,6 @@ export function createRequestInbox({
           loadedReadyGroups.length,
         )
         state.open_count = Math.max(0, Number(payload.open_count || 0) || 0)
-        state.cancelled_count = Math.max(0, Number(payload.cancelled_count || 0) || 0)
         state.ready_requests = readyRequests
         state.open_requests = Array.isArray(payload.open_requests) ? payload.open_requests : []
         chooseActiveGroup()
@@ -378,39 +375,46 @@ export function createRequestInbox({
     })
   }
 
-  function requestGroupSummaryMarkup(label, count, unread, groupName) {
+  // Ready and Waiting are two views of one list, so they are tabs (GitHub's
+  // Issues "Open / Closed" pair): one panel shows at a time, with its count beside
+  // the label. The Ready count is accent-tinted because everything in Ready is unread.
+  function requestTabMarkup(name, label, count) {
     var safeCount = Math.max(0, Number(count || 0) || 0)
-    var unreadNoun = " generation"
+    var selected = state.active_group === name
     return (
-      '<span slot="summary" class="icono-request-inbox__group-summary">' +
-      '<span class="icono-request-inbox__group-label">' +
+      '<button type="button" role="tab" class="icono-request-inbox__tab" id="icono-request-tab-' +
+      name +
+      '" aria-controls="icono-request-panel-' +
+      name +
+      '" aria-selected="' +
+      (selected ? "true" : "false") +
+      '" tabindex="' +
+      (selected ? "0" : "-1") +
+      '" data-icono-request-tab="' +
+      name +
+      '">' +
       escapeHtml(label) +
-      "</span>" +
-      '<span class="icono-request-inbox__group-meta">' +
-      (unread
-        ? '<sl-badge class="icono-request-inbox__unread-dot" variant="danger" pill aria-hidden="true"></sl-badge>' +
-          '<span class="sr-only">' +
-          escapeHtml(String(unread)) +
-          (unread === 1 ? " unread" + unreadNoun : " unread" + unreadNoun + "s") +
-          "</span>"
-        : "") +
-      '<span class="icono-request-inbox__group-count">' +
+      '<span class="icono-request-inbox__count' +
+      (name === "ready" && safeCount ? " icono-request-inbox__count--new" : "") +
+      '">' +
       escapeHtml(String(safeCount)) +
-      "</span></span></span>"
+      "</span></button>"
     )
   }
 
-  function requestGroupMarkup(name, label, count, unread, content) {
+  function requestPanelMarkup(name, content) {
     return (
-      '<sl-details class="icono-request-inbox__group" data-icono-request-group="' +
-      escapeHtml(name) +
+      '<div class="icono-request-inbox__panel" role="tabpanel" id="icono-request-panel-' +
+      name +
+      '" aria-labelledby="icono-request-tab-' +
+      name +
+      '" data-icono-request-group="' +
+      name +
       '"' +
-      (state.active_group === name ? " open" : "") +
+      (state.active_group === name ? "" : " hidden") +
       ">" +
-      requestGroupSummaryMarkup(label, count, unread, name) +
-      '<div class="icono-request-inbox__group-body">' +
       content +
-      "</div></sl-details>"
+      "</div>"
     )
   }
 
@@ -539,9 +543,7 @@ export function createRequestInbox({
         "</span>"
     }
     return (
-      '<a class="icono-request-inbox__item icono-request-inbox__receipt' +
-      (group.unread ? " icono-request-inbox__item--unread" : "") +
-      '" href="' +
+      '<a class="icono-request-inbox__item icono-request-inbox__receipt" href="' +
       escapeHtml(group.gene_url || "/") +
       '" data-icono-request-receipt data-icono-request-gene-symbol="' +
       escapeHtml(group.gene_symbol || "") +
@@ -555,9 +557,7 @@ export function createRequestInbox({
       '">' +
       escapeHtml(String(total)) +
       "</span></span>" +
-      '<span class="icono-request-inbox__previews icono-request-inbox__previews--' +
-      escapeHtml(String(Math.max(1, previews.length))) +
-      '" aria-hidden="true">' +
+      '<span class="icono-request-inbox__previews" aria-hidden="true">' +
       previewMarkup +
       "</span></a>"
     )
@@ -637,7 +637,7 @@ export function createRequestInbox({
     if (!state.loaded && state.loading) {
       return (
         '<div class="icono-request-inbox" aria-busy="true">' +
-        '<div class="icono-request-inbox__head"><span>Inbox</span>' +
+        '<div class="icono-request-inbox__head"><span class="brd-sidebar-panel-title">Inbox</span>' +
         '<span class="icono-request-inbox__loading">Checking…</span></div></div>'
       )
     }
@@ -649,27 +649,16 @@ export function createRequestInbox({
       return sum + group.items.length
     }, 0)
     var openCount = Math.max(0, Number(state.open_count || 0) || 0)
-    var cancelledCount = Math.max(0, Number(state.cancelled_count || 0) || 0)
-    var html =
-      '<div class="icono-request-inbox">' +
-      '<div class="icono-request-inbox__head"><span>Inbox</span></div>' +
-      '<div class="icono-request-inbox__groups">'
+    var unavailable = '<div class="icono-request-inbox__empty">Requests unavailable.</div>'
 
-    var readyContent = unread
-      ? '<div class="icono-request-inbox__group-actions"><button type="button" data-icono-request-inbox-read-all>Mark all read</button></div>'
-      : ""
+    var readyContent = ""
     for (var i = 0; i < readyGroups.length; i++) {
       readyContent += fulfilledReceiptMarkup(readyGroups[i] || {})
     }
     if (state.request_error && !readyRequests.length) {
-      readyContent +=
-        '<div class="icono-request-inbox__empty"><strong>Requests unavailable.</strong>' +
-        "Try again when this panel refreshes.</div>"
-    } else if (state.loading && !state.loaded) {
-      readyContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
+      readyContent += unavailable
     } else if (!readyGroups.length) {
-      readyContent +=
-        '<div class="icono-request-inbox__empty"><strong>Nothing ready yet.</strong></div>'
+      readyContent += '<div class="icono-request-inbox__empty">Nothing ready yet.</div>'
     } else if (unread > shownUnread) {
       readyContent +=
         '<div class="icono-request-inbox__limit-note">' +
@@ -678,21 +667,19 @@ export function createRequestInbox({
         escapeHtml(String(unread)) +
         " shown.</div>"
     }
+    if (unread) {
+      readyContent +=
+        '<button type="button" class="icono-request-inbox__read-all" data-icono-request-inbox-read-all>Mark all read</button>'
+    }
 
     var waitingContent = ""
     for (var j = 0; j < openRequests.length; j++) {
       waitingContent += waitingRequestMarkup(openRequests[j] || {})
     }
     if (state.request_error && !openRequests.length) {
-      waitingContent +=
-        '<div class="icono-request-inbox__empty"><strong>Requests unavailable.</strong>' +
-        "Try again when this panel refreshes.</div>"
-    } else if (state.loading && !state.loaded) {
-      waitingContent += '<div class="icono-request-inbox__empty">Checking requests.</div>'
+      waitingContent += unavailable
     } else if (!openRequests.length) {
-      waitingContent +=
-        '<div class="icono-request-inbox__empty"><strong>Nothing waiting.</strong>' +
-        "New requests appear here until they are ready.</div>"
+      waitingContent += '<div class="icono-request-inbox__empty">Nothing waiting.</div>'
     } else if (openCount > openRequests.length) {
       waitingContent +=
         '<div class="icono-request-inbox__limit-note">' +
@@ -701,22 +688,17 @@ export function createRequestInbox({
         escapeHtml(String(openCount)) +
         " shown.</div>"
     }
-    html += requestGroupMarkup(
-      "ready",
-      "Ready",
-      readyGroups.length,
-      readyGroups.length,
-      readyContent,
+    return (
+      '<div class="icono-request-inbox">' +
+      '<div class="icono-request-inbox__head"><span class="brd-sidebar-panel-title" id="icono-request-inbox-title">Inbox</span></div>' +
+      '<div class="icono-request-inbox__tabs" role="tablist" aria-labelledby="icono-request-inbox-title">' +
+      requestTabMarkup("ready", "Ready", readyGroups.length) +
+      requestTabMarkup("waiting", "Waiting", openCount) +
+      "</div>" +
+      requestPanelMarkup("ready", readyContent) +
+      requestPanelMarkup("waiting", waitingContent) +
+      "</div>"
     )
-    html += requestGroupMarkup("waiting", "Waiting", openCount, 0, waitingContent)
-    html += "</div>"
-    if (cancelledCount) {
-      html +=
-        '<div class="icono-request-inbox__cancelled-count">Cancelled <span>' +
-        escapeHtml(String(cancelledCount)) +
-        "</span></div>"
-    }
-    return html + "</div>"
   }
 
   function caretakerPanelMarkup() {
@@ -745,29 +727,42 @@ export function createRequestInbox({
         })
       })
     }
-    var groups = stack.querySelectorAll("[data-icono-request-group]")
-    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
-      ;(function (group) {
-        if (group._iconoRequestInboxWired) return
-        group._iconoRequestInboxWired = true
-        var groupName = group.getAttribute("data-icono-request-group") || ""
-        group.addEventListener("sl-show", function () {
-          state.active_group = groupName
-          state.active_group_touched = true
-          for (var otherIndex = 0; otherIndex < groups.length; otherIndex++) {
-            var other = groups[otherIndex]
-            if (other === group) continue
-            if (typeof other.hide === "function") {
-              void other.hide()
-            } else {
-              other.removeAttribute("open")
-            }
-          }
+    var tabs = Array.prototype.slice.call(stack.querySelectorAll("[data-icono-request-tab]"))
+    function selectTab(tab, focus) {
+      var name = tab.getAttribute("data-icono-request-tab") || ""
+      state.active_group = name
+      state.active_group_touched = true
+      for (var t = 0; t < tabs.length; t++) {
+        var on = tabs[t] === tab
+        tabs[t].setAttribute("aria-selected", on ? "true" : "false")
+        tabs[t].tabIndex = on ? 0 : -1
+        var panel = stack.querySelector(
+          '[data-icono-request-group="' + tabs[t].getAttribute("data-icono-request-tab") + '"]',
+        )
+        if (panel) panel.hidden = !on
+      }
+      if (focus) tab.focus()
+    }
+    for (var tabIndex = 0; tabIndex < tabs.length; tabIndex++) {
+      ;(function (tab) {
+        if (tab._iconoRequestInboxWired) return
+        tab._iconoRequestInboxWired = true
+        tab.addEventListener("click", function () {
+          selectTab(tab, false)
         })
-        group.addEventListener("sl-hide", function () {
-          if (state.active_group === groupName) state.active_group = ""
+        // WAI-ARIA tabs: arrows move between tabs, Home and End jump to the ends.
+        tab.addEventListener("keydown", function (event) {
+          var at = tabs.indexOf(tab)
+          var next = -1
+          if (event.key === "ArrowRight") next = (at + 1) % tabs.length
+          else if (event.key === "ArrowLeft") next = (at - 1 + tabs.length) % tabs.length
+          else if (event.key === "Home") next = 0
+          else if (event.key === "End") next = tabs.length - 1
+          if (next < 0) return
+          event.preventDefault()
+          selectTab(tabs[next], true)
         })
-      })(groups[groupIndex])
+      })(tabs[tabIndex])
     }
     var links = stack.querySelectorAll("[data-icono-request-receipt]")
     for (var i = 0; i < links.length; i++) {
