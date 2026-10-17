@@ -403,12 +403,24 @@ export function createIconoplasmPublicationReader(options = {}) {
     else rows.sort((a, b) => b.votes - a.votes || a.symbol.localeCompare(b.symbol))
   }
 
+  // B-1098: every gene, in catalogue order, for /genes and /caretakers. The
+  // genes table shows symbol and name only (portraits are what discovering a
+  // gene earns); the caretakers list shows the thumbnail of each caretaker's gene.
+  async function catalogIndex() {
+    const stable = await stableCatalog()
+    return stable.entries.map((entry) => ({
+      symbol: entry.symbol,
+      full_name: entry.full_name,
+      thumb_url: entry.portrait ? entry.portrait.thumb_url : "",
+    }))
+  }
+
   async function metadata() {
     const stable = await stableCatalog()
     return { card_snapshot_version: stable.version, publication_source: "stable_v3" }
   }
 
-  return { gene, genes, search, gallery, geneMetrics, metadata }
+  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()

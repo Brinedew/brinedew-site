@@ -55,8 +55,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=757dd027db36f911"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=2e729bf6f00c8c8a"
+} from "./diagram-studio.js?v=0de157ed6795747b"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=37611a52bb083d01"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -8440,6 +8440,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       path === "/apps/iconoplasm/studio/"
     )
       return { page: "studio" }
+    // B-1098: /genes lists every gene by first letter; /genes/TO-TR and other
+    // old range addresses open their first letter. These come before the bare
+    // gene word below, which would otherwise read "genes" as a gene.
+    var genes = path.match(/^\/genes(?:\/([A-Za-z])[^/]*)?\/?$/)
+    if (genes) return { page: "genes", tab: "genes", letter: (genes[1] || "").toUpperCase() }
+    if (path === "/caretakers" || path === "/caretakers/")
+      return { page: "genes", tab: "caretakers" }
     var m = path.match(/^\/gene\/(.+)$/)
     if (m) return { page: "gene", symbol: decodeURIComponent(m[1]) }
     // People type iconoplasm.brinedew.bio/TP53 or /p53. A bare word with no dot (so never a
@@ -11130,7 +11137,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var discoveredCount = Number(data && data.discovered_clan_count) || revealed.length
     var pct = total > 0 ? Math.round((discoveredCount / total) * 100) : 0
     return (
-      '<h1 class="icono-clans-title">Clans</h1>' +
       '<div class="icono-clans-count">' +
       discoveredCount +
       "</div>" +
@@ -11265,7 +11271,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<header class="icono-clans-page-header"><div class="icono-nav"><a href="/" data-icono-nav>' +
       ICONO_ARROW_LEFT +
       "Archive</a></div></header>" +
-      '<main class="icono-clans-page-main" id="icono-main">' +
+      '<main class="icono-registry icono-clans-page-main" id="icono-main">' +
+      '<h1 class="icono-registry-title">Clans</h1>' +
+      "<div data-icono-registry-tabs>" +
+      registryTabsMarkup("clans") +
+      "</div>" +
       '<section class="icono-clans" id="icono-clans-content" aria-busy="true">' +
       '<div class="icono-clans-head" id="icono-clans-head"></div>' +
       '<div id="icono-clans-body">' +
@@ -11281,9 +11291,294 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
   }
 
-  // ARCHITECTURE FENCE [IPD-003]: Desktop and mobile switchers are part of the
-  // immersive application, not the crawler frontier. Keep them Archive/Clans/Studio;
-  // the existing non-visual homepage description owns the ordinary archive link.
+  /* ─── Rendering: Genes and Caretakers (B-1098) ─── */
+
+  // Every gene as a table (symbol, name, caretaker) and every caretaker with
+  // their gene. The genes come from the catalogue the page already loads for
+  // search; the caretakers from one edge-cached route. The table shows no
+  // portraits: they are what discovering a gene earns. A caretaker's own gene
+  // is a showcase, like other readers' discoveries on the Archive.
+  var GENES_SEARCH_LIMIT = 200
+  var caretakerDirectoryPromise = null
+  var caretakerDirectoryAt = 0
+
+  function loadCaretakerDirectory() {
+    if (caretakerDirectoryPromise && Date.now() - caretakerDirectoryAt < 60000) {
+      return caretakerDirectoryPromise
+    }
+    caretakerDirectoryAt = Date.now()
+    caretakerDirectoryPromise = fetchJSON("/api/public/v1/caretakers", { credentials: "omit" })
+      .then(function (data) {
+        return data && Array.isArray(data.caretakers) ? data.caretakers : []
+      })
+      .catch(function (error) {
+        caretakerDirectoryPromise = null
+        throw error
+      })
+    return caretakerDirectoryPromise
+  }
+
+  function loadGenesIndex() {
+    var reader = window.IconoplasmPublicationReader
+    if (!reader || typeof reader.catalogIndex !== "function") {
+      return Promise.reject(new Error("catalogue reader unavailable"))
+    }
+    return reader.catalogIndex()
+  }
+
+  function registryPersonMarkup(person, size) {
+    return (
+      '<span class="icono-registry-person">' +
+      (person.avatar_url
+        ? '<img src="' +
+          esc(person.avatar_url) +
+          '" alt="" width="' +
+          size +
+          '" height="' +
+          size +
+          '" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        : "") +
+      "<span>" +
+      esc(person.username) +
+      "</span></span>"
+    )
+  }
+
+  // Genes, Clans and Caretakers are three ways to browse the same catalogue:
+  // alphabetically, by protein family and by who looks after each gene. The
+  // tabs carry no counts: each page knows only its own, so counts would come and
+  // go as a reader switched tabs.
+  function registryTabsMarkup(tab) {
+    function tabLink(id, href, label) {
+      var active = tab === id
+      return (
+        '<a href="' +
+        href +
+        '" data-icono-nav class="icono-registry-tab' +
+        (active ? " is-active" : "") +
+        '"' +
+        (active ? ' aria-current="page"' : "") +
+        ">" +
+        label +
+        "</a>"
+      )
+    }
+    return (
+      '<nav class="icono-registry-tabs" aria-label="Genes, clans and caretakers">' +
+      tabLink("genes", "/genes", "Genes") +
+      tabLink("clans", "/clans", "Clans") +
+      tabLink("caretakers", "/caretakers", "Caretakers") +
+      "</nav>"
+    )
+  }
+
+  function registryGeneRowsMarkup(genes, caretakerBySymbol) {
+    var html = ""
+    for (var i = 0; i < genes.length; i++) {
+      var gene = genes[i]
+      var person = caretakerBySymbol[gene.symbol]
+      html +=
+        '<tr><td class="icono-registry-symbol"><a href="/gene/' +
+        encodeURIComponent(gene.symbol) +
+        '" data-icono-nav>' +
+        esc(gene.symbol) +
+        '</a></td><td class="icono-registry-name">' +
+        esc(gene.full_name) +
+        (person
+          ? '<span class="icono-registry-caretaker"><span class="icono-registry-caretaker-label">Caretaker</span>' +
+            registryPersonMarkup(person, 20) +
+            "</span>"
+          : "") +
+        "</td></tr>"
+    }
+    return html
+  }
+
+  function renderGenesTab(body, route, genes, caretakers) {
+    var caretakerBySymbol = Object.create(null)
+    for (var c = 0; c < caretakers.length; c++)
+      caretakerBySymbol[caretakers[c].symbol] = caretakers[c]
+    var letters = []
+    var seenLetter = Object.create(null)
+    for (var g = 0; g < genes.length; g++) {
+      var first = genes[g].symbol.charAt(0)
+      if (/[A-Z]/.test(first) && !seenLetter[first]) {
+        seenLetter[first] = true
+        letters.push(first)
+      }
+    }
+    letters.sort()
+    var letter = seenLetter[route.letter] ? route.letter : letters[0] || "A"
+    var letterLinks = ""
+    for (var l = 0; l < letters.length; l++) {
+      var active = letters[l] === letter
+      letterLinks +=
+        '<a href="/genes/' +
+        letters[l] +
+        '" data-icono-nav class="icono-registry-letter' +
+        (active ? " is-active" : "") +
+        '"' +
+        (active ? ' aria-current="page"' : "") +
+        ">" +
+        letters[l] +
+        "</a>"
+    }
+    body.innerHTML =
+      '<input type="search" class="icono-search-input icono-registry-search" data-icono-registry-search ' +
+      'placeholder="Search by gene symbol or name..." aria-label="Search genes" autocomplete="off" spellcheck="false">' +
+      '<nav class="icono-registry-letters" aria-label="First letter">' +
+      letterLinks +
+      "</nav>" +
+      '<p class="icono-registry-status" data-icono-registry-status aria-live="polite"></p>' +
+      '<table class="icono-registry-table"><thead><tr><th scope="col">Symbol</th><th scope="col">Name</th>' +
+      "</tr></thead><tbody data-icono-registry-rows></tbody></table>"
+    var rows = body.querySelector("[data-icono-registry-rows]")
+    var status = body.querySelector("[data-icono-registry-status]")
+    var lettersNav = body.querySelector(".icono-registry-letters")
+    var letterGenes = genes
+      .filter(function (gene) {
+        return gene.symbol.charAt(0) === letter
+      })
+      .sort(function (a, b) {
+        return a.symbol.localeCompare(b.symbol)
+      })
+
+    function showLetter() {
+      lettersNav.hidden = false
+      status.textContent = ""
+      rows.innerHTML = registryGeneRowsMarkup(letterGenes, caretakerBySymbol)
+    }
+
+    function showSearch(query) {
+      var q = query.toUpperCase()
+      var symbolHits = []
+      var nameHits = []
+      for (var i = 0; i < genes.length; i++) {
+        var gene = genes[i]
+        if (gene.symbol.indexOf(q) === 0) symbolHits.push(gene)
+        else if (gene.full_name.toUpperCase().indexOf(q) !== -1) nameHits.push(gene)
+      }
+      symbolHits.sort(function (a, b) {
+        return a.symbol.length - b.symbol.length || a.symbol.localeCompare(b.symbol)
+      })
+      var hits = symbolHits.concat(nameHits)
+      lettersNav.hidden = true
+      status.textContent = hits.length
+        ? hits.length > GENES_SEARCH_LIMIT
+          ? "Showing " +
+            GENES_SEARCH_LIMIT +
+            " of " +
+            hits.length.toLocaleString("en-US") +
+            " results"
+          : ""
+        : "No results matched your search."
+      rows.innerHTML = registryGeneRowsMarkup(hits.slice(0, GENES_SEARCH_LIMIT), caretakerBySymbol)
+    }
+
+    var search = body.querySelector("[data-icono-registry-search]")
+    search.addEventListener("input", function () {
+      var query = search.value.trim()
+      if (query) showSearch(query)
+      else showLetter()
+    })
+    showLetter()
+  }
+
+  function renderCaretakersTab(body, genes, caretakers) {
+    if (!caretakers.length) {
+      body.innerHTML = '<p class="icono-registry-status">No caretakers yet.</p>'
+      return
+    }
+    var geneBySymbol = Object.create(null)
+    for (var g = 0; g < genes.length; g++) geneBySymbol[genes[g].symbol] = genes[g]
+    var html = '<ul class="icono-caretaker-directory">'
+    for (var i = 0; i < caretakers.length; i++) {
+      var person = caretakers[i]
+      var gene = geneBySymbol[person.symbol] || { symbol: person.symbol, full_name: "" }
+      var since = person.since ? new Date(person.since + "T00:00:00Z") : null
+      html +=
+        '<li class="icono-caretaker-entry">' +
+        registryPersonMarkup(person, 40) +
+        '<a class="icono-caretaker-gene" href="/gene/' +
+        encodeURIComponent(gene.symbol) +
+        '" data-icono-nav>' +
+        (gene.thumb_url
+          ? '<img src="' +
+            esc(gene.thumb_url) +
+            '" alt="" width="48" height="64" loading="lazy" decoding="async">'
+          : '<span class="icono-caretaker-gene-blank" aria-hidden="true"></span>') +
+        '<span class="icono-caretaker-gene-text"><strong>' +
+        esc(gene.symbol) +
+        "</strong><span>" +
+        esc(gene.full_name) +
+        "</span></span></a>" +
+        (since && !isNaN(since.getTime())
+          ? '<time class="icono-caretaker-since" datetime="' +
+            esc(person.since) +
+            '">Since ' +
+            since.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              timeZone: "UTC",
+            }) +
+            "</time>"
+          : "") +
+        "</li>"
+    }
+    body.innerHTML = html + "</ul>"
+  }
+
+  function renderGenesPage(root, route) {
+    iconoSidebarState.page = "genes"
+    renderIconoplasmSidebar()
+    root.innerHTML =
+      '<header class="icono-clans-page-header"><div class="icono-nav"><a href="/" data-icono-nav>' +
+      ICONO_ARROW_LEFT +
+      "Archive</a></div></header>" +
+      '<main class="icono-registry" id="icono-main">' +
+      '<h1 class="icono-registry-title">' +
+      (route.tab === "caretakers" ? "Caretakers" : "Genes") +
+      "</h1>" +
+      "<div data-icono-registry-tabs>" +
+      registryTabsMarkup(route.tab) +
+      "</div>" +
+      '<section class="icono-registry-body" data-icono-registry-body aria-busy="true"></section>' +
+      "</main>"
+    var body = root.querySelector("[data-icono-registry-body]")
+    var path = window.location.pathname
+    Promise.all([
+      loadGenesIndex(),
+      loadCaretakerDirectory().catch(function () {
+        return null
+      }),
+    ])
+      .then(function (results) {
+        if (window.location.pathname !== path || !body.isConnected) return
+        var genes = results[0]
+        var caretakers = results[1] || []
+        body.setAttribute("aria-busy", "false")
+        if (route.tab === "caretakers") {
+          if (!results[1]) {
+            body.innerHTML =
+              '<p class="icono-registry-status">Could not load caretakers right now. ' +
+              '<a href="/caretakers" data-icono-nav>Try again</a>.</p>'
+            return
+          }
+          renderCaretakersTab(body, genes, caretakers)
+        } else renderGenesTab(body, route, genes, caretakers)
+      })
+      .catch(function () {
+        if (!body.isConnected) return
+        body.setAttribute("aria-busy", "false")
+        body.innerHTML =
+          '<p class="icono-registry-status">Could not load genes right now. ' +
+          '<a href="/genes" data-icono-nav>Try again</a>.</p>'
+      })
+  }
+
+  // The phone switcher mirrors the desktop sidebar's IconoplasmPageSwitcher
+  // (Archive, Genes, Studio). Clans and Caretakers are tabs inside Genes.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
     if (!root || !root.parentNode) return
@@ -11294,15 +11589,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     bar.setAttribute("aria-label", "Iconoplasm sections")
     bar.innerHTML =
       '<a href="/" class="icono-page-tab" data-icono-nav data-icono-switch="archive">Archive</a>' +
-      '<a href="/clans" class="icono-page-tab" data-icono-nav data-icono-switch="clans">Clans</a>' +
+      '<a href="/genes" class="icono-page-tab" data-icono-nav data-icono-switch="genes">Genes</a>' +
       '<a href="/studio" class="icono-page-tab" data-icono-nav data-icono-switch="studio">Studio</a>'
     root.parentNode.insertBefore(bar, root)
   }
 
   function syncPageSwitcher(route) {
     var active =
-      route && route.page === "clans"
-        ? "clans"
+      route && (route.page === "genes" || route.page === "clans")
+        ? "genes"
         : route && route.page === "studio"
           ? "studio"
           : "archive"
@@ -11346,6 +11641,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!isIconoplasmGenePageTitle(document.title, normalizedSymbol(route.symbol))) {
         document.title = geneProfileDocumentTitle(null, route.symbol)
       }
+    } else if (route.page === "genes") {
+      document.title = iconoplasmPageTitle(route.tab === "caretakers" ? "Caretakers" : "Genes")
+      syncDocumentCanonical(
+        route.tab === "caretakers"
+          ? "/caretakers"
+          : route.letter
+            ? "/genes/" + route.letter
+            : "/genes",
+      )
     } else if (route.page === "clans") {
       document.title = iconoplasmPageTitle("Clans")
       syncDocumentCanonical("/clans")
@@ -11362,6 +11666,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     } else if (route.page === "gene") {
       scrollWindowInstantly(0, 0)
       renderGene(root, route.symbol)
+    } else if (route.page === "genes") {
+      scrollWindowInstantly(0, 0)
+      renderGenesPage(root, route)
     } else if (route.page === "clans") {
       scrollWindowInstantly(0, 0)
       renderClans(root)

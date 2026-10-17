@@ -89,15 +89,21 @@ test("one static file per gene is written under gene/", async () => {
   }
 })
 
-// B-980: the 404 page and the two in-app route pages are stubs that say noindex
+// B-980: the 404 page and the in-app route pages (B-1098 added /caretakers) are stubs that say noindex
 // until the shell takes over, and boot the shell exactly as a gene document does.
 test("the not-found and in-app route stubs are noindex and boot the shell", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "stub-pages-"))
   try {
-    assert.equal((await writeIconoplasmStubPages({ outputRoot: dir })).stubPages, 3)
-    assert.deepEqual((await readdir(dir)).sort(), ["404.html", "clans.html", "studio.html"])
+    assert.equal((await writeIconoplasmStubPages({ outputRoot: dir })).stubPages, 4)
+    assert.deepEqual((await readdir(dir)).sort(), [
+      "404.html",
+      "caretakers.html",
+      "clans.html",
+      "studio.html",
+    ])
     const titles = {
       "404.html": "Page not found | Iconoplasm",
+      "caretakers.html": "Caretakers | Iconoplasm",
       "clans.html": "Clans | Iconoplasm",
       "studio.html": "Diagram Studio | Iconoplasm",
     }
