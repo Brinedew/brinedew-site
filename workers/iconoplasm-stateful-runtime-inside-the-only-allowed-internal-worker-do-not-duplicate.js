@@ -18744,6 +18744,24 @@ async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}
     .map((row) => row.gene_symbol)
 }
 
+// Which of a search's genes the signed-in reader has discovered (B-1094). The
+// page only ever holds one window of a large collection, so it cannot tell on
+// its own: a reader with 2,144 discoveries saw INS as "Undiscovered" because
+// it was not in the cards on screen. Costs the session check, one dictionary
+// row per result (12 at most) and the reader's one compact state row; guests
+// and an unreadable session get no flags, never a wrong one.
+async function signedInDiscoveredAmong(request, env, symbols) {
+  if (!symbols.length) return null
+  let user = null
+  try {
+    user = await iconoplasmSessionUser(request, env)
+  } catch {
+    return null
+  }
+  if (!user?.user_id) return null
+  return new Set(await readCompactDiscoveryMembership(env, { userId: user.user_id, symbols }))
+}
+
 async function handlePublicGeneSearch(request, env) {
   const url = new URL(request.url)
   const requestedScope = normalizePublicGeneSearchScope(url.searchParams.get("scope"))
@@ -18814,8 +18832,17 @@ async function handlePublicGeneSearch(request, env) {
   })
 
   const genes = matches.slice(0, limit)
+  const discovered =
+    requestedScope === "catalog"
+      ? await signedInDiscoveredAmong(
+          request,
+          env,
+          genes.map((gene) => gene.symbol),
+        )
+      : null
+  if (discovered) for (const gene of genes) gene.discovered = discovered.has(gene.symbol)
   const cacheControl =
-    requestedScope === "catalog" || requestedScope === "shared"
+    !discovered && (requestedScope === "catalog" || requestedScope === "shared")
       ? iconoplasmCacheControl("publicSearch")
       : iconoplasmCacheControl("sensitive")
   return json({ genes, query: qUpper, scope_applied: appliedScope }, 200, {
