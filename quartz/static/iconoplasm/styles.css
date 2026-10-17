@@ -4922,61 +4922,69 @@ html[data-theme="dark"] .icono-card--brick {
 }
 
 /* ───────── Skeleton loading ───────── */
-.icono-gene-skeleton .icono-skel-block {
-  background: var(--ui-bg);
-  border-radius: 20px;
-  border: 1px solid var(--ui-border);
-  flex-shrink: 0;
-}
-
-.icono-gene-skeleton .icono-skel-line {
-  background: var(--ui-bg);
-  border-radius: 4px;
-}
-
-/* B-836: the gene-page skeleton occupies exactly the box the real lead will
-   (card + gap + published bar, measured 25 Sep 2026: 800x416 + 15 + 74 at
-   desktop; 390x644 + 15 + 74 on a 390px phone), so the swap to content moves
-   nothing. The card keeps the lab-label aspect ratio on wide screens and the
-   measured phone proportion below the shared 720px mobile breakpoint. */
-/* Keep the footer below the fold while loading, so the gallery arriving
-   under the card pushes nothing the reader can see. */
+/* B-1105: the gene-page skeleton is the loaded page's own markup with the data
+   left out (geneSkeletonMarkup in app.js), so its boxes are the loaded page's
+   boxes at every width. These rules only fill the places data would go. The
+   footer stays below the fold while loading. */
 .icono-gene-skeleton {
   min-block-size: 100dvh;
 }
 
-.icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
-  inline-size: 100%;
-  aspect-ratio: 1220 / 634;
-  box-sizing: border-box;
-  border: 1px solid var(--ui-border);
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 31%,
-      transparent 31%
-    ),
-    color-mix(in srgb, var(--ui-bg) 55%, var(--light));
+.icono-gene-skeleton .icono-gene-lead-card,
+.icono-gene-skeleton .icono-gene-lead-card * {
+  color: transparent !important;
+  text-shadow: none !important;
 }
 
-.icono-gene-lead--skeleton .icono-gene-lead-skeleton-bar {
-  block-size: 74px;
-  box-sizing: border-box;
-  border: 1px solid var(--ui-border);
-  background: color-mix(in srgb, var(--ui-bg) 40%, var(--light));
+.icono-gene-skeleton .icono-gene-lead-card :is(img, svg, canvas),
+.icono-gene-skeleton .iconoplasm-tooltip-portrait-fallback,
+.icono-gene-skeleton .iconoplasm-tooltip-skin-dot,
+.icono-gene-skeleton .icono-label-specimen-swatch,
+.icono-gene-skeleton .icono-label-mass-line {
+  visibility: hidden;
 }
 
-@media (max-width: 720px) {
-  .icono-gene-lead--skeleton .icono-gene-lead-skeleton-card {
-    aspect-ratio: 390 / 644;
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--ui-bg) 70%, transparent) 0 79%,
-        transparent 79%
-      ),
-      color-mix(in srgb, var(--ui-bg) 55%, var(--light));
-  }
+.icono-gene-skeleton .iconoplasm-tooltip-portrait,
+.icono-gene-skeleton .icono-skel-fill,
+.icono-gene-skeleton .icono-skel-tool,
+.icono-gene-skeleton .icono-skel-line {
+  background: color-mix(in srgb, var(--ui-bg) 70%, var(--light));
+}
+
+.icono-gene-skeleton .icono-skel-fill {
+  display: block;
+}
+
+/* The phone card's MISFIT/FIT buttons need a published portrait to vote on. */
+.icono-gene-skeleton .icono-label-mobile-peek-swipe {
+  min-block-size: 44px;
+}
+
+.icono-gene-skeleton .icono-skel-tool {
+  display: block;
+  inline-size: 40px;
+  block-size: 40px;
+}
+
+.icono-gene-skeleton .icono-skel-tool--primary {
+  inline-size: 159px;
+}
+
+.icono-gene-skeleton .icono-skel-line {
+  display: inline-block;
+  inline-size: 10rem;
+  block-size: 0.9em;
+  vertical-align: middle;
+}
+
+.icono-gene-skeleton .icono-skel-count {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ui-bg) 70%, var(--light));
+}
+
+.icono-gene-skeleton .icono-gene-tab {
+  box-sizing: border-box;
+  cursor: default;
 }
 
 /* ───────── Responsive ───────── */
