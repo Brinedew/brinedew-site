@@ -19383,7 +19383,10 @@ function withPortraitCdnUrls(env, gene) {
   return { ...gene, p: { ...gene.p, renditions: withCdn } }
 }
 
-async function publishCatalogArtifact(env) {
+// B-1090: run by scripts/release-iconoplasm-catalog.mjs in the GitHub catalog
+// job, never in a Worker request. It rebuilds the whole 19k-gene artifact,
+// which a free-plan request's 10 ms of CPU can't finish.
+export async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)
   const artifact = {
@@ -19664,7 +19667,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     normalizeEssencePayload,
     normalizeSymbol,
     prepareGeneEssenceUpsertStatement,
-    publishCatalogArtifact,
     rebuildSharedGeneDiscoveryRollup,
     sanitizeText,
     syncAdminReadModels,

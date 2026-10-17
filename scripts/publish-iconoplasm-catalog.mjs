@@ -36,6 +36,7 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { PUBLICATION_AFFECTING_ACTIONS } from "../workers/iconoplasm-catalog-dispatch.js"
 import { iconoplasmGeneName } from "../workers/lib/iconoplasm-gene-name.js"
+import { releaseCatalog } from "./release-iconoplasm-catalog.mjs"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
@@ -49,6 +50,8 @@ const CARD_READ_CONCURRENCY = 16
 const args = new Set(process.argv.slice(2))
 const FULL = args.has("--full")
 const DRY_RUN = args.has("--dry-run")
+// Release the public catalogue even when no gene's recognition changed (B-1090).
+const FORCE_RELEASE = args.has("--release")
 
 function need(name) {
   const value = String(process.env[name] || "").trim()
@@ -257,19 +260,6 @@ export function recognitionChanged(previousRows, rows) {
   return rows.some((row) => !before.has(key(row)))
 }
 
-async function postCatalogRelease() {
-  const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/catalog/publish`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-  })
-  const body = await response.json().catch(() => null)
-  return { ok: response.ok && body?.ok === true, status: response.status, body }
-}
-
 async function postRepublish(symbols) {
   const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
     method: "POST",
@@ -440,22 +430,25 @@ async function main() {
   receipt.result = receipt.cdn.verified
     ? "published"
     : "uploaded, CDN not yet serving the new bytes"
-  if (recognitionChanged(previous?.genes || null, genes)) {
-    const release = await postCatalogRelease().catch((error) => ({
+  if (FORCE_RELEASE || recognitionChanged(previous?.genes || null, genes)) {
+    // Runs the release here, not in the Worker: it rebuilds all 19k genes,
+    // which a free-plan request's 10 ms of CPU can't finish (B-1090).
+    const release = await releaseCatalog().catch((error) => ({
       ok: false,
-      status: 0,
-      body: { error: String(error) },
+      error: String(error?.message || error).slice(0, 300),
     }))
     receipt.extension_release = {
-      ok: release.ok,
-      status: release.status,
-      gene_count: release.body?.gene_count ?? null,
-      current_hash: release.body?.current_hash ?? null,
-      error: release.ok ? null : String(release.body?.error || "").slice(0, 300),
+      ok: release.ok === true,
+      gene_count: release.gene_count ?? null,
+      current_hash: release.current_hash ?? null,
+      error: release.ok ? null : release.error,
+      details: release.ok ? null : (release.details ?? null),
+      d1: release.d1 ?? null,
+      kv: release.kv ?? null,
     }
     // A release that refuses fails the run, so it can't sit frozen behind a
     // green job again.
-    if (!release.ok) process.exitCode = 1
+    if (release.ok !== true) process.exitCode = 1
   }
   finish(receipt)
   if (!receipt.cdn.verified) process.exitCode = 1
