@@ -113,8 +113,22 @@ export async function readDiscordGuildRoles(env, userId, { fetchImpl = fetch } =
   } catch {
     return null
   }
-  if (response.status === 404) return { isMember: false, tier: "registered" }
-  if (!response.ok) return null
+  if (!response.ok) {
+    // Only Discord's "Unknown Member" (10007) means "not on the server". Any other
+    // refusal, such as "Unknown Guild" (10004) from a wrong DISCORD_GUILD_ID, is no
+    // answer: treating it as "not a member" showed the owner the join invite on
+    // their own server (B-1103).
+    const body = await response.json().catch(() => null)
+    if (response.status === 404 && Number(body?.code) === 10007) {
+      return { isMember: false, tier: "registered" }
+    }
+    console.error("Discord guild member lookup refused", {
+      status: response.status,
+      code: body?.code ?? null,
+      message: String(body?.message || "").slice(0, 120),
+    })
+    return null
+  }
   const member = await response.json().catch(() => null)
   const roles = Array.isArray(member?.roles) ? member.roles : []
   const supporterRoleId = readEnvString(env.DISCORD_SUPPORTER_ROLE_ID)
@@ -447,6 +461,16 @@ export async function handleCallback(request, env) {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
     isMember = guildResp.ok
+    if (!guildResp.ok) {
+      const body = await guildResp.json().catch(() => null)
+      if (!(guildResp.status === 404 && Number(body?.code) === 10007)) {
+        console.error("Discord login guild check refused", {
+          status: guildResp.status,
+          code: body?.code ?? null,
+          message: String(body?.message || "").slice(0, 120),
+        })
+      }
+    }
     if (guildResp.ok) {
       try {
         const memberData = await guildResp.json()
