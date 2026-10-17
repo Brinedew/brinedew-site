@@ -5,10 +5,19 @@
   "pagesProject": "brinedew-bio",
   "pagesTarget": "brinedew-bio.pages.dev",
   "pagesCustomDomains": ["brinedew.bio", "geneguessr.brinedew.bio"],
+  "otherPagesProjects": [
+    {
+      "project": "curvarium",
+      "target": "curvarium.pages.dev",
+      "domains": ["curvarium.brinedew.bio"],
+      "purpose": "Curvarium, the library of lifespan curves. Its own repository deploys its own Pages project, so its releases never wait on this site's pipeline. Pure static files: no Worker, no D1."
+    }
+  ],
   "dnsCnames": [
     { "name": "brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true },
     { "name": "geneguessr.brinedew.bio", "content": "brinedew-bio.pages.dev", "proxied": true },
-    { "name": "img.brinedew.bio", "content": "iconoplasmportraits.b-cdn.net", "proxied": true }
+    { "name": "img.brinedew.bio", "content": "iconoplasmportraits.b-cdn.net", "proxied": true },
+    { "name": "curvarium.brinedew.bio", "content": "curvarium.pages.dev", "proxied": true }
   ],
   "imageHostPurpose": "B-1087: readers fetch portraits, blots and the stable card objects through img.brinedew.bio, a proxied name for the Bunny pull zone. Cloudflare's free cache serves the repeats, so Bunny bills only cache misses and its prepaid balance can't run out on a viral day. The pull zone knows the name from bunny/the-only-iconoplasm-pull-zone-policy.json. The origin keeps sending its own Cache-Control (immutable files 30 days, mutable card objects 60 s).",
   "publicEdgeWorker": "the-only-allowed-public-edge-worker-that-must-not-touch-state",
