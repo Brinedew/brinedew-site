@@ -6,6 +6,7 @@ import {
   desiredRedirectRule,
   desiredRewriteRule,
   loadStaticEdgePolicy,
+  pagesProjects,
   reconcileStaticEdgePolicy,
 } from "./reconcile-brinedew-static-edge-policy.mjs"
 
@@ -71,6 +72,25 @@ test("every name pointed at the pull zone is a hostname of the pull zone", async
     const host = `(http.host eq "${name}")`
     assert.ok(policy.configRules.some((rule) => rule.expression === host && rule.ssl === "full"))
     assert.ok(policy.cacheRules.some((rule) => rule.expression === host && rule.cache === true))
+  }
+})
+
+// A Pages custom domain with no CNAME, or one pointing at another project,
+// verifies forever as "pending" while readers get Cloudflare's error page.
+test("every Pages custom domain has a proxied CNAME to its own project", async () => {
+  const policy = await loadStaticEdgePolicy()
+  const projects = pagesProjects(policy)
+  const all = projects.flatMap((entry) => entry.domains)
+  assert.equal(new Set(all).size, all.length, "a domain may belong to one Pages project only")
+  for (const { project, target, domains } of projects) {
+    assert.match(target, /\.pages\.dev$/, project)
+    for (const name of domains) {
+      assert.deepEqual(
+        policy.dnsCnames.filter((record) => record.name === name),
+        [{ name, content: target, proxied: true }],
+        `${name} must point at ${target}`,
+      )
+    }
   }
 })
 
