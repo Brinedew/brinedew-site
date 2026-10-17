@@ -531,3 +531,9 @@ jobs:
           sleep 5
           curl --fail --silent --show-error --max-time 30 "https://iconoplasm.brinedew.bio/?v=${{ github.sha }}" >/dev/null
           curl --fail --silent --show-error --max-time 30 "https://iconoplasm.brinedew.bio/gene/TP53?v=${{ github.sha }}" >/dev/null
+          # B-417: another site's text/plain POST carrying a cookie is refused before any route runs.
+          forged=$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 30 -X POST \
+            "https://iconoplasm.brinedew.bio/api/iconoplasm/votes/set" \
+            -H "Origin: https://cross-site.invalid" -H "Sec-Fetch-Site: cross-site" \
+            -H "Cookie: session=acceptance-probe" -H "Content-Type: text/plain" --data '{}')
+          test "$forged" = 403 || { echo "A cross-site POST with a cookie answered $forged, not 403 (B-417)"; exit 1; }
