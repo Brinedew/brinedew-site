@@ -386,9 +386,11 @@
   opacity: 1;
 }
 
-/* B-1038: the name keeps at least 9 characters of width; a symbol too long to sit
-   beside it drops to its own line under the name instead of crushing the name into
-   a column one letter wide. */
+/* B-1038: the name keeps at least 9 characters of width, and never less than its
+   longest word; a symbol too long to sit beside it drops to its own line under the
+   name instead of crushing the name into a column one letter wide, or printing over
+   a word like "acetylgalactosaminyltransferase" (CSGALNACT1/2, ST6GALNAC1-6,
+   HNRNPA1L2, HNRNPA2B1 on 2026-10-17). */
 .icono-image-only-caption-row {
   display: flex;
   flex-wrap: wrap;
@@ -415,8 +417,8 @@
   color: rgba(250, 238, 222, 0.92);
   font-size: clamp(0.9rem, 3.2cqw, 1.12rem);
   line-height: 1.22;
-  flex: 1 1 9ch;
-  min-inline-size: 9ch;
+  flex: 1 0 9ch;
+  min-inline-size: min-content;
   max-inline-size: 20ch;
   text-align: left;
   text-wrap: pretty;
