@@ -9847,7 +9847,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
       }
-      if (loadingEl) loadingEl.style.display = "none"
+      // B-1105: the skeleton repeats the loaded page's classes, so it leaves the
+      // page once the gene arrives; a hidden copy would answer every selector first.
+      if (loadingEl) loadingEl.remove()
       if (!contentEl) {
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
@@ -9869,7 +9871,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     var renderGeneFailure = function (err) {
       if (renderId !== activeGeneRenderId) return
-      if (loadingEl) loadingEl.style.display = "none"
+      if (loadingEl) loadingEl.remove()
       if (err && err.status === 404) markDocumentNotFound(iconoplasmPageTitle("Gene not found"))
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(symbol),
