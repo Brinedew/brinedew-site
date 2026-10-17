@@ -8,8 +8,9 @@ import {
 // Storage: one stable object per gene (genes/v3/<SYMBOL>.json), the catalog
 // object (catalog/v3/index.json), GeneGuessr's "Top Streaks" board
 // (leaderboard/v1/top.json, B-965), and the style picker's first page
-// (picker/v1/styles.json, B-896), and each gene's comments for readers who are
-// not signed in (comments/v1/<SYMBOL>.json). Readers outside the Worker fetch
+// (picker/v1/styles.json, B-896), each gene's comments for readers who are
+// not signed in (comments/v1/<SYMBOL>.json), and the gene page's Discord invite
+// counts (community/v1/discord.json, B-1102). Readers outside the Worker fetch
 // them from the CDN. ARCHITECTURE FENCE [IPD-011].
 // A deployment without object storage cannot hold any published object.
 // Distinguish that definitive absence from a transient read failure so
@@ -61,6 +62,12 @@ export const LEADERBOARD_OBJECT_LIMIT = 128 * 1024
 export const REQUEST_PICKER_OBJECT_KEY = "picker/v1/styles.json"
 export const REQUEST_PICKER_OBJECT_LIMIT = 512 * 1024
 
+// B-1102: the gene page's Discord invite card, its Online and Members counts and
+// the server icon as a data: URI (workers/lib/discord-invite-publication.js), so a
+// reader's browser never contacts Discord. A 96 px icon is a few KiB.
+export const DISCORD_INVITE_OBJECT_KEY = "community/v1/discord.json"
+export const DISCORD_INVITE_OBJECT_LIMIT = 64 * 1024
+
 // Each gene's visible comments, the answer a guest gets from GET
 // /api/iconoplasm/genes/<SYMBOL>/comments without the ownership flags
 // (workers/lib/gene-comments-publication.js builds it). 50 comments of at most
@@ -80,6 +87,7 @@ function stableGeneObjectIdentity(key) {
   if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
   if (key === REQUEST_PICKER_OBJECT_KEY) return { symbol: "", limit: REQUEST_PICKER_OBJECT_LIMIT }
   if (key === LEADERBOARD_OBJECT_KEY) return { symbol: "", limit: LEADERBOARD_OBJECT_LIMIT }
+  if (key === DISCORD_INVITE_OBJECT_KEY) return { symbol: "", limit: DISCORD_INVITE_OBJECT_LIMIT }
   // A comments object is rewritten, never deleted (its symbol is not a gene object's).
   if (typeof key === "string" && key.startsWith(`${GENE_COMMENTS_OBJECT_PREFIX}/`)) {
     const symbol = key.slice(GENE_COMMENTS_OBJECT_PREFIX.length + 1, -".json".length)

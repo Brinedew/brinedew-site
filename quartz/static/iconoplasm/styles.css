@@ -6067,6 +6067,12 @@ a.icono-clan-ae:hover {
   margin-top: 2rem;
 }
 
+/* B-1103: a reader already on the server sees no invite. */
+[data-icono-discord-island][hidden],
+.icono-card[data-icono-discord-invite-card][hidden] {
+  display: none;
+}
+
 .icono-discord-invite {
   display: grid;
   gap: 0.7rem;

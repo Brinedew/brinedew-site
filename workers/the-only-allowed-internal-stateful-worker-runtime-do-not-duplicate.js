@@ -471,6 +471,7 @@ import {
 } from "./lib/structure-upstream.js"
 import { recordDailyGuessAggregates } from "./lib/guess-aggregates.js"
 import { publishLeaderboardObject } from "./lib/leaderboard-publication.js"
+import { publishDiscordInviteObject } from "./lib/discord-invite-publication.js"
 import { withObservedGameSessionWrite } from "./lib/game-session-write-evidence.js"
 import { geneguessrMolstarVendorUpstreamUrl } from "./lib/the-only-geneguessr-molstar-vendor-path-do-not-duplicate.js"
 import { extractAvatarUpstreamFromRequest } from "./lib/avatar-proxy.js"
@@ -1860,6 +1861,9 @@ export default {
         // B-965: GeneGuessr's "Top Streaks" object on the CDN. Reads the GeneGuessr D1 (26 rows),
         // not an Iconoplasm one.
         geneguessrBoard: () => publishLeaderboardObject(env),
+        // B-1102: the gene page's Discord invite counts and icon, so a reader's
+        // browser never contacts Discord.
+        discordInvite: () => publishDiscordInviteObject(env),
         // B-896: the style picker's first page on the CDN (121 rows, written on change).
         // B-1057: first rebuild, once each, the visions a card build marked, so
         // the page is built from fresh rollups. A failed rebuild re-marks its visions
