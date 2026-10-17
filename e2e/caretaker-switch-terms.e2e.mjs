@@ -12,6 +12,10 @@
 // 5. A column is missing, or names the wrong gene (the old one where the new
 //    one belongs).
 // 6. The supervote line shows for a caretaker who never cast a supervote.
+// 7. On a small phone the dialog scrolls (the owner, 2026-10-17: "having a scroll
+//    bar at the dialogue is not acceptable" for an informational dialog). The
+//    smallest screen checked is an iPhone SE in Safari, 375 x 548, leaving a
+//    long gene symbol (ARHGEF10L), with the terms box shown.
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import test from "node:test"
@@ -24,7 +28,7 @@ const TERMS = {
   display_label: "Caretaker terms - 25 September 2026 (v4)",
 }
 
-function claimFor(acceptedVersion, hasSupervote) {
+function claimFor(acceptedVersion, hasSupervote, from) {
   return {
     enabled: true,
     gene: { gene_id: "HGNC:11998", canonical_symbol: "TP53" },
@@ -34,7 +38,7 @@ function claimFor(acceptedVersion, hasSupervote) {
       mode: "switch",
       switch_from: {
         caretaker_assignment_id: "assignment_mfng",
-        canonical_symbol: "MFNG",
+        canonical_symbol: from,
         assignment_version: 1,
         gene_revision: 0,
         terms_version_id: acceptedVersion,
@@ -47,33 +51,45 @@ function claimFor(acceptedVersion, hasSupervote) {
   }
 }
 
-const CARETAKER = {
-  ok: true,
-  caretaker: {
-    caretaker_assignment_id: "assignment_mfng",
-    canonical_symbol: "MFNG",
-    assignment_status: "active",
-    href: "/gene/MFNG",
-  },
+function caretakerOf(from) {
+  return {
+    ok: true,
+    caretaker: {
+      caretaker_assignment_id: "assignment_mfng",
+      canonical_symbol: from,
+      assignment_status: "active",
+      href: `/gene/${from}`,
+    },
+  }
 }
 
-async function openSwitchDialog(browser, origin, acceptedVersion, hasSupervote) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+async function openSwitchDialog(
+  browser,
+  origin,
+  acceptedVersion,
+  hasSupervote,
+  { from = "MFNG", viewport = { width: 1280, height: 900 } } = {},
+) {
+  const context = await browser.newContext({ viewport })
   const claims = []
   await routeProduction(context, origin, (pathname, request) => {
-    if (pathname === "/api/iconoplasm/caretaker/me") return CARETAKER
+    if (pathname === "/api/iconoplasm/caretaker/me") return caretakerOf(from)
     if (pathname === "/api/iconoplasm/caretaker/genes/TP53/claim") {
       if (request.method() === "POST") {
         claims.push(request.postDataJSON())
         return { ok: false, code: "TEST_STOP" }
       }
-      return claimFor(acceptedVersion, hasSupervote)
+      return claimFor(acceptedVersion, hasSupervote, from)
     }
     return undefined
   })
   const page = await context.newPage()
   await page.goto(`${HOST}/gene/TP53`)
-  await page.getByRole("button", { name: "Switch to TP53" }).first().click()
+  // On a phone the switch button sits in the toolbar's More menu; the dialog it
+  // opens is the same one.
+  const open = page.locator("[data-icono-caretaker-claim-open]")
+  await open.waitFor({ state: "attached", timeout: 30_000 })
+  await open.evaluate((button) => button.click())
   const dialog = page.locator("#icono-caretaker-claim-dialog-TP53")
   await dialog.waitFor({ state: "visible", timeout: 30_000 })
   return { context, page, dialog, claims }
@@ -110,14 +126,12 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
   const { server, origin } = await startSite()
   try {
     const kept = [
-      "MFNG keeps showing your lore unless a new caretaker of MFNG saves their own.",
-      "Every version of your lore stays in MFNG's lore history.",
-      "Your ordinary votes on MFNG and other genes stay unchanged.",
+      "MFNG keeps showing your lore unless a new caretaker of MFNG saves their own. Every version stays in MFNG's lore history.",
       "You can become MFNG's caretaker again later, if nobody else has taken it.",
     ]
     const undone = ["You can no longer edit MFNG's lore. You can now edit TP53's lore."]
     const supervote =
-      "Your MFNG supervote is withdrawn. MFNG's portrait is decided by ordinary votes. You gain a supervote on TP53's portraits. It starts unused."
+      "Your MFNG supervote is withdrawn, so ordinary votes decide MFNG's portrait. You gain a supervote on TP53's portraits."
     const headings = ["What stays the same on MFNG", "What is undone on MFNG"]
     const inventory = { headings, kept, undone: [supervote, ...undone] }
     // 1, 3, 4 and 5: the account accepted v4, which is on offer, and holds a supervote.
@@ -157,6 +171,35 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
     await termsBox(older.dialog).click()
     assert.equal((await readDialog(older.dialog)).submitDisabled, false)
     await older.context.close()
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
+
+test("the switch dialog fits a small phone without a scroll bar", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  try {
+    for (const viewport of [
+      { width: 375, height: 548 },
+      { width: 360, height: 640 },
+    ]) {
+      for (const accepted of [TERMS.terms_version_id, "terms_2026_09_02_v3"]) {
+        const opened = await openSwitchDialog(browser, origin, accepted, true, {
+          from: "ARHGEF10L",
+          viewport,
+        })
+        await opened.page.evaluate(() => document.fonts.ready)
+        const overflow = await opened.dialog.evaluate((node) => {
+          const body = node.querySelector(".icono-dialog__body")
+          return body.scrollHeight - body.clientHeight
+        })
+        assert.equal(overflow, 0, `${viewport.width}x${viewport.height}, ${accepted}: body scrolls`)
+        await opened.context.close()
+      }
+    }
   } finally {
     server.close()
     await browser.close()
