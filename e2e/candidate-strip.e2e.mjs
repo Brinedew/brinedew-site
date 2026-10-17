@@ -184,7 +184,22 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       // 7: every fully shown tile holds its own footer.
       assert.deepEqual(await page.evaluate(footerCollisions), [], `${name}: tile footer collides`)
 
-      // 8: loaded images are opaque.
+      // 8: loaded images end opaque. They fade in once developed, so read them
+      // after the fade: one read mid-fade saw 0.795 (CI, 2026-10-17).
+      await page
+        .waitForFunction(
+          () =>
+            [
+              ...document.querySelectorAll(
+                "[data-icono-candidate-strip] .icono-candidate-media img",
+              ),
+            ]
+              .slice(0, 2)
+              .every((img) => getComputedStyle(img).opacity === "1"),
+          null,
+          { timeout: 5000 },
+        )
+        .catch(() => {})
       const opacities = await page.$$eval(
         "[data-icono-candidate-strip] .icono-candidate-media img",
         (images) =>
