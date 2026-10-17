@@ -36,6 +36,7 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { PUBLICATION_AFFECTING_ACTIONS } from "../workers/iconoplasm-catalog-dispatch.js"
 import { iconoplasmGeneName } from "../workers/lib/iconoplasm-gene-name.js"
+import { releaseCatalog } from "./release-iconoplasm-catalog.mjs"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const ORIGIN = "https://iconoplasm.brinedew.bio"
@@ -49,6 +50,8 @@ const CARD_READ_CONCURRENCY = 16
 const args = new Set(process.argv.slice(2))
 const FULL = args.has("--full")
 const DRY_RUN = args.has("--dry-run")
+// Release the public catalogue even when no gene's recognition changed (B-1090).
+const FORCE_RELEASE = args.has("--release")
 
 function need(name) {
   const value = String(process.env[name] || "").trim()
@@ -257,19 +260,6 @@ export function recognitionChanged(previousRows, rows) {
   return rows.some((row) => !before.has(key(row)))
 }
 
-async function postCatalogRelease() {
-  const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/catalog/publish`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${need("ICONOPLASM_ADMIN_TOKEN")}`,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-  })
-  const body = await response.json().catch(() => null)
-  return { ok: response.ok && body?.ok === true, status: response.status, body }
-}
-
 async function postRepublish(symbols) {
   const response = await fetch(`${ORIGIN}/api/iconoplasm/admin/publication/republish`, {
     method: "POST",
@@ -359,6 +349,52 @@ async function verifyOnCdn(expectedHash, { attempts = 18, delayMs = 5000 } = {})
   return { verified: false, attempt: attempts }
 }
 
+// The public API's gene count, read from the same metadata route the extension
+// reads (one Worker request per run). It is behind when its count differs from
+// the index's and its release is over a day old. The age bound caps a lasting
+// mismatch (a catalogue gene without a card, say) at one release a day, 71 KV
+// writes, instead of one every run: about 30 runs a day would spend 2,100 of
+// the free plan's 1,000 daily KV writes. An unreadable route releases nothing.
+export const PUBLIC_RELEASE_STALE_MS = 24 * 60 * 60 * 1000
+
+export function publicReleaseIsBehind(live, geneCount, now = Date.now()) {
+  const liveCount = Number(live?.gene_count)
+  const releasedAt = Date.parse(String(live?.released_at || ""))
+  if (!Number.isFinite(liveCount) || !Number.isFinite(releasedAt)) return false
+  return liveCount !== geneCount && now - releasedAt > PUBLIC_RELEASE_STALE_MS
+}
+
+async function publicReleaseBehind(geneCount, receipt) {
+  const live = await fetch(`${ORIGIN}/api/public/v1/metadata`, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null)
+  receipt.public_release = {
+    gene_count: live?.gene_count ?? null,
+    released_at: live?.released_at ?? null,
+  }
+  return publicReleaseIsBehind(live, geneCount)
+}
+
+// Runs the release here, not in the Worker: it rebuilds all 19k genes, which a
+// free-plan request's 10 ms of CPU can't finish (B-1090). A release that
+// refuses fails the run, so it can't sit frozen behind a green job again.
+async function release(receipt) {
+  const released = await releaseCatalog().catch((error) => ({
+    ok: false,
+    error: String(error?.message || error).slice(0, 300),
+  }))
+  receipt.extension_release = {
+    ok: released.ok === true,
+    gene_count: released.gene_count ?? null,
+    current_hash: released.current_hash ?? null,
+    error: released.ok ? null : released.error,
+    details: released.ok ? null : (released.details ?? null),
+    d1: released.d1 ?? null,
+    kv: released.kv ?? null,
+  }
+  if (released.ok !== true) process.exitCode = 1
+}
+
 async function main() {
   const startedAt = new Date()
   const receipt = { started_at: startedAt.toISOString(), mode: FULL ? "full" : "incremental" }
@@ -387,6 +423,10 @@ async function main() {
     ) {
       receipt.result = "unchanged"
       receipt.d1_rows_read = reads
+      // An unchanged index can still sit on a frozen public release: the
+      // release that failed last run never retries otherwise, and the job
+      // went green over a stale API for eleven weeks (B-1090).
+      if (await publicReleaseBehind(previous.genes.length, receipt)) await release(receipt)
       finish(receipt)
       return
     }
@@ -440,22 +480,12 @@ async function main() {
   receipt.result = receipt.cdn.verified
     ? "published"
     : "uploaded, CDN not yet serving the new bytes"
-  if (recognitionChanged(previous?.genes || null, genes)) {
-    const release = await postCatalogRelease().catch((error) => ({
-      ok: false,
-      status: 0,
-      body: { error: String(error) },
-    }))
-    receipt.extension_release = {
-      ok: release.ok,
-      status: release.status,
-      gene_count: release.body?.gene_count ?? null,
-      current_hash: release.body?.current_hash ?? null,
-      error: release.ok ? null : String(release.body?.error || "").slice(0, 300),
-    }
-    // A release that refuses fails the run, so it can't sit frozen behind a
-    // green job again.
-    if (!release.ok) process.exitCode = 1
+  if (
+    FORCE_RELEASE ||
+    recognitionChanged(previous?.genes || null, genes) ||
+    (await publicReleaseBehind(genes.length, receipt))
+  ) {
+    await release(receipt)
   }
   finish(receipt)
   if (!receipt.cdn.verified) process.exitCode = 1

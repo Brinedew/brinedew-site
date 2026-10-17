@@ -126,7 +126,6 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_catalog_state: perItem("symbols", { rows_written: 0, rows_read: 20 }),
   admin_catalog_upsert: perItem("items", CATALOG_ROW),
   admin_catalog_reconcile: perItem("delete_symbols", CATALOG_ROW),
-  admin_catalog_publish: batch(CATALOGUE_READ),
   admin_essence_upsert: perItem("items", ESSENCE_ROW),
   admin_cost_snapshot: critical("no D1 rows: it reads KV and Cloudflare's analytics"),
 })
