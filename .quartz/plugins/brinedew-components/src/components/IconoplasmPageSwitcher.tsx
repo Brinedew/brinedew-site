@@ -11,8 +11,8 @@ const IconoplasmPageSwitcher: QuartzComponent = ({
   const activeTab =
     slug === "" || slug === "/"
       ? "archive"
-      : slug.startsWith("clans")
-        ? "clans"
+      : slug.startsWith("genes") || slug.startsWith("clans") || slug.startsWith("caretakers")
+        ? "genes"
         : slug.startsWith("studio")
           ? "studio"
           : slug.startsWith("wiki/Tutorial")
@@ -35,13 +35,13 @@ const IconoplasmPageSwitcher: QuartzComponent = ({
         Archive
       </a>
       <a
-        href="/clans"
-        class={classNames("icono-page-tab", activeTab === "clans" && "is-active")}
+        href="/genes"
+        class={classNames("icono-page-tab", activeTab === "genes" && "is-active")}
         data-icono-nav
-        data-icono-switch="clans"
-        aria-current={activeTab === "clans" ? "page" : undefined}
+        data-icono-switch="genes"
+        aria-current={activeTab === "genes" ? "page" : undefined}
       >
-        Clans
+        Genes
       </a>
       <a
         href="/studio"

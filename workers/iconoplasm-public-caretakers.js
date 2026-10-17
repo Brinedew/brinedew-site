@@ -1,4 +1,4 @@
-import { buildAvatarProxyPath } from "./lib/avatar-proxy.js"
+import { buildAvatarProxyPath, sanitizeDiscordAvatarUrl } from "./lib/avatar-proxy.js"
 
 const CURRENT_CARETAKER_STATUSES = Object.freeze(["active", "suspended"])
 const MAX_PUBLIC_CARETAKER_SYMBOLS = 500
@@ -123,4 +123,73 @@ export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSym
     if (profile) result[symbol] = profile
   }
   return Object.freeze(result)
+}
+
+// B-1098: the /caretakers directory. One account holds at most one open gene
+// (the unique open index on account_id), so this is one row per caretaker. The
+// open-role filter is the partial indexes' own WHERE, so the read touches only
+// open rows, never the ended history. Pictures are Discord's own URLs, so the
+// directory costs no /api/avatar request per face.
+export const CARETAKER_DIRECTORY_LIMIT = 2000
+
+export async function readCaretakerDirectory(iconoplasmDb, accountDb) {
+  if (!iconoplasmDb || !accountDb) return []
+  const assignments = rowsFrom(
+    await iconoplasmDb
+      .prepare(
+        `SELECT gene_symbol, account_id, status, started_at
+           FROM icono_caretaker_assignments
+          WHERE status IN ('pending_acceptance', 'active', 'suspended')
+          LIMIT ?`,
+      )
+      .bind(CARETAKER_DIRECTORY_LIMIT)
+      .all(),
+  ).filter((row) => CURRENT_CARETAKER_STATUSES.includes(row?.status))
+  const accountIds = Array.from(
+    new Set(assignments.map((row) => String(row?.account_id || "").trim()).filter(Boolean)),
+  )
+  if (!accountIds.length) return []
+
+  const profileByAccount = new Map()
+  for (const accountChunk of chunks(accountIds)) {
+    const result = await accountDb
+      .prepare(
+        `SELECT identity.account_id, users.discord_id, users.username, users.avatar_url
+           FROM brinedew_account_identities identity
+           JOIN users ON users.discord_id = identity.provider_subject
+          WHERE identity.provider = 'discord'
+            AND identity.account_id IN (${accountChunk.map(() => "?").join(", ")})
+          ORDER BY identity.last_seen_at DESC`,
+      )
+      .bind(...accountChunk)
+      .all()
+    for (const row of rowsFrom(result)) {
+      const accountId = String(row?.account_id || "").trim()
+      const username = String(row?.username || "")
+        .trim()
+        .slice(0, 80)
+      if (!accountId || !username || profileByAccount.has(accountId)) continue
+      profileByAccount.set(accountId, {
+        username,
+        avatar_url:
+          sanitizeDiscordAvatarUrl(String(row?.avatar_url || "").trim()) ||
+          discordDefaultAvatarUrl(row?.discord_id),
+      })
+    }
+  }
+
+  const directory = []
+  for (const row of assignments) {
+    const symbol = normalizedSymbol(row?.gene_symbol)
+    const profile = profileByAccount.get(String(row?.account_id || "").trim())
+    if (!symbol || !profile) continue
+    directory.push({
+      username: profile.username,
+      avatar_url: profile.avatar_url,
+      symbol,
+      since: String(row?.started_at || "").slice(0, 10) || null,
+    })
+  }
+  directory.sort((a, b) => a.symbol.localeCompare(b.symbol))
+  return directory
 }

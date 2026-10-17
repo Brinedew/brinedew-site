@@ -145,6 +145,16 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     rateLimit: rateLimit("gene_search", 120),
   }),
   contract({
+    // B-1098: the /caretakers directory, edge-cached for 60 s by its handler.
+    id: "public_caretakers",
+    match: exact(iconoplasmPublicApiPath("/caretakers")),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    gatewayHandler: "public_caretakers",
+    rateLimit: rateLimit("caretakers", 120),
+  }),
+  contract({
     // B-898: the one stable catalog object, canonical-origin fallback only.
     id: "public_stable_catalog_object",
     match: exact("/api/public/v1/stable-catalog.json"),
