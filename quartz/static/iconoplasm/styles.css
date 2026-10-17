@@ -1055,6 +1055,44 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   color: var(--secondary);
 }
 
+/* B-1104: what a switch leaves on the old gene, and what it ends. */
+.icono-caretaker-switch-inventory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem 1.5rem;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.icono-caretaker-switch-inventory h3 {
+  margin: 0 0 0.5rem;
+  color: var(--dark);
+  font: 500 var(--icono-action-font-size) / 1.2 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.icono-caretaker-switch-inventory ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-inline-start: 1.35rem;
+}
+
+.icono-caretaker-switch-inventory li {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.icono-caretaker-switch-inventory__keeps li::marker {
+  content: "✓  ";
+  color: var(--secondary);
+}
+
+.icono-caretaker-switch-inventory__ends li::marker {
+  content: "✕  ";
+  color: var(--secondary);
+}
+
 .icono-caretaker-claim-terms {
   display: block;
   box-sizing: border-box;
