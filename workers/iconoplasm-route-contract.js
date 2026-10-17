@@ -883,6 +883,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     apiHandler: "admin_publication.pull_zone_reconcile",
   }),
   iconoplasmApiContract({
+    // B-1087: the Bunny balance, this month's charges and the storage zone's size.
+    id: "admin_publication_bunny_account",
+    match: exact("/api/iconoplasm/admin/publication/bunny-account"),
+    methods: GET,
+    auth: "administrator",
+    apiHandler: "admin_publication.bunny_account",
+  }),
+  iconoplasmApiContract({
     // B-898: the GitHub Actions publisher uploads the one catalog object here.
     id: "admin_publication_catalog_object",
     match: exact("/api/iconoplasm/admin/publication/catalog-object"),
