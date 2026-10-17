@@ -265,11 +265,6 @@ async function runCommentsStep(env, step, context, budget, services, changedBy, 
     const publishFetches = publish ? symbols.length * 4 : 0
     const publishCalls = publish ? symbols.length : 0
     if (budget.fetches < publishFetches || budget.calls < 2 + publishCalls) return false
-    if (env.KV && services?.geneCommentsCacheKey) {
-      if (budget.kv < symbols.length) return false
-      for (const symbol of symbols) await env.KV.delete(services.geneCommentsCacheKey(symbol))
-      budget.kv -= symbols.length
-    }
     // Each comment needs up to two Discord calls (find the post, then edit or delete it). A comment
     // the budget cannot reach waits for the next request, as does everything after a rate limit.
     const handled = []

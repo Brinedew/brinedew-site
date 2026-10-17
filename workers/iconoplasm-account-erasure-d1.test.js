@@ -199,7 +199,6 @@ test(
             maxRowsWritten: ERASURE_DEFAULT_ROW_WRITES,
           },
           {
-            geneCommentsCacheKey: (symbol) => `iconoplasm:gene-comments:${symbol}`,
             publishGeneComments: publishErasedGeneComments,
             userKvKeyScopes: iconoplasmUserKvKeyScopes,
           },
