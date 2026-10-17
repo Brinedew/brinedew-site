@@ -9329,6 +9329,8 @@
     }
     var ICONO_CHECK_ICON = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5 8.25 13.75 15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     var ICONO_CROSS_ICON = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 6 14 14M14 6 6 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    var ICONO_VOTE_UP_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18v-6H5l7-7 7 7h-4v6H9z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/></svg>';
+    var ICONO_VOTE_DOWN_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6v6h4l-7 7-7-7h4V6h6z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/></svg>';
     var ICONO_ROUGH_LOOP_VIEWBOX_WIDTH = 132;
     var ICONO_ROUGH_LOOP_VIEWBOX_HEIGHT = 34;
     var iconoRoughLoopSerial = 0;
@@ -10491,14 +10493,15 @@
       var variant = String(opts.variant || "").trim();
       var isBrick = variant === "brick";
       var isLabel = variant === "label";
+      var arrowGlyphs = !isLabel && opts.glyphs === "arrows";
       var showArrows = isLabel && !!opts.showArrows;
       var approveArrow = showArrows ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--right" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z" transform="translate(60 0) scale(-1 1)"></path></svg>' : "";
       var rejectArrow = showArrows ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--left" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z"></path></svg>' : "";
-      var approveInner = isLabel ? '<span class="icono-vote-btn-copy-stack"><span class="icono-vote-btn-copy" data-icono-rough-copy="true">FIT</span>' + approveArrow + "</span>" + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve") : ICONO_CHECK_ICON;
-      var rejectInner = isLabel ? '<span class="icono-vote-btn-copy-stack">' + rejectArrow + '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span></span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject") : ICONO_CROSS_ICON;
+      var approveInner = isLabel ? '<span class="icono-vote-btn-copy-stack"><span class="icono-vote-btn-copy" data-icono-rough-copy="true">FIT</span>' + approveArrow + "</span>" + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve") : arrowGlyphs ? ICONO_VOTE_UP_ICON : ICONO_CHECK_ICON;
+      var rejectInner = isLabel ? '<span class="icono-vote-btn-copy-stack">' + rejectArrow + '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span></span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject") : arrowGlyphs ? ICONO_VOTE_DOWN_ICON : ICONO_CROSS_ICON;
       var firstButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>";
       var secondButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>";
-      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + '" data-icono-vote-box' + attrs + ">" + firstButton + // A candidate tile shows its score between the two buttons, only when it is
+      return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + (arrowGlyphs ? " icono-vote-box--arrows" : "") + '" data-icono-vote-box' + attrs + ">" + firstButton + // A candidate tile shows its score between the two buttons, only when it is
       // above zero (owner, 2026-10-16: "just the number and plus sign before it").
       (opts.showScore ? '<span class="icono-vote-score" data-icono-vote-score aria-hidden="true"></span>' : "") + secondButton + "</div>";
     }

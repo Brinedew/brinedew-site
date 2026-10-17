@@ -109,13 +109,10 @@ function layoutProblems() {
   )
 
   for (const [rowName, row] of rows) {
-    // The vote box is one control; its two buttons sit inside its border.
+    // The vote box is one control: ⇧, the score, ⇩.
     const controls = [
       ...row.querySelectorAll(".icono-vote-box, button, .icono-button, summary"),
     ].filter((el) => shown(el) && (el.matches(".icono-vote-box") || !el.closest(".icono-vote-box")))
-    const marks = [
-      ...row.querySelectorAll(".icono-canonical-toolbar-pair, .icono-toolbar-divider"),
-    ].filter(shown)
     const centre = controls.length ? box(controls[0]).top + box(controls[0]).height / 2 : 0
 
     for (const el of controls) {
@@ -143,7 +140,7 @@ function layoutProblems() {
         problems.push(`${rowName}: ${name(el)} label is ${getComputedStyle(el).fontSize}`)
       }
     }
-    for (const el of [...controls, ...marks]) {
+    for (const el of controls) {
       const b = box(el)
       if (!near(b.top + b.height / 2, centre)) {
         problems.push(
@@ -160,7 +157,7 @@ function layoutProblems() {
         )
       }
     }
-    const items = [...controls, ...marks]
+    const items = controls
     for (let i = 0; i < items.length; i += 1) {
       for (let j = i + 1; j < items.length; j += 1) {
         const a = box(items[i])
@@ -211,15 +208,13 @@ function layoutProblems() {
 function toolbarFit() {
   const rail = document.querySelector(".icono-gene-toolbar-rail")
   const collapsed = rail.classList.contains("is-collapsed")
-  const tight = rail.classList.contains("is-tight")
-  rail.classList.remove("is-collapsed", "is-tight")
+  rail.classList.remove("is-collapsed")
   rail.classList.add("is-measuring")
   const overflows = rail.scrollWidth > rail.clientWidth + 1
   rail.classList.remove("is-measuring")
   if (collapsed) rail.classList.add("is-collapsed")
-  if (tight) rail.classList.add("is-tight")
   const more = rail.querySelector(".icono-toolbar-more")
-  const clipped = [...rail.querySelectorAll("button, .icono-canonical-toolbar-pair")]
+  const clipped = [...rail.querySelectorAll("button")]
     .filter((el) => el.checkVisibility() && el.scrollWidth > el.clientWidth + 1)
     .map((el) => (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 24))
   return {
