@@ -21,7 +21,13 @@
         "rows_read": 10000,
         "rows_written": 1000,
         "requests": 1
-      }
+      },
+      "guards": [
+        {
+          "sql": "SELECT 1 - COUNT(*) AS missing_0130 FROM d1_migrations WHERE name = '0130_style_published_portraits.sql'",
+          "max": 0
+        }
+      ]
     }
   }
 }
