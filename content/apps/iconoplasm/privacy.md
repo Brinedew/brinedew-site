@@ -78,7 +78,7 @@ The extension makes requests only to `iconoplasm.brinedew.bio` and to the Bunny 
 
 No requests are made to any other domain.
 
-The signed-in website may also contact Discord for login and the image API provider you choose for generation or editing.
+Gene pages on the website load the Discord server's public invite preview (its icon and member counts) from Discord. The signed-in website may also contact Discord for login and the image API provider you choose for generation or editing.
 
 The website may load Cloudflare Web Analytics only after you allow analytics in the site prompt. Cloudflare Web Analytics is cookieless and used for aggregate page-visit counts.
 
@@ -107,7 +107,7 @@ The extension's content script runs on all web pages (except `iconoplasm.brinede
 - **Cloudflare**: Infrastructure provider for `iconoplasm.brinedew.bio`. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
 - **Cloudflare Web Analytics**: Used on the website only after analytics consent, for aggregate traffic measurement.
 - **Bunny CDN (BunnyWay d.o.o.)**: Content delivery provider for `iconoplasmportraits.b-cdn.net`. See [Bunny's privacy policy](https://bunny.net/privacy/).
-- **Discord**: Used for website login.
+- **Discord**: Used for website login and the server invite preview on gene pages.
 - **Image API providers you choose**: Used only when you start direct generation or editing.
 - No data is shared with advertisers, analytics providers, or unrelated third parties.
 
