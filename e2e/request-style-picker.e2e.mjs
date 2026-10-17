@@ -34,8 +34,9 @@
 //     or shows a bare "HTTP 503", until the reader switches views (B-884);
 // 16. the list keeps failing and the grid offers no way to try again, or the
 //     Try again button does not load the styles once the server recovers;
-// 17. one gene shows on two cards (B-896: every style below also has an
-//     ACVR2B candidate, as the owner's Favorites did on 2026-10-05);
+// 17. a card shows other than its style's published portraits, up to four,
+//     tiled to fill the 3:4 card, or one gene shows on two cards (B-896,
+//     migration 0130);
 // 18. All styles stops at the first answer: scrolling to the end of the grid
 //     does not load the next page, or the label claims a count (B-1014);
 // 19. opening the picker asks the Worker for the style list although the CDN
@@ -72,23 +73,34 @@ const SINGLE_PREVIEW_SLOT = 11111
 const EMPTY_SLOT = 33333
 const QUEUED_SLOT = 51084
 
-// The server's shape since B-896: at most 5 previews, canonical first, medium
-// (3:4) only.
+// The server's shape since migration 0130: the style's published portraits
+// only, most upvoted first, at most four, medium (3:4) only; canonical_count
+// is every published portrait, so it can exceed four. Styles get one to four
+// so every tiling shows.
 const GENE_BY_SHA = new Map()
+function previewCount(slot) {
+  if (slot === EMPTY_SLOT) return 0
+  return slot === SINGLE_PREVIEW_SLOT ? 1 : (slot % 4) + 1
+}
 function previewAssets(slot) {
-  if (slot === EMPTY_SLOT) return []
-  const count = slot === SINGLE_PREVIEW_SLOT ? 1 : 5
-  return Array.from({ length: count }, (_, i) => {
+  return Array.from({ length: previewCount(slot) }, (_, i) => {
     const sha = `${String(slot).padStart(6, "0")}${i}`.padEnd(64, "a")
-    const gene = i === 3 ? "ACVR2B" : `G${slot}${"ABCDE"[i]}`
+    const gene = `G${slot}${"ABCD"[i]}`
     GENE_BY_SHA.set(sha, gene)
     return {
       gene_symbol: gene,
       asset_sha256: sha,
-      is_current: i === 0,
+      is_current: true,
       medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
     }
   })
+}
+// One, two, three or four tiles of a 3:4 card, as width over height.
+const TILE_RATIOS = {
+  1: [0.75],
+  2: [0.375, 0.375],
+  3: [0.375, 0.75, 0.75],
+  4: [0.75, 0.75, 0.75, 0.75],
 }
 
 const OPTIONS = SLOTS.map((slot, index) => ({
@@ -106,6 +118,7 @@ const OPTIONS = SLOTS.map((slot, index) => ({
   score: 0,
   vote_h_index: SLOTS.length - index,
   preview_assets: previewAssets(slot),
+  canonical_count: previewCount(slot) === 4 ? 7 : previewCount(slot),
   is_preallocated_without_preview: slot === EMPTY_SLOT,
   is_favorite: FAVORITES.includes(`0-${slot}`),
 }))
@@ -126,6 +139,7 @@ const NEXT_OPTIONS = NEXT_SLOTS.map((slot) => ({
   score: 0,
   vote_h_index: 0,
   preview_assets: previewAssets(slot),
+  canonical_count: previewCount(slot),
   is_favorite: false,
 }))
 const LAST = OPTIONS[OPTIONS.length - 1]
@@ -287,6 +301,7 @@ function measurePicker() {
     cardLabels: cards.filter(visible).map((c) => c.getAttribute("data-icono-request-card")),
     arts: arts.map((a) => a.getBoundingClientRect().width / a.getBoundingClientRect().height),
     images: images.map((img) => ({
+      card: img.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
       src: img.getAttribute("src") || "",
       ratio: img.getBoundingClientRect().width / img.getBoundingClientRect().height,
     })),
@@ -386,7 +401,17 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
-          assert.ok(Math.abs(image.ratio - 0.75) < 0.03, `${where}: preview ratio ${image.ratio}`)
+        }
+        for (const label of new Set(first.images.map((image) => image.card))) {
+          const tiles = first.images.filter((image) => image.card === label)
+          const expected = TILE_RATIOS[previewCount(Number(label))]
+          assert.equal(tiles.length, expected.length, `${where}: card ${label} tiles`)
+          tiles.forEach((tile, i) =>
+            assert.ok(
+              Math.abs(tile.ratio - expected[i]) < 0.03,
+              `${where}: card ${label} tile ${i} ratio ${tile.ratio}`,
+            ),
+          )
         }
 
         // 2. Nothing artist-shaped.

@@ -138,7 +138,7 @@ import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-
 import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
 import { createIconoplasmCaretakerNotificationHandlers } from "./iconoplasm-caretaker-notifications.js"
 import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
-import { attachStyleCanonicalCounts } from "./iconoplasm/style-canonical-counts.js"
+import { attachStylePublishedPortraits } from "./iconoplasm/style-published-portraits.js"
 import {
   caretakerCommentOutboxStatement,
   deliverPendingCaretakerCommentNotifications,
@@ -8925,8 +8925,9 @@ function generationRequestFirstPageOptions(env, url, rows) {
 // B-896: the picker's first page is the same for every player, so it lives on
 // the CDN (picker/v1/styles.json) and an open reads no D1 for it. Sized for a
 // viral day: 6,000 opens at 120 rows each was 720,000 reads; this job reads
-// 121 rows plus two per style for its canonical blots (0128), about 360 four
-// times an hour, about 35,000 a day, whatever the traffic. It writes only when
+// 121 rows plus its styles' published portraits (0130): one row per style and
+// about two per blot, about 1,450 for the 661 blots of the 2026-10-17 first
+// page, four times an hour, about 140,000 a day, whatever the traffic. It writes only when
 // the bytes changed, the leaderboard's pattern (B-965).
 export async function publishRequestPickerObject(env) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
@@ -8937,9 +8938,10 @@ export async function publishRequestPickerObject(env) {
     GENERATION_REQUEST_FIRST_PAGE,
   )
   const object = {
-    request_options: await attachStyleCanonicalCounts(
+    request_options: await attachStylePublishedPortraits(
       env.ICONOPLASM_DB,
       generationRequestFirstPageOptions(env, url, firstPage.rows),
+      (sha) => adminPortraitUrl(portraitBase(url, env), sha, "medium"),
     ),
     next_cursor: firstPage.nextCursor,
   }
@@ -8964,12 +8966,15 @@ export async function publishRequestPickerObject(env) {
 }
 
 // Every picker page leaves through here, so every style card carries its
-// canonical blots (migration 0128), whichever rollup supplied the card.
+// blot count and its published portraits (migration 0130), whichever rollup
+// supplied the card.
 async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
   const page = await readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)
   return {
     ...page,
-    options: await attachStyleCanonicalCounts(env.ICONOPLASM_DB, page.options),
+    options: await attachStylePublishedPortraits(env.ICONOPLASM_DB, page.options, (sha) =>
+      adminPortraitUrl(portraitBase(url, env), sha, "medium"),
+    ),
   }
 }
 

@@ -377,7 +377,6 @@ if (!extensionOnly) {
     "home-orders.js",
     "request-inbox.js",
     "emulsion-favorites.js",
-    "style-card-previews.js",
     "collection-feed.js",
     "iconoplasm-collection-route-state.js",
     "guest-discovery-store.js",

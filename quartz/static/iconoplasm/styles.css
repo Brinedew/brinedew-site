@@ -1704,7 +1704,9 @@ img-comparison-slider.rendered [slot="second"] {
   cursor: pointer;
 }
 
-/* Portraits are 3:4, so the card is too: one portrait, or a 2x2 of them. */
+/* Portraits are 3:4, so the card is too. One portrait fills it; two stand
+   side by side; three put one beside a stack of two 3:4 halves; four make a
+   2x2 of 3:4 quarters. */
 .icono-request-card-art {
   position: relative;
   display: grid;
@@ -1721,6 +1723,11 @@ img-comparison-slider.rendered [slot="second"] {
   grid-template-rows: 1fr 1fr;
   gap: 2px;
   background: var(--light);
+}
+
+.icono-request-card-art.is-mosaic-2 img,
+.icono-request-card-art.is-mosaic-3 img:first-child {
+  grid-row: 1 / span 2;
 }
 
 .icono-request-card-art img {

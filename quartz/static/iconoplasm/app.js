@@ -15,7 +15,6 @@ import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
 } from "./emulsion-favorites.js?v=9dc72d17f083e4ba"
-import { assignStyleCardPreviews } from "./style-card-previews.js?v=88b113f9e183e92a"
 import { createCollectionFeedController } from "./collection-feed.js?v=1d50b8633919419d"
 import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-route-state.js?v=35d012ba1da0d6a4"
 import {
@@ -32,7 +31,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=dd8c7f5c591478c7"
+} from "../shared/sidebar-shell.js?v=6de8c983a0307439"
 import "./vendor/img-comparison-slider.js?v=6e01335000bbafdd"
 import {
   closeDialog,
@@ -5650,22 +5649,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // the number, the favorite star right after it (as on the gene page's
   // "Emulsion 21329 ☆") and the count or queued badge. The star is never
   // nested in the toggle; a click anywhere else on the card toggles it.
-  function renderRequestStyleCardMarkup(option, isSelected, queuedCount, assignedPreviews) {
+  function renderRequestStyleCardMarkup(option, isSelected, queuedCount) {
     var item = option || {}
     var visionId = String(item.vision_id || "").trim()
     var label = requestOptionPrimaryLabel(item)
-    var previews = (
-      Array.isArray(assignedPreviews)
-        ? assignedPreviews
-        : Array.isArray(item.preview_assets)
-          ? item.preview_assets
-          : []
-    )
+    // The pictures are the style's published portraits, most upvoted first, at
+    // most four (B-896, 2026-10-17); the worker sends nothing else, so a card
+    // never shows a candidate and a gene is never on two cards. Portraits are
+    // 3:4: one fills the card, three put one beside a stack of two 3:4 halves,
+    // four make a 2x2.
+    var shown = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
       .map(requestOptionPreviewUrl)
       .filter(Boolean)
-    // Portraits are 3:4. Four previews make a 2x2 mosaic that keeps 3:4;
-    // fewer would crop into slivers, so the first one fills the card.
-    var shown = previews.length >= 4 ? previews.slice(0, 4) : previews.slice(0, 1)
+      .slice(0, 4)
     var art = shown.length
       ? shown
           .map(function (url) {
@@ -5677,9 +5673,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</span>"
     // Blots are the published portraits: the genes whose canonical portrait
     // the style drew now, across all its codes, not every image ever drawn in
-    // it (owner, 2026-10-16). The worker attaches canonical_count from the
-    // trigger-kept table (migration 0128); the rollups' live_count is per
-    // vision or per factory code and goes stale, so it only orders the list.
+    // it (owner, 2026-10-16). The worker counts them from the same
+    // trigger-kept table as the pictures (migration 0130); the rollups'
+    // live_count is per vision or per factory code and goes stale, so it only
+    // orders the list.
     var imageCount = Number(item.canonical_count || 0) || 0
     return (
       '<div class="icono-request-card' +
@@ -5695,7 +5692,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(label) +
       '">' +
       '<span class="icono-request-card-art' +
-      (shown.length === 4 ? " is-mosaic" : "") +
+      (shown.length > 1 ? " is-mosaic is-mosaic-" + shown.length : "") +
       '">' +
       art +
       "</span>" +
@@ -7735,14 +7732,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!requestView) requestView = emulsionFavorites.ids().length ? "favorites" : "all"
         filteredOptions = styleGridOptions(renderQuery, loadedOptions)
         rememberRequestOptions(filteredOptions)
-        var cardPreviews = assignStyleCardPreviews(filteredOptions)
         var html = filteredOptions
-          .map(function (option, index) {
+          .map(function (option) {
             return renderRequestStyleCardMarkup(
               option,
               selectedRequestVisionIds.has(String(option.vision_id || "").trim()),
               styleQueuedCount(option),
-              cardPreviews[index],
             )
           })
           .join("")
