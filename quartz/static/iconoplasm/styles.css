@@ -222,7 +222,8 @@
      .icono-dialog--wide       72rem  work surfaces
      .icono-dialog--fixed      a fixed height, for content that changes under tabs
    Dialogs add content classes (inside __body or __footer); they never restyle the
-   frame. Colors read the theme variables, so light and dark both work. */
+   frame, which changes here only, for every dialog at once (the phone frame below).
+   Colors read the theme variables, so light and dark both work. */
 .icono-dialog {
   box-sizing: border-box;
   width: min(var(--icono-dialog-width, var(--icono-dialog-width-standard)), calc(100vw - 2rem));
@@ -368,12 +369,26 @@ body:has(.icono-dialog[open]) {
   text-underline-offset: 0.15em;
 }
 
-/* Phones: nearly full width, with the same frame. */
+/* Phones: nearly full width, and a slimmer frame, so a short informational dialog
+   fits a 360 x 640 screen without a scroll bar (B-1104). The close and footer
+   buttons keep their full touch size; only the padding around them shrinks. */
 @media (max-width: 599px) {
   .icono-dialog {
     --icono-dialog-gutter: 0.85rem;
     width: calc(100vw - 1rem);
-    max-height: calc(100dvh - 1rem);
+    max-height: calc(100dvh - 0.5rem);
+  }
+
+  .icono-dialog__header {
+    padding-block: 0.3rem;
+  }
+
+  .icono-dialog__body {
+    padding-block: 0.75rem;
+  }
+
+  .icono-dialog__footer {
+    padding-block: 0.5rem;
   }
 
   .icono-dialog--fixed {
@@ -1059,7 +1074,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-caretaker-switch-inventory {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 1rem 1.5rem;
+  gap: 0.75rem 1.5rem;
   font-family: "IBM Plex Mono", monospace;
 }
 
@@ -1073,14 +1088,18 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-caretaker-switch-inventory ul {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin: 0;
   padding-inline-start: 1.35rem;
 }
 
 .icono-caretaker-switch-inventory li {
   margin: 0;
-  line-height: 1.45;
+  /* Sentences read in the lore's face; the mono headings stay the printed form. */
+  font:
+    1.0625rem / 1.3 "Crimson Pro",
+    Georgia,
+    serif;
 }
 
 .icono-caretaker-switch-inventory__kept li::marker {
@@ -1117,6 +1136,31 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   min-width: 0;
   font-family: "IBM Plex Mono", monospace;
   overflow-wrap: anywhere;
+}
+
+/* B-1104: on phones the switch dialog fits one screen with no scroll bar. */
+@media (max-width: 599px) {
+  .icono-caretaker-claim-form {
+    gap: 0.75rem;
+  }
+
+  .icono-caretaker-switch-inventory h3 {
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.08em;
+  }
+
+  .icono-caretaker-switch-inventory li {
+    line-height: 1.22;
+  }
+
+  .icono-caretaker-claim-terms {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .icono-caretaker-claim-terms::part(label) {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
 }
 
 .icono-request-shell {
