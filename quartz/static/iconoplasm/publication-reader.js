@@ -27,6 +27,12 @@ const STABLE_FETCH = Object.freeze({ cache: "no-cache" })
 const STABLE_CATALOG_PATH = "/catalog/v3/index.json"
 const STABLE_CATALOG_ORIGIN_PATH = "/api/public/v1/stable-catalog.json"
 const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
+// The names readers type for a gene (HER2, PD-L1, p21, TIPE2): HGNC's alias and
+// previous symbols, published by the workstation (Iconoplasm core/alias_publication.py).
+// On 2026-10-17 the search box answered "No results" for HER2 and PD-L1, and
+// "p21" listed PAK1 before CDKN1A.
+const STABLE_ALIASES_PATH = "/catalog/v3/aliases.json"
+const STABLE_ALIASES_OBJECT_LIMIT = 4 * 1024 * 1024
 
 function normalizedSymbol(value) {
   const symbol = String(value || "")
@@ -83,6 +89,7 @@ export function createIconoplasmPublicationReader(options = {}) {
   const cdnTimeoutMs = Number(options.cdnTimeoutMs) || CDN_TIMEOUT_MS
   let geneMetricsCache = null
   let stableCatalogPromise = null
+  let aliasIndexPromise = null
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
@@ -260,16 +267,49 @@ export function createIconoplasmPublicationReader(options = {}) {
     return keys.map((key) => stable.bySymbol.get(key)).filter(Boolean)
   }
 
-  function searchRank(needle, rawSymbol, rawName) {
+  // Fetched on the first search only, so a page that never searches loads
+  // nothing more (188 KB compressed). Search without it still answers by symbol
+  // and name, so a failed read is not a reader error; the next search retries.
+  function aliasIndex() {
+    if (aliasIndexPromise) return aliasIndexPromise
+    aliasIndexPromise = fromCdn(STABLE_ALIASES_PATH, STABLE_ALIASES_OBJECT_LIMIT).then((value) => {
+      if (value?.schema !== 1 || !value.aliases || typeof value.aliases !== "object")
+        throw new Error("Invalid published Iconoplasm alias file")
+      const bySymbol = new Map()
+      for (const [symbol, names] of Object.entries(value.aliases)) {
+        const key = normalizedSymbol(symbol)
+        if (!key || !Array.isArray(names)) continue
+        const lower = names.map((name) => String(name || "").toLowerCase()).filter(Boolean)
+        bySymbol.set(key, { names: lower, compact: new Set(lower.map(compactName)) })
+      }
+      return bySymbol
+    })
+    aliasIndexPromise.catch(() => {
+      aliasIndexPromise = null
+    })
+    return aliasIndexPromise
+  }
+
+  // "PD-L1", "pdl1" and "PD L1" are one name.
+  function compactName(value) {
+    return value.replace(/[^a-z0-9]/g, "")
+  }
+
+  function searchRank(needle, compact, rawSymbol, rawName, aliases) {
     const symbol = String(rawSymbol || "").toLowerCase()
     const name = String(rawName || "").toLowerCase()
     // An exact full name ("insulin" for INS) is as good as an exact symbol; ranked with the
     // prefix matches it sorted after "insulin degrading enzyme" and every IGF gene.
     if (symbol === needle || name === needle) return 1
-    if (symbol.startsWith(needle)) return 2
-    if (name.startsWith(needle)) return 3
-    if (symbol.includes(needle)) return 4
-    if (name.includes(needle)) return 5
+    // An exact alias names the gene as surely ("p53" is TP53), ahead of every gene
+    // whose name merely starts with it (PDRG1, "p53 and DNA damage regulated 1").
+    if (aliases && compact && aliases.compact.has(compact)) return 2
+    if (symbol.startsWith(needle)) return 3
+    if (name.startsWith(needle)) return 4
+    if (aliases && needle.length > 1 && aliases.names.some((alias) => alias.startsWith(needle)))
+      return 5
+    if (symbol.includes(needle)) return 6
+    if (name.includes(needle)) return 7
     return 0
   }
 
@@ -280,11 +320,14 @@ export function createIconoplasmPublicationReader(options = {}) {
     if (!needle) return { genes: [], query: "" }
     const allowed = symbols ? new Set(symbols.map(normalizedSymbol).filter(Boolean)) : null
     const size = Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12))
-    const stable = await stableCatalog()
+    const [stable, aliases] = await Promise.all([stableCatalog(), aliasIndex().catch(() => null)])
+    const compact = compactName(needle)
     const ranked = []
     for (const entry of stable.entries) {
       if (allowed && !allowed.has(entry.symbol)) continue
-      const rank = searchRank(needle, entry.symbol, entry.full_name)
+      // The catalogue keeps "C1orf112"; the alias file is keyed upper-case.
+      const geneAliases = aliases?.get(entry.symbol.toUpperCase())
+      const rank = searchRank(needle, compact, entry.symbol, entry.full_name, geneAliases)
       if (rank) ranked.push({ rank, entry })
     }
     ranked.sort(
