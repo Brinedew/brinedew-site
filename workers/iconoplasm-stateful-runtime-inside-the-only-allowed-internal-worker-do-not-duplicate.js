@@ -11840,7 +11840,7 @@ async function warmCatalogCache(env) {
     if (!s) continue
     bySymbol.set(s, g)
     const u = normalizeUniprot(g?.u)
-    if (u) symbolByUniprot.set(u, s)
+    if (u && !symbolByUniprot.has(u)) symbolByUniprot.set(u, s)
     for (const alias of normalizeCatalogAliases(g?.a || [])) {
       const key = normalizeCatalogAliasLookupKey(alias)
       if (!key || ambiguousAliases.has(key)) continue
@@ -19312,13 +19312,12 @@ async function loadCatalogRowsForPublish(env) {
     if (!fullName) throw new Error(`Catalog row ${symbol} is missing full_name`)
     if (seenSymbols.has(symbol)) throw new Error(`Duplicate catalog symbol ${symbol}`)
     seenSymbols.add(symbol)
-    if (uniprot) {
-      const sibling = seenUniprot.get(uniprot)
-      if (sibling && sibling !== symbol) {
-        throw new Error(`Duplicate catalog UniProt ${uniprot} for ${sibling} and ${symbol}`)
-      }
-      seenUniprot.set(uniprot, symbol)
-    }
+    // Duplicated genes make one identical protein, so they share an accession:
+    // HBA1 and HBA2, SMN1 and SMN2, BOLA2 and BOLA2B (63 pairs on 2026-10-17).
+    // Both are genes of their own and both get cards. Refusing them froze this
+    // release from 2026-07-30 to 2026-10-17 (B-1090); an accession lookup
+    // answers the first symbol alphabetically.
+    if (uniprot && !seenUniprot.has(uniprot)) seenUniprot.set(uniprot, symbol)
     const entry = { s: symbol, n: fullName, tmh }
     if (uniprot) entry.u = uniprot
     if (colorHex) entry.c = colorHex
