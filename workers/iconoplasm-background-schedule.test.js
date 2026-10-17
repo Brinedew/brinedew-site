@@ -93,15 +93,7 @@ test("background schedules retain bounded cadence and never repeat nightly work 
       )
       continue
     }
-    // The Discord invite's counts (B-1102) refresh every half hour.
-    const expectedGap =
-      job === "sharedDiscovery"
-        ? 60
-        : job === "caretakerSupervotes"
-          ? 12
-          : job === "discordInvite"
-            ? 30
-            : 15
+    const expectedGap = job === "sharedDiscovery" ? 60 : job === "caretakerSupervotes" ? 12 : 15
     minutes.forEach((minute, i) =>
       assert.equal(
         minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute,
