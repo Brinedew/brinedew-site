@@ -2036,12 +2036,13 @@ test("B-1001: the public Discord copy follows the author's own edit and delete, 
 })
 
 // 30. The request picker is read by every signed-in reader who opens it. Its answer is
-//     bounded (120 styles, five previews each: four for the card and a spare for when
-//     another card already shows one of its genes, B-896) and carries no artist identity
-//     (B-883, B-884); the artist stays in the rollup row and goes no further.
-test("30: the request picker lists at most 120 styles, five medium previews each, and never an artist", async () => {
+//     bounded (120 styles) and carries no artist identity (B-883, B-884); the artist
+//     stays in the rollup row and goes no further. Each card's pictures are its style's
+//     published portraits only, at most four, and its count is all of them (B-896,
+//     migration 0130): the rollup's candidate previews never reach a card.
+test("30: the request picker lists at most 120 styles, published portraits only, and never an artist", async () => {
   const db = new SqliteD1()
-  const previews = JSON.stringify(
+  const candidates = JSON.stringify(
     [1, 2, 3, 4, 5, 6].map((rank) => ({
       gene_symbol: `GENE${rank}`,
       asset_sha256: sha(String(rank)),
@@ -2049,6 +2050,7 @@ test("30: the request picker lists at most 120 styles, five medium previews each
       preview_rank: rank,
     })),
   )
+  const publishedIn = (n) => n % 7
   for (let n = 1; n <= 300; n += 1) {
     db.exec(
       `INSERT INTO icono_generation_request_vision_option_rollup (
@@ -2060,8 +2062,20 @@ test("30: the request picker lists at most 120 styles, five medium previews each
       `A1-93-${n}`,
       `0-${n}`,
       String(n),
-      previews,
+      candidates,
     )
+    for (let k = 0; k < publishedIn(n); k += 1) {
+      const symbol = `S${n}X${k}`
+      const asset = `${n.toString(16).padStart(4, "0")}${k}`.padEnd(64, "0")
+      db.exec(
+        `INSERT INTO icono_portrait_assets (gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, emulsion_id)
+         VALUES (?, ?, 'f', 'm', 't', ?)`,
+        symbol,
+        asset,
+        `0-${n}`,
+      )
+      seedPublished(db, symbol, asset)
+    }
   }
 
   const guest = await routeRequest(db, "GET", "/api/iconoplasm/requests/options", { user: {} })
@@ -2073,8 +2087,12 @@ test("30: the request picker lists at most 120 styles, five medium previews each
   assert.ok(options.length > 0 && options.length <= 120, `${options.length} styles in one answer`)
   assert.doesNotMatch(JSON.stringify(signedIn.payload), /secretartist|secret artist/i)
   for (const option of options) {
-    assert.equal(option.preview_assets.length, 5, "a style sends five of its six previews")
+    const n = Number(option.emulsion_family_id.split("-")[1])
+    assert.equal(option.canonical_count, publishedIn(n), `style ${n} counts its published`)
+    assert.equal(option.preview_assets.length, Math.min(4, publishedIn(n)), `style ${n}`)
     for (const preview of option.preview_assets) {
+      assert.match(preview.gene_symbol, new RegExp(`^S${n}X`), "only the style's published")
+      assert.equal(preview.is_current, true)
       assert.match(String(preview.medium_url || ""), /medium\.webp$/)
       assert.equal("thumb_url" in preview, false)
       assert.equal("preview_rank" in preview, false)
