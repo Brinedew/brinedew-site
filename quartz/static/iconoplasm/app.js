@@ -494,6 +494,50 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     tick()
   }
 
+  // B-1104: what a switch leaves on the old gene and what it undoes there. Each
+  // line answers one fear a switching caretaker has: their lore, their supervote,
+  // editing, the way back. The words are Echo's ("Wikipedia utility page" voice,
+  // 17 Oct 2026), each read for misreadings before it shipped.
+  function caretakerSwitchInventoryMarkup(switchFrom, symbol) {
+    var from = esc(switchFrom.canonical_symbol)
+    var to = esc(symbol)
+    var item = function (text) {
+      return "<li>" + text + "</li>"
+    }
+    return (
+      '<div class="icono-caretaker-switch-inventory">' +
+      '<section class="icono-caretaker-switch-inventory__kept">' +
+      "<h3>What stays the same on " +
+      from +
+      "</h3><ul>" +
+      item(
+        from + " keeps showing your lore unless a new caretaker of " + from + " saves their own.",
+      ) +
+      item("Every version of your lore stays in " + from + "'s lore history.") +
+      item("Your ordinary votes on " + from + " and other genes stay unchanged.") +
+      item("You can become " + from + "'s caretaker again later, if nobody else has taken it.") +
+      "</ul></section>" +
+      '<section class="icono-caretaker-switch-inventory__undone">' +
+      "<h3>What is undone on " +
+      from +
+      "</h3><ul>" +
+      (switchFrom.has_supervote
+        ? item(
+            "Your " +
+              from +
+              " supervote is withdrawn. " +
+              from +
+              "'s portrait is decided by ordinary votes. You gain a supervote on " +
+              to +
+              "'s portraits. It starts unused.",
+          )
+        : "") +
+      item("You can no longer edit " + from + "'s lore. You can now edit " + to + "'s lore.") +
+      "</ul></section>" +
+      "</div>"
+    )
+  }
+
   function hydrateCaretakerClaimAction(container, genePayload) {
     var target = container && container.querySelector("[data-icono-caretaker-claim-action]")
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
@@ -550,13 +594,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             body:
               '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
               (switchFrom
-                ? "<p>You will stop caring for " +
-                  esc(switchFrom.canonical_symbol) +
-                  " and start caring for " +
-                  esc(symbol) +
-                  ". What you wrote for " +
-                  esc(switchFrom.canonical_symbol) +
-                  " stays in its history.</p>" +
+                ? caretakerSwitchInventoryMarkup(switchFrom, symbol) +
                   '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
                   (switchFrom.terms_version_id === terms.terms_version_id ? " checked" : "") +
                   '>I accept the <a href="'
