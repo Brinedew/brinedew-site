@@ -366,6 +366,10 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       canonical_selection_id: "",
       canonical_revision_id: canonicalId,
       gene_revision: 0,
+      // B-1106: the switch acts on the text the gene uses now, the original
+      // one included, not only on the caretaker's own writing.
+      manifestation_id: current ? current.line_id || FACTORY_LINE_ID : null,
+      public_page_visible: current?.readers_see === true,
     },
     pinned_revisions: pinned,
     manifestations,
@@ -445,10 +449,6 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
   const db = rolesDb(env)
   const { gene, assignment } = await requireSteward(db, geneLocator, accountId)
   const commandId = readCommandId(body)
-  // B-1106: a caretaker can set "Show on the gene page" before writing a word;
-  // the first save of a new line carries that choice. Later saves keep the
-  // line's own flag.
-  const firstReadersSee = body?.visible === true ? 1 : 0
   let prose
   try {
     prose = normalizeManifestationProse(body.prose)
@@ -496,11 +496,14 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     assignment.caretaker_assignment_id,
   )
   const lineId = latest && !latest.withdrawn_at ? latest.line_id : newLineId()
+  // B-1106: a new line starts from what readers see now, so a gene page that
+  // shows its text keeps showing it after a new caretaker's first save.
+  const firstReadersSee = (await readGeneText(db, gene.canonical_symbol))?.readers_see ? 1 : 0
   const at = new Date().toISOString()
   const statements = [
     // Numbered within the line in the statement itself; UNIQUE (line_id, version)
     // makes two racing saves end with one winner. A new version keeps the line's
-    // readers-see flag; a new line starts from the caretaker's switch.
+    // readers-see flag.
     db
       .prepare(
         `INSERT INTO icono_caretaker_text_versions
@@ -615,6 +618,16 @@ export async function setCaretakerLineVisibility(env, { geneLocator, accountId, 
   const { gene } = await requireSteward(db, geneLocator, accountId)
   if (typeof body?.visible !== "boolean")
     throw authorityError("VISIBLE_REQUIRED", "visible must be true or false", 400)
+  // B-1106: a new caretaker's gene still uses the original text, and that is
+  // the text the switch shows or hides.
+  if (lineId === FACTORY_LINE_ID) {
+    await runWrite(db, [
+      db
+        .prepare(`UPDATE icono_gene_texts SET readers_see = ? WHERE gene_symbol = ?`)
+        .bind(body.visible ? 1 : 0, gene.canonical_symbol),
+    ])
+    return { ok: true, manifestation_id: lineId, gene }
+  }
   await requireLine(db, gene, lineId)
   await runWrite(db, [
     db

@@ -29,8 +29,8 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 //    stranger, or the lookup reads another gene's pool;
 // 11. History names a caretaker by their account, or two caretakers alike, or
 //    a removed account by its old name;
-// 12. (B-1106) a caretaker's "Show on the gene page" choice made before their
-//    first save is lost, or a later save overrides the line's own flag.
+// 12. (B-1106) a new caretaker cannot show the gene's original text, or their
+//    first save hides a text readers could see.
 
 const ORIGIN = "https://iconoplasm.test"
 const CARETAKER = "account_caretaker_0001"
@@ -108,27 +108,16 @@ async function harness(t, { accounts = null } = {}) {
   }
   const save = (
     prose,
-    { tags = "a tag", commandId = `cmd_${String(++commands).padStart(32, "0")}`, as, visible } = {},
+    { tags = "a tag", commandId = `cmd_${String(++commands).padStart(32, "0")}`, as } = {},
   ) =>
     tags
       ? call(
           "POST",
           "/saves",
-          {
-            prose,
-            tags_text: tags,
-            fields_json: { mood: ["warm"] },
-            command_id: commandId,
-            ...(visible === undefined ? {} : { visible }),
-          },
+          { prose, tags_text: tags, fields_json: { mood: ["warm"] }, command_id: commandId },
           { as },
         )
-      : call(
-          "POST",
-          "/revisions",
-          { prose, command_id: commandId, ...(visible === undefined ? {} : { visible }) },
-          { as },
-        )
+      : call("POST", "/revisions", { prose, command_id: commandId }, { as })
   const versions = () =>
     db.raw
       .prepare(
@@ -282,16 +271,22 @@ test("7: the card is rebuilt only when what readers see changes", async (t) => {
   )
 })
 
-test("12: the first save carries the switch; later saves keep the line's flag", async (t) => {
+test("12: the switch shows the original text; a new caretaker's first save keeps it shown", async (t) => {
   const h = await harness(t)
-  await h.save("Shown from the start.", { visible: true })
+  const shown = await h.call("POST", "/manifestations/factory/page-visibility", {
+    visible: true,
+    command_id: "cmd_visible_00000000000000000000012",
+  })
+  assert.equal(shown.status, 200)
   assert.deepEqual(h.published, ["MFNG"])
-  assert.equal((await readGeneText(h.db, "MFNG")).readers_see, true)
-  await h.save("Still shown.", { visible: false })
-  assert.deepEqual(
-    h.versions().map((row) => row.readers_see),
-    [1, 1],
-  )
+  let text = await readGeneText(h.db, "MFNG")
+  assert.equal(text.origin, "factory")
+  assert.equal(text.readers_see, true)
+  await h.save("A caretaker's MFNG.")
+  text = await readGeneText(h.db, "MFNG")
+  assert.equal(text.origin, "caretaker")
+  assert.equal(text.readers_see, true)
+  assert.deepEqual(h.published, ["MFNG", "MFNG"])
 })
 
 test("8: the panel keeps the chosen and factory texts beyond History's first page, and Tags stay per gene", async (t) => {

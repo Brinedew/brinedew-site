@@ -3,7 +3,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=95f3b13b8485b8ac"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=e386b428ba061189"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -15,12 +15,12 @@ import {
   ownManifestation,
   proseValidationError,
   revisionById,
-} from "./caretaker-manifestations-model.js?v=7758512d8b57272b"
+} from "./caretaker-manifestations-model.js?v=de638e47ba183354"
 import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import {
   renderCaretakerManifestationPanel,
   suggestionReviewMarkup,
-} from "./caretaker-manifestations-view.js?v=e3a671e69c72ef2f"
+} from "./caretaker-manifestations-view.js?v=2d3f41205f4df342"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -123,7 +123,6 @@ export function createCaretakerManifestationPanel({
     const markup = renderCaretakerManifestationPanel(state.dossier, escapeHtml, {
       selectedRevisionId: state.selectedRevisionId,
       expandedSessions: state.expandedSessions,
-      pendingVisible: state.pendingVisible === true,
     })
     if (existingForm) {
       const next = state.host.ownerDocument.createElement("div")
@@ -605,7 +604,6 @@ export function createCaretakerManifestationPanel({
         expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
         expected_manifestation_version: Number(own?.row_version || 0),
         based_on_revision_id: state.basedOnRevisionId || null,
-        ...(own ? {} : { visible: state.pendingVisible === true }),
       }
       if (snapshot.tags.trim()) {
         // B-859 step 3: prose, Tags and "draw new images from this" in one command.

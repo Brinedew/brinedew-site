@@ -118,6 +118,8 @@ export function normalizedDossier(payload, symbol) {
       canonical_selection_id: String(head.canonical_selection_id || ""),
       canonical_revision_id: String(head.canonical_revision_id || ""),
       gene_revision: Math.max(0, Number(head.gene_revision || 0) || 0),
+      manifestation_id: String(head.manifestation_id || ""),
+      public_page_visible: head.public_page_visible === true,
     },
     manifestations,
     // B-724: which saved version made each candidate image (bound images only).
