@@ -20,9 +20,6 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   // B-896: the style picker's first page on the CDN. Free minutes again, so the
   // gaps are uneven; the page is never more than 20 minutes behind.
   requestPicker: Object.freeze([9, 21, 36, 49]),
-  // B-1102: the gene page's Discord invite counts and icon on the CDN, twice an
-  // hour; nobody needs a member count fresher than that.
-  discordInvite: Object.freeze([7, 37]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({
