@@ -410,6 +410,16 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
    Quartz's tablet grid (800-1200px), which is two columns and was leaving the
    gene browser at the default 320px sidebar + auto column. */
 @media (min-width: 1024px) {
+  /* Iconoplasm pulls its main column up to the top of the window, so both
+     sidebars start on that same line instead of the blog's 6rem (owner,
+     2026-10-17: "everything is misaligned"). */
+  body[data-slug^="apps/iconoplasm"] #quartz-body > .sidebar {
+    padding-top: var(--icono-space-2);
+  }
+  /* The back link and the Account label centre on the logo row's line. */
+  body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
+    padding-top: var(--icono-space-3);
+  }
   body[data-slug^="apps/iconoplasm"] #quartz-body {
     grid-template-columns: 240px minmax(0, 1fr) minmax(220px, 250px) !important;
     grid-template-rows: auto auto auto !important;
@@ -422,7 +432,7 @@ body[data-slug^="apps/iconoplasm"] .center > article.iconoplasm-page {
     width: auto;
     height: auto;
     flex-direction: column;
-    padding: 4rem 2rem 2rem;
+    padding: 1.25rem 2rem 2rem;
   }
 }
 /* B-457: on phones the Quartz mobile grid's `auto` track was sizing to the
@@ -797,7 +807,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   flex-wrap: nowrap;
   align-items: center;
   gap: var(--icono-space-2);
-  padding: var(--icono-space-2) var(--icono-space-2) var(--icono-space-2) var(--icono-space-4);
+  /* The same 8 px at both ends: the row starts with a bare icon now, not text. */
+  padding: var(--icono-space-2);
   border: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
   border-top: 0;
   border-radius: 0;
@@ -817,35 +828,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   align-items: center;
   gap: var(--icono-space-2);
   min-width: 0;
-}
-
-.icono-canonical-toolbar-pair {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--icono-space-1);
-  min-width: 0;
-  white-space: nowrap;
-  font: 400 var(--icono-action-font-size) / 1 var(--icono-action-font);
-}
-
-.icono-canonical-toolbar-pair span {
-  color: var(--secondary, var(--darkgray));
-}
-
-.icono-canonical-toolbar-pair span::after {
-  content: ":";
-}
-
-.icono-canonical-toolbar-pair strong {
-  color: var(--dark);
-  font-weight: 500;
-}
-
-.icono-toolbar-divider {
-  flex: none;
-  width: 1px;
-  height: 1.5rem;
-  background: color-mix(in srgb, var(--dark) 18%, transparent);
 }
 
 .icono-canonical-toolbar-actions {
@@ -888,14 +870,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 /* Collapsed (set by fitCanonicalToolbar in app.js when the row does not fit):
-   the More menu holds the rarer actions. Tight (the row still does not fit, or
-   there was nothing to fold): the published id goes, as it does on a very
-   narrow card, because the card above already prints it. An id cut to "A…"
-   says nothing. */
-.icono-gene-toolbar-rail.is-tight .icono-canonical-toolbar-pair {
-  display: none;
-}
-
+   the More menu holds the rarer actions. */
 .icono-gene-toolbar-rail.is-collapsed .icono-toolbar-more {
   display: inline-flex;
 }
@@ -933,13 +908,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-gene-toolbar-rail .icono-canonical-toolbar-meta,
 .icono-gene-toolbar-rail .icono-canonical-toolbar-actions > * {
   flex-shrink: 0;
-}
-
-/* Very narrow: the published id is already printed on the card above. */
-@container (max-width: 22rem) {
-  .icono-canonical-toolbar-meta .icono-canonical-toolbar-pair {
-    display: none;
-  }
 }
 
 /* Open menu: a small list of labelled rows under the ... button. Without anchor
@@ -5847,17 +5815,17 @@ a.icono-clan-ae:hover {
 
 .icono-candidate-strip-progress {
   height: 2px;
-  margin-top: 0.55rem;
+  margin-top: var(--icono-space-2);
   overflow: hidden;
-  background: color-mix(in srgb, var(--ui-border) 70%, transparent);
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
 }
 
 .icono-candidate-strip-progress > span {
   display: block;
+  width: max(1.5rem, var(--strip-thumb, 0%));
   height: 100%;
-  background: color-mix(in srgb, var(--darkgray) 80%, transparent);
-  transform: scaleX(0);
-  transform-origin: left center;
+  margin-left: calc(var(--strip-progress, 0) * (100% - max(1.5rem, var(--strip-thumb, 0%))));
+  background: color-mix(in srgb, var(--darkgray) 70%, transparent);
 }
 
 .icono-candidate-strip:not(.is-strip-ready) .icono-candidate-strip-progress,
@@ -6097,7 +6065,7 @@ a.icono-clan-ae:hover {
   gap: 0.7rem;
   padding: 1rem;
   border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-lg);
+  border-radius: 0;
   background: color-mix(in srgb, var(--ui-bg) 80%, var(--light));
 }
 
@@ -6529,4 +6497,170 @@ h2.icono-section-label {
 .icono-candidate-menu .icono-candidate-copy-popover .icono-request-inline-submit svg {
   width: var(--icono-icon-size);
   height: var(--icono-icon-size);
+}
+
+/* ───────── Gene page: icons are bare, words are buttons ─────────
+   Owner, 2026-10-17: the page looked "made like a kindergarten student". Every
+   control was already 40 px, but icons came in two treatments: framed (the vote
+   box, the strip arrows, the count boxes) and bare (star, print, ⋯). Reddit's
+   post row puts every action in one shape, and the App Store's strip arrows are
+   bare. Here an icon is always a bare glyph that tints on hover, and only a word
+   (New candidate, Comment, Join) gets a filled button. */
+
+/* The tile vote: ⇧ score ⇩ as bare glyphs, the way Reddit and Stack Overflow vote. */
+.icono-candidate-footer .icono-vote-box--arrows {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  /* The score sits in the glyphs' own padding, so the footer still fits an
+     11rem grid tile (Candidates tab). */
+  grid-template-columns: repeat(2, var(--icono-control-size));
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn {
+  width: var(--icono-control-size);
+  border-radius: var(--icono-control-radius);
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn svg {
+  width: var(--icono-icon-size);
+  height: var(--icono-icon-size);
+}
+
+.icono-candidate-footer
+  .icono-vote-box--arrows
+  .icono-vote-btn:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+  color: var(--dark);
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn.active {
+  background: transparent;
+  box-shadow: none;
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn--approve.active {
+  color: var(--accent);
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn--reject.active {
+  color: var(--dark);
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-btn.active svg path {
+  fill: currentColor;
+}
+
+.icono-candidate-footer .icono-vote-box--arrows .icono-vote-score {
+  color: var(--darkgray);
+  font: 500 0.75rem / 1 var(--icono-action-font);
+  letter-spacing: 0;
+}
+
+/* The strip's arrows wear the same bare treatment as every other icon. */
+.icono-candidate-strip-nav .icono-button--icon {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
+}
+
+.icono-candidate-strip-nav .icono-button--icon:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+  color: var(--dark);
+}
+
+.icono-candidate-strip-nav .icono-button--icon:disabled {
+  border-color: transparent;
+  opacity: 0.35;
+}
+
+/* Counts are a quiet tinted number, as GitHub's tab counters are, not a box. */
+.icono-section-count {
+  border: 0;
+  border-radius: 999px;
+  min-width: 1.75rem;
+  height: 1.375rem;
+  padding: 0 0.45rem;
+  background: color-mix(in srgb, var(--dark) 10%, transparent);
+  color: var(--darkgray);
+}
+
+/* "See all" and "Read more" read as links, in sentence case like the App Store's. */
+.icono-gene-more {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The comment box rests at the 40 px control height beside its button and grows
+   with what is typed, like Slack's composer. No drag handle. */
+.icono-suggest-form {
+  align-items: flex-end;
+}
+
+.icono-suggest-form .icono-suggest-input {
+  min-height: var(--icono-control-size);
+  height: var(--icono-control-size);
+  max-height: 12rem;
+  padding: 0.5625rem 0.75rem;
+  line-height: 1.4;
+  resize: none;
+  field-sizing: content;
+}
+
+@supports (field-sizing: content) {
+  .icono-suggest-form .icono-suggest-input {
+    height: auto;
+  }
+}
+
+/* On a phone the hint would wrap and grow the empty box past its button. */
+.icono-suggest-form .icono-suggest-input::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The account sidebar is shared with the blog, where it reads in Crimson Pro
+   with rounded pills. Beside Iconoplasm's square IBM Plex Mono controls that
+   was a second design language on one screen, so here it takes the page's. */
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-stack {
+  margin-top: 0;
+  font-family: var(--icono-action-font);
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-user-name,
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-panel-title {
+  font-family: var(--icono-action-font);
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-user-name {
+  font-size: var(--icono-action-font-size);
+  font-weight: 500;
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-panel-title {
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-btn {
+  min-height: var(--icono-control-size);
+  padding: 0 var(--icono-space-3);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--icono-control-radius);
+  background: transparent;
+  font: 500 var(--icono-action-font-size) / 1 var(--icono-action-font);
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-btn:hover {
+  border-color: color-mix(in srgb, var(--ui-border) 50%, var(--dark) 50%);
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+}
+
+body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
+  font: 400 var(--icono-action-font-size) / 1 var(--icono-action-font);
 }

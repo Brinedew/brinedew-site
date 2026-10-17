@@ -208,7 +208,7 @@ function installStrip(section) {
     state.api = null
     api.destroy()
     section.classList.remove("is-strip-ready")
-    if (progress) progress.style.transform = ""
+    if (progress) progress.removeAttribute("style")
   }
 
   state.refresh = function () {
@@ -254,10 +254,17 @@ function installStrip(section) {
       developImages(track)
     }
 
+    // A scrollbar thumb, as wide as the share of the strip in view: a full-width
+    // fill read as one more rule across the page.
     function syncProgress() {
       if (!progress) return
       var value = Math.max(0, Math.min(1, api.scrollProgress()))
-      progress.style.transform = "scaleX(" + value + ")"
+      var slides = api.slideNodes()
+      var last = slides[slides.length - 1]
+      var length = last ? last.offsetLeft + last.offsetWidth - slides[0].offsetLeft : 0
+      var shown = length > 0 ? api.rootNode().clientWidth / length : 1
+      progress.style.setProperty("--strip-progress", String(value))
+      progress.style.setProperty("--strip-thumb", Math.min(100, shown * 100).toFixed(2) + "%")
     }
 
     api.on("select", sync)
@@ -265,6 +272,7 @@ function installStrip(section) {
     api.on("reInit", sync)
     api.on("reInit", syncProgress)
     api.on("scroll", syncProgress)
+    api.on("resize", syncProgress)
     sync()
     syncProgress()
   }

@@ -268,10 +268,13 @@ test("candidate strip: TP53's 71 candidates stay one strip that keys, wheel and 
       // 6: a vertical wheel over the strip scrolls the page.
       await page.evaluate(() => {
         const viewport = document.querySelector("[data-icono-strip-viewport]")
-        // Instant: the site scrolls smoothly, and a scroll still in flight
-        // would pass for the wheel's.
+        // The strip is the Overview's last part, so the page may end before
+        // the strip can reach the top: stop 200 px short of the end, or the
+        // wheel has nothing left to scroll. Instant: the site scrolls
+        // smoothly, and a scroll still in flight would pass for the wheel's.
+        const end = document.documentElement.scrollHeight - window.innerHeight
         window.scrollTo({
-          top: viewport.getBoundingClientRect().top + window.scrollY - 80,
+          top: Math.min(viewport.getBoundingClientRect().top + window.scrollY - 80, end - 200),
           behavior: "instant",
         })
       })
