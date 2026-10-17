@@ -496,8 +496,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   // B-1104: what a switch leaves on the old gene and what it undoes there. Each
   // line answers one fear a switching caretaker has: their lore, their supervote,
-  // editing, the way back. The words are Echo's ("Wikipedia utility page" voice,
-  // 17 Oct 2026), each read for misreadings before it shipped.
+  // editing, the way back. The words began as Echo's ("Wikipedia utility page"
+  // voice, 17 Oct 2026), were read for misreadings, then merged and trimmed so the
+  // dialog fits a 375 x 548 phone screen without a scroll bar.
   function caretakerSwitchInventoryMarkup(switchFrom, symbol) {
     var from = esc(switchFrom.canonical_symbol)
     var to = esc(symbol)
@@ -511,10 +512,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       from +
       "</h3><ul>" +
       item(
-        from + " keeps showing your lore unless a new caretaker of " + from + " saves their own.",
+        from +
+          " keeps showing your lore unless a new caretaker of " +
+          from +
+          " saves their own. Every version stays in " +
+          from +
+          "'s lore history.",
       ) +
-      item("Every version of your lore stays in " + from + "'s lore history.") +
-      item("Your ordinary votes on " + from + " and other genes stay unchanged.") +
       item("You can become " + from + "'s caretaker again later, if nobody else has taken it.") +
       "</ul></section>" +
       '<section class="icono-caretaker-switch-inventory__undone">' +
@@ -525,11 +529,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         ? item(
             "Your " +
               from +
-              " supervote is withdrawn. " +
+              " supervote is withdrawn, so ordinary votes decide " +
               from +
-              "'s portrait is decided by ordinary votes. You gain a supervote on " +
+              "'s portrait. You gain a supervote on " +
               to +
-              "'s portraits. It starts unused.",
+              "'s portraits.",
           )
         : "") +
       item("You can no longer edit " + from + "'s lore. You can now edit " + to + "'s lore.") +
@@ -579,6 +583,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var switchFrom = claim.mode === "switch" ? claim.switch_from : null
         var actionLabel = switchFrom ? "Switch to " + symbol : "Become a " + symbol + " caretaker"
         var dialogId = "icono-caretaker-claim-dialog-" + symbol
+        // A switching caretaker who already accepted these terms sees the box ticked.
+        var termsAccepted = Boolean(
+          switchFrom && switchFrom.terms_version_id === terms.terms_version_id,
+        )
+        var termsMarkup =
+          '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
+          (termsAccepted ? " checked" : "") +
+          '>I accept the <a href="' +
+          esc(terms.document_url) +
+          '" target="_blank" rel="noopener">' +
+          esc(terms.display_label || "caretaker terms") +
+          "</a>.</sl-checkbox>"
         target.innerHTML =
           '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
           esc(dialogId) +
@@ -594,22 +610,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             body:
               '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
               (switchFrom
-                ? caretakerSwitchInventoryMarkup(switchFrom, symbol) +
-                  '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
-                  (switchFrom.terms_version_id === terms.terms_version_id ? " checked" : "") +
-                  '>I accept the <a href="'
-                : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div><sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms>I accept the <a href="') +
-              esc(terms.document_url) +
-              '" target="_blank" rel="noopener">' +
-              esc(terms.display_label || "caretaker terms") +
-              "</a>.</sl-checkbox>" +
+                ? caretakerSwitchInventoryMarkup(switchFrom, symbol)
+                : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div>') +
+              termsMarkup +
               '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
               "</form>",
             footer:
               '<button type="button" class="icono-button" data-icono-caretaker-claim-cancel>Cancel</button><button type="button" class="icono-button icono-button--primary" data-icono-caretaker-claim-submit' +
-              (switchFrom && switchFrom.terms_version_id === terms.terms_version_id
-                ? ""
-                : " disabled") +
+              (termsAccepted ? "" : " disabled") +
               ">" +
               esc(actionLabel) +
               "</button>",
@@ -630,23 +638,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             var menu = target.closest("[popover]")
             if (menu && menu.matches(":popover-open")) menu.hidePopover()
             openDialog(dialog)
-            if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
+            syncClaimSubmitState()
           })
         scope
           .querySelector("[data-icono-caretaker-claim-cancel]")
           ?.addEventListener("click", function () {
             closeDialog(dialog)
           })
+        // Until sl-checkbox is defined its checked property is unset, so the attribute
+        // speaks for it; a dialog opened that early once showed a ticked box beside a
+        // dead button (B-1104).
+        function termsChecked() {
+          if (!termsCheckbox) return false
+          return typeof termsCheckbox.checked === "boolean"
+            ? termsCheckbox.checked
+            : termsCheckbox.hasAttribute("checked")
+        }
         // The vendored sl-checkbox emits only sl-change; listen for both so a
         // native change event can never be the reason the button stays dead.
         function syncClaimSubmitState() {
-          if (termsCheckbox && submit) submit.disabled = !termsCheckbox.checked
+          if (termsCheckbox && submit) submit.disabled = !termsChecked()
         }
         ;["change", "sl-change"].forEach(function (eventName) {
           termsCheckbox?.addEventListener(eventName, syncClaimSubmitState)
         })
+        customElements.whenDefined("sl-checkbox").then(syncClaimSubmitState)
         submit?.addEventListener("click", function () {
-          if (!termsCheckbox?.checked || submit.disabled) return
+          if (!termsChecked() || submit.disabled) return
           submit.disabled = true
           status.hidden = false
           status.textContent = switchFrom ? "Switching caretaker gene…" : "Claiming caretaking…"
@@ -687,7 +705,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               status.hidden = false
               status.dataset.tone = "error"
               status.textContent = String(error?.message || "Caretaking could not be claimed.")
-              submit.disabled = switchFrom ? false : !termsCheckbox?.checked
+              submit.disabled = switchFrom ? false : !termsChecked()
             })
         })
       })
