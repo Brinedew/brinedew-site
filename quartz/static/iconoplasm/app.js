@@ -494,10 +494,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     tick()
   }
 
-  // B-1104: the switch dialog answers what a caretaker fears losing: their
-  // writing, their supervote, editing, and the way back. The words are Echo's
-  // (persona E. B. White, 17 Oct 2026, prompted with those four worries), chosen,
-  // never added to; the owner asked that no copy be written by hand.
+  // B-1104: what a switch leaves on the old gene and what it undoes there. Each
+  // line answers one fear a switching caretaker has: their lore, their supervote,
+  // editing, the way back. The words are Echo's ("Wikipedia utility page" voice,
+  // 17 Oct 2026), each read for misreadings before it shipped.
   function caretakerSwitchInventoryMarkup(switchFrom, symbol) {
     var from = esc(switchFrom.canonical_symbol)
     var to = esc(symbol)
@@ -507,14 +507,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<div class="icono-caretaker-switch-inventory">' +
       '<section class="icono-caretaker-switch-inventory__kept">' +
-      "<h3>What is not lost</h3><ul>" +
-      item("Nothing you wrote is deleted, and every version remains in its history") +
-      item("You may return to " + from + " later if it is still unclaimed") +
+      "<h3>What stays the same on " +
+      from +
+      "</h3><ul>" +
+      item(
+        from + " keeps showing your lore unless a new caretaker of " + from + " saves their own.",
+      ) +
+      item("Every version of your lore stays in " + from + "'s lore history.") +
+      item("Your ordinary votes on " + from + " and other genes stay unchanged.") +
+      item("You can become " + from + "'s caretaker again later, if nobody else has taken it.") +
       "</ul></section>" +
-      '<section class="icono-caretaker-switch-inventory__moved">' +
-      "<h3>What changes</h3><ul>" +
-      item("Your supervote moves from " + from + " to " + to) +
-      item("Your editing moves from " + from + " to " + to + ", nothing more") +
+      '<section class="icono-caretaker-switch-inventory__undone">' +
+      "<h3>What is undone on " +
+      from +
+      "</h3><ul>" +
+      (switchFrom.has_supervote
+        ? item(
+            "Your " +
+              from +
+              " supervote is withdrawn. " +
+              from +
+              "'s portrait is decided by ordinary votes. You gain a supervote on " +
+              to +
+              "'s portraits. It starts unused.",
+          )
+        : "") +
+      item("You can no longer edit " + from + "'s lore. You can now edit " + to + "'s lore.") +
       "</ul></section>" +
       "</div>"
     )
