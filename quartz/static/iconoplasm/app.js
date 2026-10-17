@@ -9023,8 +9023,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return galleryState.sharedDiscoveries ? "shared" : "catalog"
     }
 
+    // Guests only: their whole collection lives in this browser. A signed-in
+    // reader's collection is paged, so the page holds one window of it; the
+    // search answer says per gene whether they discovered it (B-1094).
     function discoveredSearchSymbols() {
-      if (useClassicGallery || galleryState.sharedDiscoveries) return null
+      if (useClassicGallery || galleryState.sharedDiscoveries || galleryState.authenticated)
+        return null
       var symbols = new Set()
       var entries = galleryState.authenticated
         ? galleryState.discoveryEntries
@@ -9132,7 +9136,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html = ""
     for (var i = 0; i < genes.length; i++) {
       var g = genes[i]
-      var undiscovered = !!discovered && !discovered.has(normalizedSymbol(g.symbol))
+      var undiscovered =
+        typeof g.discovered === "boolean"
+          ? !g.discovered
+          : !!discovered && !discovered.has(normalizedSymbol(g.symbol))
       var portraitUrl = undiscovered
         ? ""
         : publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")

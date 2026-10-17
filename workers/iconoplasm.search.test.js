@@ -944,6 +944,48 @@ test("signed-in discovery search uses virtual starters without mutating an empty
   assert.equal(hiddenResponse.headers.get("Cache-Control"), "no-store")
 })
 
+// B-1094: the page holds one window of a signed-in reader's collection, so
+// catalog search marks each result discovered or not for them. Ways this can
+// fail: a discovered gene comes back false (the bug: INS shown "Undiscovered"
+// to its discoverer); a guest's cached answer carries someone's flags; a
+// signed-in answer is cached as public.
+test("catalog search tells a signed-in reader which results they discovered, and a guest nothing", async () => {
+  const env = buildEnv()
+  env.gatewayDb.seedDiscovery("user-123", "TP53")
+
+  const search = async (q, cookie = "") => {
+    const response = await viaStatefulWorker(
+      buildRequest(`/api/public/v1/genes/search?q=${q}&scope=catalog&limit=10`, { cookie }),
+      env,
+      {},
+    )
+    return { response, payload: await response.json() }
+  }
+
+  const mine = await search("tp53", ALEX)
+  assert.equal(mine.response.status, 200)
+  assert.deepEqual(
+    mine.payload.genes.map((gene) => [gene.symbol, gene.discovered]),
+    [["TP53", true]],
+  )
+  assert.equal(mine.response.headers.get("Cache-Control"), "no-store")
+
+  const notMine = await search("rho", ALEX)
+  assert.deepEqual(
+    notMine.payload.genes.map((gene) => [gene.symbol, gene.discovered]),
+    [["RHO", false]],
+  )
+
+  const guest = await search("tp53")
+  assert.equal(guest.response.status, 200)
+  assert.deepEqual(
+    guest.payload.genes.map((gene) => gene.symbol),
+    ["TP53"],
+  )
+  assert.equal("discovered" in guest.payload.genes[0], false)
+  assert.equal(guest.response.headers.get("Cache-Control"), "public, max-age=30")
+})
+
 test("shared discovery search is public and reads the shared symbol cache", async () => {
   const env = buildEnv({
     kvEntries: {
