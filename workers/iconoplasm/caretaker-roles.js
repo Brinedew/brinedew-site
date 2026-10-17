@@ -209,8 +209,6 @@ export async function readClaimAvailability(
           // The switch dialog pre-checks its terms box only when this role already
           // accepted the version on offer.
           terms_version_id: accountRole.terms_version_id,
-          // B-1104: the dialog lists the supervote among what ends only when there is one.
-          has_supervote: Boolean(accountRole.supervote_asset_sha256),
         }
       : null
   let reason = null

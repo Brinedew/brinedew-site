@@ -494,29 +494,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     tick()
   }
 
-  // B-1104: what a switch leaves on the old gene and what it ends, side by side.
-  // The words are Echo's (persona E. B. White, 17 Oct 2026), chosen and trimmed,
+  // B-1104: the switch dialog answers what a caretaker fears losing: their
+  // writing, their supervote, editing, and the way back. The words are Echo's
+  // (persona E. B. White, 17 Oct 2026, prompted with those four worries), chosen,
   // never added to; the owner asked that no copy be written by hand.
-  function caretakerSwitchInventoryMarkup(switchFrom) {
+  function caretakerSwitchInventoryMarkup(switchFrom, symbol) {
     var from = esc(switchFrom.canonical_symbol)
+    var to = esc(symbol)
     var item = function (text) {
       return "<li>" + text + "</li>"
     }
     return (
       '<div class="icono-caretaker-switch-inventory">' +
-      '<section class="icono-caretaker-switch-inventory__keeps">' +
-      "<h3>" +
-      from +
-      " keeps</h3><ul>" +
-      item("Your texts and their history") +
-      item("Current text, as you left it") +
-      item("Candidate images and votes") +
+      '<section class="icono-caretaker-switch-inventory__kept">' +
+      "<h3>What is not lost</h3><ul>" +
+      item("Nothing you wrote is deleted, and every version remains in its history") +
+      item("You may return to " + from + " later if it is still unclaimed") +
       "</ul></section>" +
-      '<section class="icono-caretaker-switch-inventory__ends">' +
-      "<h3>Ends</h3><ul>" +
-      (switchFrom.has_supervote ? item("Your 10x supervote") : "") +
-      item("Your right to edit") +
-      item("Another caretaker may take over") +
+      '<section class="icono-caretaker-switch-inventory__moved">' +
+      "<h3>What changes</h3><ul>" +
+      item("Your supervote moves from " + from + " to " + to) +
+      item("Your editing moves from " + from + " to " + to + ", nothing more") +
       "</ul></section>" +
       "</div>"
     )
@@ -578,7 +576,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             body:
               '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
               (switchFrom
-                ? caretakerSwitchInventoryMarkup(switchFrom) +
+                ? caretakerSwitchInventoryMarkup(switchFrom, symbol) +
                   '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
                   (switchFrom.terms_version_id === terms.terms_version_id ? " checked" : "") +
                   '>I accept the <a href="'

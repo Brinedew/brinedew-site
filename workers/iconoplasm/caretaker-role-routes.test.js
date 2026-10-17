@@ -171,7 +171,6 @@ test("1, 2, 3, 6: one caretaker per gene and per person, a retry claims once, a 
   const later = await h.call("GET", "WEE1/claim")
   assert.equal(later.body.claim.mode, "switch")
   assert.equal(later.body.claim.switch_from.canonical_symbol, "MFNG")
-  assert.equal(later.body.claim.switch_from.has_supervote, false)
   // The switch dialog pre-checks its terms box from this.
   assert.equal(
     later.body.claim.switch_from.terms_version_id,
@@ -202,8 +201,6 @@ test("4: leaving with a supervote takes it out of the election once", async (t) 
         SET supervote_asset_sha256 = '${"a".repeat(64)}', supervote_direction = 1,
             supervote_version = 1`,
   )
-  // B-1104: the switch dialog lists the supervote among what ends.
-  assert.equal((await h.call("GET", "WEE1/claim")).body.claim.switch_from.has_supervote, true)
   const path = `MFNG/assignments/${claimed.body.caretaker_assignment_id}/end`
   const left = await h.call("POST", path, { expected_assignment_version: 1 })
   assert.equal(left.status, 200, JSON.stringify(left.body))

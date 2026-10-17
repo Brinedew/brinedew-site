@@ -8,9 +8,9 @@
 // 2. The box is pre-checked for terms the account never accepted (a newer version).
 // 3. Unchecking the box leaves "Switch to TP53" live, or clicking it still posts.
 // 4. The box starts unchecked for terms the account already accepted.
-// B-1104: the dialog lists what the old gene keeps and what the switch ends.
-// 5. The supervote row is missing for a caretaker who holds one.
-// 6. The supervote row appears for a caretaker who never cast one.
+// B-1104: the dialog answers what a caretaker fears losing by switching.
+// 5. A column is missing, or names the wrong gene (the old one where the new
+//    one belongs).
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import test from "node:test"
@@ -23,7 +23,7 @@ const TERMS = {
   display_label: "Caretaker terms - 25 September 2026 (v4)",
 }
 
-function claimFor(acceptedVersion, hasSupervote) {
+function claimFor(acceptedVersion) {
   return {
     enabled: true,
     gene: { gene_id: "HGNC:11998", canonical_symbol: "TP53" },
@@ -37,7 +37,6 @@ function claimFor(acceptedVersion, hasSupervote) {
         assignment_version: 1,
         gene_revision: 0,
         terms_version_id: acceptedVersion,
-        has_supervote: hasSupervote,
       },
       gene_revision: 0,
       entitlement_policy_version: "caretaker_entitlement_v1",
@@ -56,7 +55,7 @@ const CARETAKER = {
   },
 }
 
-async function openSwitchDialog(browser, origin, acceptedVersion, hasSupervote) {
+async function openSwitchDialog(browser, origin, acceptedVersion) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
   const claims = []
   await routeProduction(context, origin, (pathname, request) => {
@@ -66,7 +65,7 @@ async function openSwitchDialog(browser, origin, acceptedVersion, hasSupervote) 
         claims.push(request.postDataJSON())
         return { ok: false, code: "TEST_STOP" }
       }
-      return claimFor(acceptedVersion, hasSupervote)
+      return claimFor(acceptedVersion)
     }
     return undefined
   })
@@ -91,11 +90,8 @@ function readDialog(dialog) {
         li.textContent.trim(),
       )
     return {
-      keepsHeading: node
-        .querySelector(".icono-caretaker-switch-inventory__keeps h3")
-        ?.textContent.trim(),
-      keeps: column("keeps"),
-      ends: column("ends"),
+      kept: column("kept"),
+      moved: column("moved"),
       hasBox: !!box,
       checked: !!box?.checked,
       submitDisabled: !!node.querySelector("[data-icono-caretaker-claim-submit]")?.disabled,
@@ -108,26 +104,27 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
   if (!browser) return
   const { server, origin } = await startSite()
   try {
-    const keeps = [
-      "Your texts and their history",
-      "Current text, as you left it",
-      "Candidate images and votes",
-    ]
-    // 1, 3, 4 and 5: the account accepted v4, which is on offer, and holds a supervote.
-    const accepted = await openSwitchDialog(browser, origin, TERMS.terms_version_id, true)
+    const inventory = {
+      kept: [
+        "Nothing you wrote is deleted, and every version remains in its history",
+        "You may return to MFNG later if it is still unclaimed",
+      ],
+      moved: [
+        "Your supervote moves from MFNG to TP53",
+        "Your editing moves from MFNG to TP53, nothing more",
+      ],
+    }
+    // 1, 3, 4 and 5: the account accepted v4, which is on offer.
+    const accepted = await openSwitchDialog(browser, origin, TERMS.terms_version_id)
     assert.deepEqual(await readDialog(accepted.dialog), {
-      keepsHeading: "MFNG keeps",
-      keeps,
-      ends: ["Your 10x supervote", "Your right to edit", "Another caretaker may take over"],
+      ...inventory,
       hasBox: true,
       checked: true,
       submitDisabled: false,
     })
     await termsBox(accepted.dialog).click()
     assert.deepEqual(await readDialog(accepted.dialog), {
-      keepsHeading: "MFNG keeps",
-      keeps,
-      ends: ["Your 10x supervote", "Your right to edit", "Another caretaker may take over"],
+      ...inventory,
       hasBox: true,
       checked: false,
       submitDisabled: true,
@@ -140,13 +137,10 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
     assert.equal(accepted.claims.length, 0, "an unchecked box still posted a switch")
     await accepted.context.close()
 
-    // 2 and 6: the account accepted an older version, so the box starts unchecked,
-    // and it holds no supervote, so none is listed.
-    const older = await openSwitchDialog(browser, origin, "terms_2026_09_02_v3", false)
+    // 2: the account accepted an older version, so the box starts unchecked.
+    const older = await openSwitchDialog(browser, origin, "terms_2026_09_02_v3")
     assert.deepEqual(await readDialog(older.dialog), {
-      keepsHeading: "MFNG keeps",
-      keeps,
-      ends: ["Your right to edit", "Another caretaker may take over"],
+      ...inventory,
       hasBox: true,
       checked: false,
       submitDisabled: true,

@@ -1055,7 +1055,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   color: var(--secondary);
 }
 
-/* B-1104: what a switch leaves on the old gene, and what it ends. */
+/* B-1104: what a switch keeps safe, and what moves to the new gene. */
 .icono-caretaker-switch-inventory {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
@@ -1083,13 +1083,13 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   line-height: 1.45;
 }
 
-.icono-caretaker-switch-inventory__keeps li::marker {
+.icono-caretaker-switch-inventory__kept li::marker {
   content: "✓  ";
   color: var(--secondary);
 }
 
-.icono-caretaker-switch-inventory__ends li::marker {
-  content: "✕  ";
+.icono-caretaker-switch-inventory__moved li::marker {
+  content: "→  ";
   color: var(--secondary);
 }
 
