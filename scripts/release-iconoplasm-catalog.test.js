@@ -38,3 +38,17 @@ test("a release that can't run says why instead of going green", async () => {
   assert.equal(refused.ok, false)
   assert.match(refused.error, /D1 query failed \(403\).*not authorized/)
 })
+
+test("a public release lagging the index is retried, at most once a day", async () => {
+  const { publicReleaseIsBehind } = await import("./publish-iconoplasm-catalog.mjs")
+  const now = Date.parse("2026-10-17T16:00:00Z")
+  // The 2026-10-17 state: 19,023 genes released on 2026-07-30, 19,381 in the index.
+  const frozen = { gene_count: 19023, released_at: "2026-07-30T09:43:27.937Z" }
+  assert.equal(publicReleaseIsBehind(frozen, 19381, now), true)
+  // Released an hour ago with a count that still differs: wait a day, don't burn KV.
+  const fresh = { gene_count: 19380, released_at: "2026-10-17T15:00:00Z" }
+  assert.equal(publicReleaseIsBehind(fresh, 19381, now), false)
+  assert.equal(publicReleaseIsBehind({ ...frozen, gene_count: 19381 }, 19381, now), false)
+  // An unreadable metadata route releases nothing.
+  assert.equal(publicReleaseIsBehind(null, 19381, now), false)
+})
