@@ -6717,12 +6717,6 @@ body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
   border-bottom-color: var(--accent);
   font-weight: 600;
 }
-.icono-registry-tab-count {
-  margin-left: 0.25rem;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-  color: var(--gray);
-}
 .icono-registry-search {
   max-width: 480px;
 }

@@ -11189,8 +11189,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     head.innerHTML = clanHeadMarkup(data)
     body.innerHTML = ""
-    var tabs = document.querySelector("[data-icono-registry-tabs]")
-    if (tabs && total > 0) tabs.innerHTML = registryTabsMarkup("clans", { clans: total })
 
     if (!revealed.length) {
       body.innerHTML = isGuest
@@ -11347,11 +11345,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // Genes, Clans and Caretakers are three ways to browse the same catalogue:
-  // alphabetically, by protein family and by who looks after each gene. A tab
-  // shows its count only where the page already knows it.
-  function registryTabsMarkup(tab, counts) {
-    counts = counts || {}
-    function tabLink(id, href, label, count) {
+  // alphabetically, by protein family and by who looks after each gene. The
+  // tabs carry no counts: each page knows only its own, so counts would come and
+  // go as a reader switched tabs.
+  function registryTabsMarkup(tab) {
+    function tabLink(id, href, label) {
       var active = tab === id
       return (
         '<a href="' +
@@ -11362,19 +11360,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         (active ? ' aria-current="page"' : "") +
         ">" +
         label +
-        (count == null
-          ? ""
-          : ' <span class="icono-registry-tab-count">' +
-            count.toLocaleString("en-US") +
-            "</span>") +
         "</a>"
       )
     }
     return (
-      '<nav class="icono-registry-tabs" aria-label="Genes and caretakers">' +
-      tabLink("genes", "/genes", "Genes", counts.genes) +
-      tabLink("clans", "/clans", "Clans", counts.clans) +
-      tabLink("caretakers", "/caretakers", "Caretakers", counts.caretakers) +
+      '<nav class="icono-registry-tabs" aria-label="Genes, clans and caretakers">' +
+      tabLink("genes", "/genes", "Genes") +
+      tabLink("clans", "/clans", "Clans") +
+      tabLink("caretakers", "/caretakers", "Caretakers") +
       "</nav>"
     )
   }
@@ -11564,10 +11557,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (window.location.pathname !== path || !body.isConnected) return
         var genes = results[0]
         var caretakers = results[1] || []
-        root.querySelector("[data-icono-registry-tabs]").innerHTML = registryTabsMarkup(route.tab, {
-          genes: genes.length,
-          caretakers: results[1] ? caretakers.length : null,
-        })
         body.setAttribute("aria-busy", "false")
         if (route.tab === "caretakers") {
           if (!results[1]) {
