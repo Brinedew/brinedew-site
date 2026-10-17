@@ -9595,7 +9595,108 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   /* ─── Rendering: Gene detail page ─── */
 
-  function genePageShellMarkup(includeSkeleton) {
+  // B-1105: the skeleton is the loaded page with its data left out, built from
+  // the same pieces: the real lead card (printed labels, empty fields), the
+  // toolbar rail, the tab strip and the Overview panel's sections. It takes the
+  // loaded page's boxes at every width, so nothing jumps when the gene arrives.
+  // It carries no ids or data hooks, so nothing wires it or finds it by mistake.
+  // The card's rows exist only for fields that have values, so the card is drawn
+  // from the field shapes of a typical published gene (WEE1's, 17 Oct 2026); CSS
+  // hides every value, leaving the card's frame at the loaded card's row heights.
+  var GENE_SKELETON_FIELDS = {
+    full_name: "WEE1 G2 checkpoint kinase",
+    color: "#888888",
+    first_publication_year: 1991,
+    molecular_weight_kda: 71.6,
+    primary_tissue: "ubiquitous",
+    loeuf: 0.4,
+    tissue_tau: 0.3,
+    portrait: { width: 768, height: 1024 },
+    essence: {
+      name: "WEE1 G2 checkpoint kinase",
+      sex: "Female",
+      sex_origin: ["Soluble"],
+      age: "29",
+      weight_kg: 71.6,
+      skin_hex: "#888888",
+      skin_name: "Mulberry Mauve Black",
+      family_surname: "WEE",
+      family_members: 2,
+      aesthetics: ["Neoclassicism"],
+      aesthetics_origin: ["Protein Kinase"],
+      politics: "pro-control",
+      politics_origin: ["tumor suppressor"],
+    },
+  }
+
+  function geneSkeletonMarkup(symbol) {
+    var tool = '<div class="icono-skel-tool"></div>'
+    var line = '<span class="icono-skel-line"></span>'
+    var count = '<span class="icono-section-count icono-skel-count"></span>'
+    var tile =
+      '<div class="icono-candidate-card">' +
+      '<span class="icono-candidate-media icono-skel-fill"></span>' +
+      '<div class="icono-candidate-footer">' +
+      tool +
+      "</div></div>"
+    var tab = function (label, selected, extra) {
+      return (
+        '<span class="icono-gene-tab" aria-selected="' +
+        (selected ? "true" : "false") +
+        '">' +
+        label +
+        (extra || "") +
+        "</span>"
+      )
+    }
+    return (
+      '<div class="icono-gene-skeleton" id="icono-gene-loading" aria-hidden="true" inert>' +
+      '<section class="icono-gene-lead">' +
+      buildGeneLeadCardMarkup(
+        Object.assign({}, GENE_SKELETON_FIELDS, { symbol: normalizedSymbol(symbol) || "" }),
+      ) +
+      '<div data-icono-canonical-toolbar-island><section class="icono-canonical-toolbar-shell"><div class="icono-gene-toolbar-rail">' +
+      '<section class="icono-gene-request-surface icono-gene-request-panel">' +
+      '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta">' +
+      tool +
+      tool +
+      "</div>" +
+      '<div class="icono-canonical-toolbar-actions">' +
+      '<div class="icono-skel-tool icono-skel-tool--primary"></div>' +
+      "</div></section></div></section></div>" +
+      "</section>" +
+      '<div class="icono-gene-tabs" data-icono-gene-selected="overview">' +
+      '<div class="icono-gene-tablist">' +
+      tab("Overview", true) +
+      tab("Comments", false) +
+      tab("Candidates", false, count) +
+      "</div>" +
+      '<div class="icono-gene-tabpanel">' +
+      '<div class="icono-gene-part"><section class="icono-suggest">' +
+      '<h2 class="icono-section-label">Comments</h2>' +
+      '<p class="icono-suggest-signin">' +
+      line +
+      "</p>" +
+      '<div class="icono-suggest-list"><p class="icono-suggest-empty">' +
+      line +
+      "</p></div>" +
+      "</section></div>" +
+      '<div class="icono-gene-part"><section class="icono-candidate-gallery icono-candidate-strip">' +
+      '<div class="icono-candidate-gallery-heading">' +
+      '<h2 class="icono-section-label">Candidates' +
+      count +
+      "</h2></div>" +
+      '<div class="icono-candidate-strip-viewport"><div class="icono-candidate-grid">' +
+      tile +
+      tile +
+      tile +
+      "</div></div></section></div>" +
+      "</div></div>" +
+      "</div>"
+    )
+  }
+
+  function genePageShellMarkup(includeSkeleton, symbol) {
     return (
       '<header class="icono-gene-page-header"><div class="icono-nav">' +
       '<a href="/" data-icono-nav>' +
@@ -9603,14 +9704,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "All genes</a>" +
       "</div></header>" +
       '<main class="icono-gene-page-main" id="icono-main">' +
-      (includeSkeleton
-        ? '<div class="icono-gene-skeleton" id="icono-gene-loading" aria-hidden="true">' +
-          '<div class="icono-gene-lead icono-gene-lead--skeleton">' +
-          '<div class="icono-gene-lead-skeleton-card"></div>' +
-          '<div class="icono-gene-lead-skeleton-bar"></div>' +
-          "</div>" +
-          "</div>"
-        : "") +
+      (includeSkeleton ? geneSkeletonMarkup(symbol) : "") +
       '<div id="icono-gene-content"></div>' +
       "</main>"
     )
@@ -9704,7 +9798,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     iconoSidebarState.caretaker = null
     renderIconoplasmSidebar()
     // Static gene documents carry no pre-rendered card: start from the skeleton.
-    root.innerHTML = genePageShellMarkup(true)
+    root.innerHTML = genePageShellMarkup(true, resolvedSymbol)
+    // B-1105: on a phone the loaded lead card opens with its field notes showing,
+    // so its skeleton does too.
+    var skeletonCard = root.querySelector(".icono-gene-skeleton .icono-gene-lead-card")
+    if (skeletonCard && isMobileLabelReviewEnabled())
+      setMobileLabelExpanded(skeletonCard, true, { preserveTop: false })
     ensureGenePageLandmarks(root)
     // The final-geometry skeleton is in place: the head bootstrap may show the page.
     document.documentElement.classList.remove("icono-route-pending")
@@ -9748,7 +9847,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
       }
-      if (loadingEl) loadingEl.style.display = "none"
+      // B-1105: the skeleton repeats the loaded page's classes, so it leaves the
+      // page once the gene arrives; a hidden copy would answer every selector first.
+      if (loadingEl) loadingEl.remove()
       if (!contentEl) {
         root.innerHTML = genePageShellMarkup(false)
         contentEl = document.getElementById("icono-gene-content")
@@ -9770,7 +9871,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     var renderGeneFailure = function (err) {
       if (renderId !== activeGeneRenderId) return
-      if (loadingEl) loadingEl.style.display = "none"
+      if (loadingEl) loadingEl.remove()
       if (err && err.status === 404) markDocumentNotFound(iconoplasmPageTitle("Gene not found"))
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(symbol),
