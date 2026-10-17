@@ -8,7 +8,7 @@ schemaType: WebPage
 
 # For developers
 
-Iconoplasm draws every human protein-coding gene as a character: 19,023 labelled cards, one per HGNC symbol. Everything on this page is free, needs no key or sign-up, and every image is [CC0](/license). Attribution is welcome but not required.
+Iconoplasm draws every human protein-coding gene as a character: over 19,000 labelled cards, one per HGNC symbol. Everything on this page is free, needs no key or sign-up, and every image is [CC0](/license). Attribution is welcome but not required.
 
 ## Quickstart
 
@@ -68,7 +68,7 @@ Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/bl
 | A quick try in a notebook, a slide or a private page | Build the image URL directly: `/blot/{SYMBOL}.webp` (official HGNC symbols only) | Nothing to call, but every view runs on our server |
 | Names from papers or datasets: aliases like p53 or IL-1β, UniProt accessions, odd capitalisation | The resolver, up to 50 identifiers per request | 1 request per 50 names |
 | Cards on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each card | 1 request per 50 cards, then nothing per view |
-| Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of all 19,023 genes | 1 download (19 MB) |
+| Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of every gene | 1 download (19 MB) |
 | A mirror you want to keep current | The bulk file once, then the change feed, polled at most hourly | 1 small request per poll |
 
 Rule of thumb: if you would call the resolver more than about 20 times in a row, download the bulk file instead.
@@ -196,7 +196,7 @@ Do:
 
 Don't:
 
-- Loop over all 19,023 genes through the resolver. It takes over 6 minutes at the limit, and the bulk file is one request.
+- Loop over every gene through the resolver. It takes over 6 minutes at the limit, and the bulk file is one request.
 - Poll the change feed more than hourly, or from the beginning of time on every run.
 - Retry a `400` or a `"found": false`. They will not change.
 - Resolve aliases by guessing `/blot/{alias}.webp` URLs. Use the resolver.
