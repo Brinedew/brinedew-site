@@ -1,7 +1,9 @@
 // Reconciles cloudflare/the-only-brinedew-static-edge-policy.json (B-834).
 //
 // Owner of every Cloudflare setting that lets brinedew.bio and
-// geneguessr.brinedew.bio be served by Pages without a Worker per request.
+// geneguessr.brinedew.bio be served by Pages without a Worker per request,
+// and of the zone's names for other static sites with their own Pages project
+// (curvarium.brinedew.bio).
 // Never change these settings in the dashboard; edit the policy and run:
 //
 //   node scripts/reconcile-brinedew-static-edge-policy.mjs --check
@@ -30,6 +32,15 @@ export async function loadStaticEdgePolicy() {
     throw new Error("Static edge policy is incomplete or uses an unsupported schema")
   }
   return policy
+}
+
+// The blog's own project plus any other site on the zone that ships its own
+// Pages project (Curvarium). Each custom domain belongs to exactly one.
+export function pagesProjects(policy) {
+  return [
+    { project: policy.pagesProject, target: policy.pagesTarget, domains: policy.pagesCustomDomains },
+    ...(policy.otherPagesProjects || []),
+  ]
 }
 
 function client({ apiToken, fetchImpl = fetch }) {
@@ -194,23 +205,23 @@ export async function reconcileStaticEdgePolicy({
   let drift = 0
 
   if (doPrepare) {
-    const domains = await call(
-      `/accounts/${accountId}/pages/projects/${policy.pagesProject}/domains`,
-    )
-    for (const domain of policy.pagesCustomDomains) {
-      const found = (domains || []).find((entry) => entry?.name === domain)
-      if (found?.status === "active") {
-        log(`pages domain ${domain}: active`)
-        continue
-      }
-      drift += 1
-      log(`pages domain ${domain}: ${found ? found.status : "missing"}`)
-      if (apply && !found) {
-        await call(`/accounts/${accountId}/pages/projects/${policy.pagesProject}/domains`, {
-          method: "POST",
-          body: { name: domain },
-        })
-        log(`pages domain ${domain}: attached (verification pending)`)
+    for (const { project, domains: wanted } of pagesProjects(policy)) {
+      const domains = await call(`/accounts/${accountId}/pages/projects/${project}/domains`)
+      for (const domain of wanted) {
+        const found = (domains || []).find((entry) => entry?.name === domain)
+        if (found?.status === "active") {
+          log(`pages domain ${domain}: active`)
+          continue
+        }
+        drift += 1
+        log(`pages domain ${domain}: ${found ? found.status : "missing"}`)
+        if (apply && !found) {
+          await call(`/accounts/${accountId}/pages/projects/${project}/domains`, {
+            method: "POST",
+            body: { name: domain },
+          })
+          log(`pages domain ${domain}: attached to ${project} (verification pending)`)
+        }
       }
     }
 
