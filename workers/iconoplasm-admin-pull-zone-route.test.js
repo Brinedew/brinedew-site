@@ -368,3 +368,99 @@ test("a hostname that is not a DNS name is a 400 with no Bunny call", async () =
   }
   assert.equal(h.calls.length, 0)
 })
+
+// B-1087: the account read behind the daily balance check. Failure modes written before the code:
+// A1. not an administrator -> 403, no Bunny call;
+// A2. no BUNNY_ACCOUNT_API_KEY -> 503, no Bunny call;
+// A3. payment or card fields leave the Worker, or the regional traffic charges are not summed;
+// A4. Bunny refuses either read -> a 502 instead of a page of zeros the check would trust.
+function accountHarness({ admin = true, key = "bunny-key", billingStatus = 200 } = {}) {
+  const calls = []
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url, method: init.method || "GET" })
+    if (url === "https://api.bunny.net/billing") {
+      if (billingStatus !== 200) return new Response(null, { status: billingStatus })
+      return Response.json({
+        Balance: 4.123456,
+        ThisMonthCharges: 0.61,
+        MonthlyChargesStorage: 0.4,
+        MonthlyChargesEUTraffic: 0.1,
+        MonthlyChargesASIATraffic: 0.11,
+        MonthlyBandwidthUsed: 12_000_000_000,
+        AutomaticPaymentIdentifier: "card-4242",
+        SavedPaymentMethods: [{ Last4: "4242" }],
+      })
+    }
+    if (url === "https://api.bunny.net/storagezone") {
+      return Response.json([
+        {
+          Name: "iconoplasm-portraits",
+          StorageUsed: 19_300_000_000,
+          FilesStored: 384_870,
+          Region: "DE",
+          ReplicationRegions: ["NY", "SG"],
+          Password: "zone-password",
+        },
+      ])
+    }
+    return new Response(null, { status: 404 })
+  }
+  const handlers = createIconoplasmAdminPullZoneHandlers({
+    isAdmin: async () => admin,
+    json: (body, status = 200, headers = {}) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json", ...headers },
+      }),
+    fetchImpl,
+  })
+  const read = async () => {
+    let answer
+    await handlers["admin_publication.bunny_account"]({
+      request: new Request(
+        "https://iconoplasm.test/api/iconoplasm/admin/publication/bunny-account",
+      ),
+      env: key ? { BUNNY_ACCOUNT_API_KEY: key } : {},
+      done: (_label, response) => (answer = response),
+    })
+    return { status: answer.status, body: await answer.json() }
+  }
+  return { calls, read }
+}
+
+test("A1: a non-administrator is refused the account without a Bunny call", async () => {
+  const { calls, read } = accountHarness({ admin: false })
+  assert.equal((await read()).status, 403)
+  assert.equal(calls.length, 0)
+})
+
+test("A2: no account key: 503 without a Bunny call", async () => {
+  const { calls, read } = accountHarness({ key: "" })
+  assert.equal((await read()).status, 503)
+  assert.equal(calls.length, 0)
+})
+
+test("A3: only the numbers leave, with the regional traffic charges summed", async () => {
+  const { read } = accountHarness()
+  const { status, body } = await read()
+  assert.equal(status, 200)
+  assert.equal(body.balance_usd, 4.1235)
+  assert.equal(body.this_month_traffic_usd, 0.21)
+  assert.deepEqual(body.storage_zones, [
+    {
+      name: "iconoplasm-portraits",
+      storage_used_bytes: 19_300_000_000,
+      files_stored: 384_870,
+      region: "DE",
+      replication_regions: ["NY", "SG"],
+    },
+  ])
+  const text = JSON.stringify(body)
+  assert.equal(text.includes("4242"), false)
+  assert.equal(text.includes("zone-password"), false)
+})
+
+test("A4: a refused billing read is a 502, not zeros", async () => {
+  const { read } = accountHarness({ billingStatus: 401 })
+  assert.equal((await read()).status, 502)
+})

@@ -101,6 +101,7 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_blots_backlog: batch(CATALOGUE_READ),
   admin_blots_upload: batch(SMALL_WRITE),
   admin_publication_pull_zone: critical("no D1 rows: it applies the Bunny pull-zone policy"),
+  admin_publication_bunny_account: critical("no D1 rows: it reads the Bunny account's numbers"),
   admin_publication_catalog_object: batch(SMALL_WRITE),
   admin_gallery: owner(SMALL_READ),
   admin_extension_blocklist: critical(OWN_ACTION),
