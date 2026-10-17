@@ -6677,3 +6677,219 @@ body[data-slug^="apps/iconoplasm"] .sidebar.right .brd-sidebar-btn:hover {
 body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
   font: 400 var(--icono-action-font-size) / 1 var(--icono-action-font);
 }
+
+/* ───────── Genes and Caretakers (B-1098) ───────── */
+.icono-registry {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding-bottom: 2rem;
+}
+.icono-registry-title {
+  margin: 0 0 0.9rem;
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--dark);
+}
+.icono-registry-tabs {
+  display: flex;
+  gap: 1.4rem;
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+.icono-registry-tab {
+  padding: 0.5rem 0 0.55rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  color: var(--secondary, var(--darkgray));
+  text-decoration: none;
+}
+.icono-registry-tab:hover {
+  color: var(--accent);
+}
+.icono-registry-tab.is-active {
+  color: var(--dark);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.icono-registry-tab-count {
+  margin-left: 0.25rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray);
+}
+.icono-registry-search {
+  max-width: 480px;
+}
+.icono-registry-letters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0.9rem 0 0.4rem;
+}
+.icono-registry-letters[hidden] {
+  display: none;
+}
+.icono-registry-letter {
+  min-width: 1.9rem;
+  padding: 0.3rem 0;
+  text-align: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+  color: var(--secondary, var(--darkgray));
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+.icono-registry-letter:hover {
+  color: var(--accent);
+  border-color: var(--ui-border);
+}
+.icono-registry-letter.is-active {
+  color: var(--light);
+  background: var(--accent);
+  font-weight: 600;
+}
+.icono-registry-status {
+  min-height: 1.2em;
+  margin: 0.5rem 2px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+  color: var(--darkgray);
+}
+.icono-registry-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.icono-registry-table th {
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gray);
+  border-bottom: 1px solid var(--ui-border);
+}
+.icono-registry-table td {
+  padding: 0.4rem 0.6rem;
+  vertical-align: baseline;
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 55%, transparent);
+}
+.icono-registry-symbol {
+  white-space: nowrap;
+}
+.icono-registry-symbol a {
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: var(--dark);
+  text-decoration: none;
+}
+.icono-registry-symbol a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.icono-registry-name {
+  font-family: "Special Elite", Georgia, serif;
+  font-size: 0.92rem;
+  color: color-mix(in srgb, var(--dark) 78%, transparent);
+}
+.icono-registry-caretaker {
+  white-space: nowrap;
+}
+.icono-registry-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+  color: var(--dark);
+}
+.icono-registry-person img {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.icono-caretaker-directory {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.icono-caretaker-entry {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 90%, var(--dark));
+  background: var(--ui-bg);
+}
+.icono-caretaker-gene {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.icono-caretaker-gene img,
+.icono-caretaker-gene-blank {
+  flex-shrink: 0;
+  width: 48px;
+  height: 64px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--dark) 8%, transparent);
+  border: 1px solid var(--ui-border);
+}
+.icono-caretaker-gene-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.icono-caretaker-gene-text strong {
+  font-family: "League Spartan", "Bahnschrift", sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--dark);
+}
+.icono-caretaker-gene:hover strong {
+  color: var(--accent);
+}
+.icono-caretaker-gene-text span {
+  font-family: "Special Elite", Georgia, serif;
+  font-size: 0.88rem;
+  color: color-mix(in srgb, var(--dark) 72%, transparent);
+}
+.icono-caretaker-since {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .icono-registry-table th,
+  .icono-registry-table td {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+  .icono-caretaker-entry {
+    grid-template-columns: 1fr auto;
+    gap: 0.6rem 1rem;
+  }
+  .icono-caretaker-entry .icono-caretaker-gene {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

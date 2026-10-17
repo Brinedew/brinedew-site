@@ -137,7 +137,7 @@ import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-pub
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
 import { createIconoplasmCaretakerNotificationHandlers } from "./iconoplasm-caretaker-notifications.js"
-import { readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
+import { readCaretakerDirectory, readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
 import { attachStylePublishedPortraits } from "./iconoplasm/style-published-portraits.js"
 import {
   caretakerCommentOutboxStatement,
@@ -17910,6 +17910,33 @@ async function handlePublicGeneBatch(request, env) {
 
 export const publishedCardDeliveryHandlers = createPublishedCardDeliveryHandlers()
 
+// B-1098: who cares for which gene, for the /caretakers page and for agents.
+// The open assignments (one per caretaker) and their profiles; the edge cache
+// holds it for 60 s, so a burst costs about one read per minute per location.
+export async function handlePublicCaretakers(request, env, ctx) {
+  const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
+  const cacheUrl = new URL(request.url)
+  cacheUrl.search = ""
+  cacheUrl.hash = ""
+  const cacheKey = new Request(cacheUrl.toString(), { method: "GET" })
+  const cached = cache ? await cache.match(cacheKey) : null
+  if (cached) return cached
+  let caretakers
+  try {
+    caretakers = await readCaretakerDirectory(env.ICONOPLASM_DB, env.DB)
+  } catch (error) {
+    console.error("Iconoplasm caretaker directory read failed:", String(error))
+    return json({ error: "The caretaker directory is unavailable" }, 503, {
+      "Cache-Control": "no-store",
+    })
+  }
+  const response = json({ api_version: PUBLIC_API_VERSION, caretakers }, 200, {
+    "Cache-Control": "public, max-age=60",
+  })
+  if (cache) ctx?.waitUntil?.(cache.put(cacheKey, response.clone()))
+  return response
+}
+
 export async function handlePublicGeneDetail(request, env, ctx, snapshotFromPath, symbolFromPath) {
   const snapshotToken = String(snapshotFromPath || "").trim()
   const symbol = normalizeSymbol(symbolFromPath)
@@ -19086,6 +19113,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
   public_catalog_dump: async ({ request, env, path }) =>
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
   public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
+  public_caretakers: async ({ request, env, ctx }) =>
+    asHead(request, await handlePublicCaretakers(request, env, ctx)),
   public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
     asHead(
       request,

@@ -141,6 +141,10 @@ function iconoplasmSitemap(symbols) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iconoplasm.brinedew.bio/</loc></url>
+  <url><loc>https://iconoplasm.brinedew.bio/genes</loc></url>
+${geneIndexLetters(symbols)
+  .map((letter) => `  <url><loc>https://iconoplasm.brinedew.bio/genes/${letter}</loc></url>`)
+  .join("\n")}
 ${symbols
   .map(
     (symbol) =>
@@ -160,6 +164,8 @@ Iconoplasm maps human-gene biology onto memorable visual character cards called 
 
 - [Published gene-card archive](https://iconoplasm.brinedew.bio/)
 - [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)
+- [Every gene, A to Z](https://iconoplasm.brinedew.bio/genes): one plain list per first letter, /genes/{LETTER}
+- Caretakers and their genes (JSON): https://iconoplasm.brinedew.bio/api/public/v1/caretakers
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
 - Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 - [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
@@ -196,9 +202,7 @@ export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
 // /portraits/* out of Static Assets redirects: those canonical URLs must reach
 // the existing Bunny-backed Worker when a browser cannot reach the CDN.
 export const ICONOPLASM_REDIRECTS = `${[
-  "/genes / 301",
   ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => `${from} ${to} 301`),
-  "/genes/* / 301",
   ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => `${from}* ${to}:splat 301`),
 ].join("\n")}\n`
 
@@ -304,6 +308,90 @@ export async function writeIconoplasmGenePages({ outputRoot, publishedGenes = []
   return { genePages: genes.length }
 }
 
+// B-1098: /genes and /genes/<LETTER>, every published gene as a plain list of
+// links, for readers without JavaScript, crawlers and AI agents (llms.txt names
+// them). Static, so a view costs nothing; in a browser the stub boots the app,
+// whose /genes page adds search and each gene's caretaker. The largest letter
+// (C, about 2,200 genes) is about 160 KB.
+export function geneIndexLetters(symbols) {
+  return [...new Set(symbols.map((symbol) => symbol[0]).filter((c) => /[A-Z]/.test(c)))].sort()
+}
+
+function geneIndexDocument({ title, heading, canonicalPath, description, body }) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<link rel="canonical" href="${escapeHtml(`${ICONOPLASM_ORIGIN}${canonicalPath}`)}">
+${SHELL_STUB_BOOT}
+</head>
+<body>
+<main>
+<h1>${escapeHtml(heading)}</h1>
+${body}
+</main>
+</body>
+</html>
+`
+}
+
+export async function writeIconoplasmGeneIndexPages({ outputRoot, publishedGenes = [] }) {
+  const genes = publishedGeneEntries(publishedGenes)
+  if (!genes.length) return { geneIndexPages: 0 }
+  const letters = geneIndexLetters(genes.map(([symbol]) => symbol))
+  const byLetter = new Map(letters.map((letter) => [letter, []]))
+  for (const [symbol, fullName] of genes) byLetter.get(symbol[0])?.push([symbol, fullName])
+  const letterLinks = letters
+    .map(
+      (letter) =>
+        `<li><a href="/genes/${letter}">${letter}</a> (${byLetter.get(letter).length.toLocaleString("en-US")})</li>`,
+    )
+    .join("\n")
+  await writeFile(
+    path.join(outputRoot, "genes.html"),
+    geneIndexDocument({
+      title: iconoplasmPageTitle("Genes"),
+      heading: "Genes",
+      canonicalPath: "/genes",
+      description: `All ${genes.length.toLocaleString("en-US")} human genes with an Iconoplasm character card, by first letter.`,
+      body: `<p>${genes.length.toLocaleString("en-US")} genes. Each gene's page is /gene/{SYMBOL}.</p>
+<ul>
+${letterLinks}
+</ul>
+<p><a href="/caretakers">Caretakers</a></p>`,
+    }),
+    "utf8",
+  )
+  await mkdir(path.join(outputRoot, "genes"), { recursive: true })
+  for (const letter of letters) {
+    const rows = byLetter
+      .get(letter)
+      .map(
+        ([symbol, fullName]) =>
+          `<li><a href="/gene/${encodeURIComponent(symbol)}">${escapeHtml(symbol)}</a> ${escapeHtml(fullName)}</li>`,
+      )
+      .join("\n")
+    await writeFile(
+      path.join(outputRoot, "genes", `${letter}.html`),
+      geneIndexDocument({
+        title: iconoplasmPageTitle(`Genes: ${letter}`),
+        heading: `Genes: ${letter}`,
+        canonicalPath: `/genes/${letter}`,
+        description: `Human genes whose symbol starts with ${letter}, each with an Iconoplasm character card.`,
+        body: `<p><a href="/genes">All letters</a></p>
+<ul>
+${rows}
+</ul>`,
+      }),
+      "utf8",
+    )
+  }
+  return { geneIndexPages: letters.length + 1 }
+}
+
 // B-980: this host has no SPA fallback. A path with no document answers a real
 // 404 (not_found_handling = "404-page" serves /404.html), so a crawler never
 // indexes the shell under an address nobody published, and the shell's own
@@ -318,6 +406,12 @@ const ICONOPLASM_STUB_PAGES = Object.freeze([
     title: iconoplasmPageTitle("Page not found"),
     heading: "Page not found",
     text: "This address is not a page in the Iconoplasm archive.",
+  },
+  {
+    file: "caretakers.html",
+    title: iconoplasmPageTitle("Caretakers"),
+    heading: "Caretakers",
+    text: "Who cares for which gene. As JSON: /api/public/v1/caretakers",
   },
   {
     file: "clans.html",
@@ -571,6 +665,7 @@ export async function prepareIconoplasmEdgeAssets({
     publishedGenes,
   })
   await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publishedGenes })
+  await writeIconoplasmGeneIndexPages({ outputRoot: resolvedOutput, publishedGenes })
   await writeIconoplasmStubPages({ outputRoot: resolvedOutput })
   const sourceSha = String(
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
