@@ -148,7 +148,8 @@ test("gene page tabs: Overview slices lead into Lore, Comments and Candidates", 
       // 3, 4: each slice is cut and says so.
       assert.equal(overview.loreClipped, true, `${name}: lore is cut in Overview`)
       assert.equal(overview.commentsShown, 3, `${name}: the newest three comments`)
-      assert.deepEqual(overview.links, ["lore", "comments", "candidates"], `${name}: slice links`)
+      // The strip holds every candidate, so it gets no "See all" under it.
+      assert.deepEqual(overview.links, ["lore", "comments"], `${name}: slice links`)
       assert.equal(overview.tabs.find((tab) => tab.id === "comments").count, "5")
       assert.equal(overview.tabs.find((tab) => tab.id === "candidates").count, "71")
       // 10

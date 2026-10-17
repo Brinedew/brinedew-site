@@ -41,7 +41,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=1c9ba5afd836054b"
+import { installCandidateStrips } from "./candidate-strip.js?v=06cec6e8e7de16ba"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -1216,17 +1216,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var portrait = (genePayload && genePayload.portrait) || null
     var emulsionInfo = emulsionDisplayInfo(portrait)
     if (!emulsionInfo.primary) return '<div class="icono-candidate-toolbar-meta"></div>'
+    // No "Emulsion: A1-20439" here: the card directly above prints its emulsion
+    // number, and the star and printer read as a pair without a divider.
     return (
       '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta">' +
-      '<div class="icono-candidate-toolbar-pair icono-canonical-toolbar-pair">' +
-      "<span>Emulsion</span><strong>" +
-      esc(emulsionInfo.primary) +
-      "</strong></div>" +
       renderEmulsionFavoriteButtonMarkup(
         emulsionInfo.emulsionId,
         "icono-emulsion-favorite-button--toolbar",
       ) +
-      '<span class="icono-toolbar-divider" aria-hidden="true"></span>' +
       renderPrintCopyButtonMarkup(genePayload) +
       "</div>"
     )
@@ -9512,7 +9509,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</span>" +
         "</button>" +
         '<div class="icono-candidate-footer">' +
-        voteBoxMarkup(voteAttrs, { showScore: true }) +
+        voteBoxMarkup(voteAttrs, { showScore: true, glyphs: "arrows" }) +
         '<div class="icono-candidate-toolbar-meta">' +
         favoriteMarkup +
         "</div>" +
@@ -9931,16 +9928,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!rail.isConnected || !rail.clientWidth) return
       // Measured start-aligned: a row that overflows its start edge has no
       // scrollWidth to show for it.
-      rail.classList.remove("is-collapsed", "is-tight")
+      rail.classList.remove("is-collapsed")
       rail.classList.add("is-measuring")
       var overflows = function () {
         return rail.scrollWidth > rail.clientWidth + 1
       }
-      if (overflows()) {
-        rail.classList.add("is-collapsed")
-        // A guest's row has nothing to fold; a caretaker's may still not fit.
-        if (overflows()) rail.classList.add("is-tight")
-      }
+      if (overflows()) rail.classList.add("is-collapsed")
       rail.classList.remove("is-measuring")
     }
     rail._iconoFitToolbar = fit
@@ -10425,8 +10418,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return Array.prototype.slice.call(tabs.querySelectorAll("[data-icono-gene-tab]"))
   }
 
-  // The "Read more" and "See all" links under each Overview slice show only
-  // when the slice actually leaves something out.
+  // The "Read more" and "See all" links under the lore and comments slices
+  // show only when the slice actually leaves something out.
   function syncGeneSliceLinks(tabs) {
     var overview = tabs.getAttribute("data-icono-gene-selected") === "overview"
     var lore = tabs.querySelector('[data-icono-gene-more="lore"]')
@@ -10438,13 +10431,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (comments) {
       var n = tabs.querySelectorAll("[data-icono-suggest-list] > .icono-suggest-item").length
       comments.hidden = !overview || n <= GENE_OVERVIEW_COMMENTS
-    }
-    var candidates = tabs.querySelector('[data-icono-gene-more="candidates"]')
-    if (candidates) {
-      var frames = tabs.querySelectorAll(
-        "[data-icono-candidate-strip] .icono-candidate-grid > .icono-candidate-card",
-      ).length
-      candidates.hidden = !overview || frames < 2
     }
   }
 
@@ -10602,11 +10588,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       id +
       '">' +
       inner +
-      '<button type="button" class="icono-gene-more" data-icono-gene-more="' +
-      id +
-      '" hidden>' +
-      esc(moreLabel) +
-      "</button></div>"
+      (moreLabel
+        ? '<button type="button" class="icono-gene-more" data-icono-gene-more="' +
+          id +
+          '" hidden>' +
+          esc(moreLabel) +
+          "</button>"
+        : "") +
+      "</div>"
     )
   }
 
@@ -10632,7 +10621,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "<div data-icono-suggest-island>" + buildSuggestSectionMarkup(g.symbol) + "</div>",
         "See all",
       ) +
-      genePartMarkup("candidates", renderCandidateGallery(g), "See all") +
+      // No "See all" under the strip: it already holds every candidate, and the
+      // Candidates tab above opens them as a grid (owner, 2026-10-17: the link
+      // "implies that carousel is not showing all").
+      genePartMarkup("candidates", renderCandidateGallery(g)) +
       "</div></div>"
 
     html +=
