@@ -88,7 +88,11 @@ class Statement {
     const result = this.adapter.database.prepare(this.sql).run(...this.args)
     const changes = Number(result.changes || 0)
     this.adapter.changes += changes
-    return { success: true, results: [], meta: { changes } }
+    return {
+      success: true,
+      results: [],
+      meta: { changes, last_row_id: Number(result.lastInsertRowid || 0) },
+    }
   }
 }
 
