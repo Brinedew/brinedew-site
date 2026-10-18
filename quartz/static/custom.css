@@ -966,6 +966,14 @@
     height: 18px;
   }
 
+  /* The gene and, for an order of several, its image count (Ready's number). */
+  .icono-request-inbox__queued-name {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
   .icono-request-inbox__caretaker-summary {
     display: flex;
     align-items: baseline;
