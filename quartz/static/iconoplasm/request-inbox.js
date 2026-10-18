@@ -563,15 +563,49 @@ export function createRequestInbox({
     )
   }
 
-  function waitingRequestMarkup(item) {
+  // Waiting is grouped the way Ready is: one entry per gene, however many images
+  // were asked for. An order of six used to show as six identical rows. The age
+  // is the oldest request's, which is how long the person has been waiting.
+  function groupWaitingRequests(items) {
+    var groups = []
+    var byKey = Object.create(null)
+    var requests = Array.isArray(items) ? items : []
+    for (var index = 0; index < requests.length; index++) {
+      var item = requests[index] || {}
+      var symbol = String(item.gene_symbol || "")
+        .trim()
+        .toUpperCase()
+      var key = symbol || "ungrouped:" + (Number(item.request_id || item.id || 0) || index)
+      var group = byKey[key]
+      if (!group) {
+        group = { gene_symbol: symbol, gene_url: item.gene_url || "/", oldest: "", count: 0 }
+        byKey[key] = group
+        groups.push(group)
+      }
+      group.count += 1
+      var createdAt = String(item.created_at || "")
+      if (createdAt && (!group.oldest || createdAt < group.oldest)) group.oldest = createdAt
+    }
+    return groups
+  }
+
+  function waitingRequestMarkup(group) {
     return (
       '<a class="icono-request-inbox__item icono-request-inbox__item--queued" href="' +
-      escapeHtml(item.gene_url || "/") +
+      escapeHtml(group.gene_url || "/") +
       '" data-icono-nav><span class="icono-request-inbox__queue-mark" aria-hidden="true"></span>' +
-      '<span class="icono-request-inbox__copy"><strong>' +
-      escapeHtml(item.gene_symbol || "Gene") +
-      "</strong><small>" +
-      escapeHtml(ageLabel(item.created_at)) +
+      '<span class="icono-request-inbox__copy"><span class="icono-request-inbox__queued-name"><strong>' +
+      escapeHtml(group.gene_symbol || "Gene") +
+      "</strong>" +
+      (group.count > 1
+        ? '<span class="icono-request-inbox__receipt-count" aria-label="' +
+          escapeHtml(String(group.count)) +
+          ' images">' +
+          escapeHtml(String(group.count)) +
+          "</span>"
+        : "") +
+      "</span><small>" +
+      escapeHtml(ageLabel(group.oldest)) +
       "</small></span></a>"
     )
   }
@@ -672,9 +706,10 @@ export function createRequestInbox({
         '<button type="button" class="icono-request-inbox__read-all" data-icono-request-inbox-read-all>Mark all read</button>'
     }
 
+    var waitingGroups = groupWaitingRequests(openRequests)
     var waitingContent = ""
-    for (var j = 0; j < openRequests.length; j++) {
-      waitingContent += waitingRequestMarkup(openRequests[j] || {})
+    for (var j = 0; j < waitingGroups.length; j++) {
+      waitingContent += waitingRequestMarkup(waitingGroups[j])
     }
     if (state.request_error && !openRequests.length) {
       waitingContent += unavailable
@@ -693,7 +728,7 @@ export function createRequestInbox({
       '<div class="icono-request-inbox__head"><span class="brd-sidebar-panel-title" id="icono-request-inbox-title">Inbox</span></div>' +
       '<div class="icono-request-inbox__tabs" role="tablist" aria-labelledby="icono-request-inbox-title">' +
       requestTabMarkup("ready", "Ready", readyGroups.length) +
-      requestTabMarkup("waiting", "Waiting", openCount) +
+      requestTabMarkup("waiting", "Waiting", waitingGroups.length) +
       "</div>" +
       requestPanelMarkup("ready", readyContent) +
       requestPanelMarkup("waiting", waitingContent) +
