@@ -10014,7 +10014,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function hydrateServerCandidateActionIslands(container, genePayload) {
     if (!container || !genePayload) return
-    var signature = currentUserIsIconoAdmin ? "admin" : "public"
+    // The menu changes with sign-in (Edit candidate blot) and with admin (Remove),
+    // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
+    // answered after the first draw kept the guest menu (owner, 2026-10-19).
+    var signature =
+      (currentUser ? "signed-in" : "guest") + ":" + (currentUserIsIconoAdmin ? "admin" : "public")
     var targets = Array.prototype.slice.call(
       container.querySelectorAll("[data-icono-candidate-actions-island]"),
     )
