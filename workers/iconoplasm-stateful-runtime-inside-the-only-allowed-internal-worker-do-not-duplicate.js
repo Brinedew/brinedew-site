@@ -3071,7 +3071,12 @@ async function generationRequestRowById(env, requestId) {
     .first()
 }
 
-async function createGenerationRequest(
+// A request is prepared (validated, resolved and bound) apart from its INSERT,
+// so a multi-emulsion order can land as one D1 batch: the Drain then sees all
+// of an order or none of it. On 2026-10-18 six CA3 rows inserted one by one
+// over two seconds, a Drain pass read the queue between the third and fourth,
+// and the order came back as two publications and two Discord messages.
+async function prepareGenerationRequest(
   env,
   {
     geneSymbol,
@@ -3195,6 +3200,7 @@ async function createGenerationRequest(
       const existingRow = await generationRequestRowById(env, Number(existing.id))
       return {
         ok: true,
+        existing: true,
         request:
           (await enrichGenerationRequestRows(env, existingRow ? [existingRow] : []))[0] || null,
         source_snapshot: requireExactGenerationProvenance(existingRow, {
@@ -3286,7 +3292,7 @@ async function createGenerationRequest(
     }
   }
   const generationRequestId = `generation_request_${crypto.randomUUID()}`
-  const insertResp = await env.ICONOPLASM_DB.prepare(
+  const statement = env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_generation_requests (
        gene_symbol,
        requester_user_id,
@@ -3339,53 +3345,66 @@ async function createGenerationRequest(
                'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
+  ).bind(
+    symbolNorm,
+    requesterNorm,
+    sanitizeText(requesterUsername || "", 255) || "",
+    kind,
+    prompt,
+    sourceSymbolNorm,
+    sourceAssetNorm,
+    mode,
+    resolvedVisionId,
+    emulsionSlot,
+    clientRequestNorm,
+    batchIdNorm,
+    batchSizeNorm,
+    promptBodyModeNorm,
+    factoryRecipe.pipeline,
+    factoryRecipe.vision,
+    origin,
+    diagnosticId,
+    generationRequestId,
+    exactSource.source_gene_id,
+    exactSource.source_manifestation_id,
+    exactSource.source_manifestation_revision_id,
+    exactSource.source_manifestation_body_sha256,
+    exactSource.source_manifestation_derivative_id,
+    exactSource.source_manifestation_derivative_sha256,
+    exactSource.source_manifestation_derivative_tags_sha256,
+    exactSource.source_manifestation_derivative_tags_bytes,
+    exactSource.source_manifestation_derivative_fields_sha256,
+    exactSource.source_manifestation_derivative_fields_bytes,
+    exactSource.source_manifestation_derivative_recipe_id,
+    exactSource.source_manifestation_derivative_recipe_version,
+    exactSource.source_manifestation_derivative_provider_id,
+    exactSource.source_manifestation_derivative_model_id,
+    exactSource.source_manifestation_derivative_tagger_config_sha256,
+    exactSource.source_canonical_selection_id,
+    exactSource.source_canonical_head_version,
+    exactSource.source_gene_revision,
+    exactSource.source_sample_label,
+    exactSource.source_sample_number,
+    exactSource.source_sample_text_sha256,
+    exactSource.source_snapshot_sha256,
+    requestContractHash,
+    generationConfigHash,
   )
-    .bind(
-      symbolNorm,
-      requesterNorm,
-      sanitizeText(requesterUsername || "", 255) || "",
-      kind,
-      prompt,
-      sourceSymbolNorm,
-      sourceAssetNorm,
-      mode,
-      resolvedVisionId,
-      emulsionSlot,
-      clientRequestNorm,
-      batchIdNorm,
-      batchSizeNorm,
-      promptBodyModeNorm,
-      factoryRecipe.pipeline,
-      factoryRecipe.vision,
-      origin,
-      diagnosticId,
-      generationRequestId,
-      exactSource.source_gene_id,
-      exactSource.source_manifestation_id,
-      exactSource.source_manifestation_revision_id,
-      exactSource.source_manifestation_body_sha256,
-      exactSource.source_manifestation_derivative_id,
-      exactSource.source_manifestation_derivative_sha256,
-      exactSource.source_manifestation_derivative_tags_sha256,
-      exactSource.source_manifestation_derivative_tags_bytes,
-      exactSource.source_manifestation_derivative_fields_sha256,
-      exactSource.source_manifestation_derivative_fields_bytes,
-      exactSource.source_manifestation_derivative_recipe_id,
-      exactSource.source_manifestation_derivative_recipe_version,
-      exactSource.source_manifestation_derivative_provider_id,
-      exactSource.source_manifestation_derivative_model_id,
-      exactSource.source_manifestation_derivative_tagger_config_sha256,
-      exactSource.source_canonical_selection_id,
-      exactSource.source_canonical_head_version,
-      exactSource.source_gene_revision,
-      exactSource.source_sample_label,
-      exactSource.source_sample_number,
-      exactSource.source_sample_text_sha256,
-      exactSource.source_snapshot_sha256,
-      requestContractHash,
-      generationConfigHash,
-    )
-    .run()
+  return {
+    ok: true,
+    statement,
+    requesterNorm,
+    clientRequestNorm,
+    requestContractHash,
+    source_snapshot: exactSource,
+  }
+}
+
+// Turns a prepared request's INSERT result into the created row. An INSERT that
+// changed nothing hit the idempotency key: a retry of the same request returns
+// its row, a different request under the same key is refused.
+async function finishGenerationRequestInsert(env, prepared, insertResp) {
+  const { requesterNorm, clientRequestNorm, requestContractHash } = prepared
   let requestId =
     Number(insertResp?.meta?.changes || 0) > 0 ? Number(insertResp?.meta?.last_row_id || 0) : 0
   if (!requestId && clientRequestNorm) {
@@ -3418,8 +3437,14 @@ async function createGenerationRequest(
   return {
     ok: true,
     request: mapped,
-    source_snapshot: exactSource,
+    source_snapshot: prepared.source_snapshot,
   }
+}
+
+async function createGenerationRequest(env, options = {}) {
+  const prepared = await prepareGenerationRequest(env, options)
+  if (!prepared.ok || prepared.existing) return prepared
+  return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
 }
 
 const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 20
@@ -3457,43 +3482,75 @@ async function createGenerationRequestBatch(
     uniqueVisionIds.push(visionId)
   }
 
-  const requests = []
-  const failures = []
+  // Prepare every row first, then insert the order as one D1 batch (a single
+  // transaction), so the Drain sees the whole order or none of it.
   let sourceSnapshot = null
-  for (let index = 0; index < uniqueVisionIds.length; index += 1) {
-    const visionId = uniqueVisionIds[index]
-    const result = await createGenerationRequest(env, {
-      geneSymbol,
-      requesterUserId,
-      requesterUsername,
-      requestMode: "specific",
-      requestedVisionId: visionId,
-      requestKind: "new_candidate",
-      sourceGeneSymbol: geneSymbol,
-      clientRequestId: `${batchId}:${index}`,
-      requestBatchId: batchId,
-      requestBatchSize: uniqueVisionIds.length,
-      promptBodyMode,
-      sourceSnapshot,
-    })
-    if (result.ok) {
-      requests.push(result.request || null)
-      sourceSnapshot = sourceSnapshot || result.source_snapshot || null
-    } else failures.push({ requested_vision_id: visionId, error: String(result.error || "Failed") })
-  }
-  if (requests.length && requests.length !== uniqueVisionIds.length) {
-    const requestIds = requests.map((request) => Number(request?.id || 0)).filter(Boolean)
-    if (requestIds.length) {
-      await env.ICONOPLASM_DB.prepare(
-        `UPDATE icono_generation_requests
-         SET request_batch_size = ?
-         WHERE requester_user_id = ?
-           AND request_batch_id = ?
-           AND id IN (${requestIds.map(() => "?").join(",")})`,
-      )
-        .bind(requestIds.length, normalizeUserId(requesterUserId || ""), batchId, ...requestIds)
-        .run()
+  const prepareAll = async (indexes, batchSize) => {
+    const prepared = []
+    for (const index of indexes) {
+      const result = await prepareGenerationRequest(env, {
+        geneSymbol,
+        requesterUserId,
+        requesterUsername,
+        requestMode: "specific",
+        requestedVisionId: uniqueVisionIds[index],
+        requestKind: "new_candidate",
+        sourceGeneSymbol: geneSymbol,
+        clientRequestId: `${batchId}:${index}`,
+        requestBatchId: batchId,
+        requestBatchSize: batchSize,
+        promptBodyMode,
+        sourceSnapshot,
+      })
+      if (result.ok) sourceSnapshot = sourceSnapshot || result.source_snapshot || null
+      prepared.push({ index, result })
     }
+    return prepared
+  }
+  let prepared = await prepareAll(
+    uniqueVisionIds.map((_, index) => index),
+    uniqueVisionIds.length,
+  )
+  const failures = prepared
+    .filter(({ result }) => !result.ok)
+    .map(({ index, result }) => ({
+      requested_vision_id: uniqueVisionIds[index],
+      error: String(result.error || "Failed"),
+    }))
+  const accepted = prepared.filter(({ result }) => result.ok).map(({ index }) => index)
+  if (failures.length && accepted.length) {
+    // The batch size is part of each row's contract: bind the rows that will
+    // exist to the order they really form.
+    prepared = await prepareAll(accepted, accepted.length)
+  } else {
+    prepared = prepared.filter(({ result }) => result.ok)
+  }
+  const toInsert = prepared.filter(({ result }) => result.ok && !result.existing)
+  const insertResults = toInsert.length
+    ? await env.ICONOPLASM_DB.batch(toInsert.map(({ result }) => result.statement))
+    : []
+  const requests = []
+  for (const { index, result } of prepared) {
+    if (!result.ok) {
+      failures.push({
+        requested_vision_id: uniqueVisionIds[index],
+        error: String(result.error || "Failed"),
+      })
+      continue
+    }
+    const finished = result.existing
+      ? result
+      : await finishGenerationRequestInsert(
+          env,
+          result,
+          insertResults[toInsert.findIndex((item) => item.index === index)],
+        )
+    if (finished.ok) requests.push(finished.request || null)
+    else
+      failures.push({
+        requested_vision_id: uniqueVisionIds[index],
+        error: String(finished.error || "Failed"),
+      })
   }
   return {
     ok: requests.length > 0,
