@@ -1162,6 +1162,56 @@ test("request inbox shows unread results only, one entry per gene with its batch
   assert.doesNotMatch(markup, /sl-details|Cancelled/)
 })
 
+// Waiting groups like Ready: an order of six CA3 styles showed as six identical rows
+// (owner, 2026-10-19). Failure modes: one row per request; the count or the tab
+// badge counting images instead of genes; the age taken from the newest request.
+test("request inbox shows waiting requests as one entry per gene with its image count", async () => {
+  const openRequests = [
+    ...Array.from({ length: 6 }, (_, index) => ({
+      request_id: index + 1,
+      gene_symbol: "CA3",
+      gene_url: "/gene/CA3",
+      created_at: `2026-10-18 17:14:3${index}`,
+    })),
+    {
+      request_id: 7,
+      gene_symbol: "TP53",
+      gene_url: "/gene/TP53",
+      created_at: "2026-10-18 17:15:00",
+    },
+  ]
+  const inbox = createRequestInbox({
+    fetchJSON: async () => ({
+      ok: true,
+      authenticated: true,
+      unread_count: 0,
+      ready_count: 0,
+      open_count: 7,
+      ready_requests: [],
+      open_requests: openRequests,
+    }),
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await inbox.refresh()
+  const markup = inbox.panelMarkup()
+  assert.equal((markup.match(/icono-request-inbox__item--queued/g) || []).length, 2)
+  assert.equal((markup.match(/<strong>CA3<\/strong>/g) || []).length, 1)
+  assert.match(
+    markup,
+    /<strong>CA3<\/strong><span class="icono-request-inbox__receipt-count" aria-label="6 images">6</,
+  )
+  // A single request has no count.
+  assert.match(markup, /<strong>TP53<\/strong><\/span>/)
+  assert.match(
+    markup,
+    /Waiting<span class="icono-request-inbox__count[^"]*">2</,
+    "the tab counts genes, as Ready does",
+  )
+  assert.doesNotMatch(markup, /of 7 shown/)
+})
+
 // B-1029: a result is seen once its gene page opens, however the person got there.
 // Failure modes: a receipt click and the page view both post; a page view posts
 // when nothing of that gene is unread; a page that opens before the inbox has
