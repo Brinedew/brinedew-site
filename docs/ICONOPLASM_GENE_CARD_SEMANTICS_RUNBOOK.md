@@ -65,7 +65,7 @@ a changed name reaches every gene's row with a full run
 deploy after it. `e2e/gene-name-one-source.e2e.mjs` proves the three
 producers agree and the title holds still in a real browser.
 
-## Canonical blot discovery contract
+## Blot discovery contract
 
 Iconoplasm's public machine image is a **gene blot**, not the source character
 portrait. A blot is the shared card runtime's exact `image-only` composition:
