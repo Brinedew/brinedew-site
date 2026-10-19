@@ -10,18 +10,18 @@ import { MAX_GENES_PER_REQUEST, REGISTER_MAX_PORTRAITS, createIconoplasmApp } fr
 import { BATCH_PRICES } from "./batch-admission.js"
 
 // B-1063: the factory's portrait registration, through the real Hono app, Zod,
-// Drizzle, the D1 schema of every production migration and the real card
+// Drizzle, the D1 schema of every production migration and the real gene object
 // publisher. Failure modes written before the route:
 // 1. a caller without the factory's token writes rows; or the router swallows
 //    a request it doesn't own instead of handing it to the legacy handler;
-// 2. new portraits don't reach the gene's live card, or arrive without the
+// 2. new portraits don't reach the gene's live stable object, or arrive without the
 //    `candidate_added` event the catalogue builder follows;
 // 3. re-sending a registration rewrites rows (and their trigger-maintained
 //    counters) or duplicates events;
 // 4. a portrait of a gene the catalogue doesn't carry is stored as an orphan;
 // 5. a malformed body, or more genes than one request can rebuild, writes
 //    anything;
-// 6. one gene's failed card build hides the others' success or loses rows;
+// 6. one gene's failed gene object build hides the others' success or loses rows;
 // 7. the summaries the clans page, the admin pages and the request picker
 //    still read (gene rollup, vision marks) miss the new portraits, because
 //    only the old ingest refreshed them.
@@ -44,7 +44,7 @@ function harness({
   db.database.exec(`CREATE TEMP TABLE portrait_writes (n INTEGER);
     CREATE TEMP TRIGGER count_portrait_updates AFTER UPDATE ON icono_portrait_assets
     BEGIN INSERT INTO portrait_writes VALUES (1); END;`)
-  const cards = new Map()
+  const geneObjects = new Map()
   const legacyCalls = []
   const legacyBodies = []
   const app = createIconoplasmApp({
@@ -60,7 +60,7 @@ function harness({
         readManifestation: async () => null,
         objects: {
           async writeStable(key, value) {
-            cards.set(key, value)
+            geneObjects.set(key, value)
             return { key, hash: "e".repeat(64), size: 1 }
           },
         },
@@ -86,7 +86,7 @@ function harness({
     return { status: response.status, body: await response.json().catch(() => null) }
   }
   const rows = (sql, ...args) => db.database.prepare(sql).all(...args)
-  return { app, env, db, cards, legacyCalls, legacyBodies, register, rows }
+  return { app, env, db, geneObjects, legacyCalls, legacyBodies, register, rows }
 }
 
 const portrait = (symbol, char, extra = {}) => ({
@@ -157,7 +157,7 @@ test("only the factory's token registers, and every other request reaches the le
   assert.equal((await writeWall.json()).code, "D1_ACCOUNT_WRITE_LIMIT")
 })
 
-test("new portraits land on the gene's card with one candidate_added event each", async () => {
+test("new portraits land on the gene's stable object with one candidate_added event each", async () => {
   const h = harness()
   const result = await h.register({
     created_by: "drain:local",
@@ -173,7 +173,7 @@ test("new portraits land on the gene's card with one candidate_added event each"
     stored.map((row) => [row.asset_sha256, row.r2_key_full, row.width, row.status]),
     [
       // Same second, no votes: the tie goes to the lower hash. Winning changes no
-      // status: icono_publish_state and the card say which portrait won.
+      // status: icono_publish_state and the gene object say which portrait won.
       [sha("a"), `portraits/v1/aa/${sha("a")}/full.webp`, 768, "draft"],
       [sha("b"), `portraits/v1/bb/${sha("b")}/full.webp`, 768, "draft"],
     ],
@@ -186,10 +186,10 @@ test("new portraits land on the gene's card with one candidate_added event each"
       .map((row) => row.to_asset_sha256),
     [sha("a"), sha("b")],
   )
-  const card = h.cards.get("genes/v3/TP53.json")
-  assert.equal(card.candidate_count, 2)
-  assert.equal(card.portrait.status, "published")
-  assert.equal(result.body.genes[0].winner_asset_sha256, card.portrait.asset_sha256)
+  const geneObject = h.geneObjects.get("genes/v3/TP53.json")
+  assert.equal(geneObject.candidate_count, 2)
+  assert.equal(geneObject.portrait.status, "published")
+  assert.equal(result.body.genes[0].winner_asset_sha256, geneObject.portrait.asset_sha256)
   assert.deepEqual(
     h
       .rows("SELECT current_asset_sha256, total_assets FROM icono_admin_gene_rollup")
@@ -208,13 +208,13 @@ test("re-sending a registration rewrites no row and adds no event", async () => 
   await h.register(body)
   const events = h.rows("SELECT COUNT(*) AS n FROM icono_publish_events")[0].n
   h.db.database.exec("DELETE FROM portrait_writes")
-  h.cards.clear()
+  h.geneObjects.clear()
   const again = await h.register(body)
   assert.equal(again.body.ok, true)
   assert.equal(again.body.added, 0)
   assert.equal(h.rows("SELECT COUNT(*) AS n FROM portrait_writes")[0].n, 0)
   assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_publish_events")[0].n, events)
-  assert.ok(h.cards.has("genes/v3/TP53.json"), "the card is rebuilt again")
+  assert.ok(h.geneObjects.has("genes/v3/TP53.json"), "the gene object is rebuilt again")
 
   // A changed factory value is written; the site's status stays.
   h.db.database.exec("UPDATE icono_portrait_assets SET status = 'approved'")
@@ -265,7 +265,7 @@ test("a malformed body, or more genes than one request can rebuild, writes nothi
   assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n, 0)
 })
 
-test("one gene's failed card build is reported, and its rows and the other genes stand", async () => {
+test("one gene's failed gene object build is reported, and its rows and the other genes stand", async () => {
   const h = harness({ failOn: "TP53" })
   const result = await h.register({
     created_by: "drain:local",
@@ -281,7 +281,7 @@ test("one gene's failed card build is reported, and its rows and the other genes
   )
   assert.match(result.body.genes[0].error, /PUT failed/)
   assert.equal(h.rows("SELECT COUNT(*) AS n FROM icono_portrait_assets")[0].n, 2)
-  assert.ok(h.cards.has("genes/v3/WEE1.json"))
+  assert.ok(h.geneObjects.has("genes/v3/WEE1.json"))
 })
 
 // 2026-10-09, 20:04 UTC: building one D1 statement per row cost a 96-portrait
@@ -315,7 +315,7 @@ test("a full registration writes all its rows with two statements", async () => 
   )
 })
 
-// B-1063 incident, 2026-10-09: the factory's backlog and a card sweep spent the
+// B-1063 incident, 2026-10-09: the factory's backlog and a gene object sweep spent the
 // whole D1 write wall. Batch work stops at the tier table's 85% of a wall,
 // measured on Cloudflare's own meter; a reader's own request runs to the wall.
 // What a lagging meter and an unreadable one do is batch-admission.test.js (B-1085).

@@ -236,7 +236,7 @@ test("F4 --only rewrites exactly the named genes, listed in the CDN catalogue or
   })
   assert.deepEqual([...published].sort(), ["G003", "G007", "HLA-A"])
   assert.equal(receipt.planned, 3)
-  // 2026-10-09: 600 genes in D1's catalogue had no card, so the CDN catalogue
+  // 2026-10-09: 600 genes in D1's catalogue had no gene object, so the CDN catalogue
   // didn't list them; the route, not the derived object, decides.
   const unlisted = await republishGeneObjects({
     symbols: SYMBOLS,

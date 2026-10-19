@@ -2,8 +2,8 @@
 // 0125. The gene uses the caretaker version it chose when there is one and it is
 // not withdrawn; otherwise the factory's text. One D1 read, no Bunny.
 //
-// The answer carries the text's Tags, which stay private (B-859): card builders
-// take only what publicGeneText returns.
+// The answer carries the text's Tags, which stay private (B-859): the stable gene object
+// builder takes only what publicGeneText returns.
 const GENE_TEXT_SQL = `
 SELECT t.gene_symbol, t.gene_id,
        t.text_id, t.version, t.text, t.text_sha256, t.tags, t.fields_json, t.readers_see,
@@ -102,10 +102,10 @@ export async function readGeneTextVersion(db, geneId, textId) {
   })
 }
 
-// What a card may say about the text: an allowlist, so the Tags the caretaker
-// panel promises to keep private can't reach a card (B-859). The text itself
+// What the stable gene object may say about the text: an allowlist, so the Tags the
+// caretaker panel promises to keep private can't reach it (B-859). The text itself
 // only when readers are meant to see it. The page compares
-// `manifestation_revision_id` after a caretaker save to know the card caught up.
+// `manifestation_revision_id` after a caretaker save to know the gene object caught up.
 export function publicGeneText(geneText) {
   if (!geneText) return null
   const visible = geneText.readers_see === true

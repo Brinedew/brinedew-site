@@ -7,19 +7,19 @@
 //   node scripts/publish-iconoplasm-catalog.mjs --dry-run  # build, no upload
 //
 // Runs in GitHub Actions (.github/workflows/publish-iconoplasm-catalog.yml).
-// Each row is read from the gene's published card, genes/v3/<SYMBOL>.json, on
-// Bunny Storage's origin (B-1064): a card rewritten seconds ago is read as
+// Each row is read from the gene's stable gene object, genes/v3/<SYMBOL>.json, on
+// Bunny Storage's origin (B-1064): a gene object rewritten seconds ago is read as
 // written, where the CDN's edge keeps its copy for 60 s and ignores query
-// strings. A gene is listed exactly when its card exists. D1 only says which
+// strings. A gene is listed exactly when its gene object exists. D1 only says which
 // genes changed: incremental runs read the previous object from the CDN and the
 // genes with a publication-affecting event since its watermark, republish
-// those, then read their cards.
+// those, then read their gene objects.
 //
-// Column 5, the Uniqueness order's rank, is not on any card. It compares a
+// Column 5, the Uniqueness order's rank, is not on any gene object. It compares a
 // gene's description with every other gene's, so the workstation, which holds
 // the descriptions' tags, computes it for the whole catalogue at once and
 // uploads one file, catalog/v3/uniqueness.json; every run applies that file to
-// every row. Stored per gene, one recompute rewrote ~19k cards and Essence rows,
+// every row. Stored per gene, one recompute rewrote ~19k gene objects and Essence rows,
 // so nobody ran it, and from March to October 2026 the order sorted by a
 // number for texts that had all been rewritten (B-1064).
 //
@@ -45,7 +45,7 @@ const UNIQUENESS_KEY = "catalog/v3/uniqueness.json"
 const D1_DATABASE_ID = "e7b2e2ca-8fa4-4a0a-bae1-9917912aa7ff" // production ICONOPLASM_DB (wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml)
 const MAX_INCREMENTAL_SYMBOLS = 2000
 const STORAGE = "https://storage.bunnycdn.com/iconoplasm-portraits"
-const CARD_READ_CONCURRENCY = 16
+const GENE_OBJECT_READ_CONCURRENCY = 16
 
 const args = new Set(process.argv.slice(2))
 const FULL = args.has("--full")
@@ -87,26 +87,28 @@ function nullableNumber(value) {
     : number
 }
 
-// The catalogue row of one card (schema 3). The winner's score and date come from
-// the candidate the card marks current. The rank (column 5) is applied from the
+// The catalogue row of one gene object (schema 3). The winner's score and date come from
+// the candidate the gene object marks current. The rank (column 5) is applied from the
 // uniqueness file afterwards, by withRanks.
-export function rowFromCard(card) {
-  const symbol = String(card?.symbol || "").toUpperCase()
+export function rowFromGeneObject(geneObject) {
+  const symbol = String(geneObject?.symbol || "").toUpperCase()
   const portrait =
-    card?.portrait?.status === "published" ? String(card.portrait.asset_sha256 || "") : ""
-  const winner = (Array.isArray(card?.portrait_candidates) ? card.portrait_candidates : []).find(
-    (candidate) => candidate?.is_current,
-  )
+    geneObject?.portrait?.status === "published"
+      ? String(geneObject.portrait.asset_sha256 || "")
+      : ""
+  const winner = (
+    Array.isArray(geneObject?.portrait_candidates) ? geneObject.portrait_candidates : []
+  ).find((candidate) => candidate?.is_current)
   return [
     symbol,
-    iconoplasmGeneName(card?.full_name, symbol),
+    iconoplasmGeneName(geneObject?.full_name, symbol),
     /^[a-f0-9]{64}$/i.test(portrait) ? portrait.toLowerCase() : "",
-    String(card?.color || ""),
+    String(geneObject?.color || ""),
     Number(winner?.image_score || 0),
     null,
-    nullableNumber(card?.weight_kg),
-    nullableNumber(card?.essence?.age_years),
-    nullableNumber(card?.first_publication_year),
+    nullableNumber(geneObject?.weight_kg),
+    nullableNumber(geneObject?.essence?.age_years),
+    nullableNumber(geneObject?.first_publication_year),
     String(winner?.created_at || ""),
   ]
 }
@@ -123,20 +125,20 @@ async function storage(pathname) {
   return response.json()
 }
 
-// The named genes' cards, null where a gene has none.
-async function readCards(symbols) {
-  const cards = new Map()
+// The named genes' gene objects, null where a gene has none.
+async function readGeneObjects(symbols) {
+  const geneObjects = new Map()
   let next = 0
   await Promise.all(
-    Array.from({ length: Math.min(CARD_READ_CONCURRENCY, symbols.length) }, async () => {
+    Array.from({ length: Math.min(GENE_OBJECT_READ_CONCURRENCY, symbols.length) }, async () => {
       while (next < symbols.length) {
         const symbol = symbols[next]
         next += 1
-        cards.set(symbol, await storage(`genes/v3/${encodeURIComponent(symbol)}.json`))
+        geneObjects.set(symbol, await storage(`genes/v3/${encodeURIComponent(symbol)}.json`))
       }
     }),
   )
-  return cards
+  return geneObjects
 }
 
 // The workstation's uniqueness file: { schema: 1, generated_at, ranks: { SYMBOL: rank } }.
@@ -160,28 +162,28 @@ export function withRanks(rows, ranks) {
   return rows
 }
 
-// The rows of the named genes whose card exists.
-async function cardRows(symbols) {
-  return [...(await readCards(symbols)).values()].filter(Boolean).map(rowFromCard)
+// The rows of the named genes whose gene object exists.
+async function geneObjectRows(symbols) {
+  return [...(await readGeneObjects(symbols)).values()].filter(Boolean).map(rowFromGeneObject)
 }
 
 // B-1063: whoever writes a publication event (a registration, a vote, an
-// election) rebuilds the gene's card in the same request. A card at least as new
+// election) rebuilds the gene object in the same request. A gene object at least as new
 // as the gene's latest event is current; only an older or missing one means that
 // rebuild failed (a CPU-killed request, a Bunny error), and only those are
 // republished here. Republishing every changed gene redid hundreds of finished
 // rebuilds and ran the job past its 15 minutes twice on 2026-10-09.
-export function staleSymbols(cards, changedAt) {
+export function staleSymbols(geneObjects, changedAt) {
   return [...changedAt.keys()].filter((symbol) => {
-    const card = cards.get(symbol)
-    const published = Date.parse(card?.published_at || "")
+    const geneObject = geneObjects.get(symbol)
+    const published = Date.parse(geneObject?.published_at || "")
     const changed = Date.parse(`${String(changedAt.get(symbol)).replace(" ", "T")}Z`)
-    return !card || !Number.isFinite(published) || !(published >= changed)
+    return !geneObject || !Number.isFinite(published) || !(published >= changed)
   })
 }
 
-// Every gene with a card: Bunny Storage's own listing of genes/v3/.
-async function allCardSymbols() {
+// Every gene with a gene object: Bunny Storage's own listing of genes/v3/.
+async function allGeneObjectSymbols() {
   const listing = await storage("genes/v3/")
   return (Array.isArray(listing) ? listing : [])
     .filter((entry) => !entry.IsDirectory && String(entry.ObjectName || "").endsWith(".json"))
@@ -189,7 +191,7 @@ async function allCardSymbols() {
 }
 
 async function readAllRows() {
-  return { rows: await cardRows(await allCardSymbols()), reads: 0 }
+  return { rows: await geneObjectRows(await allGeneObjectSymbols()), reads: 0 }
 }
 
 async function highWater() {
@@ -251,7 +253,7 @@ export const REPUBLISH_RETRY_DELAYS_MS = Object.freeze([2000, 5000])
 // (the scanner artifact and catalog JSONL behind /api/public/v1/metadata). Its
 // recognition data is each gene's symbol, name and colour (plus UniProt and
 // aliases, which change with them), so it is rebuilt when those change, not on
-// every portrait vote: portraits reach the extension from each card on hover.
+// every portrait vote: portraits reach the extension from each gene object on hover.
 export function recognitionChanged(previousRows, rows) {
   if (!previousRows) return true
   const key = (row) => JSON.stringify([row[0], row[1], row[3]])
@@ -352,7 +354,7 @@ async function verifyOnCdn(expectedHash, { attempts = 18, delayMs = 5000 } = {})
 // The public API's gene count, read from the same metadata route the extension
 // reads (one Worker request per run). It is behind when its count differs from
 // the index's and its release is over a day old. The age bound caps a lasting
-// mismatch (a catalogue gene without a card, say) at one release a day, 71 KV
+// mismatch (a catalogue gene without a gene object, say) at one release a day, 71 KV
 // writes, instead of one every run: about 30 runs a day would spend 2,100 of
 // the free plan's 1,000 daily KV writes. An unreadable route releases nothing.
 export const PUBLIC_RELEASE_STALE_MS = 24 * 60 * 60 * 1000
@@ -436,14 +438,15 @@ async function main() {
       genes = all.rows
       reads += all.reads
     } else {
-      const cards = await readCards(dirty.symbols)
-      const stale = staleSymbols(cards, dirty.changedAt)
+      const geneObjects = await readGeneObjects(dirty.symbols)
+      const stale = staleSymbols(geneObjects, dirty.changedAt)
       receipt.stale_symbols = stale.length
       if (!DRY_RUN && stale.length) {
         receipt.republish = await republishGenes(stale)
-        for (const [symbol, card] of await readCards(stale)) cards.set(symbol, card)
+        for (const [symbol, geneObject] of await readGeneObjects(stale))
+          geneObjects.set(symbol, geneObject)
       }
-      const changed = { rows: [...cards.values()].filter(Boolean).map(rowFromCard) }
+      const changed = { rows: [...geneObjects.values()].filter(Boolean).map(rowFromGeneObject) }
       const bySymbol = new Map(previous.genes.map((row) => [row[0], row]))
       for (const symbol of dirty.symbols) bySymbol.delete(symbol) // a deleted gene disappears
       for (const row of changed.rows) bySymbol.set(row[0], row)

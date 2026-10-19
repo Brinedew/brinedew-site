@@ -55,20 +55,20 @@ test("a gene that fails every try fails the run instead of vanishing", async () 
   )
 })
 
-// B-1064: each catalogue row is read from the gene's published card. Golden: two
-// live cards (genes/v3/WEE1.json and MFNG.json as published on 2026-10-09).
-test("a catalogue row is the card's name, winner, colour, score, measures and date", async () => {
+// B-1064: each catalogue row is read from the gene's published gene object. Golden: two
+// live gene objects (genes/v3/WEE1.json and MFNG.json as published on 2026-10-09).
+test("a catalogue row is the gene object's name, winner, colour, score, measures and date", async () => {
   const { readFileSync } = await import("node:fs")
-  const { rowFromCard } = await import("./publish-iconoplasm-catalog.mjs")
-  const card = (symbol) =>
+  const { rowFromGeneObject } = await import("./publish-iconoplasm-catalog.mjs")
+  const geneObject = (symbol) =>
     JSON.parse(
       readFileSync(
-        new URL(`../workers/lib/fixtures/gene-cards/${symbol}.json`, import.meta.url),
+        new URL(`../workers/lib/fixtures/gene-objects/${symbol}.json`, import.meta.url),
         "utf8",
       ),
     )
-  const wee1 = card("WEE1")
-  assert.deepEqual(rowFromCard(wee1), [
+  const wee1 = geneObject("WEE1")
+  assert.deepEqual(rowFromGeneObject(wee1), [
     "WEE1",
     "WEE1 G2 checkpoint kinase",
     wee1.portrait.asset_sha256,
@@ -80,9 +80,9 @@ test("a catalogue row is the card's name, winner, colour, score, measures and da
     1991,
     "2026-03-12 18:23:25",
   ])
-  const mfng = card("MFNG")
+  const mfng = geneObject("MFNG")
   const winner = mfng.portrait_candidates.find((candidate) => candidate.is_current)
-  const row = rowFromCard(mfng)
+  const row = rowFromGeneObject(mfng)
   assert.equal(row[2], mfng.portrait.asset_sha256)
   assert.equal(row[4], winner.image_score)
   assert.equal(row[9], winner.created_at)
@@ -93,20 +93,20 @@ test("a catalogue row is the card's name, winner, colour, score, measures and da
     portrait: { status: "missing", asset_sha256: null },
     portrait_candidates: [],
   }
-  assert.deepEqual(rowFromCard(bare).slice(2, 5), ["", "#352f35", 0])
-  assert.equal(rowFromCard(bare)[9], "")
+  assert.deepEqual(rowFromGeneObject(bare).slice(2, 5), ["", "#352f35", 0])
+  assert.equal(rowFromGeneObject(bare)[9], "")
 })
 
 // B-1064: the rank compares a gene with the whole catalogue, so it comes from the
-// workstation's one uniqueness file, never from a card. Failure modes: an
+// workstation's one uniqueness file, never from a gene object. Failure modes: an
 // unchanged row from the previous object keeps a stale rank; a gene the file
 // doesn't name keeps one; a bad value reaches the sort.
 test("every row takes its rank from the uniqueness file, the previous object's rows too", async () => {
-  const { rowFromCard, withRanks } = await import("./publish-iconoplasm-catalog.mjs")
+  const { rowFromGeneObject, withRanks } = await import("./publish-iconoplasm-catalog.mjs")
   const wee1 = JSON.parse(
-    fs.readFileSync(new URL("../workers/lib/fixtures/gene-cards/WEE1.json", import.meta.url)),
+    fs.readFileSync(new URL("../workers/lib/fixtures/gene-objects/WEE1.json", import.meta.url)),
   )
-  const fresh = rowFromCard(wee1)
+  const fresh = rowFromGeneObject(wee1)
   const previous = ["TLX3", "T cell leukemia homeobox 3", "", "#7074a3", 0, 8.0, 31.9, 27, 1993, ""]
   const dropped = ["ACTL10", "actin like 10", "", "", 0, 4.2, 26.8, 30, 2001, ""]
   const odd = ["UBE2W", "ubiquitin conjugating enzyme E2 W", "", "", 0, null, 17.3, 26, 1994, ""]
@@ -124,24 +124,26 @@ test("every row takes its rank from the uniqueness file, the previous object's r
   assert.equal(odd[5], null)
 })
 
-// B-1063: the writer of a publication event rebuilds the gene's card in the same
-// request, so a run republishes only the changed genes whose card is older than
-// their latest event, or missing. Real cards: WEE1 published 2026-10-01 15:13:03,
+// B-1063: the writer of a publication event rebuilds the gene's gene object in the same
+// request, so a run republishes only the changed genes whose gene object is older than
+// their latest event, or missing. Real gene objects: WEE1 published 2026-10-01 15:13:03,
 // MFNG 2026-10-09 13:52:14.
-test("only a card older than its gene's latest event, or a missing one, is republished", () => {
-  const card = (name) =>
+test("only a gene object older than its gene's latest event, or a missing one, is republished", () => {
+  const geneObject = (name) =>
     JSON.parse(
-      fs.readFileSync(new URL(`../workers/lib/fixtures/gene-cards/${name}.json`, import.meta.url)),
+      fs.readFileSync(
+        new URL(`../workers/lib/fixtures/gene-objects/${name}.json`, import.meta.url),
+      ),
     )
-  const cards = new Map([
-    ["WEE1", card("WEE1")],
-    ["MFNG", card("MFNG")],
+  const geneObjects = new Map([
+    ["WEE1", geneObject("WEE1")],
+    ["MFNG", geneObject("MFNG")],
     ["GONE1", null],
   ])
   const changedAt = new Map([
-    ["WEE1", "2026-10-09 13:00:00"], // a vote after the card: its rebuild failed
-    ["MFNG", "2026-10-09 13:52:14"], // the same second as the card: current
-    ["GONE1", "2026-10-09 10:00:00"], // no card at all
+    ["WEE1", "2026-10-09 13:00:00"], // a vote after the gene object: its rebuild failed
+    ["MFNG", "2026-10-09 13:52:14"], // the same second as the gene object: current
+    ["GONE1", "2026-10-09 10:00:00"], // no gene object at all
   ])
-  assert.deepEqual(staleSymbols(cards, changedAt), ["WEE1", "GONE1"])
+  assert.deepEqual(staleSymbols(geneObjects, changedAt), ["WEE1", "GONE1"])
 })

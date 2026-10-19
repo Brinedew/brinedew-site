@@ -1793,7 +1793,7 @@ const app = createIconoplasmApp({
   refreshSummaries: refreshIconoplasmRegisteredGeneSummaries,
   // The signed-in Brinedew account behind a caretaker panel request.
   caretakerSession: resolveActiveCaretakerAccountSession,
-  // Re-runs a gene's election and republishes its card after a caretaker role
+  // Re-runs a gene's election and republishes its gene object after a caretaker role
   // that held a supervote ends.
   settleGene: (env, ctx, symbol) =>
     settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_assignment_supervote_cleared" }),
@@ -1861,7 +1861,7 @@ export default {
         // not an Iconoplasm one.
         geneguessrBoard: () => publishLeaderboardObject(env),
         // B-896: the style picker's first page on the CDN (121 rows, written on change).
-        // B-1057: first rebuild, once each, the visions a card build marked, so
+        // B-1057: first rebuild, once each, the visions a gene object build marked, so
         // the page is built from fresh rollups. A failed rebuild re-marks its visions
         // and never blocks the page.
         requestPicker: async () => {

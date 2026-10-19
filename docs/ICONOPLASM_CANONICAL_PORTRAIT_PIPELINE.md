@@ -5,7 +5,7 @@ How a gene's winning portrait is chosen, published and repaired.
 If you remember one rule, remember this:
 
 **D1 is the authoring and vote source. The stable gene object
-`genes/v3/<SYMBOL>.json` is the one published card for a gene: its portrait is
+`genes/v3/<SYMBOL>.json` is the one published record of a gene: its portrait is
 the published winner (the current portrait), and the canonical public image is
 that portrait's blot, whose address follows from the object alone.**
 
@@ -13,13 +13,13 @@ that portrait's blot, whose address follows from the object alone.**
 
 Iconoplasm publishes two objects on Bunny:
 
-- `genes/v3/<SYMBOL>.json` is the whole published card for one gene: the
+- `genes/v3/<SYMBOL>.json` is the whole published record of one gene: the
   projected record, the winning portrait, the complete candidate pool and
   `published_at`. The record carries the shown manifestation prose and never
   the Tags (the caretaker panel promises they stay private). One pure builder
-  (`buildGeneCard`, `workers/lib/iconoplasm-stable-gene-object.js`) makes it,
+  (`buildStableGeneObject`, `workers/lib/iconoplasm-stable-gene-object.js`) makes it,
   and `publishIconoplasmGeneStableObject` in the stateful runtime writes it.
-  Whoever changes a gene rebuilds its card in the same request:
+  Whoever changes a gene rebuilds its stable gene object in the same request:
   - **the factory** registers portraits it has uploaded to Bunny
     (`POST /api/iconoplasm/admin/portraits/register`, Hono, `workers/iconoplasm/app.js`),
     up to 8 genes and 100 portraits a call (the laptop sends 4 and 50);
@@ -28,17 +28,17 @@ Iconoplasm publishes two objects on Bunny:
     serves the bulk sweep (`scripts/republish-iconoplasm-gene-objects.mjs`) and
     the catalogue run's repairs.
 - `catalog/v3/index.json` is the one catalogue object. GitHub Actions
-  (`scripts/publish-iconoplasm-catalog.mjs`) builds it **from the cards** on
+  (`scripts/publish-iconoplasm-catalog.mjs`) builds it **from the stable gene objects** on
   Bunny Storage's origin, not from D1, and uploads it through
-  `admin_publication.catalog_object_put`. An incremental run reads the cards of
+  `admin_publication.catalog_object_put`. An incremental run reads the gene objects of
   the genes with a publication-affecting event since its watermark and
-  republishes only those whose card is older than the gene's latest event: the
+  republishes only those whose gene object is older than the gene's latest event: the
   rebuilds that failed in their own request. The Worker's quarter-hour
   `gallery` cron (`workers/iconoplasm-catalog-dispatch.js`) sends one
   `repository_dispatch` when the newest publication-affecting event moved.
   `PUBLICATION_AFFECTING_ACTIONS` in that file is the one list of event actions
   that change what readers see.
-- A gene the catalogue no longer carries has no card. Its republish deletes its
+- A gene the catalogue no longer carries has no stable gene object. Its republish deletes its
   stable object and its `icono_published_gene_routes` row, after a D1 read
   proves the gene is absent, and the catalogue run drops its row.
 
@@ -60,7 +60,7 @@ batch job with these numbers before running it.
 
 ## Stable gene object
 
-`writeStable` in `workers/lib/iconoplasm-published-card-objects.js`, called
+`writeStable` in `workers/lib/iconoplasm-published-objects.js`, called
 only by `publishIconoplasmGeneStableObject`, writes the object with
 `stable_object_version: 3` and Cache-Control
 `public, max-age=300, stale-while-revalidate=86400`, and verifies the bytes by
@@ -105,8 +105,8 @@ One painter draws both: `shared/iconoplasm-card/blot-painter.js`. The blot's sto
 
 Rich detail and candidate state come from D1 (`icono_gene_essence`,
 `icono_portrait_assets`, the candidate and vote read models). The published
-portrait comes only from the stable gene object. Public card traffic never
-rebuilds cards from D1 per request, because cold Cloudflare isolates multiply
+portrait comes only from the stable gene object. Public gene traffic never
+rebuilds gene objects from D1 per request, because cold Cloudflare isolates multiply
 D1 reads globally:
 
 1. `readStableGeneObjects(...)` reads `genes/v3/<SYMBOL>.json` from Bunny Storage, one read per requested symbol.
@@ -123,9 +123,9 @@ The home page's IndexedDB card cache is write-through only: the page always
 asks `/api/iconoplasm/mobile-card-manifest` for the current snapshot label
 before painting cached cards, because browsers keep IndexedDB rows for weeks.
 
-`/gene/:symbol` reads its card from the stable object on the CDN
+`/gene/:symbol` reads its gene object from the CDN
 (`genes/v3/<SYMBOL>.json`). The print copy is painted in the reader's browser from
-that card's published portrait, so it can never show a D1 leader that has not
+that object's published portrait, so it can never show a D1 leader that has not
 been published.
 
 Budget: publication writes go to Bunny Storage (one PUT and one verified GET
@@ -279,11 +279,11 @@ refresh; treat it as a hint, not proof.
 
 ### 2. Republish the gene from D1
 
-Republishing is the check and the repair in one step. The card builder elects
+Republishing is the check and the repair in one step. The gene object builder elects
 the winner on every build (B-1063), so a republish can change a gene's portrait:
 when the votes, the candidates or a pin say another portrait should win, the
-card shows it and `icono_publish_state` follows. An exact tie keeps the portrait
-the card already shows. It rewrites `genes/v3/PRL.json` and returns the new
+gene object shows it and `icono_publish_state` follows. An exact tie keeps the portrait
+the gene object already shows. It rewrites `genes/v3/PRL.json` and returns the new
 `published_at`; the CDN shows it within about a minute. Up to `MAX_GENES_PER_REQUEST` (8) per call.
 
 ```powershell

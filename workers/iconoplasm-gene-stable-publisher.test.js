@@ -7,14 +7,14 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 // ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
 // B-898, B-1063: the per-gene publisher, on the real D1 schema (every
 // production migration). Failure modes written before the builder replaced the
-// D1 card assembly:
+// D1 gene object assembly:
 // 1. a gene's first portrait doesn't show until a vote or the nightly repair
 //    elects it (ERVK11-1 on 2026-10-09: "no portrait" next to its candidate),
 //    or the elected winner isn't projected into icono_publish_state, which the
 //    gallery feeds and the catalogue builder still read;
 // 2. an administrator's pin loses to the election, or the election overwrites
 //    the pinned state;
-// 3. a gene with no canonical text gets no card (599 genes on 2026-10-09);
+// 3. a gene with no canonical text gets no gene object (599 genes on 2026-10-09);
 // 4. (B-1055) a gene the catalogue no longer carries keeps its page, or a
 //    listed gene loses it;
 // 5. reading a gene's inputs costs more than one D1 call;
@@ -83,25 +83,25 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
     objects,
     readManifestation: noText,
   })
-  const card = objects.written.at(-1).value
+  const geneObject = objects.written.at(-1).value
   assert.equal(objects.written.at(-1).key, "genes/v3/TP53.json")
-  assert.equal(card.portrait.status, "published")
-  assert.equal(card.portrait.asset_sha256, A)
+  assert.equal(geneObject.portrait.status, "published")
+  assert.equal(geneObject.portrait.asset_sha256, A)
   // 2026-10-09: marking the winner "approved" cost 17 D1 rows written per
   // election (34,068 rows of that day's write wall) for a label nothing reads.
-  assert.equal(card.portrait_candidates[0].status, "draft", "winning changes no status")
+  assert.equal(geneObject.portrait_candidates[0].status, "draft", "winning changes no status")
   assert.equal(
     db.database.prepare("SELECT status FROM icono_portrait_assets WHERE asset_sha256 = ?").get(A)
       .status,
     "draft",
   )
-  assert.equal(card.full_name, "tumor protein p53")
-  assert.equal(card.essence.sex, "Female", "tmh 0 reads as soluble")
+  assert.equal(geneObject.full_name, "tumor protein p53")
+  assert.equal(geneObject.essence.sex, "Female", "tmh 0 reads as soluble")
   // Production Essence rows still hold March 2026 leakage values. The rank is a
   // whole-catalogue number from the workstation's uniqueness file (B-1064), so a
-  // card never carries one.
-  assert.equal(card.uniqueness_rank, undefined, "a card carries no uniqueness rank")
-  assert.equal(card.weight_kg, 43.7)
+  // gene object never carries one.
+  assert.equal(geneObject.uniqueness_rank, undefined, "a gene object carries no uniqueness rank")
+  assert.equal(geneObject.weight_kg, 43.7)
   assert.equal(result.winner_asset_sha256, A)
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 0 })
   const rollup = db.database
@@ -127,10 +127,13 @@ test("a pin beats the election and the election leaves the pinned state alone", 
     objects,
     readManifestation: noText,
   })
-  const card = objects.written.at(-1).value
-  assert.equal(card.portrait.asset_sha256, A, "the older, pinned portrait shows")
+  const geneObject = objects.written.at(-1).value
+  assert.equal(geneObject.portrait.asset_sha256, A, "the older, pinned portrait shows")
   assert.deepEqual(
-    card.portrait_candidates.map((candidate) => [candidate.asset_sha256, candidate.is_current]),
+    geneObject.portrait_candidates.map((candidate) => [
+      candidate.asset_sha256,
+      candidate.is_current,
+    ]),
     [
       [A, true],
       [B, false],
@@ -139,17 +142,17 @@ test("a pin beats the election and the election leaves the pinned state alone", 
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 1 })
 })
 
-test("a gene with no canonical text and no portrait still gets its card", async () => {
+test("a gene with no canonical text and no portrait still gets its gene object", async () => {
   const db = geneDatabase()
   const objects = recordingStore()
   const result = await publishIconoplasmGeneStableObject({ ICONOPLASM_DB: db }, "TP53", {
     objects,
     readManifestation: noText,
   })
-  const card = objects.written.at(-1).value
+  const geneObject = objects.written.at(-1).value
   assert.equal(result.withdrawn, false)
-  assert.equal(card.portrait.status, "missing")
-  assert.equal(card.canonical_manifestation, null)
+  assert.equal(geneObject.portrait.status, "missing")
+  assert.equal(geneObject.canonical_manifestation, null)
   assert.equal(winnerOf(db), null, "no winner, nothing projected")
 })
 

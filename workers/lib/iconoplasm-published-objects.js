@@ -19,7 +19,7 @@ export const PUBLISHED_OBJECT_STORAGE_UNAVAILABLE = "PUBLISHED_OBJECT_STORAGE_UN
 // read-back, so a transient Bunny Storage timeout (the request aborts at
 // portraitStorageRequestTimeout) or a retryable 408/425/429/5xx is safe to
 // retry inside the fetch. Linear B-753.
-export const PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS = 3
+export const PUBLISHED_OBJECT_STORAGE_MAX_ATTEMPTS = 3
 // B-898 (Stage 1): ONE stable, mutable object per gene. Readers fetch this
 // single URL instead of walking head -> manifest -> indexes -> gene -> delta.
 // It is rewritten in place whenever the gene changes and carries the complete
@@ -161,14 +161,14 @@ function sameContentApartFromStamp(storedBytes, value) {
   return canonicalPublishedJson(storedContent) === canonicalPublishedJson(content)
 }
 
-export function createPublishedCardObjectStore(env, { request, bodyTimeoutMs = 8000 } = {}) {
+export function createPublishedObjectStore(env, { request, bodyTimeoutMs = 8000 } = {}) {
   const send =
     request ||
     ((url, init, key) =>
       fetchPortraitStorage(env, url, init, {
         operation: init.method,
         key,
-        maxAttempts: PUBLISHED_CARD_STORAGE_MAX_ATTEMPTS,
+        maxAttempts: PUBLISHED_OBJECT_STORAGE_MAX_ATTEMPTS,
       }))
 
   // Stable (mutable, fixed-URL) gene object. PUT, then verify: the bytes are

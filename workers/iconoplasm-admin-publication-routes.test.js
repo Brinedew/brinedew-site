@@ -242,7 +242,7 @@ test("catalog upsert rejects request shapes that are too heavy for one Worker re
 // B-1064: "Sync website now" re-sends Essence for every gene it has no receipt
 // for (17,689 of 19,381 on 2026-10-10). Failure modes: an unchanged row still
 // rewrites itself and its updated_at index, so the resend spends days of the
-// write wall; or a real change is reported unchanged, so its card is never
+// write wall; or a real change is reported unchanged, so its gene object is never
 // rebuilt.
 test("an Essence row the site already holds writes nothing and says so", async () => {
   const db = iconoplasmDatabase()

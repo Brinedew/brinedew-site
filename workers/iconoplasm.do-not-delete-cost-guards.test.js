@@ -256,12 +256,12 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     /"\/(?:gene|genes|sitemap|robots\.txt|llms\.txt)/,
     "static reader routes must never re-enter the Worker-first list",
   )
-  const cardDeliverySource = readFileSync(
-    new URL("./lib/iconoplasm-card-delivery.js", import.meta.url),
+  const objectDeliverySource = readFileSync(
+    new URL("./lib/iconoplasm-published-object-delivery.js", import.meta.url),
     "utf8",
   )
   assert.doesNotMatch(
-    cardDeliverySource,
+    objectDeliverySource,
     /ICONOPLASM_DB|\.prepare\(|\.batch\(/u,
     "the publication-object fallback handler must never touch D1",
   )

@@ -132,7 +132,7 @@ portrait-native product surfaces; the agent gene-image workflow returns blots
 only. The blot route derives the current renderer
 fingerprint and immutable object key from the gene's stable object; it does
 not require blot metadata to be copied back into
-KV. A vote changes public output after the normal canonical-card publication.
+KV. A vote changes public output after the normal stable gene object publication.
 
 For ordinary exact-symbol retrieval, teach the stable `/blot/{SYMBOL}.webp`
 route before the resolver. The resolver remains the advanced interface for
@@ -160,7 +160,7 @@ Crawler GET and HEAD paths are static files, not workflows; see "Static
 discovery documents" below.
 
 Blot readiness does not control sitemap membership. GET and HEAD for
-the stable blot route read the published card through the existing Worker and
+the stable blot route read the stable gene object through the existing Worker and
 serve its immutable WebP bytes, or redirect to the current portrait while the
 blot is still being drawn. A gene with no published portrait returns 404. This route
 does not read mutable D1 or create an alternate image selection timeline.
@@ -279,9 +279,9 @@ with Chrome's own screenshot of the card.
 ## Requested high-resolution print copies
 
 The print copy is painted in the reader's own browser when they press the
-printer button beside the star in the gene toolbar. The browser takes the card and
+printer button beside the star in the gene toolbar. The browser takes the gene's name and
 portrait the page already holds (read from the gene's stable object
-`genes/v3/<SYMBOL>.json`), copies the portrait's pixels 1:1 and bakes the card's
+`genes/v3/<SYMBOL>.json`), copies the portrait's pixels 1:1 and bakes the
 name, symbol and shading into them, then shows the PNG in the site's image viewer.
 The viewer's Download button saves it named for the gene, for example
 `SOX12-iconoplasm-print-copy.png`, and "Save image as" works on the picture. No

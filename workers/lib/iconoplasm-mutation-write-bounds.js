@@ -24,7 +24,7 @@ export const MAX_EMULSION_CODES_PER_VISION = 24
 // scanning its assets.
 export const VISION_ROLLUP_ROWS = 194
 
-// B-1057: a card build marks the visions a gene touched instead of
+// B-1057: a gene object build marks the visions a gene touched instead of
 // rebuilding each one, and the request-picker job rebuilds every marked vision
 // once, in one batch. A mark is one row of icono_vision_rollup_dirty and its
 // primary-key index entry.

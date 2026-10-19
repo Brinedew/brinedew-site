@@ -74,7 +74,7 @@ maintenance window as in normal service. A `/gene/` path with no document has
 no page to give: containment keeps no 404 page, so it reaches the Worker, which
 answers 404.
 
-A gene's card is its stable object on the CDN, which the page reads directly;
+A gene's card is drawn from its stable object on the CDN, which the page reads directly;
 the Worker serves none of it. Candidate images, caretaker identity, voting,
 generation, authoring, and other mutation routes remain behind the
 schema-transition response. Reader recovery restores reading, not full service:

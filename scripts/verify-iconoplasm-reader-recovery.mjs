@@ -23,7 +23,7 @@ export async function verifyIconoplasmReaderRecovery({
   }
   // Every /gene/{SYMBOL} is a static per-gene document the asset layer serves
   // before the Worker runs, in production and in the containment deploy, which
-  // keeps those asset bytes. Its card comes from the CDN. The one thing this
+  // keeps those asset bytes. Its gene object comes from the CDN. The one thing this
   // containment Worker answers for a reader is the first-party portrait fallback.
   const canonicalLink = (symbol) =>
     `<link rel="canonical" href="https://iconoplasm.brinedew.bio/gene/${symbol}">`
@@ -33,13 +33,13 @@ export async function verifyIconoplasmReaderRecovery({
     if (page.status !== 200 || !html.includes(canonicalLink(symbol)))
       throw new Error(`COST_READER_RECOVERY_PAGE_INVALID: ${symbol}`)
     const stable = await probe(`${STABLE_OBJECT_ORIGIN}/genes/v3/${symbol}.json`)
-    const card = await stable.json()
-    if (stable.status !== 200 || card.symbol !== symbol)
-      throw new Error(`COST_READER_RECOVERY_CARD_INVALID: ${symbol}`)
+    const geneObject = await stable.json()
+    if (stable.status !== 200 || geneObject.symbol !== symbol)
+      throw new Error(`COST_READER_RECOVERY_GENE_OBJECT_INVALID: ${symbol}`)
     const head = await probe(`/gene/${symbol}`, "HEAD")
     if (head.status !== 200 || (await head.text()) !== "")
       throw new Error(`COST_READER_RECOVERY_HEAD_INVALID: ${symbol}`)
-    const sha = card.portrait?.asset_sha256
+    const sha = geneObject.portrait?.asset_sha256
     if (!/^[a-f0-9]{64}$/.test(sha || ""))
       throw new Error(`COST_READER_RECOVERY_PORTRAIT_INVALID: ${symbol}`)
     const portrait = await probe(`/portraits/v1/${sha.slice(0, 2)}/${sha}/full.webp`, "HEAD")

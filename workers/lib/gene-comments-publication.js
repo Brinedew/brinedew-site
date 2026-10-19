@@ -24,9 +24,9 @@
 // the rows store a `/api/avatar` path, which is a Worker request per picture, and the privacy page
 // promises that only the signed-in site contacts Discord.
 import {
-  createPublishedCardObjectStore,
+  createPublishedObjectStore,
   geneCommentsObjectKey,
-} from "./iconoplasm-published-card-objects.js"
+} from "./iconoplasm-published-objects.js"
 import {
   externalPortraitStoragePassword,
   externalPortraitStorageUrl,
@@ -113,7 +113,7 @@ export async function publishGeneCommentsObject(
     return { key, skipped: "storage_unconfigured" }
   }
   const list = Array.isArray(rows) ? rows : []
-  const store = createPublishedCardObjectStore(env)
+  const store = createPublishedObjectStore(env)
   const { avatars, fetches } =
     mode === "reuse"
       ? { avatars: await storedAvatars(store, key, list), fetches: 0 }

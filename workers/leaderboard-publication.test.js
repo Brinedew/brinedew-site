@@ -31,7 +31,7 @@ import {
   ICONOPLASM_BACKGROUND_MINUTES,
   ICONOPLASM_RECURRING_CRON,
 } from "./iconoplasm-background-schedule.js"
-import { LEADERBOARD_OBJECT_KEY } from "./lib/iconoplasm-published-card-objects.js"
+import { LEADERBOARD_OBJECT_KEY } from "./lib/iconoplasm-published-objects.js"
 import { AVATAR_BYTE_LIMIT } from "./lib/avatar-proxy.js"
 import { publishLeaderboardObject } from "./lib/leaderboard-publication.js"
 import { publicContentSecurityPolicy } from "./lib/the-only-public-document-policy-do-not-duplicate.js"

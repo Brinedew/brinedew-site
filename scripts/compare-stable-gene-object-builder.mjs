@@ -1,21 +1,21 @@
-// B-1063: checks buildGeneCard against the cards readers get today.
+// B-1063: checks buildStableGeneObject against the gene objects readers get today.
 //
-//   node scripts/compare-gene-card-builder.mjs --symbols TP53,WEE1
-//   node scripts/compare-gene-card-builder.mjs --all [--concurrency 16]
+//   node scripts/compare-stable-gene-object-builder.mjs --symbols TP53,WEE1
+//   node scripts/compare-stable-gene-object-builder.mjs --all [--concurrency 16]
 //
 // For each gene it downloads the live genes/v3/<SYMBOL>.json from the CDN,
 // splits it back into the builder's two inputs (the factory's content and the
 // readers' facts), rebuilds it and reports:
-//   - winner: whether the winner rule, run on the card's own vote counts and
-//     supervote, picks the portrait the card shows. A mismatch is either an
+//   - winner: whether the winner rule, run on the object's own vote counts and
+//     supervote, picks the portrait the object shows. A mismatch is either an
 //     administrator's pin or a stored winner the D1 path never re-elected;
-//   - fields: every path where the rebuilt card differs from the live one,
-//     with the live card's portrait pinned so the winner can't explain it.
-// Nothing is written anywhere. Reading costs CDN bandwidth only (about 10 KB a
-// card).
+//   - fields: every path where the rebuilt object differs from the live one,
+//     with the live object's portrait pinned so the winner can't explain it.
+// Nothing is written anywhere. Reading costs CDN bandwidth only (about 10 KB per
+// gene object).
 import { pathToFileURL } from "node:url"
 
-import { buildGeneCard } from "../workers/lib/iconoplasm-stable-gene-object.js"
+import { buildStableGeneObject } from "../workers/lib/iconoplasm-stable-gene-object.js"
 
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 
@@ -41,43 +41,43 @@ const TOP_LEVEL_ESSENCE_FIELDS = [
   "primary_tissue",
 ]
 
-// The live card, taken apart into what the factory made and what readers did.
-// Stale and legacy flags never reach a card, so every portrait counts as fresh.
-export function inputsFromCard(card) {
-  const essence = { ...(card.essence || {}) }
+// The live gene object, taken apart into what the factory made and what readers did.
+// Stale and legacy flags never reach a gene object, so every portrait counts as fresh.
+export function inputsFromGeneObject(geneObject) {
+  const essence = { ...(geneObject.essence || {}) }
   const sexOrigin = Array.isArray(essence.sex_origin) ? essence.sex_origin[0] : null
   delete essence.name
   delete essence.politics
   delete essence.sex_origin
   for (const field of TOP_LEVEL_ESSENCE_FIELDS) {
-    if (card[field] !== undefined) essence[field] = card[field]
+    if (geneObject[field] !== undefined) essence[field] = geneObject[field]
   }
-  if (card.uniqueness_rank !== undefined) essence.leakage_percent = card.uniqueness_rank
-  if (card.weight_kg !== undefined && essence.weight_kg === undefined)
-    essence.weight_kg = card.weight_kg
-  const portraits = (card.portrait_candidates || []).map((candidate) =>
+  if (geneObject.uniqueness_rank !== undefined) essence.leakage_percent = geneObject.uniqueness_rank
+  if (geneObject.weight_kg !== undefined && essence.weight_kg === undefined)
+    essence.weight_kg = geneObject.weight_kg
+  const portraits = (geneObject.portrait_candidates || []).map((candidate) =>
     Object.fromEntries(CONTENT_PORTRAIT_FIELDS.map((field) => [field, candidate[field] ?? null])),
   )
-  const supervoted = (card.portrait_candidates || []).find(
+  const supervoted = (geneObject.portrait_candidates || []).find(
     (candidate) => candidate.caretaker_supervote,
   )
-  const manifestation = card.canonical_manifestation
-    ? { ...card.canonical_manifestation }
-    : (card.canonical_manifestation ?? null)
+  const manifestation = geneObject.canonical_manifestation
+    ? { ...geneObject.canonical_manifestation }
+    : (geneObject.canonical_manifestation ?? null)
   if (manifestation) delete manifestation.accepted_tags_derivative
   return {
     content: {
-      symbol: card.symbol,
+      symbol: geneObject.symbol,
       catalog: {
-        full_name: card.full_name,
-        color_hex: card.color,
+        full_name: geneObject.full_name,
+        color_hex: geneObject.color,
         tmh: sexOrigin === "Transmembrane" ? true : sexOrigin === "Soluble" ? false : null,
       },
       essence,
       portraits,
     },
     facts: {
-      votes: (card.portrait_candidates || []).map((candidate) => ({
+      votes: (geneObject.portrait_candidates || []).map((candidate) => ({
         asset_sha256: candidate.asset_sha256,
         upvotes: candidate.image_upvotes,
         downvotes: candidate.image_downvotes,
@@ -90,9 +90,9 @@ export function inputsFromCard(card) {
           }
         : null,
       pin: null,
-      previous_winner: card.portrait?.asset_sha256 || null,
+      previous_winner: geneObject.portrait?.asset_sha256 || null,
       manifestation,
-      vote_version: card.vote_version ?? null,
+      vote_version: geneObject.vote_version ?? null,
     },
   }
 }
@@ -116,25 +116,25 @@ export function differences(expected, actual, path = "") {
   return Object.is(expected, actual) ? [] : [path]
 }
 
-export function compareCard(card) {
-  const { content, facts } = inputsFromCard(card)
-  const stamp = () => card.published_at
-  const elected = buildGeneCard(content, facts, { now: stamp })
-  const liveWinner = card.portrait?.asset_sha256 || null
-  const pinned = buildGeneCard(content, { ...facts, pin: liveWinner }, { now: stamp })
-  const expected = structuredClone(card)
-  // Cards older than B-898 stage 2 carry no vote version; the builder writes
+export function compareGeneObject(geneObject) {
+  const { content, facts } = inputsFromGeneObject(geneObject)
+  const stamp = () => geneObject.published_at
+  const elected = buildStableGeneObject(content, facts, { now: stamp })
+  const liveWinner = geneObject.portrait?.asset_sha256 || null
+  const pinned = buildStableGeneObject(content, { ...facts, pin: liveWinner }, { now: stamp })
+  const expected = structuredClone(geneObject)
+  // Gene objects older than B-898 stage 2 carry no vote version; the builder writes
   // null for "none read". Leaked private tags are dropped on purpose (B-859).
   if (!("vote_version" in expected)) expected.vote_version = null
   if (expected.canonical_manifestation)
     delete expected.canonical_manifestation.accepted_tags_derivative
   return {
-    symbol: card.symbol,
+    symbol: geneObject.symbol,
     winner_matches: (elected.portrait?.asset_sha256 || null) === liveWinner,
     elected_winner: elected.portrait?.asset_sha256 || null,
     live_winner: liveWinner,
     fields: differences(expected, pinned),
-    leaked_tags: Boolean(card.canonical_manifestation?.accepted_tags_derivative),
+    leaked_tags: Boolean(geneObject.canonical_manifestation?.accepted_tags_derivative),
   }
 }
 
@@ -174,11 +174,11 @@ async function main() {
     Array.from({ length: Math.min(concurrency, symbols.length) }, async () => {
       while (next < symbols.length) {
         const symbol = symbols[next++]
-        const card = await fetchJson(
+        const geneObject = await fetchJson(
           `${CDN}/genes/v3/${encodeURIComponent(symbol)}.json?cb=${stamp}`,
         )
-        if (!card) missing.push(symbol)
-        else results.push(compareCard(card))
+        if (!geneObject) missing.push(symbol)
+        else results.push(compareGeneObject(geneObject))
       }
     }),
   )
@@ -192,11 +192,11 @@ async function main() {
     JSON.stringify(
       {
         compared: results.length,
-        missing_cards: missing.length,
+        missing_objects: missing.length,
         identical: results.filter((result) => !result.fields.length).length,
         winner_mismatches: winnerMismatches.length,
         winner_mismatch_examples: winnerMismatches.slice(0, 12).map((result) => result.symbol),
-        cards_with_leaked_tags: results.filter((result) => result.leaked_tags).length,
+        objects_with_leaked_tags: results.filter((result) => result.leaked_tags).length,
         differing_fields: Object.fromEntries(
           [...fieldCounts.entries()].sort((left, right) => right[1] - left[1]),
         ),

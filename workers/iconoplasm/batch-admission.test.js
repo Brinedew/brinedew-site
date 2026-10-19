@@ -66,7 +66,7 @@ const laggingMeter =
 
 test("a job the day can't hold is refused before its first write", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-11T10:40:00.000Z") })
-  // 84,600 rows written: eight cards (480 rows) no longer fit under the 85,000 stop.
+  // 84,600 rows written: eight gene object rebuilds (480 rows) no longer fit under the 85,000 stop.
   const h = harness(t, { meter: laggingMeter({ before: 84_600 }) })
   const genes = ["A1BG", "A2M", "AAAS", "AACS", "AAGAB", "AAK1", "AAMP", "AANAT"]
   const refused = await h.post("/api/iconoplasm/admin/publication/republish", { symbols: genes })
@@ -75,7 +75,7 @@ test("a job the day can't hold is refused before its first write", async (t) => 
   assert.equal(refused.body.meter, "rows_written")
   assert.equal(refused.body.price, 480 + 1, "the whole job and its own admission row are priced")
   assert.match(refused.body.error.message, /^This batch request costs 481 D1 rows written/)
-  assert.equal(h.spent.length, 0, "no card was built")
+  assert.equal(h.spent.length, 0, "no gene object was built")
   assert.equal(
     h.db.database.prepare("SELECT COUNT(*) AS n FROM icono_batch_admissions").get().n,
     0,
@@ -98,7 +98,7 @@ test("a fast batch stream stops before the stop although the meter runs two minu
   const genes = ["A1BG", "A2M", "AAAS", "AACS", "AAGAB", "AAK1", "AAMP", "AANAT"]
   let refused = null
   let meterAtRefusal = null
-  // Eight cards every two seconds: 14,400 rows written a minute, about the
+  // Eight gene object rebuilds every two seconds: 14,400 rows written a minute, about the
   // copy's 17,800 on 2026-10-11.
   for (let request = 0; request < 2_000 && !refused; request += 1) {
     const answer = await h.post("/api/iconoplasm/admin/publication/republish", { symbols: genes })

@@ -25,8 +25,8 @@ import {
   LEADERBOARD_OBJECT_KEY,
   PUBLISHED_OBJECT_STORAGE_UNAVAILABLE,
   canonicalPublishedJson,
-  createPublishedCardObjectStore,
-} from "./iconoplasm-published-card-objects.js"
+  createPublishedObjectStore,
+} from "./iconoplasm-published-objects.js"
 import { discordAvatarDataUri } from "./avatar-proxy.js"
 import { boardEntry, readLeaderboard } from "./leaderboard-streaks.js"
 
@@ -62,7 +62,7 @@ export async function publishLeaderboardObject(
     bytes: bytes.byteLength,
   }
 
-  const objects = createPublishedCardObjectStore(env)
+  const objects = createPublishedObjectStore(env)
   let stored
   try {
     stored = await objects.readStable(LEADERBOARD_OBJECT_KEY)

@@ -4,7 +4,7 @@
 // button uses (shared/iconoplasm-card/blot-painter.js). Its address is a pure
 // function of the gene's symbol, name and current portrait
 // (workers/lib/iconoplasm-blot.js), so the site computes it from the published
-// card and this script draws whatever address is still empty.
+// stable gene object and this script draws whatever address is still empty.
 //
 // Bunny storage is the record. A blot exists exactly when its file is in
 // storage; one listing per first letter shows them all. Each run reads the
@@ -113,14 +113,14 @@ export function blotsOfCatalog(catalog) {
   for (const row of catalog.genes) {
     const [symbol, fullName, portraitSha256] = row
     if (!portraitSha256) continue
-    const card = {
+    const geneObject = {
       symbol,
       full_name: fullName,
       portrait: { status: "published", asset_sha256: portraitSha256 },
     }
-    const fingerprint = iconoplasmBlotFingerprint(card)
+    const fingerprint = iconoplasmBlotFingerprint(geneObject)
     const key = iconoplasmBlotObjectKey(symbol, fingerprint)
-    if (key) blots.push({ symbol, card, key, folder: iconoplasmBlotFolder(symbol) })
+    if (key) blots.push({ symbol, geneObject, key, folder: iconoplasmBlotFolder(symbol) })
   }
   return blots
 }
@@ -221,10 +221,10 @@ async function openPainterPage(context, origin) {
   return page
 }
 
-async function paintBlot(page, card) {
+async function paintBlot(page, geneObject) {
   const base64 = await page.evaluate(
-    async ({ card, portraitUrl, width, quality }) => {
-      const canvas = await globalThis.IconoplasmBlot.paint(card, {
+    async ({ geneObject, portraitUrl, width, quality }) => {
+      const canvas = await globalThis.IconoplasmBlot.paint(geneObject, {
         portraitUrl,
         width,
         requireFonts: true,
@@ -245,8 +245,8 @@ async function paintBlot(page, card) {
       return btoa(binary)
     },
     {
-      card,
-      portraitUrl: `/portrait/${card.portrait.asset_sha256}.webp`,
+      geneObject,
+      portraitUrl: `/portrait/${geneObject.portrait.asset_sha256}.webp`,
       width: ICONOPLASM_BLOT_WIDTH,
       quality: WEBP_QUALITY,
     },
@@ -298,7 +298,7 @@ async function drawAll(missing, { key, out }) {
           }
           paints += 1
           try {
-            const bytes = await paintBlot(page, blot.card)
+            const bytes = await paintBlot(page, blot.geneObject)
             if (out) {
               const file = path.join(out, blot.key)
               mkdirSync(path.dirname(file), { recursive: true })

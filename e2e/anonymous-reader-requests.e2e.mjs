@@ -13,7 +13,7 @@
 //  2. a page puts a first-party /blot/ or /portraits/ URL in the document, so each view costs a
 //     Worker request (B-846);
 //  3. the page never loaded at all and the empty request list is a vacuous pass: the home shell
-//     must mount, and the gene page must load its card from the CDN's stable gene object;
+//     must mount, and the gene page must load its stable gene object from the CDN;
 //  4. the analytics beacon loads before a visitor in a consent country has answered, or after
 //     "No thanks", or never loads for a visitor who accepted or lives outside the consent
 //     countries (the prompt decision is made in the page, from /cdn-cgi/trace).
@@ -169,7 +169,7 @@ test("an anonymous reader on the home page and on a gene page sends the Worker n
         await page.waitForTimeout(5_000)
         report.push({ where, workerBound, cdn: [...new Set(cdn)] })
 
-        // 3. The gene page really loaded its card from the published object.
+        // 3. The gene page really loaded its gene object from the CDN.
         if (pagePath !== "/") {
           assert.ok(
             cdn.includes("/genes/v3/TP53.json"),

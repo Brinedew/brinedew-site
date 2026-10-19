@@ -36,7 +36,7 @@ export function prepareSchemaTransitionConfig(source, { mode = SCHEMA_TRANSITION
   if (mode !== SCHEMA_TRANSITION_MODE)
     throw new Error(`Unsupported schema-transition mode: ${String(mode || "")}`)
   // B-742: the migration stage is a live deployment. If admission subsequently
-  // fails, the already-tested published-card reader must survive that failed stage.
+  // fails, the already-tested stable-gene-object reader must survive that failed stage.
   // Preserve every route, secret binding, Durable Object identity and budget.
   return prepareRetainedAssetsConfig(source.replace(canonicalMain, transitionMain))
 }

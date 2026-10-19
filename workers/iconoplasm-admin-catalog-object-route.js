@@ -10,7 +10,7 @@ import {
   STABLE_CATALOG_OBJECT_KEY,
   STABLE_CATALOG_OBJECT_LIMIT,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
-} from "./lib/iconoplasm-published-card-objects.js"
+} from "./lib/iconoplasm-published-objects.js"
 
 export { STABLE_CATALOG_OBJECT_KEY, STABLE_CATALOG_OBJECT_LIMIT }
 

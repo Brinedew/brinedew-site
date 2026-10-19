@@ -16,7 +16,8 @@ test("the stable object routes are declared", () => {
 })
 
 test("the stable gene object route serves storage bytes with a short shared TTL and no Workers Cache", async () => {
-  const { createPublishedCardDeliveryHandlers } = await import("./lib/iconoplasm-card-delivery.js")
+  const { createPublishedObjectDeliveryHandlers } =
+    await import("./lib/iconoplasm-published-object-delivery.js")
   const stored = new Map([
     ["genes/v3/TP53.json", JSON.stringify({ symbol: "TP53", stable_object_version: 3 })],
   ])
@@ -48,7 +49,7 @@ test("the stable gene object route serves storage bytes with a short shared TTL 
       : new Response(null, { status: 404 })
   }
   try {
-    const handlers = createPublishedCardDeliveryHandlers()
+    const handlers = createPublishedObjectDeliveryHandlers()
     const hit = await handlers.stableGene({ env, match: { params: { symbol: "tp53" } } })
     assert.equal(hit.status, 200)
     assert.equal(
@@ -73,7 +74,8 @@ test("the stable gene object route serves storage bytes with a short shared TTL 
 
 // B-898: the canonical-origin fallback for the one stable catalog object.
 test("the stable catalog route serves storage bytes with the stable TTL and no Workers Cache", async () => {
-  const { createPublishedCardDeliveryHandlers } = await import("./lib/iconoplasm-card-delivery.js")
+  const { createPublishedObjectDeliveryHandlers } =
+    await import("./lib/iconoplasm-published-object-delivery.js")
   const stored = new Map([["catalog/v3/index.json", JSON.stringify({ schema: 3, genes: [] })]])
   const env = {
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "zone",
@@ -103,7 +105,7 @@ test("the stable catalog route serves storage bytes with the stable TTL and no W
       : new Response(null, { status: 404 })
   }
   try {
-    const handlers = createPublishedCardDeliveryHandlers()
+    const handlers = createPublishedObjectDeliveryHandlers()
     const hit = await handlers.stableCatalog({ env })
     assert.equal(hit.status, 200)
     assert.equal(

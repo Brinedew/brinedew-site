@@ -14,7 +14,7 @@
 // 4. The skeleton shows a value, a pen mark or a picture that isn't this gene's.
 // 5. The skeleton can be focused or clicked.
 //
-// What is real: the built site, TP53's published card and candidates, Chrome.
+// What is real: the built site, TP53's stable gene object and candidates, Chrome.
 // The gene's published file is held back until the skeleton is measured.
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"

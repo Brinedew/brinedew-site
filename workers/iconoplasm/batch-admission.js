@@ -38,12 +38,12 @@ export const BATCH_METERS = ["rows_read", "rows_written"]
 export const BATCH_PRICES = Object.freeze({
   // Register route, Drain-only window 2026-10-10 00:00-00:10 UTC, 174 portraits
   // (d1QueriesAdaptiveGroups per statement): ~54 written and ~150 read each,
-  // card rebuild included.
+  // gene object rebuild included.
   portrait: Object.freeze({ rows_written: 60, rows_read: 160 }),
-  // A card rebuild without a new portrait: the gene rollup, its publish event
+  // A gene object rebuild without a new portrait: the gene rollup, its publish event
   // and winner rows, about 28 written per gene in that window. Doubled until a
   // republish-only window measures it.
-  card: Object.freeze({ rows_written: 60, rows_read: 300 }),
+  gene_object: Object.freeze({ rows_written: 60, rows_read: 300 }),
   // One gene text: 62,037 rows written for 20,155 texts in the 2026-10-11 copy
   // (row, primary key, gene_id index), and 70,127 read.
   gene_text: Object.freeze({ rows_written: 4, rows_read: 4 }),
