@@ -269,8 +269,8 @@ or admin route. A run costs no D1 rows and no Worker requests.
 A portrait or full-name change produces a new fingerprint and so a new key;
 unrelated essence changes do not. Changing the painter's output means changing
 `ICONOPLASM_BLOT_RENDERER_REVISION`, and the next run redraws every gene
-(about 19,400 blots; measured on 2026-10-19 at roughly N per minute on a
-GitHub runner). GET and HEAD routes never render, enroll, repair or enqueue
+(about 19,400 blots, 2.6 GB; the first full run on 2026-10-19 drew about
+250 a minute on a GitHub runner, so about 80 minutes). GET and HEAD routes never render, enroll, repair or enqueue
 work.
 
 `e2e/draw-blots.e2e.mjs` runs the script on real genes and compares its blots

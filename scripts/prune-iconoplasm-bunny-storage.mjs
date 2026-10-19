@@ -23,7 +23,7 @@
 //    missed. Their rows were removed, so no reader can reach them.
 // Everything else stays. Old blots (blots/v1/ and blots/v2/) stay even when no gene uses them: the
 // developers page promises embedders that a blot's CDN address "never changes" (2,939 v1 blots,
-// 0.4 GB, measured 2026-10-17; each v2 blot is about 60 KB).
+// 0.4 GB, measured 2026-10-17; each v2 blot is about 136 KB, measured 2026-10-19).
 import { appendFileSync, createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
