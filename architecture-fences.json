@@ -47,7 +47,7 @@
     {
       "id": "IPD-003",
       "title": "Gene discovery is eligibility-gated and built from the catalog object",
-      "decision": "One stable gene object defines each gene's public identity and canonical blot, and one catalog object defines the discoverable set. Complete profiles are discoverable; incomplete or inconsistent publication fails closed and never repairs itself on a reader request.",
+      "decision": "One stable gene object defines each gene's public identity, from which its blot's address follows, and one catalog object defines the discoverable set. Complete profiles are discoverable; incomplete or inconsistent publication fails closed and never repairs itself on a reader request.",
       "reason": "Search, archives, metadata, and images must agree without making public readers perform authoring work.",
       "change_control": "A replacement must keep one eligibility rule and one public image identity across every surface. Rendering, indexing, storage, and sitemap mechanics may change.",
       "runbook": "docs/ICONOPLASM_GENE_CARD_SEMANTICS_RUNBOOK.md",
@@ -371,8 +371,8 @@
     },
     {
       "id": "IPD-011",
-      "title": "Every public canonical blot uses the one stable gene object",
-      "decision": "The stable gene object owns the public character, selected source portrait, complete candidate pool and canonical blot for a gene; the catalog object carries the same portrait identity for the whole set. Every public surface resolves that same identity.",
+      "title": "Every public blot follows from the one stable gene object",
+      "decision": "The stable gene object owns the public character, current portrait and complete candidate pool for a gene, and the gene's blot address is computed from it alone (workers/lib/iconoplasm-blot.js); the catalog object carries the same portrait identity for the whole set. Every public surface resolves that same identity.",
       "reason": "Separate portrait, metadata, and page authorities create split canon that readers cannot reason about.",
       "change_control": "A replacement must preserve one committed identity per gene, verified bytes, and agreement across site, extension, APIs, metadata, and media. Storage and publication formats may change.",
       "runbook": "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md",

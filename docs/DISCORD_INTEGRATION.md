@@ -151,8 +151,9 @@ it into `#iconoplasm`.
     blot object it names, with the same lookup the `/blot/<SYMBOL>.webp` route
     uses (`readPublishedGeneBlotObject`). That is two Bunny Storage reads, no D1
     and no KV, and it shows the **current** blot (which changes as people vote).
-  - A gene with no published blot yet, or a failed read, degrades to a clean
-    text-only post whose header line still links the gene page.
+  - A gene with no published portrait, a blot the drawing run hasn't painted
+    yet (a few minutes after a new winner), or a failed read degrades to a
+    clean text-only post whose header line still links the gene page.
 - The author's own edit rewrites the post's text and their delete removes the post (B-1001),
   after the response and best-effort. Only a post that quotes the comment's previous text
   exactly is touched, so a post that cannot be found (one from before the mirror, or a post a

@@ -15,9 +15,8 @@ const DISPATCH_URL = "https://api.github.com/repos/Brinedew/brinedew-site/dispat
 // catalogue row (B-1055: until then a new gene stayed invisible and a removed
 // one kept its page), writes one of these, and the Actions publisher
 // republishes every gene with one after its watermark (scripts/publish-iconoplasm-catalog.mjs imports
-// this list, as do the runtime's blot backlog and gallery version). Bookkeeping
-// actions such as gene_blot_materialized stay out, so one publish never
-// schedules a second no-op publish.
+// this list, as does the runtime's gallery version). Bookkeeping actions stay
+// out, so one publish never schedules a second no-op publish.
 export const PUBLICATION_AFFECTING_ACTIONS = Object.freeze([
   "publish",
   "auto_promote",

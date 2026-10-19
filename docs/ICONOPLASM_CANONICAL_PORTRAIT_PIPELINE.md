@@ -6,8 +6,8 @@ If you remember one rule, remember this:
 
 **D1 is the authoring and vote source. The stable gene object
 `genes/v3/<SYMBOL>.json` is the one published card for a gene: its portrait is
-the published winner, and the canonical public image is the workstation-rendered
-gene blot tied to that object.**
+the published winner (the current portrait), and the canonical public image is
+that portrait's blot, whose address follows from the object alone.**
 
 ## Publication contract
 
@@ -93,11 +93,13 @@ next Actions run repairs it; a count-only lag lasts until the gene's next vote.
 
 ## Image ontology
 
-- **Portrait** is the generated character image selected by `asset_sha256`. It is source material.
-- **Gene blot** is the exact shared `image-only` card composition: portrait cover crop, protection gradient, full gene name at bottom left, and symbol at bottom right. Its verified 768x1024 WebP is the canonical public/search image.
-- **Print copy** is the PNG a reader's browser paints from the published portrait and card when they press "download print copy". It needs no server, no D1 row and no stored object, and it is not the canonical search image.
+The words are defined once, in `docs/ICONOPLASM_GLOSSARY.md`:
 
-Only the Iconoplasm workstation renders canonical blots. Cloudflare accepts authenticated verified WebP uploads, records the one-row-per-gene materialization ledger, carries the blot key in the stable gene object, and serves bytes. Public GET/HEAD requests never render or enroll blots.
+- **Portrait** is the generated character image selected by `asset_sha256`, with no text on it. A gene's **current portrait** is the winner its stable object names; its other portraits are **candidate portraits**.
+- **Blot** is a portrait with the gene's full name and symbol painted into the same image file: the shared `image-only` card composition (portrait cover crop, protection gradient, full name at bottom left, symbol at bottom right). A gene's blot is its current portrait's blot, a 768x1024 WebP and the canonical public/search image.
+- **Print copy** is the same blot painted in a reader's browser at the portrait's full resolution, as a PNG, when they press "download print copy". It needs no server and no stored object.
+
+One painter draws both: `shared/iconoplasm-card/blot-painter.js`. The blot's storage key is `blots/v2/<initial>/<SYMBOL>-<fingerprint>.webp`, where the fingerprint hashes the painter revision, the symbol, the full name and the current portrait's `asset_sha256` (`workers/lib/iconoplasm-blot.js`). The only drawer is `scripts/draw-iconoplasm-blots.mjs`, run by the "Draw Iconoplasm blots" workflow after every catalogue publication: it lists the blots Bunny storage holds, paints the missing ones in the runner's Chrome and uploads them (B-1131). Storage is the record: no D1 row, queue or admin route says which blots exist. Public GET/HEAD requests never render blots.
 
 ## Read path
 
@@ -131,7 +133,7 @@ per gene), never to KV, and the catalog object is built outside
 the Worker. Do not fix staleness by bypassing a provider headroom check, and do
 not add a public D1 fallback.
 
-## Votes and the workstation blot lane
+## Votes
 
 D1 is the only store for votes. A vote (`/api/iconoplasm/votes/set`, the
 admin and import routes, a copied, edited or generated candidate's first
@@ -225,12 +227,11 @@ the caller's own vote on exactly the named asset and the caretaker row.
 A print copy is painted in the reader's browser when they press its button;
 publication renders nothing for it and no server stores one.
 
-The workstation drain polls the authenticated `blots/backlog` route, which
-answers from D1 and the stable objects, renders the missing blots for the
-published portraits and uploads them. The blot route serves a blot once its
-upload completes; until then the gene shows its developing state. The drain
-never changes D1 canonical state or uploads an image that does not match the
-published card.
+A new winner or a renamed gene gets its blot a few minutes after its stable
+object is published: the catalogue publication that carries the change starts
+the drawing run. Until the file lands, `/blot/<SYMBOL>.webp` redirects to the
+bare current portrait and the resolver's `cdn_url` answers 404; neither ever
+serves an older blot.
 
 ## Automatic canonical tie-breaker
 

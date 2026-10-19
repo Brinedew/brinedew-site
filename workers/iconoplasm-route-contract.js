@@ -292,7 +292,7 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   contract({
     id: "gene_blot_asset",
-    match: prefix("/blots/v1/", "storageKey"),
+    match: prefix("/blots/", "storageKey"),
     methods: GET,
     auth: "public",
     cache: "immutable",
@@ -876,14 +876,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     "admin_assets.repair_scope",
   ),
   adminApiContract("admin_assets_state", "/assets/state", GET_POST, "admin_assets.state"),
-  adminApiContract("admin_blots_backlog", "/blots/backlog", GET_POST, "admin_blots.backlog"),
-  iconoplasmApiContract({
-    id: "admin_blots_upload",
-    match: pattern(/^\/api\/iconoplasm\/admin\/blots\/([^/]+)$/, ["symbol"]),
-    methods: PUT,
-    auth: "administrator",
-    apiHandler: "admin_blots.upload",
-  }),
   iconoplasmApiContract({
     // B-898: apply bunny/the-only-iconoplasm-pull-zone-policy.json (CORS extensions, edge rules).
     id: "admin_publication_pull_zone",

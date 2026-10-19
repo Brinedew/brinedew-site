@@ -98,8 +98,6 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_assets_storage_audit: owner({ rows_written: 0, rows_read: 160_000 }),
   admin_assets_repair_scope: owner(CATALOGUE_READ),
   admin_assets_state: batch(CATALOGUE_READ),
-  admin_blots_backlog: batch(CATALOGUE_READ),
-  admin_blots_upload: batch(SMALL_WRITE),
   admin_publication_pull_zone: critical("no D1 rows: it applies the Bunny pull-zone policy"),
   admin_publication_bunny_account: critical("no D1 rows: it reads the Bunny account's numbers"),
   admin_publication_catalog_object: batch(SMALL_WRITE),

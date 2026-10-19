@@ -75,18 +75,6 @@ export function inputsFromCard(card) {
       },
       essence,
       portraits,
-      blots: card.blot
-        ? [
-            {
-              portrait_asset_sha256: card.blot.portrait_asset_sha256,
-              blot_fingerprint: card.blot.blot_fingerprint,
-              asset_sha256: card.blot.asset_sha256,
-              object_key: card.blot.object_key,
-              width: card.blot.width,
-              height: card.blot.height,
-            },
-          ]
-        : [],
     },
     facts: {
       votes: (card.portrait_candidates || []).map((candidate) => ({

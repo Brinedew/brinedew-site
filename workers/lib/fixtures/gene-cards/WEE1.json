@@ -1,19 +1,5 @@
 {
   "api_version": "v1",
-  "blot": {
-    "asset_sha256": "5b55240b599d3781fa8dd1242a05a8ae7cce251a8b6ac75df1f0e5a782ab364b",
-    "blot_fingerprint": "d5b0aaf5b20a446737cd25e74829ba4c",
-    "canonical_url": "https://iconoplasm.brinedew.bio/blots/v1/W/WEE1/d5b0aaf5b20a446737cd25e74829ba4c/WEE1-iconoplasm-gene-blot.webp",
-    "filename": "WEE1-iconoplasm-gene-blot.webp",
-    "height": 1024,
-    "image_url": "https://img.brinedew.bio/blots/v1/W/WEE1/d5b0aaf5b20a446737cd25e74829ba4c/WEE1-iconoplasm-gene-blot.webp",
-    "object_key": "blots/v1/W/WEE1/d5b0aaf5b20a446737cd25e74829ba4c/WEE1-iconoplasm-gene-blot.webp",
-    "portrait_asset_sha256": "902c27126682460def82f70bce61e14655b2965820a48dd12242d1c8362fc12e",
-    "renderer_revision": "gene-blot-v2-2026-08-24-gallery-artboard-2x",
-    "semantic_url": "https://iconoplasm.brinedew.bio/blot/WEE1.webp",
-    "status": "ready",
-    "width": 768
-  },
   "candidate_count": 2,
   "canonical_key": "symbol",
   "canonical_manifestation": {

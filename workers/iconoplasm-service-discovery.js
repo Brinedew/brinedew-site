@@ -34,8 +34,8 @@ const reusableImageFields = {
     info_url: { type: "string", format: "uri" },
     width: { type: ["integer", "null"] },
     height: { type: ["integer", "null"] },
-    checksum_sha256: { type: ["string", "null"] },
-    availability: { type: ["string", "null"] },
+    blot_fingerprint: { type: "string" },
+    filename: { type: "string" },
     rights: { type: "string", const: "CC0 1.0 Universal" },
     license_url: {
       type: "string",

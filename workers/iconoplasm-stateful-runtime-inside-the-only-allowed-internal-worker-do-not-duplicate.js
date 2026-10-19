@@ -57,7 +57,6 @@ import {
 } from "./lib/iconoplasm-published-card-objects.js"
 import { publishGeneCommentsObject } from "./lib/gene-comments-publication.js"
 import { createPublishedCardDeliveryHandlers } from "./lib/iconoplasm-card-delivery.js"
-import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { isAdmin } from "./admin.js"
 import { readSession } from "./lib/sealed-session.js"
 import {
@@ -123,7 +122,6 @@ export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
-import { createIconoplasmAdminBlotHandlers } from "./iconoplasm-admin-blot-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
 import { MAX_GENES_PER_REQUEST } from "./iconoplasm/app.js"
@@ -194,17 +192,14 @@ import {
 // signed-in shelf by popularity locally, and the published catalog has none.
 import { ICONOPLASM_WIKI_PAGEVIEWS } from "../quartz/static/iconoplasm/wiki-pageviews.js"
 import {
-  iconoplasmGeneCardCdnUrl,
-  ICONOPLASM_GENE_BLOT_HEIGHT,
-  ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-  ICONOPLASM_GENE_BLOT_WIDTH,
-  iconoplasmGeneBlotCdnUrl,
-  iconoplasmGeneBlotFilename,
-  iconoplasmGeneBlotFingerprint,
-  iconoplasmGeneBlotObjectKey,
-  iconoplasmGeneBlotWebpDimensions,
-  registerIconoplasmGeneBlot,
-} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
+  ICONOPLASM_BLOT_HEIGHT,
+  ICONOPLASM_BLOT_WIDTH,
+  iconoplasmBlotCdnUrl,
+  iconoplasmBlotFilename,
+  iconoplasmBlotFingerprint,
+  iconoplasmBlotObjectKey,
+  iconoplasmCdnUrl,
+} from "./lib/iconoplasm-blot.js"
 import { applyIconoplasmPublicationAliasPolicyToGene } from "./iconoplasm-publication-aliases.js"
 import {
   readIconoplasmPublicationAliasPolicy,
@@ -11719,7 +11714,7 @@ async function publicMetadataObj(url, env) {
       // B-846: the same immutable file straight from the CDN. Downloading it
       // from there costs no Worker request.
       catalog_jsonl_cdn: catalogHash
-        ? iconoplasmGeneCardCdnUrl(env, publicCatalogJsonlDumpKey(catalogHash))
+        ? iconoplasmCdnUrl(env, publicCatalogJsonlDumpKey(catalogHash))
         : null,
       batch: publicUrl(url, "/genes/batch"),
       resolve: publicUrl(url, "/resolve"),
@@ -11824,38 +11819,35 @@ function projectGeneRecord(record, rawFields) {
   return projected
 }
 
+// The blot of a gene's published card (docs/ICONOPLASM_GLOSSARY.md). Its
+// address follows from the card alone; scripts/draw-iconoplasm-blots.mjs draws
+// the file there after each catalogue publication (B-1131). For the minutes
+// between a new winner and that run, cdn_url answers 404 and canonical_url
+// redirects to the bare portrait: never an older blot.
 function publicGeneBlotMediaEnvelope(url, symbol, cardPayload, env) {
-  const blot = cardPayload?.blot
   const portrait =
     cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : null
-  const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
-  if (portrait?.status !== "published" || !portraitAssetSha) return null
-  const expectedFingerprint = iconoplasmGeneBlotFingerprint(cardPayload)
-  const expectedObjectKey = iconoplasmGeneBlotObjectKey(symbol, expectedFingerprint)
-  const assetSha = normalizeSha256(blot?.asset_sha256 || "")
-  const recordedReady =
-    blot?.status === "ready" &&
-    assetSha &&
-    normalizeSha256(blot.portrait_asset_sha256 || "") === portraitAssetSha
+  if (portrait?.status !== "published" || !normalizeSha256(portrait?.asset_sha256 || "")) {
+    return null
+  }
+  const fingerprint = iconoplasmBlotFingerprint(cardPayload)
+  const objectKey = iconoplasmBlotObjectKey(symbol, fingerprint)
   return {
-    id: assetSha || `blot:${expectedFingerprint}`,
+    id: `blot:${fingerprint}`,
     type: "gene_blot",
     symbol,
-    ...(assetSha ? { checksum_sha256: assetSha } : {}),
-    blot_fingerprint: expectedFingerprint,
+    blot_fingerprint: fingerprint,
     canonical_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
-    immutable_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${expectedObjectKey}`,
+    immutable_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
     // B-846: canonical_url and immutable_url are on our domain, so every view of
     // them runs this Worker (Free plan: 100k requests/day shared with sign-in and
-    // the API). cdn_url is the same immutable bytes served straight from Bunny's
+    // the API). cdn_url is the same immutable bytes served straight from the
     // CDN: zero Worker requests, max-age 30 days. Hand it to anyone who embeds.
-    cdn_url: iconoplasmGeneBlotCdnUrl(env, expectedObjectKey),
-    ...(recordedReady && blot.image_url ? { accelerator_url: String(blot.image_url) } : {}),
+    cdn_url: iconoplasmBlotCdnUrl(env, objectKey),
     info_url: publicUrl(url, `/media/${encodeURIComponent(symbol)}`),
-    width: ICONOPLASM_GENE_BLOT_WIDTH,
-    height: ICONOPLASM_GENE_BLOT_HEIGHT,
-    filename: iconoplasmGeneBlotFilename(symbol),
-    availability: recordedReady ? "recorded_ready" : "resolve_at_canonical_url",
+    width: ICONOPLASM_BLOT_WIDTH,
+    height: ICONOPLASM_BLOT_HEIGHT,
+    filename: iconoplasmBlotFilename(symbol),
     ...ICONOPLASM_IMAGE_LICENSE_FIELDS,
     attribution: "Brinedew / Iconoplasm",
     source: "iconoplasm-gene-blots",
@@ -16756,7 +16748,7 @@ async function hydratedCatalogArtifact(env, hash) {
 
 // B-1063: everything one gene's card is built from, in one D1 batch (one call,
 // about 2 rows per portrait plus six): the factory's rows (catalogue, essence,
-// portraits, blot) as the builder's content, and what readers did (vote
+// portraits) as the builder's content, and what readers did (vote
 // tallies, the caretaker supervote, the published state, the vote version) as
 // its facts. The canonical text comes from the manifestation authority; a gene
 // that has none yet (599 genes on 2026-10-09) gets a card without one instead
@@ -16813,7 +16805,7 @@ function geneCardPortraitContent(row) {
 async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
   const db = env?.ICONOPLASM_DB
   if (!db) throw new Error("ICONOPLASM_DB binding missing")
-  const [catalog, essence, portraits, blots, votes, caretaker, state, version] = await db.batch([
+  const [catalog, essence, portraits, votes, caretaker, state, version] = await db.batch([
     db
       .prepare(
         `SELECT full_name AS catalog_full_name, color_hex, tmh
@@ -16834,13 +16826,6 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
                 sample_number, sample_text_hash, artist_tag, artist_name
            FROM icono_portrait_assets
           WHERE gene_symbol = ?1 AND asset_sha256 <> ''`,
-      )
-      .bind(symbol),
-    db
-      .prepare(
-        `SELECT portrait_asset_sha256, blot_fingerprint, blot_asset_sha256 AS asset_sha256,
-                object_key, width, height
-           FROM icono_gene_blot_materializations WHERE gene_symbol = ?1`,
       )
       .bind(symbol),
     db
@@ -16886,7 +16871,6 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
         politics_origin: parseJsonTextList(politics_origin_json),
       },
       portraits: (portraits?.results || []).map(geneCardPortraitContent),
-      blots: blots?.results || [],
     },
     facts: {
       votes: votes?.results || [],
@@ -16899,13 +16883,6 @@ async function readGeneCardInputs(env, symbol, { readManifestation } = {}) {
       manifestation: await (readManifestation || readPublicManifestationFact)(env, symbol),
     },
   }
-}
-
-// The card the gene would get now, unwritten: the blot lane fingerprints it
-// before rendering a blot for a winner that isn't published yet.
-async function currentGeneCard(env, symbol, options = {}) {
-  const inputs = await readGeneCardInputs(env, symbol, options)
-  return inputs ? buildGeneCard(inputs.content, inputs.facts) : null
 }
 
 // The most times one publish writes a gene's object while votes keep landing.
@@ -17069,10 +17046,6 @@ function republishTouchedGenesAfterResponse(env, ctx, symbols) {
   return true
 }
 
-function publicationAffectingActionPlaceholders() {
-  return PUBLICATION_AFFECTING_ACTIONS.map(() => "?").join(",")
-}
-
 function parseJsonTextList(raw) {
   try {
     const parsed = JSON.parse(String(raw || "[]"))
@@ -17080,545 +17053,6 @@ function parseJsonTextList(raw) {
     return parsed.map((value) => String(value || "").trim()).filter(Boolean)
   } catch {
     return []
-  }
-}
-
-function geneBlotServiceError(status, code, message) {
-  const error = new Error(message)
-  error.status = status
-  error.code = code
-  return error
-}
-
-// B-898 Stage 1 (step B): the workstation blot drain learns which genes need a
-// canonical blot from D1 and the stable gene objects (genes/v3/<SYMBOL>.json)
-// alone. No coordinator status, no KV head, no manifest shards, no delta chain:
-// those cost 2-8 s per poll and hung past 35 s on 3 of 15 probes (B-894).
-//
-// Reads per call, automatic candidate scope: one watermark row, one indexed
-// event window (<= GENE_BLOT_BACKLOG_EVENT_WINDOW rows on
-// idx_icono_publish_events_card_catalog_window), one readiness join per 90
-// distinct symbols (publish_state x blot row by primary key), then at most
-// `limit` (<= 25) authenticated storage reads for the genes whose D1 blot row
-// is not current. An idle poll is two rows read and zero writes. The watermark
-// row is written only when the examined window actually advanced.
-const GENE_BLOT_BACKLOG_EVENT_WINDOW = 200
-const GENE_BLOT_BACKLOG_MAX_STORAGE_READS = 25
-const GENE_BLOT_BACKLOG_PAGE_CAP = 250
-const GENE_BLOT_BACKLOG_SNAPSHOT_VERSION = "genes-v3"
-const GENE_BLOT_READINESS_SELECT = `SELECT s.gene_symbol,
-            s.current_asset_sha256,
-            b.blot_fingerprint,
-            b.portrait_asset_sha256 AS blot_portrait_asset_sha256,
-            b.renderer_revision AS blot_renderer_revision`
-
-function geneBlotBacklogWatermarkStatements(env) {
-  return {
-    read: env.ICONOPLASM_DB.prepare(
-      `SELECT through_event_id
-         FROM icono_gene_blot_backlog_watermark
-        WHERE watermark_key = 'candidate'
-        LIMIT 1`,
-    ),
-    advance: (throughEventId) =>
-      env.ICONOPLASM_DB.prepare(
-        `INSERT INTO icono_gene_blot_backlog_watermark (watermark_key, through_event_id, updated_at)
-         VALUES ('candidate', ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(watermark_key) DO UPDATE SET
-           through_event_id = MAX(icono_gene_blot_backlog_watermark.through_event_id, excluded.through_event_id),
-           updated_at = CURRENT_TIMESTAMP
-         WHERE excluded.through_event_id > icono_gene_blot_backlog_watermark.through_event_id`,
-      ).bind(throughEventId),
-  }
-}
-
-async function newestCanonicalPublishEventId(env) {
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT id
-       FROM icono_publish_events
-      WHERE action IN (${publicationAffectingActionPlaceholders()})
-      ORDER BY id DESC
-      LIMIT 1`,
-  )
-    .bind(...PUBLICATION_AFFECTING_ACTIONS)
-    .first()
-  return Math.max(0, Number(row?.id || 0) || 0)
-}
-
-// Readiness of each symbol from D1 alone: the current winner and the blot row
-// the workstation registered. A gene without a winner needs no blot. A row
-// whose portrait sha and renderer revision match the winner is the necessary
-// condition for "current"; the exact fingerprint (it also covers full_name)
-// is settled against the stable object only for genes that fail this filter.
-async function geneBlotReadinessRows(env, symbols) {
-  const bySymbol = new Map()
-  const D1_MAX_BOUND_PARAMS = 90
-  for (let index = 0; index < symbols.length; index += D1_MAX_BOUND_PARAMS) {
-    const batch = symbols.slice(index, index + D1_MAX_BOUND_PARAMS)
-    const result = await env.ICONOPLASM_DB.prepare(
-      `${GENE_BLOT_READINESS_SELECT}
-         FROM icono_publish_state s
-         LEFT JOIN icono_gene_blot_materializations b ON b.gene_symbol = s.gene_symbol
-        WHERE s.gene_symbol IN (${batch.map(() => "?").join(",")})`,
-    )
-      .bind(...batch)
-      .all()
-    for (const row of Array.isArray(result?.results) ? result.results : []) {
-      const symbol = normalizeSymbol(row?.gene_symbol || "")
-      if (symbol) bySymbol.set(symbol, row)
-    }
-  }
-  return bySymbol
-}
-
-function geneBlotRowIsCurrent(row) {
-  const winner = normalizeSha256(row?.current_asset_sha256 || "")
-  if (!winner) return true
-  return (
-    normalizeSha256(row?.blot_portrait_asset_sha256 || "") === winner &&
-    String(row?.blot_renderer_revision || "") === ICONOPLASM_GENE_BLOT_RENDERER_REVISION
-  )
-}
-
-function geneBlotBacklogItem(card, scope) {
-  const symbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
-  const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
-  if (!symbol || portrait?.status !== "published" || !normalizeSha256(portrait.asset_sha256)) {
-    return null
-  }
-  const fingerprint = iconoplasmGeneBlotFingerprint(card)
-  // The drain renders the card; the candidate pool is reader detail and would
-  // multiply the page size by the number of candidates per gene.
-  const { portrait_candidates: _pool, ...cardPayload } = card
-  return {
-    symbol,
-    scope,
-    blot_fingerprint: fingerprint,
-    renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-    width: ICONOPLASM_GENE_BLOT_WIDTH,
-    height: ICONOPLASM_GENE_BLOT_HEIGHT,
-    portrait_asset_sha256: normalizeSha256(portrait.asset_sha256),
-    portrait_url:
-      String(portrait.hero_url || "") ||
-      adminPortraitUrl(ICONOPLASM_CANONICAL_ORIGIN, portrait.asset_sha256, "full") ||
-      "",
-    card_payload: cardPayload,
-    upload_url: `/api/iconoplasm/admin/blots/${encodeURIComponent(symbol)}?scope=${encodeURIComponent(scope)}&fingerprint=${encodeURIComponent(fingerprint)}`,
-  }
-}
-
-// One storage read for one gene whose D1 blot row is not current. Outcomes:
-//   listed  - the stable object matches D1's winner and needs this blot;
-//   ready   - the object's fingerprint already matches the registered row
-//             (only full_name could differ from the D1 prefilter);
-//   missing - no stable object yet (the publisher has not written it);
-//   stale   - the object's portrait is behind D1 (the Actions publisher has not
-//             rewritten it yet); listing it would hand out the wrong fingerprint;
-//   error   - storage failed; the page goes on without this gene.
-async function geneBlotBacklogDecision(env, symbol, row, scope) {
-  let card
-  try {
-    card = await readStableGeneObject(env, symbol)
-  } catch (error) {
-    return { kind: "error", error: String(error?.message || error) }
-  }
-  if (!card) return { kind: "missing" }
-  const winner = normalizeSha256(row?.current_asset_sha256 || "")
-  const objectSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
-  const objectSha = normalizeSha256(card?.portrait?.asset_sha256 || "")
-  if (objectSymbol !== symbol || card?.portrait?.status !== "published" || objectSha !== winner) {
-    return { kind: "stale" }
-  }
-  const item = geneBlotBacklogItem(card, scope)
-  if (!item) return { kind: "stale" }
-  if (
-    String(row?.blot_fingerprint || "").toLowerCase() === item.blot_fingerprint &&
-    normalizeSha256(row?.blot_portrait_asset_sha256 || "") === winner
-  ) {
-    return { kind: "ready" }
-  }
-  return { kind: "listed", item }
-}
-
-async function geneBlotBacklogDecisions(env, symbols, rowsBySymbol, scope) {
-  const settled = await Promise.all(
-    symbols.map((symbol) => geneBlotBacklogDecision(env, symbol, rowsBySymbol.get(symbol), scope)),
-  )
-  const decisions = new Map()
-  const skipped = { missing: 0, stale: 0, errors: 0 }
-  symbols.forEach((symbol, index) => {
-    const decision = settled[index]
-    decisions.set(symbol, decision)
-    if (decision.kind === "missing") skipped.missing += 1
-    else if (decision.kind === "stale") skipped.stale += 1
-    else if (decision.kind === "error") {
-      skipped.errors += 1
-      console.warn(`Iconoplasm blot backlog skipped ${symbol}: ${decision.error}`)
-    }
-  })
-  return { decisions, skipped }
-}
-
-// Explicit symbols (the drain's finalization lane and published retries):
-// readiness for exactly those genes, storage reads for the ones that are not
-// current, bounded by `limit`.
-async function geneBlotBacklogForSymbols(env, symbols, { scope, limit }) {
-  const rowsBySymbol = await geneBlotReadinessRows(env, symbols)
-  const pending = symbols.filter((symbol) => !geneBlotRowIsCurrent(rowsBySymbol.get(symbol)))
-  const page = pending.slice(0, limit)
-  const { decisions, skipped } = await geneBlotBacklogDecisions(env, page, rowsBySymbol, scope)
-  const items = page
-    .map((symbol) => decisions.get(symbol))
-    .filter((d) => d.kind === "listed")
-    .map((d) => d.item)
-  return { items, skipped, complete: pending.length <= limit, scanned: symbols.length }
-}
-
-// Automatic candidate scope: canonical-affecting publish events after the
-// examined watermark (or the drain's own resume cursor), in event order.
-async function automaticCandidateGeneBlotBacklog(env, { after, limit }) {
-  const watermark = geneBlotBacklogWatermarkStatements(env)
-  const stored = await watermark.read.first()
-  const storedThrough = stored ? Math.max(0, Number(stored.through_event_id || 0) || 0) : null
-  const cursor = /^\d+$/.test(after) ? Number.parseInt(after, 10) : null
-  // A cold mark starts at the newest event: history is the published walk's
-  // job, and walking it here would cost 200 rows per poll for days.
-  const since = cursor ?? storedThrough ?? (await newestCanonicalPublishEventId(env))
-  const result = await env.ICONOPLASM_DB.prepare(
-    `SELECT id, gene_symbol
-       FROM icono_publish_events
-      WHERE action IN (${publicationAffectingActionPlaceholders()})
-        AND id > ?
-      ORDER BY id ASC
-      LIMIT ?`,
-  )
-    .bind(...PUBLICATION_AFFECTING_ACTIONS, since, GENE_BLOT_BACKLOG_EVENT_WINDOW + 1)
-    .all()
-  const allEvents = (Array.isArray(result?.results) ? result.results : [])
-    .map((row) => ({ id: Number(row?.id || 0), symbol: normalizeSymbol(row?.gene_symbol || "") }))
-    .filter((event) => event.id > 0 && event.symbol)
-  const moreEvents = allEvents.length > GENE_BLOT_BACKLOG_EVENT_WINDOW
-  const events = allEvents.slice(0, GENE_BLOT_BACKLOG_EVENT_WINDOW)
-  const symbols = [...new Set(events.map((event) => event.symbol))]
-  const rowsBySymbol = symbols.length ? await geneBlotReadinessRows(env, symbols) : new Map()
-
-  // Pass 1: which genes need a storage read, in first-event order, up to limit.
-  const toRead = []
-  let pageFull = false
-  for (const symbol of symbols) {
-    if (geneBlotRowIsCurrent(rowsBySymbol.get(symbol))) continue
-    if (toRead.length >= limit) {
-      pageFull = true
-      break
-    }
-    toRead.push(symbol)
-  }
-  const { decisions, skipped } = await geneBlotBacklogDecisions(
-    env,
-    toRead,
-    rowsBySymbol,
-    "candidate",
-  )
-
-  // Pass 2: the examined mark advances past satisfied and handed-out genes in
-  // event order and stops at the first held gene (missing, stale, error) or
-  // at the first gene the page had no room for.
-  let through = since
-  let held = false
-  for (const event of events) {
-    const decision = decisions.get(event.symbol)
-    const current = geneBlotRowIsCurrent(rowsBySymbol.get(event.symbol))
-    if (!current && !decision) break
-    if (!current && decision.kind !== "listed" && decision.kind !== "ready") {
-      held = true
-      break
-    }
-    through = event.id
-  }
-  if (storedThrough === null || through > storedThrough) await watermark.advance(through).run()
-
-  const items = toRead
-    .map((symbol) => decisions.get(symbol))
-    .filter((d) => d.kind === "listed")
-    .map((d) => d.item)
-  const complete = !pageFull && !moreEvents && !held
-  return {
-    ok: true,
-    scope: "candidate",
-    automatic: true,
-    items,
-    symbols: items.map((item) => item.symbol),
-    candidate_symbols: items.map((item) => item.symbol),
-    scanned: symbols.length,
-    pending_item_count: items.length + (pageFull ? 1 : 0),
-    skipped,
-    render_queue_complete: complete,
-    through_event_id: through,
-    through_event_at: null,
-    done: complete,
-    next_after: complete ? null : String(through),
-  }
-}
-
-// Published scope without symbols: the drain's full backfill walk. Keyset by
-// symbol over route membership joined to the winner and the blot row; storage
-// reads only for genes whose row is not current, at most 25 per page, and the
-// page ends at the last examined symbol so the drain resumes exactly there.
-async function publishedGeneBlotBacklogPage(env, { after, limit, snapshotVersion = "" }) {
-  const pageLimit = Math.max(1, Math.min(GENE_BLOT_BACKLOG_PAGE_CAP, limit))
-  const result = await env.ICONOPLASM_DB.prepare(
-    `${GENE_BLOT_READINESS_SELECT.replace("s.gene_symbol,", "r.gene_symbol,")}
-       FROM icono_published_gene_routes r
-       LEFT JOIN icono_publish_state s ON s.gene_symbol = r.gene_symbol
-       LEFT JOIN icono_gene_blot_materializations b ON b.gene_symbol = r.gene_symbol
-      WHERE r.gene_symbol > ?
-      ORDER BY r.gene_symbol ASC
-      LIMIT ?`,
-  )
-    .bind(after, pageLimit + 1)
-    .all()
-  const allRows = Array.isArray(result?.results) ? result.results : []
-  const moreRows = allRows.length > pageLimit
-  const rows = allRows.slice(0, pageLimit)
-  const rowsBySymbol = new Map()
-  const examined = []
-  const toRead = []
-  for (const row of rows) {
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
-    if (!symbol) continue
-    if (!geneBlotRowIsCurrent(row)) {
-      if (toRead.length >= GENE_BLOT_BACKLOG_MAX_STORAGE_READS) break
-      toRead.push(symbol)
-    }
-    rowsBySymbol.set(symbol, row)
-    examined.push(symbol)
-  }
-  const { decisions, skipped } = await geneBlotBacklogDecisions(
-    env,
-    toRead,
-    rowsBySymbol,
-    "published",
-  )
-  const items = toRead
-    .map((symbol) => decisions.get(symbol))
-    .filter((d) => d.kind === "listed")
-    .map((d) => d.item)
-  const done = !moreRows && examined.length === rows.length
-  return {
-    ok: true,
-    scope: "published",
-    automatic: true,
-    items,
-    symbols: examined,
-    scanned: examined.length,
-    skipped,
-    // The drain pins the version it started a backfill with and aborts the
-    // walk when a page names another one (measured 2026-10-02 01:09 local:
-    // "changed snapshots during a pinned backfill" after the rewrite returned
-    // the constant). There is no snapshot generation any more, so the pin is
-    // echoed; an unpinned walk names the stable object generation.
-    snapshot_version: snapshotVersion || GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
-    done,
-    next_after: examined.length ? examined.at(-1) : after || null,
-  }
-}
-
-async function currentGeneBlotSourceCard(env, { requestUrl, symbol, scope }) {
-  if (scope === "published") {
-    // The stable gene object is the published card (B-898); an upload for the
-    // published lane is verified against the same object the backlog listed.
-    let card
-    try {
-      card = await readStableGeneObject(env, symbol)
-    } catch {
-      throw geneBlotServiceError(
-        503,
-        "PUBLISHED_CARD_ARTIFACT_UNAVAILABLE",
-        "The published gene object is unavailable.",
-      )
-    }
-    return card && normalizeSymbol(card?.symbol || card?.canonical_symbol || "") === symbol
-      ? card
-      : null
-  }
-  if (scope !== "candidate") {
-    throw geneBlotServiceError(
-      400,
-      "INVALID_BLOT_SCOPE",
-      "Blot scope must be published or candidate.",
-    )
-  }
-  return await currentGeneCard(env, symbol)
-}
-
-export async function listIconoplasmGeneBlotBacklog(env, { request, payload }) {
-  const url = new URL(request.url)
-  const scope = String(payload?.scope || url.searchParams.get("scope") || "published")
-    .trim()
-    .toLowerCase()
-  const requestedLimit = Number.parseInt(
-    String(payload?.limit || url.searchParams.get("limit") || "25"),
-    10,
-  )
-  const limit = Math.max(
-    1,
-    Math.min(GENE_BLOT_BACKLOG_PAGE_CAP, Number.isFinite(requestedLimit) ? requestedLimit : 25),
-  )
-  const readLimit = Math.min(limit, GENE_BLOT_BACKLOG_MAX_STORAGE_READS)
-  if (scope !== "candidate" && scope !== "published") {
-    throw geneBlotServiceError(
-      400,
-      "INVALID_BLOT_SCOPE",
-      "Blot scope must be published or candidate.",
-    )
-  }
-  const requestedSymbols = normalizeRequestedSymbols(
-    Array.isArray(payload?.symbols) ? payload.symbols : [],
-    100,
-  )
-  const after = String(payload?.after || url.searchParams.get("after") || "")
-    .trim()
-    .toUpperCase()
-  if (requestedSymbols.length) {
-    const requestedVersion = String(
-      payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
-    ).trim()
-    const page = await geneBlotBacklogForSymbols(env, requestedSymbols, { scope, limit: readLimit })
-    return {
-      ok: true,
-      scope,
-      automatic: false,
-      items: page.items,
-      symbols: requestedSymbols,
-      candidate_symbols: requestedSymbols,
-      scanned: page.scanned,
-      pending_item_count: page.items.length,
-      skipped: page.skipped,
-      render_queue_complete: page.complete,
-      through_event_id: null,
-      through_event_at: null,
-      snapshot_version: requestedVersion || GENE_BLOT_BACKLOG_SNAPSHOT_VERSION,
-      total_count: requestedSymbols.length,
-      done: page.complete,
-      next_after: null,
-    }
-  }
-  if (scope === "candidate") {
-    return automaticCandidateGeneBlotBacklog(env, { after, limit: readLimit })
-  }
-  return publishedGeneBlotBacklogPage(env, {
-    after: normalizeSymbol(after) || "",
-    limit,
-    snapshotVersion: String(
-      payload?.snapshot_version || url.searchParams.get("snapshot_version") || "",
-    ).trim(),
-  })
-}
-
-export async function uploadIconoplasmGeneBlot(env, { request, symbol: symbolValue }) {
-  const url = new URL(request.url)
-  const symbol = normalizeSymbol(decodeURIComponent(symbolValue || ""))
-  const scope = String(url.searchParams.get("scope") || "candidate")
-    .trim()
-    .toLowerCase()
-  const requestedFingerprint = String(url.searchParams.get("fingerprint") || "")
-    .trim()
-    .toLowerCase()
-  if (!symbol) throw geneBlotServiceError(400, "INVALID_GENE_SYMBOL", "Invalid gene symbol.")
-  if (
-    request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "image/webp"
-  ) {
-    throw geneBlotServiceError(
-      415,
-      "BLOT_WEBP_REQUIRED",
-      "Canonical gene blots must be image/webp.",
-    )
-  }
-  const declaredLength = Number.parseInt(request.headers.get("content-length") || "0", 10) || 0
-  if (declaredLength > 4 * 1024 * 1024) {
-    throw geneBlotServiceError(413, "BLOT_TOO_LARGE", "Canonical gene blot exceeds 4 MiB.")
-  }
-  const card = await currentGeneBlotSourceCard(env, { requestUrl: request.url, symbol, scope })
-  if (!card) throw geneBlotServiceError(404, "BLOT_SOURCE_NOT_FOUND", "Gene card source not found.")
-  const expectedFingerprint = iconoplasmGeneBlotFingerprint(card)
-  if (!requestedFingerprint || requestedFingerprint !== expectedFingerprint) {
-    throw geneBlotServiceError(
-      409,
-      "STALE_BLOT_FINGERPRINT",
-      "The gene blot source changed before upload; render the current source card.",
-    )
-  }
-  const portraitAssetSha = normalizeSha256(card?.portrait?.asset_sha256 || "")
-  if (card?.portrait?.status !== "published" || !portraitAssetSha) {
-    throw geneBlotServiceError(
-      409,
-      "BLOT_PORTRAIT_NOT_PUBLISHED",
-      "The source portrait is not published.",
-    )
-  }
-  const bytes = new Uint8Array(await request.arrayBuffer())
-  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) {
-    throw geneBlotServiceError(
-      413,
-      "BLOT_TOO_LARGE",
-      "Canonical gene blot must be between 1 byte and 4 MiB.",
-    )
-  }
-  const dimensions = iconoplasmGeneBlotWebpDimensions(bytes)
-  if (
-    dimensions?.width !== ICONOPLASM_GENE_BLOT_WIDTH ||
-    dimensions?.height !== ICONOPLASM_GENE_BLOT_HEIGHT
-  ) {
-    throw geneBlotServiceError(
-      422,
-      "INVALID_BLOT_DIMENSIONS",
-      `Canonical gene blot must be ${ICONOPLASM_GENE_BLOT_WIDTH}x${ICONOPLASM_GENE_BLOT_HEIGHT} WebP.`,
-    )
-  }
-  const blotAssetSha = await sha256HexBytes(bytes)
-  const objectKey = iconoplasmGeneBlotObjectKey(symbol, expectedFingerprint)
-  const existing = await readPortraitStorageObject(env, objectKey, {
-    fallbackContentType: "image/webp",
-    maxAttempts: 1,
-  })
-  if (existing) {
-    const existingBytes = new Uint8Array(await new Response(existing.body).arrayBuffer())
-    const existingSha = await sha256HexBytes(existingBytes)
-    if (existingSha !== blotAssetSha) {
-      throw geneBlotServiceError(
-        409,
-        "IMMUTABLE_BLOT_COLLISION",
-        "An immutable blot already exists for this fingerprint with different bytes.",
-      )
-    }
-  } else {
-    await putPortraitStorageObject(env, objectKey, bytes, {
-      contentType: "image/webp",
-      cacheControl: "public, max-age=31536000, immutable",
-      verifyAfterPut: true,
-    })
-  }
-  const registered = await registerIconoplasmGeneBlot(env, {
-    symbol,
-    blotFingerprint: expectedFingerprint,
-    portraitAssetSha256: portraitAssetSha,
-    blotAssetSha256: blotAssetSha,
-    objectKey,
-  })
-  return {
-    ok: true,
-    changed: registered.changed,
-    symbol,
-    scope,
-    blot_fingerprint: expectedFingerprint,
-    asset_sha256: blotAssetSha,
-    portrait_asset_sha256: portraitAssetSha,
-    object_key: objectKey,
-    image_url: iconoplasmGeneBlotCdnUrl(env, objectKey),
-    canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
-    semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`,
-    width: ICONOPLASM_GENE_BLOT_WIDTH,
-    height: ICONOPLASM_GENE_BLOT_HEIGHT,
   }
 }
 
@@ -17716,7 +17150,7 @@ function portraitCdnUrl(env, asset, preferred) {
   const path = [preferred, "medium", "full", "thumb"]
     .map((size) => renditions?.[size]?.path)
     .find(Boolean)
-  return path ? iconoplasmGeneCardCdnUrl(env, path) : portraitAssetUrl(asset, preferred)
+  return path ? iconoplasmCdnUrl(env, path) : portraitAssetUrl(asset, preferred)
 }
 
 async function parseJsonBody(request) {
@@ -18741,7 +18175,7 @@ async function handlePublicMedia(request, env, symbol) {
   const etag = await etagFor({
     card_snapshot_version: publishedCard.version,
     symbol: resolvedSymbol,
-    asset_sha256: media.checksum_sha256,
+    blot_fingerprint: media.blot_fingerprint,
   })
   const cacheControl = iconoplasmCacheControl("publicMutable")
   const responseHeaders = {
@@ -19056,50 +18490,22 @@ async function readStableGeneObject(env, symbol) {
   return parsed && typeof parsed === "object" ? parsed : null
 }
 
-// The blot object a gene's stable object names, or null when the object is another
-// gene's, the gene has no published portrait, or Bunny has no blot for it yet. The
-// stable gene object is the authority: its renderer revision, symbol, name, and
-// portrait SHA deterministically identify the immutable Bunny key, so a blot never
-// needs a second KV catalog publication. Shared by the /blot route and the Discord
-// comment mirror.
+// The blot a gene's stable object names, or null when the object is another
+// gene's, the gene has no published portrait, or the blot isn't drawn yet. The
+// card's symbol, name and portrait fix the immutable Bunny key
+// (workers/lib/iconoplasm-blot.js), so nothing else records which blots exist.
+// Shared by the /blot route and the Discord comment mirror.
 async function readPublishedGeneBlotObject(env, card, symbol) {
   const cardSymbol = normalizeSymbol(card?.symbol || card?.canonical_symbol || "")
   const portrait = card?.portrait && typeof card.portrait === "object" ? card.portrait : null
   const portraitAssetSha = normalizeSha256(portrait?.asset_sha256 || "")
   if (cardSymbol !== symbol || portrait?.status !== "published" || !portraitAssetSha) return null
-  const blotFingerprint = iconoplasmGeneBlotFingerprint(card)
-  const objectKey = iconoplasmGeneBlotObjectKey(symbol, blotFingerprint)
-  let selectedFingerprint = blotFingerprint
-  let selectedObjectKey = objectKey
-  let object = await readPortraitStorageObject(env, objectKey, {
+  const fingerprint = iconoplasmBlotFingerprint(card)
+  const objectKey = iconoplasmBlotObjectKey(symbol, fingerprint)
+  const object = await readPortraitStorageObject(env, objectKey, {
     fallbackContentType: "image/webp",
   })
-  // During the renderer-v2 backfill, keep an exact-card v1 blot reachable when
-  // the replacement object has not arrived yet. This fallback is removed by
-  // data completion, not by a KV migration: the v2 key automatically wins as
-  // soon as Bunny contains it.
-  if (!object) {
-    const legacy = card?.blot && typeof card.blot === "object" ? card.blot : null
-    const legacyFingerprint = String(legacy?.blot_fingerprint || "").toLowerCase()
-    const legacyObjectKey = String(legacy?.object_key || "").replace(/^\/+/, "")
-    const legacyPortraitSha = normalizeSha256(legacy?.portrait_asset_sha256 || "")
-    if (
-      legacy?.status === "ready" &&
-      /^[a-f0-9]{32}$/.test(legacyFingerprint) &&
-      legacyPortraitSha === portraitAssetSha &&
-      legacyObjectKey.startsWith("blots/")
-    ) {
-      const legacyObject = await readPortraitStorageObject(env, legacyObjectKey, {
-        fallbackContentType: "image/webp",
-      })
-      if (legacyObject) {
-        object = legacyObject
-        selectedFingerprint = legacyFingerprint
-        selectedObjectKey = legacyObjectKey
-      }
-    }
-  }
-  return object ? { object, selectedFingerprint, selectedObjectKey } : null
+  return object ? { object, fingerprint, objectKey } : null
 }
 
 async function handleSemanticGeneBlot(request, env, symbolValue) {
@@ -19121,13 +18527,30 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
     )
   }
   const found = await readPublishedGeneBlotObject(env, card, symbol)
+  const portraitSha =
+    normalizeSymbol(card?.symbol || "") === symbol && card?.portrait?.status === "published"
+      ? normalizeSha256(card.portrait.asset_sha256 || "")
+      : ""
+  if (!found && portraitSha) {
+    // A new winner or name is published a few minutes before the drawing run
+    // paints its blot (B-1131). Until then a share preview gets the bare
+    // portrait, never a 404 and never an older blot with the wrong picture.
+    return new Response(null, {
+      status: 307,
+      headers: {
+        Location: iconoplasmCdnUrl(env, portraitStorageKey(portraitSha, "full")),
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+      },
+    })
+  }
   if (!found) {
     return json({ error: "Canonical gene blot not found" }, 404, {
       "Cache-Control": "no-store",
     })
   }
-  const { object, selectedFingerprint, selectedObjectKey } = found
-  const etag = `"${selectedFingerprint}"`
+  const { object, fingerprint, objectKey } = found
+  const etag = `"${fingerprint}"`
   if (etagMatches(request.headers.get("If-None-Match"), etag)) {
     return new Response(null, {
       status: 304,
@@ -19143,10 +18566,10 @@ async function handleSemanticGeneBlot(request, env, symbolValue) {
       "Content-Type": "image/webp",
       "Cache-Control": "public, max-age=300, stale-while-revalidate=86400",
       ETag: etag,
-      "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${selectedObjectKey}`,
-      ...iconoplasmImageLicenseResponseHeaders(iconoplasmGeneBlotCdnUrl(env, selectedObjectKey)),
+      "Content-Location": `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
+      ...iconoplasmImageLicenseResponseHeaders(iconoplasmBlotCdnUrl(env, objectKey)),
       "Access-Control-Allow-Origin": "*",
-      "X-Iconoplasm-Blot-Fingerprint": selectedFingerprint,
+      "X-Iconoplasm-Blot-Fingerprint": fingerprint,
       "X-Iconoplasm-Card-Version": String(
         card.published_at || `stable-v${card.stable_object_version ?? ""}`,
       ),
@@ -19435,7 +18858,7 @@ function withPortraitCdnUrls(env, gene) {
   for (const [size, rendition] of Object.entries(renditions)) {
     const path = String(rendition?.path || "")
     withCdn[size] =
-      rendition && path ? { ...rendition, cdn_url: iconoplasmGeneCardCdnUrl(env, path) } : rendition
+      rendition && path ? { ...rendition, cdn_url: iconoplasmCdnUrl(env, path) } : rendition
   }
   return { ...gene, p: { ...gene.p, renditions: withCdn } }
 }
@@ -19679,13 +19102,6 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     readPublicStatsProjection,
     sanitizeText,
     stateSymbolMax: 25000,
-  }),
-  ...createIconoplasmAdminBlotHandlers({
-    isAdmin: isIconoplasmAdmin,
-    json,
-    listBacklog: listIconoplasmGeneBlotBacklog,
-    upload: uploadIconoplasmGeneBlot,
-    republish: (env, symbol) => publishIconoplasmGeneStableObject(env, symbol),
   }),
   ...createIconoplasmAdminPullZoneHandlers({ isAdmin: isIconoplasmAdmin, json }),
   ...createIconoplasmAdminCatalogObjectHandlers({

@@ -77,11 +77,11 @@ test("architecture fence registry distributes every decision across independent 
 test("IPD-011 keeps one exact-card blot authority across every public surface", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-011")
   assert.ok(fence, "IPD-011 must remain registered")
-  assert.equal(fence.title, "Every public canonical blot uses the one stable gene object")
+  assert.equal(fence.title, "Every public blot follows from the one stable gene object")
   assert.equal(fence.runbook, "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md")
 
   assert.match(fence.decision, /stable gene object owns the public character/i)
-  assert.match(fence.decision, /canonical blot/i)
+  assert.match(fence.decision, /blot address is computed from it alone/i)
   assert.match(fence.decision, /Every public surface resolves that same identity/i)
 
   const runtime = readRepositoryFile(
@@ -109,7 +109,7 @@ test("IPD-003 keeps discovery eligibility on the exact published card", () => {
   const fence = registry.fences.find((entry) => entry.id === "IPD-003")
   assert.ok(fence, "IPD-003 must remain registered")
   assert.match(fence.decision, /One stable gene object defines each gene's public identity/i)
-  assert.match(fence.decision, /canonical blot/i)
+  assert.match(fence.decision, /blot's address follows/i)
   assert.match(fence.decision, /fails closed/i)
 })
 
