@@ -271,7 +271,7 @@ function discordMessage(rows, previewCount) {
   const symbol = geneSymbol(row.gene_symbol) || "your gene"
   const isEdit = requestKind(row.request_kind) === "edit_image"
   if (total > 1) {
-    const noun = isEdit ? "blot edits" : "candidate blots"
+    const noun = isEdit ? "portrait edits" : "candidate portraits"
     return [
       `Your ${total} free queue ${noun} for **${symbol}** are ready.`,
       `Showing ${previewCount} of ${total} previews.`,
@@ -430,7 +430,7 @@ async function loadFulfilledPortraitAttachment(env, row) {
   }
   const filename = `iconoplasm-${symbol.toLowerCase()}-${sha.slice(0, 12)}.webp`
   const requestLabel =
-    requestKind(row?.request_kind) === "edit_image" ? "blot edit" : "candidate blot"
+    requestKind(row?.request_kind) === "edit_image" ? "portrait edit" : "candidate portrait"
   return {
     ok: true,
     filename,

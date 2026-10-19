@@ -1181,10 +1181,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var fetchPriority = String(opts.fetchPriority || "low").trim() || "low"
     var portraitAlt =
       String(opts.portraitAlt || "").trim() ||
-      (resolvedSymbol ? resolvedSymbol + " blot" : "Gene blot")
+      (resolvedSymbol ? resolvedSymbol + " portrait" : "Gene portrait")
     var buttonAriaLabel =
       String(opts.buttonAriaLabel || "").trim() ||
-      (resolvedSymbol ? "Open full-size blot for " + resolvedSymbol : "Open full-size gene blot")
+      (resolvedSymbol ? "Open full-size portrait for " + resolvedSymbol : "Open full-size gene portrait")
     var captionText = String(opts.captionText || "").trim()
     // Fence: the archival portrait rail is a shared visual contract. The website and browser
     // extension must render the same button/img/fallback structure or they drift on width, crop,
@@ -1192,7 +1192,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (!portraitUrl) {
       return (
         '<div class="iconoplasm-tooltip-portrait-fallback">' +
-        '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
+        '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
         '<div class="iconoplasm-tooltip-portrait-symbol">' +
         escapeHtml(resolvedSymbol) +
         "</div>" +
@@ -1358,7 +1358,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         .toLowerCase(),
       politicalNote: normalizeHandwrittenText(politicsDisplay.character),
       portraitAlt:
-        String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
+        String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
       portraitDimensions: portraitDimensions(
         Object.keys(safePortrait).length
           ? safeGeneDetail
@@ -1711,7 +1711,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var portraitSrc = String(model.portraitSrc || "").trim()
     var portraitAlt =
       String(model.portraitAlt || "").trim() ||
-      (model.symbol ? model.symbol + " blot" : "Gene blot")
+      (model.symbol ? model.symbol + " portrait" : "Gene portrait")
     var dims =
       model.portraitDimensions && typeof model.portraitDimensions === "object"
         ? model.portraitDimensions
@@ -2015,17 +2015,17 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
         ? ICONO_VOTE_DOWN_ICON
         : ICONO_CROSS_ICON
     var firstButton = isLabel
-      ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
+      ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
         rejectInner +
         "</button>"
-      : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
+      : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
         approveInner +
         "</button>"
     var secondButton = isLabel
-      ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' +
+      ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' +
         approveInner +
         "</button>"
-      : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' +
+      : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' +
         rejectInner +
         "</button>"
     return (

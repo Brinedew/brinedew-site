@@ -349,7 +349,7 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
   }
 
   // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-  // Search terms: PRL split-brain, public edge card cache, canonical blot,
+  // Search terms: PRL split-brain, public edge card cache, current portrait,
   // logged-out stale card, KV_GALLERY_VERSION.
   //
   // Do not cache `/api/iconoplasm/cards/:symbol` in this public edge worker.

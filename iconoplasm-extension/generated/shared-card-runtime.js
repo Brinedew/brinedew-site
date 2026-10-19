@@ -10142,11 +10142,11 @@
       var buttonClassName = "iconoplasm-tooltip-portrait-media icono-brick-media-link" + (opts.extraButtonClass ? " " + String(opts.extraButtonClass).trim() : "");
       var loading = String(opts.loading || "eager").trim() || "eager";
       var fetchPriority = String(opts.fetchPriority || "low").trim() || "low";
-      var portraitAlt = String(opts.portraitAlt || "").trim() || (resolvedSymbol ? resolvedSymbol + " blot" : "Gene blot");
-      var buttonAriaLabel = String(opts.buttonAriaLabel || "").trim() || (resolvedSymbol ? "Open full-size blot for " + resolvedSymbol : "Open full-size gene blot");
+      var portraitAlt = String(opts.portraitAlt || "").trim() || (resolvedSymbol ? resolvedSymbol + " portrait" : "Gene portrait");
+      var buttonAriaLabel = String(opts.buttonAriaLabel || "").trim() || (resolvedSymbol ? "Open full-size portrait for " + resolvedSymbol : "Open full-size gene portrait");
       var captionText = String(opts.captionText || "").trim();
       if (!portraitUrl) {
-        return '<div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status">Blot pending</div><div class="iconoplasm-tooltip-portrait-symbol">' + escapeHtml(resolvedSymbol) + "</div></div>";
+        return '<div class="iconoplasm-tooltip-portrait-fallback"><div class="iconoplasm-tooltip-portrait-status">Portrait pending</div><div class="iconoplasm-tooltip-portrait-symbol">' + escapeHtml(resolvedSymbol) + "</div></div>";
       }
       return '<button type="button" class="' + escapeHtml(buttonClassName) + '"' + (extraButtonAttrs ? " " + extraButtonAttrs : "") + ' aria-label="' + escapeHtml(buttonAriaLabel) + '"><img class="iconoplasm-tooltip-portrait-img" src="' + escapeHtml(portraitUrl) + '" data-iconoplasm-role="source-portrait" data-gene-symbol="' + escapeHtml(resolvedSymbol) + '" alt="' + escapeHtml(portraitAlt) + '" loading="' + escapeHtml(loading) + '" decoding="async" fetchpriority="' + escapeHtml(fetchPriority) + '" width="' + size.width + '" height="' + size.height + '"></button>' + (captionText ? '<span class="icono-visually-hidden icono-portrait-caption">' + escapeHtml(captionText) + "</span>" : "");
     }
@@ -10236,7 +10236,7 @@
         mode: mode === "brick" ? "brick" : "sheet",
         molecularAlignment: String(politicsDisplay.molecular || "").trim().toLowerCase(),
         politicalNote: normalizeHandwrittenText(politicsDisplay.character),
-        portraitAlt: String(opts.portraitAlt || "").trim() || (symbol ? symbol + " blot" : "Gene blot"),
+        portraitAlt: String(opts.portraitAlt || "").trim() || (symbol ? symbol + " portrait" : "Gene portrait"),
         portraitDimensions: portraitDimensions(
           Object.keys(safePortrait).length ? safeGeneDetail : Object.assign({}, safeGeneDetail, { portrait: {} })
         ),
@@ -10408,7 +10408,7 @@
     function renderLabLabelImageOnlyCardHtml(model) {
       var href = String(model.titleHref || "").trim();
       var portraitSrc = String(model.portraitSrc || "").trim();
-      var portraitAlt = String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " blot" : "Gene blot");
+      var portraitAlt = String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " portrait" : "Gene portrait");
       var dims = model.portraitDimensions && typeof model.portraitDimensions === "object" ? model.portraitDimensions : {};
       var width = Number(dims.width || 0);
       var height = Number(dims.height || 0);
@@ -10499,8 +10499,8 @@
       var rejectArrow = showArrows ? '<svg class="icono-vote-btn-arrow icono-vote-btn-arrow--left" viewBox="0 0 60 60" aria-hidden="true" focusable="false"><path d="M29 43l-3 3-16-16 16-16 3 3-13 13 13 13z"></path></svg>' : "";
       var approveInner = isLabel ? '<span class="icono-vote-btn-copy-stack"><span class="icono-vote-btn-copy" data-icono-rough-copy="true">FIT</span>' + approveArrow + "</span>" + iconoPenLoopSvg("icono-vote-btn-loop", "vote-approve") : arrowGlyphs ? ICONO_VOTE_UP_ICON : ICONO_CHECK_ICON;
       var rejectInner = isLabel ? '<span class="icono-vote-btn-copy-stack">' + rejectArrow + '<span class="icono-vote-btn-copy" data-icono-rough-copy="true">MISFIT</span></span>' + iconoPenLoopSvg("icono-vote-btn-loop", "vote-reject") : arrowGlyphs ? ICONO_VOTE_DOWN_ICON : ICONO_CROSS_ICON;
-      var firstButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>";
-      var secondButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve blot" title="Approve blot">' + approveInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject blot" title="Reject blot">' + rejectInner + "</button>";
+      var firstButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + rejectInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + approveInner + "</button>";
+      var secondButton = isLabel ? '<button type="button" class="icono-vote-btn icono-vote-btn--approve" data-icono-vote-up aria-label="Approve portrait" title="Approve portrait">' + approveInner + "</button>" : '<button type="button" class="icono-vote-btn icono-vote-btn--reject" data-icono-vote-down aria-label="Reject portrait" title="Reject portrait">' + rejectInner + "</button>";
       return '<div class="icono-vote-box' + (isBrick ? " icono-vote-box--brick" : "") + (isLabel ? " icono-vote-box--label" : "") + (arrowGlyphs ? " icono-vote-box--arrows" : "") + '" data-icono-vote-box' + attrs + ">" + firstButton + // A candidate tile shows its score between the two buttons, only when it is
       // above zero (owner, 2026-10-16: "just the number and plus sign before it").
       (opts.showScore ? '<span class="icono-vote-score" data-icono-vote-score aria-hidden="true"></span>' : "") + secondButton + "</div>";

@@ -1,6 +1,6 @@
 ---
 title: "For developers"
-description: "Put Iconoplasm gene cards in your own tools: one image URL per gene, a free resolver for aliases and UniProt accessions, a one-file bulk download, and the limits and good practice for each."
+description: "Put Iconoplasm gene blots in your own tools: one image URL per gene, a free resolver for aliases and UniProt accessions, a one-file bulk download, and the limits and good practice for each."
 date: 2026-09-25
 draft: false
 schemaType: WebPage
@@ -8,7 +8,7 @@ schemaType: WebPage
 
 # For developers
 
-Iconoplasm draws every human protein-coding gene as a character: over 19,000 labelled cards, one per HGNC symbol. Everything on this page is free, needs no key or sign-up, and every image is [CC0](/license). Attribution is welcome but not required.
+Iconoplasm draws every human protein-coding gene as a character: over 19,000 blots, one per HGNC symbol. A blot is a gene's portrait with its name and symbol painted into the picture. Everything on this page is free, needs no key or sign-up, and every image is [CC0](/license). Attribution is welcome but not required.
 
 ## Quickstart
 
@@ -57,9 +57,9 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
 <img src="https://img.brinedew.bio/blots/v2/T/TP53-26b51a7ee1e19d6afc31d4bfe68c14f7.webp" alt="TP53 as an Iconoplasm character" width="384" height="512">
 ```
 
-That address comes straight from our CDN and never changes, so the page keeps showing the card you picked, however many people read it.
+That address comes straight from our CDN and never changes, so the page keeps showing the blot you picked, however many people read it.
 
-Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/blot/TP53.webp` works without a lookup and always shows the current card. Every view of it runs on our server, though, so please don't put it on a page many people will see (see [Using images at scale](#using-images-at-scale)).
+Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/blot/TP53.webp` works without a lookup and always shows the current blot. Every view of it runs on our server, though, so please don't put it on a page many people will see (see [Using images at scale](#using-images-at-scale)).
 
 ## Which approach to use
 
@@ -67,7 +67,7 @@ Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/bl
 | --- | --- | --- |
 | A quick try in a notebook, a slide or a private page | Build the image URL directly: `/blot/{SYMBOL}.webp` (official HGNC symbols only) | Nothing to call, but every view runs on our server |
 | Names from papers or datasets: aliases like p53 or IL-1β, UniProt accessions, odd capitalisation | The resolver, up to 50 identifiers per request | 1 request per 50 names |
-| Cards on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each card | 1 request per 50 cards, then nothing per view |
+| Blots on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each blot | 1 request per 50 blots, then nothing per view |
 | Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of every gene | 1 download (19 MB) |
 | A mirror you want to keep current | The bulk file once, then the change feed, polled at most hourly | 1 small request per poll |
 
@@ -75,28 +75,28 @@ Rule of thumb: if you would call the resolver more than about 20 times in a row,
 
 ## Images
 
-`https://iconoplasm.brinedew.bio/blot/{SYMBOL}.webp` is the labelled card for a gene. It shows the gene's name and symbol over its character.
+`https://iconoplasm.brinedew.bio/blot/{SYMBOL}.webp` is a gene's blot. It shows the gene's name and symbol over its character.
 
 - 768 × 1024 WebP, about 140 KB.
 - `{SYMBOL}` is the HGNC symbol and is case-insensitive (`tp53` works). It is not an alias: `/blot/p53.webp` is a 404. Resolve aliases first.
-- It always serves the gene's **current** card, which can change when the community picks a better one. It is cached for 5 minutes and may be served stale for up to a day while refreshing. It sends an `ETag`, so conditional requests are cheap.
+- It always serves the gene's **current** blot, which changes when the community picks a better portrait. It is cached for 5 minutes and may be served stale for up to a day while refreshing. It sends an `ETag`, so conditional requests are cheap.
 - `Access-Control-Allow-Origin: *`, so you can draw it into a canvas or fetch it from any web page.
 - An unknown symbol returns `404` with a small JSON body.
 
-Every resolver result also gives you two addresses for that exact card, which never change their bytes:
+Every resolver result also gives you two addresses for that exact blot, which never change their bytes:
 
-- `cdn_url` is the card on our CDN. **Use this one to embed or mirror.** It is cached for 30 days and costs us nothing per view.
+- `cdn_url` is the blot on our CDN. **Use this one to embed or mirror.** It is cached for 30 days and costs us nothing per view.
 - `immutable_url` is the same file at an address on our own domain, which will keep working if we ever change CDN. Every view of it goes through our server, so use it for links and records, not for images many people will load.
 
-A new card for the same gene gets a new `cdn_url`, so an embedded figure keeps showing the version you picked.
+A new blot for the same gene gets a new `cdn_url`, so an embedded figure keeps showing the version you picked.
 
 ### Using images at scale
 
-The `/blot/` and `immutable_url` addresses are answered by a small program on our side, once per view. The site's free hosting allows about 100,000 of those a day, shared by everyone. A pathway figure of 20 cards on a popular page can use that up in an afternoon.
+The `/blot/` and `immutable_url` addresses are answered by a small program on our side, once per view. The site's free hosting allows about 100,000 of those a day, shared by everyone. A pathway figure of 20 blots on a popular page can use that up in an afternoon.
 
 So for anything many people will see:
 
-1. Resolve your genes once (50 per request) and use each card's `cdn_url`. Views then cost nothing.
+1. Resolve your genes once (50 per request) and use each blot's `cdn_url`. Views then cost nothing.
 2. Or download the images once and serve them from your own site. CC0 means you may.
 
 Please don't point a popular page at `/blot/{SYMBOL}.webp`. It is for trying things out and for small, private use.
@@ -127,11 +127,11 @@ Each result has:
 | Field | Meaning |
 | --- | --- |
 | `requested` | Exactly what you sent. |
-| `found` | `false` means we have no card for it; `canonical_symbol`, `matched_by` and `images` are then `null`. |
+| `found` | `false` means we have no blot for it; `canonical_symbol`, `matched_by` and `images` are then `null`. |
 | `canonical_symbol` | The HGNC symbol it resolved to. |
 | `matched_by` | `symbol`, `alias` or `uniprot`. |
 | `page_url` | The gene's page on Iconoplasm. |
-| `images.gene_blot` | The card: `canonical_url`, `immutable_url`, `width`, `height`, licence fields. |
+| `images.gene_blot` | The blot: `canonical_url`, `immutable_url`, `width`, `height`, licence fields. |
 
 Errors:
 
@@ -140,7 +140,7 @@ Errors:
 | `400` | Missing or empty list, or more than 50 | `{"error": "Too many symbols (max 50)", "max_symbols": 50}` |
 | `405` | Anything but `POST` | `{"error": "Method not allowed"}` |
 | `429` | Rate limit reached (see below) | Problem JSON with `retry_after_seconds` |
-| `503` | The card catalogue is briefly unavailable, usually during a publish | Retry after a minute |
+| `503` | The catalogue is briefly unavailable, usually during a publish | Retry after a minute |
 
 The full schema is in the [OpenAPI document](https://iconoplasm.brinedew.bio/api/public/v1/openapi.json).
 
@@ -157,7 +157,7 @@ Each line:
 
 | Key | Meaning |
 | --- | --- |
-| `s` | HGNC symbol. For the labelled card, resolve symbols in batches of 50 and use each `cdn_url` (about 380 requests for the whole catalogue). |
+| `s` | HGNC symbol. For the blot, resolve symbols in batches of 50 and use each `cdn_url` (about 380 requests for the whole catalogue). |
 | `n` | Full gene name. |
 | `u` | UniProt accession, when there is one. |
 | `c` | The character's signature colour (hex). |
@@ -188,7 +188,7 @@ Every rate-limited response carries `ratelimit-policy`, `x-ratelimit-limit` and 
 Do:
 
 - Send up to 50 identifiers per resolver request, not one request per gene.
-- Cache resolver results. A symbol's card changes rarely, so a day is a sensible cache time for most tools.
+- Cache resolver results. A symbol's blot changes rarely, so a day is a sensible cache time for most tools.
 - Use the bulk file for anything genome-wide.
 - On `429` or `503`, wait (`Retry-After`), then retry with exponential backoff and a little random jitter.
 - Send a descriptive `User-Agent` with a contact URL or email, so we can reach you before blocking a runaway script.
@@ -203,7 +203,7 @@ Don't:
 
 ## Licence and credit
 
-Every card and portrait is dedicated to the public domain under [CC0 1.0](/license): use, modify, embed and sell them without asking. Credit ("Images: Iconoplasm") is appreciated, not required. Please don't suggest that Iconoplasm endorses your product.
+Every blot and portrait is dedicated to the public domain under [CC0 1.0](/license): use, modify, embed and sell them without asking. Credit ("Images: Iconoplasm") is appreciated, not required. Please don't suggest that Iconoplasm endorses your product.
 
 ## Machine-readable descriptions
 

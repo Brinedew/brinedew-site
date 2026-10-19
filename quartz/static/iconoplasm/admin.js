@@ -559,8 +559,8 @@
     return "canonical only"
   }
 
-  // Terminology rule: "canonical" is the blot shown in the extension.
-  // Votes auto-pick the canonical blot unless admin_override is active.
+  // Terminology rule: "canonical" is the current portrait shown in the extension.
+  // Votes auto-pick the current portrait unless admin_override is active.
   // Keep this language consistent in the admin even though legacy route/state
   // names still use "live" internally.
 
@@ -763,7 +763,7 @@
       evt.thumb_url
         ? '<img src="' +
           esc(evt.thumb_url) +
-          '" alt="Blot thumbnail" loading="lazy" width="40" height="40" />'
+          '" alt="Portrait thumbnail" loading="lazy" width="40" height="40" />'
         : "",
       "</div>",
       "<div>",
@@ -837,7 +837,7 @@
   }
 
   function requestKindLabel(kind) {
-    return String(kind || "") === "edit_image" ? "Edit blot" : "New blot"
+    return String(kind || "") === "edit_image" ? "Edit portrait" : "New portrait"
   }
 
   function requestKindPill(kind) {
@@ -893,7 +893,7 @@
     var fullUrl = result.full_url || imageUrl
     return [
       '<section class="request-result-panel">',
-      '<div><div class="detail-copy">The blot produced by this request remains attached to its history row.</div></div>',
+      '<div><div class="detail-copy">The portrait produced by this request remains attached to its history row.</div></div>',
       imageUrl
         ? '<a class="request-result-preview" href="' +
           esc(fullUrl) +
@@ -4437,13 +4437,13 @@
     if (state.activeTab !== "overview") return
     var summary = state.overviewSummary || {}
     els.overviewMetrics.innerHTML = [
-      metricMarkup("Canonical set", summary.with_live, "Genes with a canonical blot set."),
+      metricMarkup("Canonical set", summary.with_live, "Genes with a current portrait set."),
       metricMarkup(
         "Broken canonical",
         summary.drift,
-        "Canonical blot points at a missing or broken asset.",
+        "Current portrait points at a missing or broken asset.",
       ),
-      metricMarkup("Missing", summary.missing, "Genes with no usable blot candidates."),
+      metricMarkup("Missing", summary.missing, "Genes with no usable candidate portraits."),
       metricMarkup("Stale", summary.stale_assets, "Old images waiting for cleanup."),
       metricMarkup("Legacy", summary.legacy_assets, "Leftovers from older sync generations."),
     ].join("")
@@ -4454,14 +4454,14 @@
         if (item.kind === "drift") {
           return attentionMarkup(
             item.symbol + " -- broken canonical",
-            "The canonical blot points at a missing or broken asset.",
+            "The current portrait points at a missing or broken asset.",
             "Browse",
             item.symbol,
           )
         }
         if (item.kind === "missing") {
           return attentionMarkup(
-            item.symbol + " -- no canonical blot",
+            item.symbol + " -- no current portrait",
             "No usable candidate exists yet, so the extension has nothing canonical to show.",
             "Look",
             item.symbol,
@@ -4470,7 +4470,7 @@
         if (item.kind === "override") {
           return attentionMarkup(
             item.symbol + " -- manual override",
-            "Votes are not auto-picking the canonical blot until you clear the override.",
+            "Votes are not auto-picking the current portrait until you clear the override.",
             "Look",
             item.symbol,
           )
@@ -9362,7 +9362,7 @@
     if (a.leader_sha && a.leader_sha !== a.live_sha)
       badges.push('<span class="badge-pill badge-pinned">Votes differ</span>')
     if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>')
-    if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical blot</span>')
+    if (a.missing) badges.push('<span class="badge-pill badge-missing">No current portrait</span>')
     if (a.has_stale) badges.push('<span class="badge-pill badge-stale">Stale</span>')
     var actions = []
     if (a.leader_sha && a.leader_sha !== a.live_sha) {
@@ -9383,10 +9383,10 @@
       imageUrl
         ? '<img src="' +
           esc(imageUrl) +
-          '" alt="Blot for ' +
+          '" alt="Portrait for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty gallery-empty--media">No blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No portrait</div>',
       "</div>",
       '<div class="gallery-card-meta">',
       '<div class="gallery-title">' + esc(a.gene_symbol || "") + "</div>",
@@ -9428,10 +9428,10 @@
       a.thumb_url
         ? '<img src="' +
           esc(a.thumb_url) +
-          '" alt="Candidate blot for ' +
+          '" alt="Candidate portrait for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty gallery-empty--media">No blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No portrait</div>',
       "</div>",
       '<div class="gallery-card-meta">',
       '<div class="gallery-title">' + esc(a.gene_symbol || "") + "</div>",
@@ -9457,7 +9457,7 @@
     if (a.leader_sha && a.leader_sha !== a.live_sha)
       badges.push('<span class="badge-pill badge-pinned">Votes differ</span>')
     if (a.has_mismatch) badges.push('<span class="badge-pill badge-mismatch">Mismatch</span>')
-    if (a.missing) badges.push('<span class="badge-pill badge-missing">No canonical blot</span>')
+    if (a.missing) badges.push('<span class="badge-pill badge-missing">No current portrait</span>')
     var actions = []
     if (a.leader_sha && a.leader_sha !== a.live_sha)
       actions.push(
@@ -9478,10 +9478,10 @@
       a.live_thumb_url
         ? '<img src="' +
           esc(a.live_thumb_url) +
-          '" alt="Canonical blot for ' +
+          '" alt="Current portrait for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
-        : '<div class="gallery-empty gallery-empty--media">No canonical blot</div>',
+        : '<div class="gallery-empty gallery-empty--media">No current portrait</div>',
       "</div>",
       '<div class="gallery-media-label">Canonical</div>',
       "</div>",
@@ -9519,14 +9519,14 @@
     if (!detail) {
       els.detail.innerHTML = [
         '<div class="detail-title">Pick a gene</div>',
-        '<div class="detail-copy">Click any gene to inspect candidates. The canonical blot is what the extension shows; votes auto-pick it unless a manual override is active.</div>',
+        '<div class="detail-copy">Click any gene to inspect candidates. The current portrait is what the extension shows; votes auto-pick it unless a manual override is active.</div>',
       ].join("")
       return
     }
 
     var headerBadges = []
     if (detail.live_sha)
-      headerBadges.push('<span class="badge-pill badge-live">Canonical blot set</span>')
+      headerBadges.push('<span class="badge-pill badge-live">Current portrait set</span>')
     if (detail.admin_override)
       headerBadges.push('<span class="badge-pill badge-pinned">Manual override</span>')
 
@@ -9543,7 +9543,7 @@
             heroCandidate.medium_url
               ? '<img src="' +
                 esc(heroCandidate.medium_url) +
-                '" alt="Selected blot for ' +
+                '" alt="Selected portrait for ' +
                 esc(detail.gene_symbol || "") +
                 '" loading="lazy" width="320" height="320" />'
               : '<div class="gallery-empty gallery-empty--media">No preview</div>',
@@ -9581,8 +9581,8 @@
       '<div class="small">' +
         esc(
           detail.admin_override
-            ? "Manual override is active. Clear it to let votes pick the canonical blot again."
-            : "Votes automatically keep the canonical blot synced to the top eligible candidate.",
+            ? "Manual override is active. Clear it to let votes pick the current portrait again."
+            : "Votes automatically keep the current portrait synced to the top eligible candidate.",
         ) +
         "</div>",
       '<div class="candidate-actions">',
@@ -9623,7 +9623,7 @@
                 candidate.thumb_url
                   ? '<img src="' +
                     esc(candidate.thumb_url) +
-                    '" alt="Candidate blot" loading="lazy" width="64" height="64" />'
+                    '" alt="Candidate portrait" loading="lazy" width="64" height="64" />'
                   : "",
                 "</div>",
                 '<div class="candidate-meta">',
@@ -9668,7 +9668,7 @@
               ].join("")
             })
             .join("")
-        : '<div class="gallery-empty">No candidate blots found for this gene.</div>',
+        : '<div class="gallery-empty">No candidate portraits found for this gene.</div>',
       "</div>",
       '<div class="detail-kicker">Recent events</div>',
       '<div class="event-list">',
@@ -9689,7 +9689,7 @@
     state.selectedCandidateSha = ""
     els.detail.innerHTML = [
       '<div class="detail-title">' + esc(safeSymbol) + "</div>",
-      '<div class="detail-copy">Loading candidate blots, canonical state, and recent events…</div>',
+      '<div class="detail-copy">Loading candidate portraits, canonical state, and recent events…</div>',
     ].join("")
     var detail = await apiJson("/gene/" + encodeURIComponent(safeSymbol), { method: "GET" })
     state.selectedGeneDetail = detail || null
@@ -9814,7 +9814,7 @@
       if (!sha) throw new Error("Missing SHA for publish")
       if (
         !window.confirm(
-          "Make this the canonical blot for " +
+          "Make this the current portrait for " +
             symbol +
             "? This creates a manual override until you clear it.",
         )
@@ -9831,7 +9831,7 @@
     if (action === "clear-override") {
       if (
         !window.confirm(
-          "Clear the manual override for " + symbol + " and let votes pick the canonical blot?",
+          "Clear the manual override for " + symbol + " and let votes pick the current portrait?",
         )
       )
         return
@@ -9877,7 +9877,7 @@
     }
 
     if (action === "rollback") {
-      if (!window.confirm("Roll back " + symbol + " to previous blot?")) return
+      if (!window.confirm("Roll back " + symbol + " to previous portrait?")) return
       var rollbackBody = { symbol: symbol }
       if (reason) rollbackBody.reason = reason
       setLog(await runMutation("/rollback", rollbackBody))

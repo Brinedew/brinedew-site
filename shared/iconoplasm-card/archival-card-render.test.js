@@ -114,7 +114,7 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
 })
 
 // ARCHITECTURE FENCE [IPD-003]
-test("gene lead portrait is labelled as source material, not the canonical blot", async () => {
+test("gene lead portrait is labelled as source material, not an ordinary portrait", async () => {
   const shared = await import(pathToFileURL(runtimePath).href)
   const sharedRuntime = shared.IconoCardShared || globalThis.IconoplasmCardShared
   const portraitAlt = sharedRuntime.genePortraitAlt("tp53")
@@ -141,7 +141,7 @@ test("gene lead portrait is labelled as source material, not the canonical blot"
     html,
     /class="icono-visually-hidden icono-portrait-caption">Source portrait used inside the Iconoplasm gene blot for TP53 \(tumor protein p53\)\.<\/span>/,
   )
-  assert.doesNotMatch(html, /alt="TP53 blot"/)
+  assert.doesNotMatch(html, /alt="TP53 portrait"/)
 })
 
 // ARCHITECTURE FENCE [IPD-003]

@@ -4,7 +4,7 @@
 // rendering, and interaction wiring. app.js supplies only the shared API,
 // current-user, sidebar-render, and escaping boundaries.
 
-import { caretakerBlotMarkup } from "./caretaker-blot.js?v=0807f7cd3c594d1c"
+import { caretakerFilmMarkup } from "./caretaker-film.js?v=74ed28e6c4cce069"
 
 export function createRequestInbox({
   fetchJSON,
@@ -14,10 +14,10 @@ export function createRequestInbox({
   ensurePortraitSource,
   resolvePortraitUrl,
   navigate,
-  loadCaretakerBlot,
+  loadCaretakerFilm,
 }) {
   var state = {
-    caretaker_blots: Object.create(null),
+    caretaker_films: Object.create(null),
     loaded: false,
     loading: false,
     request_error: false,
@@ -103,7 +103,7 @@ export function createRequestInbox({
       "<span><strong>" +
       escapeHtml(notification.gene_symbol) +
       "</strong><small>" +
-      escapeHtml(notification.requested_emulsion_label || "Your requested blot") +
+      escapeHtml(notification.requested_emulsion_label || "Your requested portrait") +
       "</small></span>"
     document.body.appendChild(notice)
     window.setTimeout(function () {
@@ -615,40 +615,40 @@ export function createRequestInbox({
     var symbol = String(item.canonical_symbol || "Gene")
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
-    // B-996: the caretaker's gene as its own blot print. Molecular weight and portrait
+    // B-996: the caretaker film is the caretaker's gene as an autoradiograph. Molecular weight and portrait
     // come from the published gene detail the page already reads, once per symbol;
     // until it arrives the film prints with the ladder alone.
-    var blot = state.caretaker_blots[symbol]
-    if (blot === undefined && typeof loadCaretakerBlot === "function") {
-      state.caretaker_blots[symbol] = null
-      void Promise.resolve(loadCaretakerBlot(symbol))
+    var film = state.caretaker_films[symbol]
+    if (film === undefined && typeof loadCaretakerFilm === "function") {
+      state.caretaker_films[symbol] = null
+      void Promise.resolve(loadCaretakerFilm(symbol))
         .catch(function () {
           return null
         })
         .then(function (data) {
           if (!data) return
-          state.caretaker_blots[symbol] = data
+          state.caretaker_films[symbol] = data
           renderSidebar()
         })
     }
     var suspended = item.assignment_status === "suspended"
     return (
       '<div class="icono-request-inbox__caretaker-item">' +
-      '<a class="icono-blot-link" href="' +
+      '<a class="icono-film-link" href="' +
       escapeHtml(href) +
       '" data-icono-caretaker-assignment data-icono-caretaker-gene="' +
       escapeHtml(symbol) +
       '" aria-label="' +
       escapeHtml(symbol + (suspended ? ", caretaking suspended" : ", caretaker")) +
       '">' +
-      caretakerBlotMarkup({
+      caretakerFilmMarkup({
         symbol: symbol,
-        kda: blot && blot.kda,
-        portraitUrl: blot && blot.portraitUrl,
+        kda: film && film.kda,
+        portraitUrl: film && film.portraitUrl,
         escapeHtml: escapeHtml,
       }) +
       "</a>" +
-      (suspended ? '<small class="icono-blot-status">Caretaking suspended</small>' : "") +
+      (suspended ? '<small class="icono-film-status">Caretaking suspended</small>' : "") +
       (unread
         ? '<a class="icono-request-inbox__caretaker-comments" href="' +
           escapeHtml(
