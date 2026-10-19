@@ -6,7 +6,7 @@ import {
   lineEnds,
   pageBackgroundColour,
   relationshipKind,
-} from "./diagram-document.js?v=ae8ed02849975cc2"
+} from "./diagram-document.js?v=128a1dcb637288b1"
 
 const X6_RUNTIME_URL = "./generated/x6-runtime.js?v=c9928004bc8e7440"
 const GENE_SHAPE = "iconoplasm-gene"

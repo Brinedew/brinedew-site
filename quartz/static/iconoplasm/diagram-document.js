@@ -205,7 +205,7 @@ function normalizeGeneNode(rawNode, index, width, height) {
   const node = rawNode && typeof rawNode === "object" ? rawNode : {}
   const symbol = normalizeGeneSymbol(node.symbol)
   if (!symbol) return null
-  // Portraits are 3:4 blots, so the height always follows the width.
+  // Blots are 3:4, so the height always follows the width.
   const nodeWidth = Math.round(clamp(finiteNumber(node.width, DEFAULT_NODE_WIDTH), 72, 240))
   return placed(
     {

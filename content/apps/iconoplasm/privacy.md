@@ -13,7 +13,7 @@ This policy describes what data Iconoplasm collects and how it's handled.
 
 ## What the Extension Does
 
-Iconoplasm scans web pages you visit for human gene symbols (like TP53, BRCA1). When it finds them, it highlights the text and shows hover cards with the gene's assigned character-card data and blot. It also tracks which genes you've encountered (your "discovery" count).
+Iconoplasm scans web pages you visit for human gene symbols (like TP53, BRCA1). When it finds them, it highlights the text and shows hover cards with the gene's assigned character-card data and portrait. It also tracks which genes you've encountered (your "discovery" count).
 
 ## Data Collected
 
@@ -23,7 +23,7 @@ The extension reads the text content of pages you visit to find gene symbol matc
 
 ### Gene Symbol Lists (sent to our server)
 
-When the extension finds gene symbols on a page, it sends those symbols — and only those symbols — to `iconoplasm.brinedew.bio` to fetch card data and blots. We do not send the URL you're visiting, the page content, or any other browsing data.
+When the extension finds gene symbols on a page, it sends those symbols — and only those symbols — to `iconoplasm.brinedew.bio` to fetch card data and portraits. We do not send the URL you're visiting, the page content, or any other browsing data.
 
 ### Discovery Encounters (optional, sent to our server)
 
@@ -49,7 +49,7 @@ If you add an image API key, we store it encrypted and use it only for generatio
 
 ### User Emulsions (website only)
 
-If you save a custom emulsion, we store its text and a public ID based on your Discord username, such as `USERNAME-1`. Saved emulsions may appear in the website's emulsion picker and may be attached to generated or published blots.
+If you save a custom emulsion, we store its text and a public ID based on your Discord username, such as `USERNAME-1`. Saved emulsions may appear in the website's emulsion picker and may be attached to generated or published portraits.
 
 ### Preferences (stored locally)
 
@@ -69,7 +69,7 @@ The extension makes requests only to `iconoplasm.brinedew.bio` and to the Bunny 
 | Request | What's Sent | When |
 |---------|-------------|------|
 | Gene batch lookup | List of gene symbols found on the current page | When you visit a page with gene symbols |
-| Blot fetch | Gene symbol | When a hover card is shown |
+| Portrait fetch | Gene symbol | When a hover card is shown |
 | Gene card fetch (Bunny CDN) | Gene symbol | When a hover card is shown |
 | Gene list and portrait fetch (Bunny CDN) | File name only | When the gene list refreshes and when a portrait is shown |
 | Discovery encounter | Gene symbol | When a gene is first encountered (signed-in users only) |

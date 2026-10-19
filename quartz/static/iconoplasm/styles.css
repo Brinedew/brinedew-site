@@ -799,7 +799,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 /* B-838: the toolbar under the gene card is ONE row at every width. Pattern from
    Apple HIG and Material 3 toolbar guidance and the Unsplash / Civitai image pages
    (checked 2026-09-25): one labelled primary on the trailing edge (New candidate),
-   icon-only secondaries, rarely used actions (Edit blot, caretaker claim/switch)
+   icon-only secondaries, rarely used actions (Edit portrait, caretaker claim/switch)
    collapse into a More menu when the bar is narrow, and the metadata truncates
    instead of pushing anything around. Nothing wraps, nothing scrolls sideways. */
 /* Breakpoints below query .icono-gene-lead, the existing inline-size container
@@ -4264,7 +4264,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 /* B-457 #3: on mobile (390x844 reference) the gene-page hero portrait
    was rendering ~310px tall, eating ~46% of the viewport and pushing the
-   toolbar rail (Edit blot / New candidate from B-472) below the fold.
+   toolbar rail (Edit portrait / New candidate from B-472) below the fold.
    The hero IS the page on mobile, but the portrait alone shouldn't be —
    cap it so the first viewport shows the portrait + the start of the
    dossier rows + at least the top of the toolbar rail. The cap only
@@ -4578,7 +4578,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   box-shadow: inset 0 0 0 1px var(--icono-ring-image);
 }
 
-/* Source: B-467 — compact action rail for candidate blots.
+/* Source: B-467 — compact action rail for candidate portraits.
    The remove and copy controls used to be wide pill buttons with text labels. They now share
    a circular icon button shape so they read as a single rail next to the approve/reject vote
    buttons. The accessible label stays as visually-hidden text inside each button so
@@ -5537,7 +5537,7 @@ a.icono-clan-acc:hover {
 a.icono-clan-ae:hover {
   text-decoration: underline;
 }
-/* Reel: prev arrow, a single page of blots, next arrow */
+/* Reel: prev arrow, a single page of cards, next arrow */
 .icono-clan-reel {
   display: flex;
   align-items: stretch;

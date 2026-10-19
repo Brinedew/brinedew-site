@@ -166,17 +166,17 @@ test("the caretaker's own toolbar badge opens the caretaker panel", async (t) =>
       const page = await context.newPage()
       await page.goto(`${HOST}/gene/TP53`)
       if (name === "desktop") {
-        // B-996: the sidebar shows the gene's own blot print: the period ladder's
+        // B-996: the sidebar shows the gene's own caretaker film: the period ladder's
         // nine bands, the gene's lane, and the symbol in wax marker. No chips, no
         // instruction sentence.
-        await page.waitForSelector("[data-icono-caretaker-assignment] .icono-blot", {
+        await page.waitForSelector("[data-icono-caretaker-assignment] .icono-film", {
           timeout: 30_000,
         })
-        const symbol = await page.textContent(".icono-blot__symbol")
+        const symbol = await page.textContent(".icono-film__symbol")
         assert.equal(symbol.replace(/\s+/g, ""), "TP53", "sidebar: symbol written on the print")
         // The lanes are exposed film: each is a rendered mask over the ink, so count the
         // ladder's bands in the mask itself, as a reader would see them, not in the DOM.
-        const ladder = await page.$eval(".icono-blot__lane--marker", async (lane) => {
+        const ladder = await page.$eval(".icono-film__lane--marker", async (lane) => {
           const style = getComputedStyle(lane)
           const url = (style.maskImage || style.webkitMaskImage || "").match(/url\("?(.*?)"?\)/)
           if (!url) return { peaks: 0, maxDensity: 0, ink: style.backgroundColor }

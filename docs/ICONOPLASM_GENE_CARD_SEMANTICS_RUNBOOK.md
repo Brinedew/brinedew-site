@@ -97,8 +97,8 @@ the stable first-party `/blot/{SYMBOL}.webp` URL. The gene page itself shows
 the card once, with no duplicate blot. Route and catalog records establish identity and membership only. The raw
 portrait may remain visible in the interactive dossier as subordinate source
 material, but it is never the social image. Visible source-portrait and
-candidate-blot `<img>` elements carry `data-iconoplasm-role="source-portrait"`
-or `"candidate-blot"` plus the same normalized `data-gene-symbol`, so machine
+candidate-portrait `<img>` elements carry `data-iconoplasm-role="source-portrait"`
+or `"candidate-portrait"` plus the same normalized `data-gene-symbol`, so machine
 readers do not have to infer the page's image hierarchy from layout or alt text
 alone.
 

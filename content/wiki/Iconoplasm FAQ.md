@@ -15,16 +15,16 @@ faq:
   - question: "One of the images looks like my work. I want that artist tag blocked."
     answer: "You can use the blocklist form to purge your style from the gallery. Enter the exact @name tag as it appears in the artist tag library: . You need to log in to brinedew.bio website with your Discord account to bypass the blocklist bot guard. If you don't want to use Discord site login, you can send a blocklist email request to from your business email account. The first @name you send me will be blocklisted. Make sure to use the @ symbol in front of the name for the email to be reviewed automati"
   - question: "How do I edit the illustration?"
-    answer: "Tap the gene card to go to the gene page. Tap \"edit blot\" under the blot you want to edit, and select your desired corrections. The newly edited card will be added as a new candidate blot. Some corrections you can select for editing: * Remove AI slop tells * Adjust sex, age, mass, or color * Correction to the fantastical feature or fashion style"
-  - question: "It's not easily fixable - I don't like the entire concept or art style of the canonical blot."
-    answer: "Downvote the canonical blot by tapping X or \"misfit\" under the canonical blot. Upvote a better candidate blot by pressing the checkmark under that candidate."
-  - question: "All candidate blots are even worse!"
-    answer: "Tap \"new candidate\" to make a new candidate blot. Make sure you have saved your API keys for your blot generation service of choice in the user settings."
-  - question: "All generated blots for a gene reuse the same bad character concept."
+    answer: "Tap the gene card to go to the gene page. Tap \"edit portrait\" under the portrait you want to edit, and select your desired corrections. The newly edited card will be added as a new candidate portrait. Some corrections you can select for editing: * Remove AI slop tells * Adjust sex, age, mass, or color * Correction to the fantastical feature or fashion style"
+  - question: "It's not easily fixable - I don't like the entire concept or art style of the current portrait."
+    answer: "Downvote the current portrait by tapping X or \"misfit\" under the current portrait. Upvote a better candidate portrait by pressing the checkmark under that candidate."
+  - question: "All candidate portraits are even worse!"
+    answer: "Tap \"new candidate\" to make a new candidate portrait. Make sure you have saved your API keys for your portrait generation service of choice in the user settings."
+  - question: "All generated portraits for a gene reuse the same bad character concept."
     answer: "Join our Discord to discuss how to modify character prompts for various gene families."
-  - question: "I noticed a candidate blot that would better fit another gene."
-    answer: "Tap the copy icon below the candidate (the button next to \"Edit\"). It will open a picker, where you can select the target gene. The blot is added as a new candidate to that other gene and auto-upvoted there."
-  - question: "What blots are not suitable for Iconoplasm?"
+  - question: "I noticed a candidate portrait that would better fit another gene."
+    answer: "Tap the copy icon below the candidate (the button next to \"Edit\"). It will open a picker, where you can select the target gene. The portrait is added as a new candidate to that other gene and auto-upvoted there."
+  - question: "What portraits are not suitable for Iconoplasm?"
     answer: "- 18+ images aren't suitable. - Animals and furries (antrhopomorphic animals) aren't well-suited to represent human genes. Keep them for other animal genomes. I'm looking forward to Drosophila characters. - Same goes for any non-humanoid faces (for example, object-heads), however helmets are OK. - Monstrous humanlike faces (ogres, robots...) are OK if they pass more as human than as animal. Monster-human hybrids are OK if the top part is human (centaurs, nagas, driders)."
   - question: "Why aren't you featuring artists' names in descriptions?"
     answer: "Artists don't want their names under some AI generated content. I'm not so sure I would want my name near some of their content either."
@@ -39,7 +39,7 @@ faq:
   - question: "Any ideas for scenarios to explore from inside the cell?"
     answer: "Some scenarios I would find engaging to explore in an Iconoplasm world: * Enucleation of an erythrocyte. * Oncogene-induced apoptosis. * Living next to a SASP senescent cell. * Sperm-egg fusion (of different species?) * Leukocyte migration. * Long-term intracellular parasitism (Malaria hypnozoites). * Lineage potency restriction in early development. * Being assigned a transit amplifying role. * Immortalization or transdifferentiation with OSKM. * Cell in a body that just died of heart attack."
   - question: "How can someone support the project?"
-    answer: "Participation is a huge help by itself! Vote on some blots, generate and edit new candidates. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on my [[Support Me]] page."
+    answer: "Participation is a huge help by itself! Vote on some portraits, generate and edit new candidates. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on my [[Support Me]] page."
 
 ---
 
@@ -96,30 +96,30 @@ If you don't want to use Discord site login, you can send a blocklist email requ
 
 ## How do I edit the illustration?
 
-Tap the gene card to go to the gene page. Tap "edit blot" under the blot you want to edit, and select your desired corrections. The newly edited card will be added as a new candidate blot.
+Tap the gene card to go to the gene page. Tap "edit portrait" under the portrait you want to edit, and select your desired corrections. The newly edited card will be added as a new candidate portrait.
 
 Some corrections you can select  for editing:
 * Remove AI slop tells
 * Adjust sex, age, mass, or color
 * Correction to the fantastical feature or fashion style
 
-## It's not easily fixable - I don't like the entire concept or art style of the canonical blot.
+## It's not easily fixable - I don't like the entire concept or art style of the current portrait.
 
-Downvote the canonical blot by tapping X or "misfit" under the canonical blot. Upvote a better candidate blot by pressing the checkmark under that candidate.
+Downvote the current portrait by tapping X or "misfit" under the current portrait. Upvote a better candidate portrait by pressing the checkmark under that candidate.
 
-## All candidate blots are even worse!
+## All candidate portraits are even worse!
 
-Tap "new candidate" to make a new candidate blot. Make sure you have saved your API keys for your blot generation service of choice in the user settings.
+Tap "new candidate" to make a new candidate portrait. Make sure you have saved your API keys for your portrait generation service of choice in the user settings.
 
-## All generated blots for a gene reuse the same bad character concept.
+## All generated portraits for a gene reuse the same bad character concept.
 
 Join our Discord to discuss how to modify character prompts for various gene families.
 
-## I noticed a candidate blot that would better fit another gene.
+## I noticed a candidate portrait that would better fit another gene.
 
-Tap the copy icon below the candidate (the button next to "Edit"). It will open a picker, where you can select the target gene. The blot is added as a new candidate to that other gene and auto-upvoted there.
+Tap the copy icon below the candidate (the button next to "Edit"). It will open a picker, where you can select the target gene. The portrait is added as a new candidate to that other gene and auto-upvoted there.
 
-## What blots are not suitable for Iconoplasm?
+## What portraits are not suitable for Iconoplasm?
 
 - 18+ images aren't suitable.
 - Animals and furries (antrhopomorphic animals) aren't well-suited to represent human genes. Keep them for other animal genomes. I'm looking forward to Drosophila characters.
@@ -188,4 +188,4 @@ Some scenarios I would find engaging to explore in an Iconoplasm world:
 
 ## How can someone support the project?
 
-Participation is a huge help by itself! Vote on some blots, generate and edit new candidates. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on my [[Support Me]] page.
+Participation is a huge help by itself! Vote on some portraits, generate and edit new candidates. Join the Discord to discuss ideas for character concepts. Share the link with people who have relevant knowledge or strong visual taste. Donate using the link on my [[Support Me]] page.

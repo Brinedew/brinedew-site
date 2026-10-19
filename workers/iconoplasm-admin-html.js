@@ -11,7 +11,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <div class="page">
     <header>
       <h1>Iconoplasm Admin</h1>
-      <p>Blots first, bookkeeping second. This page steers the canonical blot shown in the extension. Votes auto-pick the canonical blot unless a manual override is active.</p>
+      <p>Portraits first, bookkeeping second. This page steers the current portrait shown in the extension. Votes auto-pick the current portrait unless a manual override is active.</p>
     </header>
 
     <nav id="admin-tabs" aria-label="Admin sections" role="tablist">
@@ -323,7 +323,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="section-head">
         <div>
           <h2>Generation requests</h2>
-          <p class="small">A request log for debugging individual new-blot and edit-blot queue entries. Summary lanes are useful for fulfillment, but this list keeps every request visible.</p>
+          <p class="small">A request log for debugging individual new-portrait and edit-portrait queue entries. Summary lanes are useful for fulfillment, but this list keeps every request visible.</p>
         </div>
         <button class="btn-primary" type="button" id="requests-refresh">Refresh</button>
       </div>
@@ -335,8 +335,8 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <label>Kind
             <select id="requests-kind">
               <option value="all" selected>All request kinds</option>
-              <option value="new_candidate">New blot</option>
-              <option value="edit_image">Edit blot</option>
+              <option value="new_candidate">New portrait</option>
+              <option value="edit_image">Edit portrait</option>
             </select>
           </label>
           <label>Mode
@@ -407,14 +407,14 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="section-head">
         <div>
           <h2>Image edit prompts</h2>
-          <p class="small">Each edit-blot checkbox has its own saved prompt template. Saving here changes future edits only; existing jobs keep their recorded prompt.</p>
+          <p class="small">Each edit-portrait checkbox has its own saved prompt template. Saving here changes future edits only; existing jobs keep their recorded prompt.</p>
         </div>
         <button class="btn-primary" type="button" id="prompts-refresh">Refresh</button>
       </div>
       <section class="prompt-editor prompt-prefix-editor" id="prompt-prefix-editor">
         <div>
           <h2>Shared prefix</h2>
-          <p class="small" id="prompt-prefix-description">This prefix is prepended once to every edit-blot prompt. It is not tied to a checkbox.</p>
+          <p class="small" id="prompt-prefix-description">This prefix is prepended once to every edit-portrait prompt. It is not tied to a checkbox.</p>
         </div>
         <label>Shared prefix
           <textarea id="prompt-prefix-text" maxlength="2400" spellcheck="true" disabled></textarea>
@@ -430,7 +430,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <section class="prompt-editor prompt-suffix-editor" id="prompt-suffix-editor">
         <div>
           <h2>Shared suffix</h2>
-          <p class="small" id="prompt-suffix-description">This suffix is appended once to every edit-blot prompt. It is not tied to a checkbox.</p>
+          <p class="small" id="prompt-suffix-description">This suffix is appended once to every edit-portrait prompt. It is not tied to a checkbox.</p>
         </div>
         <label>Shared suffix
           <textarea id="prompt-suffix-text" maxlength="2400" spellcheck="true" disabled></textarea>
@@ -641,7 +641,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <div class="section-head">
         <div>
           <h2>Gallery</h2>
-          <p class="small">Canonical means the blot shown in the extension. Votes pick it automatically unless you deliberately pin a manual override.</p>
+          <p class="small">Canonical means the portrait shown in the extension. Votes pick it automatically unless you deliberately pin a manual override.</p>
         </div>
       </div>
 
@@ -653,10 +653,10 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
             </label>
             <label>Show
               <select id="gallery-filter">
-                <option value="all" selected>all blots</option>
+                <option value="all" selected>all portraits</option>
                 <option value="mismatch">has mismatch</option>
                 <option value="pinned">manual override</option>
-                <option value="missing">missing canonical blot</option>
+                <option value="missing">missing current portrait</option>
                 <option value="stale">has stale images</option>
               </select>
             </label>
@@ -679,7 +679,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           </div>
         </div>
         <div class="gallery-toolbar-row">
-          <div class="small">Click a gene to inspect candidates. If a manual override exists, the compare view shows the current canonical blot against the vote winner.</div>
+          <div class="small">Click a gene to inspect candidates. If a manual override exists, the compare view shows the current portrait against the vote winner.</div>
           <div class="actions">
             <button class="btn-flat" type="button" id="assets-unstale-visible" disabled>Restore stale in view</button>
             <button class="btn-primary" id="assets-refresh">Refresh</button>

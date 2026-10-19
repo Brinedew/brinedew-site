@@ -281,7 +281,7 @@ export async function setCaretakerSupervote(
   )
     fail(
       "SUPERVOTE_TARGET_INELIGIBLE",
-      "Caretaker supervotes require an eligible, current candidate blot",
+      "Caretaker supervotes require an eligible, current candidate portrait",
       409,
     )
   fail("STALE_SUPERVOTE_STATE", "Caretaker supervote changed", 409)

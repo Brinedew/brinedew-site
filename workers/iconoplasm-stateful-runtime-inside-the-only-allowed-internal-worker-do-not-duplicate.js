@@ -314,13 +314,13 @@ const SCANNER_ARTIFACT_CONTRACT_REVISION = Number(
   ICONOPLASM_CANDIDATE_CONTRACT.scanner_contract_revision,
 )
 const SCANNER_ARTIFACT_MAX_BYTES = 3 * 1024 * 1024
-const ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH = 384
-const ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT = 512
-const ICONOPLASM_BLOT_REQUEST_WIDTH = ICONOPLASM_BLOT_CARD_LAYOUT_WIDTH * 4
-const ICONOPLASM_BLOT_REQUEST_HEIGHT = ICONOPLASM_BLOT_CARD_LAYOUT_HEIGHT * 4
-const ICONOPLASM_BLOT_REQUEST_SIZE = `${ICONOPLASM_BLOT_REQUEST_WIDTH}x${ICONOPLASM_BLOT_REQUEST_HEIGHT}`
-const ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO = "3:4"
-const ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE = ICONOPLASM_BLOT_REQUEST_SIZE
+const ICONOPLASM_CARD_LAYOUT_WIDTH = 384
+const ICONOPLASM_CARD_LAYOUT_HEIGHT = 512
+const ICONOPLASM_PORTRAIT_REQUEST_WIDTH = ICONOPLASM_CARD_LAYOUT_WIDTH * 4
+const ICONOPLASM_PORTRAIT_REQUEST_HEIGHT = ICONOPLASM_CARD_LAYOUT_HEIGHT * 4
+const ICONOPLASM_PORTRAIT_REQUEST_SIZE = `${ICONOPLASM_PORTRAIT_REQUEST_WIDTH}x${ICONOPLASM_PORTRAIT_REQUEST_HEIGHT}`
+const ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO = "3:4"
+const ICONOPLASM_OPENAI_PORTRAIT_REQUEST_SIZE = ICONOPLASM_PORTRAIT_REQUEST_SIZE
 const ICONOPLASM_IMAGE_PROVIDER_TIMEOUT_MS = 10 * 60 * 1000
 const ICONOPLASM_PROVIDER_POLL_INITIAL_WAIT_MS = 60_000
 const ICONOPLASM_PROVIDER_POLL_INTERVAL_MS = 10_000
@@ -362,7 +362,7 @@ const FAL_SEEDREAM_LITE_REQUEST_FIELDS = Object.freeze({
   enable_safety_checker: true,
 })
 // GPT Image 2.5 on fal: "auto" infers the size from the source image; a generation
-// needs a concrete size with both sides a multiple of 16 (1536x2048 is the blot's
+// needs a concrete size with both sides a multiple of 16 (1536x2048 is the portrait's
 // 3:4 target and inside fal's 655,360 to 8,294,400 pixel range).
 const FAL_GPT_IMAGE_EDIT_REQUEST_FIELDS = Object.freeze({
   image_size: "auto",
@@ -372,8 +372,8 @@ const FAL_GPT_IMAGE_EDIT_REQUEST_FIELDS = Object.freeze({
 })
 const FAL_GPT_IMAGE_GENERATE_REQUEST_FIELDS = Object.freeze({
   image_size: Object.freeze({
-    width: ICONOPLASM_BLOT_REQUEST_WIDTH,
-    height: ICONOPLASM_BLOT_REQUEST_HEIGHT,
+    width: ICONOPLASM_PORTRAIT_REQUEST_WIDTH,
+    height: ICONOPLASM_PORTRAIT_REQUEST_HEIGHT,
   }),
   quality: "high",
   num_images: 1,
@@ -383,7 +383,7 @@ const FAL_GPT_IMAGE_GENERATE_REQUEST_FIELDS = Object.freeze({
 // Krea's GPT Image 2.5 schema requires aspect_ratio and resolution (checked
 // 2026-10-03). 3:4 is in its aspect_ratio enum; 2K is the scale nearest 1536x2048.
 const KREA_GPT_IMAGE_25_BODY_FIELDS = Object.freeze({
-  aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+  aspect_ratio: ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO,
   resolution: "2K",
   quality: "high",
 })
@@ -405,7 +405,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         model: "gpt-image-2.5-sunburst",
         label: "GPT Image 2.5 Sunburst",
         pricing_label: "Per token, $30/M image output",
-        image_size: ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
+        image_size: ICONOPLASM_OPENAI_PORTRAIT_REQUEST_SIZE,
         image_quality: "high",
         estimated_seconds: 180,
         edit_capable: true,
@@ -415,7 +415,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         model: "gpt-image-2.5-flare",
         label: "GPT Image 2.5 Flare",
         pricing_label: "Per token, $30/M image output",
-        image_size: ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
+        image_size: ICONOPLASM_OPENAI_PORTRAIT_REQUEST_SIZE,
         image_quality: "high",
         estimated_seconds: 90,
         edit_capable: true,
@@ -568,7 +568,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       // GPT Image 2.5, two tiers (OpenAI's current image models). aspect_ratio and
       // resolution are required by the schema; 3:4 is in its aspect_ratio enum and
-      // 2K is the scale nearest the blot's 1536x2048 target. Krea shows no price.
+      // 2K is the scale nearest the portrait's 1536x2048 target. Krea shows no price.
       Object.freeze({
         model: "openai/gpt-image-2.5-sunburst",
         label: "GPT Image 2.5 Sunburst",
@@ -735,7 +735,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         model: "gemini-3.1-flash-image",
         label: "Gemini 3.1 Flash Image",
         pricing_label: "~$0.067/image",
-        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        aspect_ratio: ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO,
         image_size: "1K",
         edit_capable: true,
         generate_capable: true,
@@ -744,7 +744,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         model: "gemini-3-pro-image",
         label: "Gemini 3 Pro Image",
         pricing_label: "$0.134/image",
-        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        aspect_ratio: ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO,
         image_size: "1K",
         edit_capable: true,
         generate_capable: true,
@@ -756,7 +756,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         model: "gemini-3.1-flash-lite-image",
         label: "Gemini 3.1 Flash Lite Image",
         pricing_label: "~$0.034/image",
-        aspect_ratio: ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+        aspect_ratio: ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO,
         image_size: "1K",
         edit_capable: true,
         generate_capable: true,
@@ -772,7 +772,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     model_options: Object.freeze([
       // aspect_ratio is the generation-only value: Luma's image guide lists nine
       // ratios (3:1, 2:1, 16:9, 3:2, 1:1, 2:3, 9:16, 1:2, 1:3), so 2:3 is the
-      // documented portrait nearest the blot's 3:4. Prices are the edit rates on
+      // documented portrait nearest the portrait's 3:4. Prices are the edit rates on
       // docs.agents.lumalabs.ai/guides/pricing (checked 2026-10-03).
       Object.freeze({
         model: "uni-1",
@@ -861,8 +861,8 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       // B-916: Flux 3 Image, released 2026-10-01 (release notes at docs.bfl.ml).
       // fal's endpoint takes image_urls (1 to 10) and treats aspect_ratio "auto" as
-      // the first reference image, so an edit keeps the blot's 3:4 frame. "2k" is
-      // the tier nearest the blot's 1536x2048 target. The launch price is 50% off
+      // the first reference image, so an edit keeps the portrait's 3:4 frame. "2k" is
+      // the tier nearest the portrait's 1536x2048 target. The launch price is 50% off
       // until 2026-10-08.
       Object.freeze({
         model: "blackforestlabs/flux-3/edit-image",
@@ -1011,7 +1011,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
         request_fields: FAL_STANDARD_REQUEST_FIELDS,
       }),
       // portrait_4_3 is fal's 864x1152 preset for Ideogram 4.5, the closest the
-      // model offers to 3:4. Prompt expansion is off so the blot prompt is used as
+      // model offers to 3:4. Prompt expansion is off so the portrait prompt is used as
       // written.
       Object.freeze({
         model: "ideogram/v4.5",
@@ -1100,7 +1100,7 @@ const PUBLIC_DEFAULT_GENE_BATCH_LIMIT = 40
 const PUBLIC_MAX_GENE_BATCH_LIMIT = 40
 const PUBLIC_MAX_RESOLVE_BATCH_LIMIT = 250
 const PUBLIC_MAX_IMAGE_RESOLVE_BATCH_LIMIT = 50
-const PUBLIC_STATS_SCHEMA_VERSION = "iconoplasm.publicStats.v1"
+const PUBLIC_STATS_SCHEMA_VERSION = "iconoplasm.publicStats.v2"
 const DISCOVERY_SOURCE_EXTENSION_HOVER = "extension_hover"
 const DISCOVERY_SOURCE_EXTENSION_GUEST_MERGE = "extension_guest_merge"
 const DISCOVERY_SOURCE_STARTER_SEED = "starter_seed"
@@ -4095,18 +4095,18 @@ const IMAGE_EDIT_SHARED_SUFFIX_PROMPT_KIND = "shared_suffix"
 const IMAGE_EDIT_SHARED_SUFFIX_PROMPT_DEFINITION = Object.freeze({
   kind: IMAGE_EDIT_SHARED_SUFFIX_PROMPT_KIND,
   label: "Shared suffix",
-  description: "Always appended once to every edit-blot provider prompt.",
+  description: "Always appended once to every edit-portrait provider prompt.",
   default_prompt_template:
-    "Preserve character identity, pose, composition, lighting, blot texture, framing, and background unless a selected adjustment directly requires a change. Use bounded local edits and preserve every unrelated region. Do not redesign the image, change the gene concept, or introduce text, labels, watermark, UI, border, collage, contact sheet, or new artifacts.",
+    "Preserve character identity, pose, composition, lighting, texture, framing, and background unless a selected adjustment directly requires a change. Use bounded local edits and preserve every unrelated region. Do not redesign the image, change the gene concept, or introduce text, labels, watermark, UI, border, collage, contact sheet, or new artifacts.",
 })
 const IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND = "shared_prefix"
 const IMAGE_EDIT_SHARED_PREFIX_PROMPT_DEFINITION = Object.freeze({
   kind: IMAGE_EDIT_SHARED_PREFIX_PROMPT_KIND,
   label: "Shared prefix",
-  description: "Always prepended once to every edit-blot provider prompt.",
+  description: "Always prepended once to every edit-portrait provider prompt.",
   default_prompt_template: [
-    "Edit the uploaded Iconoplasm blot with a localized image-to-image edit.",
-    `Output canvas: ${ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO} vertical Iconoplasm blot, target ${ICONOPLASM_BLOT_REQUEST_SIZE} px when the provider accepts exact dimensions. Compose directly for the full frame; do not rely on later cropping.`,
+    "Edit the uploaded Iconoplasm portrait with a localized image-to-image edit.",
+    `Output canvas: ${ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO} vertical Iconoplasm portrait, target ${ICONOPLASM_PORTRAIT_REQUEST_SIZE} px when the provider accepts exact dimensions. Compose directly for the full frame; do not rely on later cropping.`,
     "Only make these targeted adjustments:",
   ].join("\n"),
 })
@@ -4114,7 +4114,7 @@ const IMAGE_EDIT_PROMPT_DEFINITIONS = Object.freeze([
   {
     kind: "remove_ai_generation_errors",
     label: "Remove visible AI errors",
-    description: "Repairs obvious generation artifacts while preserving the blot.",
+    description: "Repairs obvious generation artifacts while preserving the portrait.",
     default_prompt_template:
       "Remove visible AI generation errors and repair malformed hands, extra limbs, text fragments, duplicated facial features, broken anatomy, and rendering artifacts.",
   },
@@ -5108,8 +5108,8 @@ function buildImageEditPrompt(adjustments, sharedSuffixTemplate = "", sharedPref
   return [prefix, ...lines, suffix].join("\n")
 }
 
-function iconoplasmBlotRequestPromptLine() {
-  return `Output canvas: ${ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO} vertical Iconoplasm blot, target ${ICONOPLASM_BLOT_REQUEST_SIZE} px when the provider accepts exact dimensions. Compose directly for the full frame; do not rely on later cropping.`
+function iconoplasmPortraitRequestPromptLine() {
+  return `Output canvas: ${ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO} vertical Iconoplasm portrait, target ${ICONOPLASM_PORTRAIT_REQUEST_SIZE} px when the provider accepts exact dimensions. Compose directly for the full frame; do not rely on later cropping.`
 }
 
 function imageEditCandidateEmulsionId(sourceRow) {
@@ -5410,7 +5410,7 @@ function openAiImageRequestOptions(providerRow) {
   const option = imageEditProviderModelOption(providerDef, model)
   return {
     model,
-    size: sanitizeText(option?.image_size || "", 32) || ICONOPLASM_OPENAI_BLOT_REQUEST_SIZE,
+    size: sanitizeText(option?.image_size || "", 32) || ICONOPLASM_OPENAI_PORTRAIT_REQUEST_SIZE,
     quality: sanitizeText(option?.image_quality || "", 32) || "medium",
   }
 }
@@ -6003,7 +6003,7 @@ function kreaAttachSourceToBody({
         apiKey,
         bytes: sourceBytes,
         contentType: sourceContentType,
-        description: "iconoplasm blot edit source",
+        description: "iconoplasm portrait edit source",
         timeoutMs: Math.max(15_000, Math.ceil(timeoutMs / 4)),
       }).then((uploaded) => {
         console.log(
@@ -6087,11 +6087,11 @@ async function callKreaImageProvider({
   const reqWidth =
     Number(kreaOption?.request_width) > 0
       ? Number(kreaOption.request_width)
-      : ICONOPLASM_BLOT_REQUEST_WIDTH
+      : ICONOPLASM_PORTRAIT_REQUEST_WIDTH
   const reqHeight =
     Number(kreaOption?.request_height) > 0
       ? Number(kreaOption.request_height)
-      : ICONOPLASM_BLOT_REQUEST_HEIGHT
+      : ICONOPLASM_PORTRAIT_REQUEST_HEIGHT
 
   const urls = (sourceUrl ? [sourceUrl] : [])
     .map((value) => String(value || "").trim())
@@ -6219,7 +6219,7 @@ function geminiImageRequestOptions(providerRow) {
   return {
     model,
     aspectRatio:
-      sanitizeText(option?.aspect_ratio || "", 32) || ICONOPLASM_BLOT_REQUEST_ASPECT_RATIO,
+      sanitizeText(option?.aspect_ratio || "", 32) || ICONOPLASM_PORTRAIT_REQUEST_ASPECT_RATIO,
     imageSize: sanitizeText(option?.image_size || "", 32) || "",
   }
 }
@@ -7200,8 +7200,8 @@ export function buildCandidateGenerationPrompt({
     promptBody = `${promptBody}, ${essenceSuffix}`.replace(/^,\s*/, "").trim()
   }
   const parts = [
-    "Generate one new Iconoplasm candidate blot.",
-    iconoplasmBlotRequestPromptLine(),
+    "Generate one new Iconoplasm candidate portrait.",
+    iconoplasmPortraitRequestPromptLine(),
     `Subject gene: ${geneSymbol}${fullName ? ` - ${fullName}` : ""}.`,
     `Prompt body authority: ${
       bodyMode === "taggerizer_prompt" ? "complete Taggerizer prompt" : "complete prose prompt"
@@ -7222,7 +7222,7 @@ export function buildCandidateGenerationPrompt({
   parts.push(
     "Image source: novel provider generation.",
     "Reference images: none.",
-    "Return a single finished portrait blot suitable as a public candidate image. No text, labels, watermark, UI, border, collage, or contact sheet.",
+    "Return a single finished portrait suitable as a public candidate image. No text, labels, watermark, UI, border, collage, or contact sheet.",
   )
   return parts.join("\n")
 }
@@ -8474,7 +8474,7 @@ export function iconoplasmPreallocatedAnimaEmulsionOption(raw) {
     vision_id: visionId,
     label: displayLabel,
     primary_label: displayLabel,
-    secondary_label: "Ready for first blot",
+    secondary_label: "Ready for first portrait",
     search_text: `${emulsionId} ${visionId}`,
     emulsion_id: emulsionId,
     emulsion_family_id: emulsionId,
@@ -12181,9 +12181,9 @@ function formatPublicStatsNumber(value) {
 
 function publicStatsCopy(payload) {
   const genes = Math.max(0, Number(payload?.gene_count || 0))
-  const candidates = Math.max(0, Number(payload?.generated_candidate_blot_count || 0))
+  const candidates = Math.max(0, Number(payload?.candidate_portrait_count || 0))
   if (!genes || !candidates) return ""
-  return `${formatPublicStatsNumber(genes)} genes · ${formatPublicStatsNumber(candidates)} AI blots`
+  return `${formatPublicStatsNumber(genes)} genes · ${formatPublicStatsNumber(candidates)} AI portraits`
 }
 
 async function publicStatsPayloadFromSummary(env, summary) {
@@ -12193,10 +12193,10 @@ async function publicStatsPayloadFromSummary(env, summary) {
   const payload = {
     schema_version: PUBLIC_STATS_SCHEMA_VERSION,
     gene_count: geneCount,
-    canonical_blot_count: row.catalog_published_live_portraits,
-    generated_candidate_blot_count: row.catalog_candidate_assets,
-    auditable_candidate_blot_count: row.catalog_auditable_assets,
-    storage_verified_candidate_blot_count: row.verified_renderable_images,
+    current_portrait_count: row.catalog_published_live_portraits,
+    candidate_portrait_count: row.catalog_candidate_assets,
+    auditable_candidate_portrait_count: row.catalog_auditable_assets,
+    storage_verified_candidate_portrait_count: row.verified_renderable_images,
     storage_audit_coverage_percent: row.storage_audit_coverage_percent,
     storage_audit_complete: Boolean(row.renderable_live_exact_known),
     updated_at: row.updated_at || new Date().toISOString(),
@@ -12212,24 +12212,21 @@ function normalizePublicStatsPayload(rawPayload) {
   const payload = {
     schema_version: String(rawPayload.schema_version || PUBLIC_STATS_SCHEMA_VERSION),
     gene_count: Math.max(0, Number(rawPayload.gene_count || 0)),
-    canonical_blot_count: Math.max(0, Number(rawPayload.canonical_blot_count || 0)),
-    generated_candidate_blot_count: Math.max(
+    current_portrait_count: Math.max(0, Number(rawPayload.current_portrait_count || 0)),
+    candidate_portrait_count: Math.max(0, Number(rawPayload.candidate_portrait_count || 0)),
+    auditable_candidate_portrait_count: Math.max(
       0,
-      Number(rawPayload.generated_candidate_blot_count || 0),
+      Number(rawPayload.auditable_candidate_portrait_count || 0),
     ),
-    auditable_candidate_blot_count: Math.max(
+    storage_verified_candidate_portrait_count: Math.max(
       0,
-      Number(rawPayload.auditable_candidate_blot_count || 0),
-    ),
-    storage_verified_candidate_blot_count: Math.max(
-      0,
-      Number(rawPayload.storage_verified_candidate_blot_count || 0),
+      Number(rawPayload.storage_verified_candidate_portrait_count || 0),
     ),
     storage_audit_coverage_percent: Number(rawPayload.storage_audit_coverage_percent || 0),
     storage_audit_complete: Boolean(rawPayload.storage_audit_complete),
     updated_at: sanitizeText(rawPayload.updated_at || "", 64) || "",
   }
-  if (!payload.gene_count || !payload.generated_candidate_blot_count) return null
+  if (!payload.gene_count || !payload.candidate_portrait_count) return null
   return {
     ...payload,
     public_copy: publicStatsCopy(payload),
@@ -12252,10 +12249,10 @@ function publicStatsMaterialFingerprint(payload) {
   return JSON.stringify({
     schema_version: normalized.schema_version,
     gene_count: normalized.gene_count,
-    canonical_blot_count: normalized.canonical_blot_count,
-    generated_candidate_blot_count: normalized.generated_candidate_blot_count,
-    auditable_candidate_blot_count: normalized.auditable_candidate_blot_count,
-    storage_verified_candidate_blot_count: normalized.storage_verified_candidate_blot_count,
+    current_portrait_count: normalized.current_portrait_count,
+    candidate_portrait_count: normalized.candidate_portrait_count,
+    auditable_candidate_portrait_count: normalized.auditable_candidate_portrait_count,
+    storage_verified_candidate_portrait_count: normalized.storage_verified_candidate_portrait_count,
     storage_audit_coverage_percent: normalized.storage_audit_coverage_percent,
     storage_audit_complete: normalized.storage_audit_complete,
   })
@@ -12264,7 +12261,7 @@ function publicStatsMaterialFingerprint(payload) {
 async function writePublicStatsProjection(env, summary) {
   if (!env?.KV) return null
   const payload = await publicStatsPayloadFromSummary(env, summary)
-  if (!payload.gene_count || !payload.generated_candidate_blot_count) return null
+  if (!payload.gene_count || !payload.candidate_portrait_count) return null
   const existing = await readPublicStatsProjection(env)
   if (
     existing &&
@@ -12287,7 +12284,7 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
        (SELECT COUNT(*) FROM icono_gene_catalog) AS catalog_gene_rows,
        (SELECT COUNT(*)
           FROM icono_publish_state
-         WHERE COALESCE(current_asset_sha256, '') <> '') AS canonical_blot_rows,
+         WHERE COALESCE(current_asset_sha256, '') <> '') AS current_portrait_rows,
        (SELECT COUNT(DISTINCT gene_symbol)
           FROM icono_publish_state
          WHERE COALESCE(current_asset_sha256, '') <> '') AS canonical_distinct_symbols,
@@ -12348,7 +12345,7 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
   const payload = {
     ok: true,
     catalog_gene_rows: Math.max(0, Number(counts?.catalog_gene_rows || 0)),
-    canonical_blot_rows: Math.max(0, Number(counts?.canonical_blot_rows || 0)),
+    current_portrait_rows: Math.max(0, Number(counts?.current_portrait_rows || 0)),
     canonical_distinct_symbols: Math.max(0, Number(counts?.canonical_distinct_symbols || 0)),
     catalog_genes_with_canonical: Math.max(0, Number(counts?.catalog_genes_with_canonical || 0)),
     catalog_candidate_assets: Math.max(0, Number(counts?.catalog_candidate_assets || 0)),
@@ -12381,7 +12378,7 @@ async function fetchAdminPublicStatsAudit(env, { sampleLimit = 25 } = {}) {
   }
   payload.expected_public_gene_count =
     payload.catalog_genes_with_canonical + payload.catalog_genes_without_canonical
-  payload.canonical_minus_catalog_delta = payload.canonical_blot_rows - payload.catalog_gene_rows
+  payload.canonical_minus_catalog_delta = payload.current_portrait_rows - payload.catalog_gene_rows
   return payload
 }
 
@@ -13064,20 +13061,22 @@ function buildAdminAssetSummaryScope(summaryRow, publicStatsPayload) {
     catalog_genes: Math.max(0, Number(publicStats?.gene_count || 0)),
     catalog_published_live_portraits: Math.max(
       0,
-      Number(publicStats?.canonical_blot_count || row.catalog_published_live_portraits || 0),
+      Number(publicStats?.current_portrait_count || row.catalog_published_live_portraits || 0),
     ),
     catalog_candidate_assets: Math.max(
       0,
-      Number(publicStats?.generated_candidate_blot_count || row.catalog_candidate_assets || 0),
+      Number(publicStats?.candidate_portrait_count || row.catalog_candidate_assets || 0),
     ),
     catalog_auditable_assets: Math.max(
       0,
-      Number(publicStats?.auditable_candidate_blot_count || row.catalog_auditable_assets || 0),
+      Number(publicStats?.auditable_candidate_portrait_count || row.catalog_auditable_assets || 0),
     ),
     storage_verified_candidate_assets: Math.max(
       0,
       Number(
-        publicStats?.storage_verified_candidate_blot_count || row.verified_renderable_images || 0,
+        publicStats?.storage_verified_candidate_portrait_count ||
+          row.verified_renderable_images ||
+          0,
       ),
     ),
     storage_audit_coverage_percent: Math.max(
@@ -20776,13 +20775,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       // Scalability: a long-time player can have ~10k discoveries spanning
       // hundreds of clans. Keep the per-clan true count, but only ship a small
-      // preview of member blots per clan (thumb + symbol only) so the payload
+      // preview of member portraits per clan (thumb + symbol only) so the payload
       // stays bounded (hundreds of KB, not multi-MB) regardless of collection size.
       // Single-clan proteins are more characteristic of a clan than proteins
       // shared across many clans, so they lead the card preview; multi-clan
       // proteins only backfill. Both buckets are capped at the preview size, and
       // the true discovered total is tracked separately (seen set), so a clan with
-      // hundreds of discoveries still ships at most a dozen blots + the real count.
+      // hundreds of discoveries still ships at most a dozen portraits + the real count.
       const singlesByClan = new Map() // clan -> single-clan member previews[]
       const multisByClan = new Map() // clan -> multi-clan member previews[]
       const seenByClan = new Map() // clan -> Set(symbol): dedupe + true count
@@ -21290,7 +21289,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const sourceRow = await sourceImageEditAssetRow(env, { symbol, assetSha256: assetSha })
       if (!sourceRow?.asset_sha256) {
-        return done("image_edit_jobs_404", json({ ok: false, error: "Source blot not found" }, 404))
+        return done(
+          "image_edit_jobs_404",
+          json({ ok: false, error: "Source portrait not found" }, 404),
+        )
       }
       const sourceKey =
         String(sourceRow.r2_key_full || "") ||
@@ -21299,7 +21301,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!sourceKey) {
         return done(
           "image_edit_jobs_409",
-          json({ ok: false, error: "Source blot has no stored image key" }, 409),
+          json({ ok: false, error: "Source portrait has no stored image key" }, 409),
         )
       }
       const jobId = crypto.randomUUID()
@@ -21334,7 +21336,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const sourceObject = await readPortraitStorageObject(env, sourceKey, {
           fallbackContentType: sourceRow.mime || "image/webp",
         })
-        if (!sourceObject?.body) throw new Error("Source blot image could not be loaded")
+        if (!sourceObject?.body) throw new Error("Source portrait image could not be loaded")
         const sourceBytes = await responseBytes(new Response(sourceObject.body))
         const apiKey = await decryptImageEditApiKey(env, providerRow)
         const sourceContentType = sourceObject.contentType || sourceRow.mime || "image/webp"
@@ -21884,8 +21886,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         // in the same pipeline that produces the medium and thumb renditions.
         const resultSha = await sha256HexBytes(resultBytes)
         const resultDimensions = webpDimensions(resultBytes) || {
-          width: ICONOPLASM_BLOT_REQUEST_WIDTH,
-          height: ICONOPLASM_BLOT_REQUEST_HEIGHT,
+          width: ICONOPLASM_PORTRAIT_REQUEST_WIDTH,
+          height: ICONOPLASM_PORTRAIT_REQUEST_HEIGHT,
         }
         const renditions = await writeImageEditRenditions(env, url, {
           assetSha256: resultSha,
@@ -22293,7 +22295,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             {
               ok: false,
               code: "AUTH_REQUIRED",
-              error: "Please log in first to copy a candidate blot.",
+              error: "Please log in first to copy a candidate portrait.",
             },
             401,
             {
@@ -22320,7 +22322,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done(
           "candidate_copy_400",
           json(
-            { ok: false, error: String(copyResult.error || "Could not copy candidate blot") },
+            { ok: false, error: String(copyResult.error || "Could not copy candidate portrait") },
             400,
             {
               "Cache-Control": "no-store",

@@ -106,21 +106,21 @@ test("admin asset summary refresh writes public stats projection to KV", async (
   const written = kv.puts.find((entry) => entry.key === "iconoplasm:public-stats:v1")
   assert.ok(written, "admin summary refresh should publish a public stats projection")
   const projected = JSON.parse(written.value)
-  assert.equal(projected.generated_candidate_blot_count, 39481)
-  assert.equal(projected.auditable_candidate_blot_count, 39112)
-  assert.equal(projected.canonical_blot_count, 19023)
+  assert.equal(projected.candidate_portrait_count, 39481)
+  assert.equal(projected.auditable_candidate_portrait_count, 39112)
+  assert.equal(projected.current_portrait_count, 19023)
   assert.equal(projected.gene_count, 19023)
 })
 
 test("admin asset summary is read-only by default and exposes public versus ledger scope", async () => {
   const kv = new FakeKv({
     "iconoplasm:public-stats:v1": JSON.stringify({
-      schema_version: "iconoplasm.publicStats.v1",
+      schema_version: "iconoplasm.publicStats.v2",
       gene_count: 19023,
-      canonical_blot_count: 19023,
-      generated_candidate_blot_count: 44836,
-      auditable_candidate_blot_count: 44436,
-      storage_verified_candidate_blot_count: 27367,
+      current_portrait_count: 19023,
+      candidate_portrait_count: 44836,
+      auditable_candidate_portrait_count: 44436,
+      storage_verified_candidate_portrait_count: 27367,
       storage_audit_coverage_percent: 61.3,
       storage_audit_complete: false,
       updated_at: "2026-05-21T06:04:25.433Z",
@@ -196,12 +196,12 @@ test("admin asset summary is read-only by default and exposes public versus ledg
 
 test("admin asset summary refresh skips KV write when public stats did not materially change", async () => {
   const existingPublicStats = {
-    schema_version: "iconoplasm.publicStats.v1",
+    schema_version: "iconoplasm.publicStats.v2",
     gene_count: 19023,
-    canonical_blot_count: 19023,
-    generated_candidate_blot_count: 39481,
-    auditable_candidate_blot_count: 39112,
-    storage_verified_candidate_blot_count: 21889,
+    current_portrait_count: 19023,
+    candidate_portrait_count: 39481,
+    auditable_candidate_portrait_count: 39112,
+    storage_verified_candidate_portrait_count: 21889,
     storage_audit_coverage_percent: 55.9,
     storage_audit_complete: false,
     updated_at: "2026-05-03 13:02:48",
@@ -295,7 +295,7 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
           if (text.includes("catalog_gene_rows")) {
             return {
               catalog_gene_rows: 19023,
-              canonical_blot_rows: 19090,
+              current_portrait_rows: 19090,
               canonical_distinct_symbols: 19090,
               catalog_genes_with_canonical: 19023,
               catalog_candidate_assets: 39481,
@@ -350,7 +350,7 @@ test("admin public stats audit exposes catalog versus canonical drift", async ()
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.catalog_gene_rows, 19023)
-  assert.equal(payload.canonical_blot_rows, 19090)
+  assert.equal(payload.current_portrait_rows, 19090)
   assert.equal(payload.catalog_candidate_assets, 39481)
   assert.equal(payload.catalog_auditable_assets, 39112)
   assert.equal(payload.canonical_symbols_missing_from_catalog, 67)
