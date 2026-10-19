@@ -42,7 +42,7 @@ moves them into the main database.
   administrator's "end and withdraw" withdraw that tenure's lines in the same batch.
 - The factory line cannot be withdrawn and is the last fallback.
 - Prose shows under the gene card only while its line is shown on the page (hidden by default)
-  and renders as text under CSP, never as markup. The card is rebuilt only when the prose readers
+  and renders as text under CSP, never as markup. The stable gene object is rebuilt only when the prose readers
   see changes; if that rebuild fails, the reply says `projection_pending` and the next publish
   catches up. Tags are never published; the caretaker's editor reads them through an
   authenticated route.
