@@ -13,8 +13,7 @@ import { buildGeneCard } from "./iconoplasm-stable-gene-object.js"
 //    reordered in the pool);
 // 2. the winner rule disagrees with the portrait the card shows;
 // 3. a vote that puts another portrait ahead doesn't move the winner, the
-//    pool order and is_current together, or keeps a blot drawn for the old
-//    winner;
+//    pool order and is_current together;
 // 4. an administrator's pin loses to votes, or a pin on a portrait that left
 //    the pool leaves the gene without a portrait;
 // 5. a rejected portrait shows or wins; a stale one wins;
@@ -33,7 +32,7 @@ test("live cards rebuild to themselves and the winner rule picks their portrait"
   }
 })
 
-test("a vote that puts another portrait ahead moves the winner and drops the old blot", () => {
+test("a vote that puts another portrait ahead moves the winner", () => {
   const card = fixture("WEE1")
   const { content, facts } = inputsFromCard(card)
   const [first, second] = card.portrait_candidates
@@ -49,7 +48,6 @@ test("a vote that puts another portrait ahead moves the winner and drops the old
       [first.asset_sha256, false],
     ],
   )
-  assert.equal(rebuilt.blot, undefined, "the blot was drawn for the old winner")
   assert.equal(rebuilt.portrait.hero_url, second.full_url)
 })
 
@@ -62,7 +60,6 @@ test("a pin beats votes while its portrait is in the pool, and falls back when i
   )
   const pinned = buildGeneCard(content, { ...facts, pin: first.asset_sha256 }, { now: at })
   assert.equal(pinned.portrait.asset_sha256, first.asset_sha256)
-  assert.equal(pinned.blot.portrait_asset_sha256, first.asset_sha256)
   const gone = buildGeneCard(content, { ...facts, pin: "f".repeat(64) }, { now: at })
   assert.equal(gone.portrait.asset_sha256, second.asset_sha256)
 })
@@ -89,12 +86,11 @@ test("rejected portraits leave the pool; stale ones stay but can't win", () => {
 
 test("a gene with no portrait yet gets the missing-portrait card", () => {
   const { content, facts } = inputsFromCard(fixture("MFNG"))
-  const card = buildGeneCard({ ...content, portraits: [], blots: [] }, facts, { now: at })
+  const card = buildGeneCard({ ...content, portraits: [] }, facts, { now: at })
   assert.equal(card.portrait.status, "missing")
   assert.equal(card.portrait.asset_sha256, null)
   assert.deepEqual(card.portrait_candidates, [])
   assert.equal(card.candidate_count, 0)
-  assert.equal(card.blot, undefined)
   assert.equal(card.full_name, "MFNG O-fucosylpeptide 3-beta-N-acetylglucosaminyltransferase")
 })
 

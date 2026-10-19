@@ -30,7 +30,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_card_snapshot_portrait_locator: "/api/public/v1/card-snapshots/card-v1/portraits/TP53",
   mobile_card_symbol: "/api/iconoplasm/cards/TP53",
   semantic_gene_blot: "/blot/TP53.webp",
-  admin_blots_upload: "/api/iconoplasm/admin/blots/TP53",
   public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
   gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",

@@ -2,11 +2,6 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  iconoplasmGeneBlotFingerprint,
-  iconoplasmGeneBlotObjectKey,
-} from "./iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
-
-import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
   mergePublishedPortraitRefsIntoArtifact,
@@ -210,29 +205,6 @@ class FakeIconoplasmDb {
         },
       ],
     ])
-    this.blots = new Map()
-    for (const symbol of this.catalog.keys()) this.materializeBlot(symbol)
-  }
-
-  materializeBlot(symbolValue) {
-    const symbol = String(symbolValue || "")
-      .trim()
-      .toUpperCase()
-    const catalog = this.catalog.get(symbol)
-    const portrait = this.published.get(symbol)
-    const blotFingerprint = iconoplasmGeneBlotFingerprint({
-      symbol,
-      full_name: catalog.full_name,
-      portrait: { status: "published", asset_sha256: portrait.asset_sha256 },
-    })
-    this.blots.set(symbol, {
-      blot_fingerprint: blotFingerprint,
-      portrait_asset_sha256: portrait.asset_sha256,
-      blot_asset_sha256: "ef".repeat(32),
-      object_key: iconoplasmGeneBlotObjectKey(symbol, blotFingerprint),
-      width: 768,
-      height: 1024,
-    })
   }
 
   prepare(sql) {

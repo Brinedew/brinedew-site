@@ -43,13 +43,13 @@ cards, gene detail, extension cards, and the print copy. A missing stable
 object fails closed; there is no D1 or gene-detail portrait fallback.
 
 The source portrait is not Iconoplasm's canonical public/search image. That role
-belongs to the matching **gene blot**: the workstation-rendered 768x1024 WebP
-containing the portrait cover crop, protection gradient, full gene name, and
-symbol. Blots use versioned immutable keys derived from the gene's stable
-object and the renderer revision. The stable first-party `/blot/<SYMBOL>.webp`
-route recomputes that key from the stable object, so blot uploads require zero
-KV writes. When the renderer-v2 object is absent, it serves only a ready v1 blot
-whose portrait SHA matches that same object. Public media, page metadata and
+belongs to the gene's **blot** (`docs/ICONOPLASM_GLOSSARY.md`): the current
+portrait with the gene's full name and symbol painted into one 768x1024 WebP by
+`scripts/draw-iconoplasm-blots.mjs`. Blots use immutable keys derived from the
+gene's stable object and the painter revision. The stable first-party
+`/blot/<SYMBOL>.webp` route recomputes that key from the stable object and
+serves that object only; until the drawing run has painted it, the route
+redirects to the bare current portrait. Public media, page metadata and
 structured data expose the blot, while the raw portrait is
 explicitly subordinate.
 
@@ -80,7 +80,7 @@ Bunny. When Bunny is unreachable from a browser, canonical first-party
 `/portraits/*` requests reach the existing Worker, which reads the same
 immutable key through that adapter. The build must not redirect those URLs to
 the static placeholder: that serves SVG with HTTP 200 under a `.webp` name and
-breaks workstation blot rendering. The mutable `/blot/<SYMBOL>.webp` alias
+breaks any client that decodes the portrait. The mutable `/blot/<SYMBOL>.webp` alias
 enters the same Worker, reads the gene's stable object, and serves only its
 matching immutable WebP. Neither route elects a portrait from D1 or starts a
 repair.
@@ -257,7 +257,7 @@ generated website or extension copies.
 7. In a browser where the accelerator is unreachable, verify one failed
    accelerator request followed by first-party portrait requests. Check image
    `complete`, `naturalWidth`, and `naturalHeight`, not only HTTP status.
-8. Generate or edit a blot after the tab has selected canonical delivery and
+8. Generate or edit a portrait after the tab has selected canonical delivery and
    confirm the new result loads first-party in the comparison modal.
 9. Verify the extension on a normal web page in the same two network states.
 10. Run the shared delivery, extension worker, public media, image-edit, storage,

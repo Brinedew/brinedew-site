@@ -73,20 +73,23 @@ the selected published portrait as a cover crop, the protection gradient, the
 full gene name at bottom left, and the gene symbol at bottom right. The portrait
 is an ingredient; the labelled blot is the finished public image.
 
-The workstation renders each exact published card on the gallery's canonical
-384x512 CSS artboard and captures it at 2x device density as a verified
-768x1024 WebP. This preserves the gallery's responsive font sizes, inset, text
-wrapping, shadows, and protection-gradient geometry instead of recalculating
-its clamped CSS at a 768px layout width.
-Its visible-material fingerprint includes the renderer revision, normalized
-symbol, full gene name, and selected portrait SHA. The immutable object lives at
-`/blots/v1/<initial>/<SYMBOL>/<fingerprint>/<SYMBOL>-iconoplasm-gene-blot.webp`.
+One painter draws every blot: `shared/iconoplasm-card/blot-painter.js`, the
+same code that paints a reader's print copy. It reproduces the gallery's
+384x512 artboard (responsive font sizes, inset, wrapping, shadows, gradient
+geometry) on a canvas at 768x1024, and the drawing script refuses to upload a
+blot whose card fonts did not load. The fingerprint hashes the painter
+revision, the normalized symbol, the full gene name and the current portrait's
+SHA. The immutable object lives at
+`blots/v2/<initial>/<SYMBOL>-<fingerprint>.webp` (`workers/lib/iconoplasm-blot.js`).
 The stable first-party `/blot/{SYMBOL}.webp` route enters the existing Worker.
 It reads the gene's stable object and then its immutable WebP object from
-Bunny (B-898: no head, no coordinator). A card without a blot returns an honest 404 at
-the image route. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
+Bunny (B-898: no head, no coordinator). In the few minutes between a new winner
+or name and the drawing run, the route redirects (307, `no-store`) to the bare
+current portrait. There is no second mutable Bunny `/blot/{SYMBOL}.webp` object
 to overwrite or wait for; its long-lived CDN cache stalled real publication on
-2026-09-24 while the first-party route already worked.
+2026-09-24 while the first-party route already worked. Old `blots/v1/` objects
+stay in storage because embedders were promised their CDN addresses never
+change.
 
 A gene's blot reaches machine readers through the static gene document, which
 names it as the page's share image: `og:image` and the JSON-LD `image` carry
@@ -158,7 +161,8 @@ discovery documents" below.
 
 Blot readiness does not control sitemap membership. GET and HEAD for
 the stable blot route read the published card through the existing Worker and
-serve its verified immutable WebP bytes. Missing blots return 404. This route
+serve its immutable WebP bytes, or redirect to the current portrait while the
+blot is still being drawn. A gene with no published portrait returns 404. This route
 does not read mutable D1 or create an alternate image selection timeline.
 
 The crawl frontier exists for search indexing and user-directed retrieval, not
@@ -248,41 +252,29 @@ site publishes the one package `extension-release.json` names, and the bundle
 build refuses a missing one and any other (see
 `docs/ICONOPLASM_RELEASE_INTEGRITY.md`).
 
-## Workstation-materialized gene blots
+## Drawing blots
 
-Cloudflare does not render canonical blots. The local Iconoplasm workstation
-asks the authenticated bounded backlog endpoint for exact published-card
-identities, loads the Website checkout's shared card runtime and label CSS in
-local Chrome, renders the `image-only` composition at 768x1024, converts it to
-WebP, and uploads it through the authenticated admin route. The server verifies
-fingerprint, selected portrait SHA, content type, byte ceiling, WebP dimensions,
-immutable-key consistency, and Storage replication before atomically recording
-the ready row and publication event.
+Cloudflare does not render blots. The "Draw Iconoplasm blots" GitHub workflow
+(`.github/workflows/draw-iconoplasm-blots.yml`) runs
+`scripts/draw-iconoplasm-blots.mjs` after every successful "Publish Iconoplasm
+catalog" run, and on demand. The script reads `catalog/v3/index.json`, computes
+each gene's blot key from the catalogue's symbol, full name and current
+portrait, lists the `blots/v2/<initial>/` folders in Bunny storage (27 listing
+calls for the whole catalogue), and paints only the keys that are missing. It
+paints in the runner's Chrome with the shared blot painter, checks every WebP is
+768x1024, and uploads it with a SHA-256 checksum that Bunny verifies. A failed
+gene stays missing and the next run draws it; there is no queue, ledger, D1 row
+or admin route. A run costs no D1 rows and no Worker requests.
 
-The server ledger contains one bounded audit row per gene. Before upload, the
-workstation persists the exact WebP in a durable local content-addressed store
-with a SQLite manifest, so restarts retry the same bytes instead of rerendering.
-A portrait or full-name change produces a new fingerprint; unrelated essence
-changes do not. Per-gene publication does not wait for materialization: the
-newly published card immediately defines the expected immutable key, and the
-stable route begins serving it as soon as Bunny contains it. Corpus backfill
-therefore performs zero KV writes. GET and HEAD routes never render, enroll,
-repair, or enqueue work.
+A portrait or full-name change produces a new fingerprint and so a new key;
+unrelated essence changes do not. Changing the painter's output means changing
+`ICONOPLASM_BLOT_RENDERER_REVISION`, and the next run redraws every gene
+(about 19,400 blots; measured on 2026-10-19 at roughly N per minute on a
+GitHub runner). GET and HEAD routes never render, enroll, repair or enqueue
+work.
 
-The authenticated candidate backlog has two modes. An explicit symbol list is
-used by generation-session finalization. An empty list is the bounded automatic
-priority lane: it returns only canonical-affecting symbols after the published
-event watermark, excludes materialization-only events, refuses more than 100
-pending symbols, and returns at most the requested render batch. The always-on
-Iconoplasm Drain checks this lane once per minute while its request queue is
-idle, renders at most 25 missing candidate blots, and publishes only after the
-whole bounded priority set is ready. It then scans at most 250 published genes
-per corpus-backfill batch, releases those backfill events every 100 scanned
-genes, and stops after 20,000 scanned genes per UTC day. Priority work may run
-while the operator is active; bulk backfill still obeys the workstation quiet
-and resource gates. Ordinary transient failures wait five minutes rather than
-opening a hot retry loop; a daily KV-budget refusal sleeps until the next UTC
-budget day.
+`e2e/draw-blots.e2e.mjs` runs the script on real genes and compares its blots
+with Chrome's own screenshot of the card.
 
 ## Requested high-resolution print copies
 
@@ -298,7 +290,8 @@ request, D1 row or Bunny object, and a viral page cannot spend a meter on it.
 The print copy never selects the current D1 authoring portrait, even during the
 expected D1-to-artifact publication window: it paints the published portrait.
 
-The print copy is not the canonical search image. Sitemap, semantic blot, and
+The print copy is the same blot painted at the portrait's full resolution as a
+PNG; it is not the canonical search image. Sitemap, semantic blot, and
 gene-page GET/HEAD paths are immutable published reads: no vote query, D1 repair
 or render is allowed. Crawling therefore cannot manufacture the 19,023-image
 corpus.

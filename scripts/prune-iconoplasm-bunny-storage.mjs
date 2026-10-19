@@ -21,9 +21,9 @@
 //    generation request, a generation job) and no published gene object names, created at least a
 //    day before the nightly copy the rows come from, so a row written after that copy can't be
 //    missed. Their rows were removed, so no reader can reach them.
-// Everything else stays. Old blots (blots/v1/) stay even when no gene uses them: the developers
-// page promises embedders that a blot's CDN address "never changes" (2,939 old blots, 0.4 GB, measured
-// 2026-10-17).
+// Everything else stays. Old blots (blots/v1/ and blots/v2/) stay even when no gene uses them: the
+// developers page promises embedders that a blot's CDN address "never changes" (2,939 v1 blots,
+// 0.4 GB, measured 2026-10-17; each v2 blot is about 60 KB).
 import { appendFileSync, createWriteStream, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"

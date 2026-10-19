@@ -94,12 +94,17 @@ export function iconoplasmBlotFolder(symbolValue) {
   return symbol ? `${ICONOPLASM_BLOT_PREFIX}${symbol.slice(0, 1)}/` : ""
 }
 
-export function iconoplasmBlotCdnUrl(env, objectKey) {
+// The public CDN address of any object in the portrait storage zone.
+export function iconoplasmCdnUrl(env, objectKey) {
   const base = String(env?.ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL || "https://img.brinedew.bio")
     .trim()
     .replace(/\/+$/, "")
   const key = String(objectKey || "").replace(/^\/+/, "")
   return base && key ? `${base}/${key}` : ""
+}
+
+export function iconoplasmBlotCdnUrl(env, objectKey) {
+  return iconoplasmCdnUrl(env, objectKey)
 }
 
 // The name a reader's download gets.
