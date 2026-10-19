@@ -27,7 +27,7 @@ const FIELDS = [
 
 // B-1065: the essence's sample_label/number/text_hash columns are not written.
 // Nothing on the site reads them (a portrait carries its own sample record), and
-// each text change used to rewrite them, their index and the gene's card.
+// each text change used to rewrite them, their index and the gene's stable object.
 
 const SQL = `INSERT INTO icono_gene_essence (
   ${FIELDS.join(", ")}, source, updated_by, updated_at
@@ -43,7 +43,7 @@ WHERE ${FIELDS.slice(1)
 
 // B-1064: an Essence row the site already holds writes nothing (its D1 result
 // says changes: 0), so re-sending every gene costs reads, not the write wall,
-// and the caller rebuilds cards only for rows that changed. Before this, each
+// and the caller rebuilds gene objects only for rows that changed. Before this, each
 // upsert rewrote the row and its updated_at index even when nothing differed.
 
 export function prepareGeneEssenceUpsertStatement(

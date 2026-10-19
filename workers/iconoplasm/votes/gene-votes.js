@@ -224,7 +224,7 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
            AND icono_publish_state.current_asset_sha256 IS NOT excluded.current_asset_sha256`,
       )
       .bind(symbol, to, election.version, String(actor || GENE_VOTE_ELECTION_ACTOR)),
-    // No status change for the winner: `icono_publish_state` and the card already
+    // No status change for the winner: `icono_publish_state` and the gene object already
     // say which portrait won, and nothing treats "approved" apart from "draft"
     // (only "rejected" matters). Marking it cost 17 D1 rows written per election
     // (4 indexes on status, a caretaker-eligibility event that changed nothing,

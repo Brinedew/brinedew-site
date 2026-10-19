@@ -12,13 +12,13 @@ const repoRoot = path.resolve(new URL("../..", import.meta.url).pathname.replace
 
 const ASSET_ROOT = "public-iconoplasm-edge"
 const WRANGLER_CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml"
-const EXACT_CARD_BLOT_ROUTE = "/blot/TP53.webp"
+const EXACT_GENE_BLOT_ROUTE = "/blot/TP53.webp"
 const CANONICAL_PORTRAIT_FALLBACK_ROUTE = `/portraits/v1/aa/${"a".repeat(64)}/full.webp`
 // B-898: the canonical-origin copy of the one stable gene object, reached only
 // when the reader's network cannot reach Bunny. Under /api/*, Worker-owned.
 const PUBLISHED_OBJECT_FALLBACK_ROUTE = "/api/public/v1/stable-genes/TP53.json"
 const WORKER_OWNED_ROUTES = new Set([
-  EXACT_CARD_BLOT_ROUTE,
+  EXACT_GENE_BLOT_ROUTE,
   CANONICAL_PORTRAIT_FALLBACK_ROUTE,
   PUBLISHED_OBJECT_FALLBACK_ROUTE,
 ])
@@ -28,7 +28,7 @@ const ANONYMOUS_ROUTE_CLASSES = Object.freeze([
   "/genes",
   "/gene/TP53",
   "/portrait/TP53.webp",
-  EXACT_CARD_BLOT_ROUTE,
+  EXACT_GENE_BLOT_ROUTE,
   CANONICAL_PORTRAIT_FALLBACK_ROUTE,
   "/sitemap.xml",
   "/robots.txt",

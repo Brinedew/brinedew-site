@@ -19,7 +19,7 @@ import {
   resetIconoplasmRuntimeCachesForTest,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 
-// ARCHITECTURE FENCE [IPD-008]: public hover batches project card artifacts without D1.
+// ARCHITECTURE FENCE [IPD-008]: public hover batches project gene objects without D1.
 
 const publisherRelease = readIconoplasmPublisherAuthority(
   fileURLToPath(new URL("..", import.meta.url)),
@@ -608,7 +608,7 @@ test("public image resolver exposes labelled gene blots without source portraits
     payload.results[0]?.images?.gene_blot?.canonical_url,
     "https://iconoplasm.brinedew.bio/blot/A1BG.webp",
   )
-  // B-846: embedders get the immutable card straight from the CDN, so a viral
+  // B-846: embedders get the immutable blot straight from the CDN, so a viral
   // hotlink costs no Worker request. It is the same object as immutable_url.
   const blot = payload.results[0]?.images?.gene_blot
   const objectKey = new URL(blot.immutable_url).pathname
@@ -637,9 +637,9 @@ test("public image resolver exposes labelled gene blots without source portraits
 //      Cache-Control no-store so the edge never caches the outage.
 //   5. If-None-Match equal to the fingerprint ETag: 304, no body, same ETag and
 //      license headers.
-function stableGeneObjectFromCard(cardPayload, overrides = {}) {
+function stableGeneObjectFromPayload(geneObject, overrides = {}) {
   return {
-    ...cardPayload,
+    ...geneObject,
     portrait_candidates: [],
     candidate_count: 0,
     stable_object_version: 3,
@@ -707,7 +707,7 @@ function stableBlotEnv({ kvReads, d1Calls, portraits }) {
 
 const STABLE_A1BG_PATH = "/test-zone/genes/v3/A1BG.json"
 
-function publishedCardPayloadFixture({ portraitSha } = {}) {
+function publishedGeneObjectFixture({ portraitSha } = {}) {
   const kv = buildPublishedCardReadKv({ version: "test-card-stable-blot", portraitSha })
   const shard = JSON.parse(kv.entries.get("iconoplasm:card-catalog-shard:test-card-stable-blot:0"))
   return shard.cards[0].payload
@@ -731,16 +731,16 @@ function blotStorageFake(reads, servedKey) {
 
 // B-898 Stage 1, step B: the site gene detail (live and reader-recovery), the
 // public media envelope, the public image resolver and the blot-upload source
-// card resolve a gene from the same stable object as the blot route. Failure
+// record resolve a gene from the same stable object as the blot route. Failure
 // modes these tests have to cover, written before the handlers changed:
 //   1. Stable object present: the response is built from it with exactly one
 //      authenticated storage read of genes/v3/<SYMBOL>.json. KV is never asked
 //      for the gallery head, a card-catalog manifest/shard, or the gene-delta
-//      view, and D1 is not consulted to find the published card (the live site
+//      view, and D1 is not consulted to find the published gene object (the live site
 //      detail still reads D1 for candidates, caretaker and the ready-blot row;
 //      the recovery route reads no D1 at all).
 //   2. Stable object missing (storage 404): site detail with live D1 answers
-//      503 artifact-unavailable (a catalog gene without a published card);
+//      503 artifact-unavailable (a catalog gene without a published gene object);
 //      site detail during a D1 outage and the recovery route answer 404 "Gene
 //      not found"; public media answers 404; the resolver reports images: null
 //      for that symbol and keeps answering the others.
@@ -754,7 +754,7 @@ function blotStorageFake(reads, servedKey) {
 //      blot field; media and the resolver fall back to resolve_at_canonical_url.
 //   6. D1 portrait rows change (a vote lands) without the object being
 //      rewritten: nothing public moves, same ETag. Rewriting the object moves
-//      the portrait, the ETag and the card version.
+//      the portrait, the ETag and the gene object version.
 const PUBLICATION_TREE_KV_PREFIXES = [
   "iconoplasm:gallery-version",
   "iconoplasm:card-catalog",
@@ -804,9 +804,9 @@ function stableReaderEnv(t, { objects = new Map(), status = 200, kv = null, over
   return { env, storageReads, kvReads }
 }
 
-function stableA1bgObjects(cardPayload = publishedCardPayloadFixture(), overrides = {}) {
+function stableA1bgObjects(geneObject = publishedGeneObjectFixture(), overrides = {}) {
   return new Map([
-    [stableObjectPath("A1BG"), JSON.stringify(stableGeneObjectFromCard(cardPayload, overrides))],
+    [stableObjectPath("A1BG"), JSON.stringify(stableGeneObjectFromPayload(geneObject, overrides))],
   ])
 }
 
@@ -836,7 +836,7 @@ test("public media answers 404 when the stable object is missing and 503 no-stor
 
 test("public media answers 404 when the stable object has no published portrait", async (t) => {
   const { env, storageReads } = stableReaderEnv(t, {
-    objects: stableA1bgObjects(publishedCardPayloadFixture(), { portrait: null, blot: undefined }),
+    objects: stableA1bgObjects(publishedGeneObjectFixture(), { portrait: null, blot: undefined }),
   })
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/api/public/v1/media/A1BG"),
@@ -876,7 +876,7 @@ test("public image resolver reads one stable object per canonical symbol and rep
 
 test("public image resolver reports a stable object without a published portrait as gene_blot null", async (t) => {
   const { env } = stableReaderEnv(t, {
-    objects: stableA1bgObjects(publishedCardPayloadFixture(), { portrait: null, blot: undefined }),
+    objects: stableA1bgObjects(publishedGeneObjectFixture(), { portrait: null, blot: undefined }),
     kv: buildCatalogResolveKv(),
   })
   const response = await viaStatefulWorker(
@@ -911,12 +911,12 @@ test("public image resolver answers 503 no-store when a stable object read fails
 })
 
 test("stable blot route derives the Bunny object from the stable gene object with one storage read and no KV or D1", async (t) => {
-  const cardPayload = publishedCardPayloadFixture()
-  const fingerprint = iconoplasmBlotFingerprint(cardPayload)
+  const geneObject = publishedGeneObjectFixture()
+  const fingerprint = iconoplasmBlotFingerprint(geneObject)
   const expectedObjectKey = iconoplasmBlotObjectKey("A1BG", fingerprint)
   const storageReads = installStableGeneStorage(
     t,
-    new Map([[STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromCard(cardPayload))]]),
+    new Map([[STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromPayload(geneObject))]]),
   )
   const kvReads = []
   const d1Calls = []
@@ -949,12 +949,12 @@ test("stable blot route derives the Bunny object from the stable gene object wit
 })
 
 test("stable blot route returns 304 for a matching fingerprint ETag", async (t) => {
-  const cardPayload = publishedCardPayloadFixture()
-  const fingerprint = iconoplasmBlotFingerprint(cardPayload)
+  const geneObject = publishedGeneObjectFixture()
+  const fingerprint = iconoplasmBlotFingerprint(geneObject)
   const expectedObjectKey = iconoplasmBlotObjectKey("A1BG", fingerprint)
   installStableGeneStorage(
     t,
-    new Map([[STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromCard(cardPayload))]]),
+    new Map([[STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromPayload(geneObject))]]),
   )
   const response = await viaStatefulWorker(
     new Request("https://iconoplasm.brinedew.bio/blot/A1BG.webp", {
@@ -993,13 +993,13 @@ test("stable blot route returns 404 when the stable gene object is missing", asy
 })
 
 test("stable blot route returns 404 when the stable gene object has no published portrait", async (t) => {
-  const cardPayload = publishedCardPayloadFixture()
-  for (const portrait of [null, { ...cardPayload.portrait, status: "pending" }]) {
+  const geneObject = publishedGeneObjectFixture()
+  for (const portrait of [null, { ...geneObject.portrait, status: "pending" }]) {
     resetIconoplasmRuntimeCachesForTest()
     const storageReads = installStableGeneStorage(
       t,
       new Map([
-        [STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromCard(cardPayload, { portrait }))],
+        [STABLE_A1BG_PATH, JSON.stringify(stableGeneObjectFromPayload(geneObject, { portrait }))],
       ]),
     )
     const blotReads = []
@@ -1034,9 +1034,9 @@ test("stable blot route returns 503 no-store when the stable gene object read fa
 
 test("public media follows the stable gene object instead of D1 portrait changes", async (t) => {
   const d1PortraitA = "a".repeat(64)
-  const publishedCardB = "b".repeat(64)
-  const publishedCardC = "c".repeat(64)
-  const objects = stableA1bgObjects(publishedCardPayloadFixture({ portraitSha: publishedCardB }))
+  const portraitShaB = "b".repeat(64)
+  const portraitShaC = "c".repeat(64)
+  const objects = stableA1bgObjects(publishedGeneObjectFixture({ portraitSha: portraitShaB }))
   const { env } = stableReaderEnv(t, { objects })
   env.gatewayDb.published.set("A1BG", {
     ...env.gatewayDb.published.get("A1BG"),
@@ -1076,7 +1076,7 @@ test("public media follows the stable gene object instead of D1 portrait changes
   objects.set(
     stableObjectPath("A1BG"),
     JSON.stringify(
-      stableGeneObjectFromCard(publishedCardPayloadFixture({ portraitSha: publishedCardC }), {
+      stableGeneObjectFromPayload(publishedGeneObjectFixture({ portraitSha: portraitShaC }), {
         published_at: "2026-10-01T12:00:00.000Z",
       }),
     ),
@@ -1093,7 +1093,7 @@ test("public media follows the stable gene object instead of D1 portrait changes
   assert.equal(afterRewrite.payload?.card_snapshot_version, "2026-10-01T12:00:00.000Z")
   assert.equal(
     afterRewrite.payload?.media?.blot_fingerprint,
-    iconoplasmBlotFingerprint(publishedCardPayloadFixture({ portraitSha: publishedCardC })),
+    iconoplasmBlotFingerprint(publishedGeneObjectFixture({ portraitSha: portraitShaC })),
   )
   assert.equal(
     afterRewrite.payload?.media?.canonical_url,
@@ -1314,7 +1314,7 @@ function retiredTreeKv(kv) {
   const originalGet = kv.get.bind(kv)
   kv.get = async (key) => {
     if (key === "iconoplasm:gallery-version" || String(key).includes("card-catalog")) {
-      throw new Error(`public card reader must not read the retired KV tree: ${key}`)
+      throw new Error(`public gene object reader must not read the retired KV tree: ${key}`)
     }
     return originalGet(key)
   }
@@ -1336,7 +1336,7 @@ function stableA1bgObjectsBatch(overrides = {}) {
   return new Map([
     [
       STABLE_A1BG_PATH,
-      JSON.stringify(stableGeneObjectFromCard(publishedCardPayloadFixture(), overrides)),
+      JSON.stringify(stableGeneObjectFromPayload(publishedGeneObjectFixture(), overrides)),
     ],
   ])
 }
@@ -1626,7 +1626,7 @@ test("concurrent public gene batches each read one stable object per symbol and 
   const objects = new Map(
     ["G000", "G001", "G002"].map((symbol) => [
       `/test-zone/genes/v3/${symbol}.json`,
-      JSON.stringify(stableGeneObjectFromCard(completeCardCatalogCacheVm(symbol).payload)),
+      JSON.stringify(stableGeneObjectFromPayload(completeCardCatalogCacheVm(symbol).payload)),
     ]),
   )
   const reads = installStableGeneStorage(t, objects)

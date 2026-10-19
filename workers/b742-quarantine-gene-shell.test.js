@@ -18,7 +18,7 @@ class FakeKV {
 
 // The reader-recovery containment Worker answers one thing for a reader: the
 // first-party portrait fallback, from the object store binding, with every D1
-// binding forbidden. The gene's card is the stable object on the CDN
+// binding forbidden. The gene's record is the stable object on the CDN
 // (genes/v3/<SYMBOL>.json), which the page and the release verifier read
 // directly; the Worker never fetches it. This fixture stands in for the CDN.
 const CDN_HOST = "iconoplasmportraits.b-cdn.net"

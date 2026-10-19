@@ -387,7 +387,7 @@ function requireServices(services) {
 }
 
 // `settleGene(env, ctx, symbol)` re-runs a gene's election and republishes its
-// card: after a role with a supervote ends, or its texts are withdrawn.
+// gene object: after a role with a supervote ends, or its texts are withdrawn.
 export function createIconoplasmCaretakerAdminHandlers(services) {
   requireServices(services)
   const { isAdmin, json, resolveActiveAccount, settleGene } = services
