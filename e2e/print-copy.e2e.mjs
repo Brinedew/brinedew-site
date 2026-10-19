@@ -66,7 +66,7 @@ async function renderReference(page, card) {
       const body = shared.renderLabLabelCardHtml(card, {
         layoutVariant: "image-only",
         mode: "brick",
-        portraitAlt: `${card.symbol} blot`,
+        portraitAlt: `${card.symbol} portrait`,
         portraitSrc: card.portrait.hero_url,
         titleHref: "",
         voteHtml: "",

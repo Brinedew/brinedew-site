@@ -4,7 +4,7 @@ import test from "node:test"
 import { imageUrl, portraitDelivery } from "./portrait-delivery.js"
 
 // Golden URLs as cards carry them today (B-1087).
-test("card images of every vintage load from the image host; other URLs are untouched", () => {
+test("images of every vintage load from the image host; other URLs are untouched", () => {
   const cases = [
     [
       "https://iconoplasm.brinedew.bio/portraits/v1/aa/asset/medium.webp",

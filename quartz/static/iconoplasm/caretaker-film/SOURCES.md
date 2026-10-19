@@ -1,4 +1,4 @@
-# Caretaker blot print assets (B-996)
+# Caretaker film assets (B-996)
 
 - `PermanentMarker.woff2`: Permanent Marker by Font Diner, from Google Fonts. Apache License 2.0. Converted from the TTF to WOFF2 with fontTools.
 - `film-light.webp` and `film-dark.webp`: film textures composited from scans. The base and ageing come from ambientCG (CC0). The grain, scuffs and spotting come from the Texturelabs "Print Ink Distress" collection (Paper 340, Paper 354, Grunge 311). That licence permits use inside published projects with optional attribution, but not redistribution of the raw files, so only these composites ship.

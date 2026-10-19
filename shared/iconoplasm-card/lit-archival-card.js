@@ -419,7 +419,7 @@ function imageOnlyTemplate(model) {
   var href = String(model.titleHref || "").trim()
   var portraitSrc = String(model.portraitSrc || "").trim()
   var portraitAlt =
-    String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " blot" : "Gene blot")
+    String(model.portraitAlt || "").trim() || (model.symbol ? model.symbol + " portrait" : "Gene portrait")
   var dims = asObject(model.portraitDimensions)
   var width = Number(dims.width || 0)
   var height = Number(dims.height || 0)

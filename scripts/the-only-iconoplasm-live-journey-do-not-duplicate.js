@@ -36,11 +36,11 @@ async (page) => {
       symbol,
       { timeout: 15000 },
     )
-    const candidate = genePage.locator(`img[alt="${symbol} candidate blot"]`).first()
+    const candidate = genePage.locator(`img[alt="${symbol} candidate portrait"]`).first()
     await candidate.scrollIntoViewIfNeeded({ timeout: 15000 })
     await genePage.waitForFunction(
       (gene) => {
-        const image = document.querySelector(`img[alt="${gene} candidate blot"]`)
+        const image = document.querySelector(`img[alt="${gene} candidate portrait"]`)
         return image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0
       },
       symbol,
@@ -48,7 +48,7 @@ async (page) => {
     )
     const details = await genePage.evaluate((gene) => {
       const portrait = document.querySelector(`img[alt^="${gene} character portrait"]`)
-      const candidates = [...document.querySelectorAll(`img[alt="${gene} candidate blot"]`)]
+      const candidates = [...document.querySelectorAll(`img[alt="${gene} candidate portrait"]`)]
       return {
         title: document.title,
         portraitWidth: portrait.naturalWidth,

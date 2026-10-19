@@ -800,12 +800,12 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
 })
 
 // Subrequest-budget regression for the re-edit KV cache. Editing the
-// same blot twice with the same provider API key must skip the Krea
+// same portrait twice with the same provider API key must skip the Krea
 // /assets multipart upload on the second call, saving one subrequest.
 // The cache is keyed by (userId, keyFingerprint, sourceSha) and is the
 // load-bearing change that keeps the synchronous edit under the 50-
 // subrequest cap for users who iterate on the same source image.
-test("re-editing the same blot with the same Krea API key skips the /assets upload on the second call", async () => {
+test("re-editing the same portrait with the same Krea API key skips the /assets upload on the second call", async () => {
   const originalFetch = globalThis.fetch
   const db = new FakeDb()
   const env = buildEnv(db)
@@ -921,7 +921,7 @@ test("re-editing the same blot with the same Krea API key skips the /assets uplo
       1,
       "first edit must populate the Krea asset upload cache exactly once",
     )
-    // Re-edit the same blot with the same model. The /assets upload must
+    // Re-edit the same portrait with the same model. The /assets upload must
     // be served from the KV cache and not re-call Krea.
     const second = await createKreaImageEditJobAndAwait({
       env,

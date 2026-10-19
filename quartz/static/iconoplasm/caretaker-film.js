@@ -1,11 +1,11 @@
-// Caretaker blot print (B-996): the caretaker's gene as its own archival autoradiograph.
+// Caretaker film (B-996): the caretaker's gene as its own archival autoradiograph.
 //
 // A period protein ladder sits beside the gene's lane, with one band at the gene's
 // molecular weight and the portrait printed into the film. The symbol is written in
 // wax China marker. Everything is drawn from data the sidebar already holds (symbol,
 // molecular_weight_kda and portrait URL from the published gene detail), so no
 // per-gene image exists anywhere and readers cost nothing extra. Styling lives in
-// custom.css under .icono-blot; textures and the font live in caretaker-blot/.
+// custom.css under .icono-film; textures and the font live in caretaker-film/.
 
 // Bio-Rad SDS-PAGE Standards, Broad Range (cat. 161-0317), a 1980s lab staple. Ovalbumin
 // (45 kDa) is the middle band, and the catalogue median is 47 kDa. Two bands print darker
@@ -153,7 +153,7 @@ function laneMarkup(kind, bands) {
   const mask = url
     ? ` style="background:rgb(var(--ink));-webkit-mask-image:url(${url});mask-image:url(${url})"`
     : ""
-  return `<span class="icono-blot__lane icono-blot__lane--${kind}"${mask}></span>`
+  return `<span class="icono-film__lane icono-film__lane--${kind}"${mask}></span>`
 }
 
 // Stable per-symbol pseudo-random stream, so a gene's handwriting never changes between visits.
@@ -188,23 +188,23 @@ function symbolMarkup(symbol, escapeHtml) {
   const lines = parts.map((p, i) =>
     waxLetters(i < parts.length - 1 ? p + "-" : p, text + i, escapeHtml),
   )
-  return `<span class="icono-blot__wax icono-blot__symbol" style="font-size:${size}px">${lines.join("<br>")}</span>`
+  return `<span class="icono-film__wax icono-film__symbol" style="font-size:${size}px">${lines.join("<br>")}</span>`
 }
 
-export function caretakerBlotMarkup({ symbol, kda, portraitUrl, escapeHtml }) {
+export function caretakerFilmMarkup({ symbol, kda, portraitUrl, escapeHtml }) {
   const ladder = LADDER.marks.map((k) =>
     LADDER.strong.includes(k) ? band(ladderPosition(k), 6, 0.9) : band(ladderPosition(k), 5, 0.7),
   )
   const photo = portraitUrl
-    ? `<img class="icono-blot__photo" src="${escapeHtml(portraitUrl)}" alt="" loading="lazy" decoding="async">`
+    ? `<img class="icono-film__photo" src="${escapeHtml(portraitUrl)}" alt="" loading="lazy" decoding="async">`
     : ""
   return (
-    '<span class="icono-blot" aria-hidden="true">' +
+    '<span class="icono-film" aria-hidden="true">' +
     laneMarkup("marker", ladder) +
     laneMarkup("sample", sampleBands(Number(kda))) +
     photo +
-    `<span class="icono-blot__wax icono-blot__mark icono-blot__mark--marker">${waxLetters("M", symbol + "M", escapeHtml)}</span>` +
-    `<span class="icono-blot__wax icono-blot__mark icono-blot__mark--sample">${waxLetters("1", symbol + "1", escapeHtml)}</span>` +
+    `<span class="icono-film__wax icono-film__mark icono-film__mark--marker">${waxLetters("M", symbol + "M", escapeHtml)}</span>` +
+    `<span class="icono-film__wax icono-film__mark icono-film__mark--sample">${waxLetters("1", symbol + "1", escapeHtml)}</span>` +
     symbolMarkup(symbol, escapeHtml) +
     "</span>"
   )

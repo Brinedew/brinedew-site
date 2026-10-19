@@ -1,4 +1,4 @@
-// A signed-in caretaker gets "Edit candidate blot" in a candidate's More menu,
+// A signed-in caretaker gets "Edit candidate portrait" in a candidate's More menu,
 // as the admin does (owner, 2026-10-19: the admin had it, a regular caretaker
 // didn't). The menus arrive drawn for a guest and are redrawn when the reader's
 // account is known; the redraw keyed only on admin or not, so a caretaker whose
@@ -83,7 +83,7 @@ test("candidate edit entry: a signed-in caretaker gets it even when sign-in answ
         .catch(() => {})
       const menu = await page.evaluate(readFirstMenu, FIRST_MENU)
       assert.ok(
-        menu.items.includes("Edit candidate blot"),
+        menu.items.includes("Edit candidate portrait"),
         `caretaker's menu: ${JSON.stringify(menu.items)}`,
       )
       // 3: the entry knows which image it edits.
@@ -99,7 +99,7 @@ test("candidate edit entry: a signed-in caretaker gets it even when sign-in answ
       // 2: a guest gets the menu without the edit entry.
       assert.ok(menu.hasMenu, "guest has no candidate menu")
       assert.ok(
-        !menu.items.includes("Edit candidate blot"),
+        !menu.items.includes("Edit candidate portrait"),
         `guest's menu: ${JSON.stringify(menu.items)}`,
       )
       await context.close()

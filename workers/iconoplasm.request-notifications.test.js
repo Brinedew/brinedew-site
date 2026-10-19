@@ -975,7 +975,7 @@ test("Brinedew fulfillment sends one nonce-enforced DM and is retry-idempotent",
       {
         id: 0,
         filename: `iconoplasm-ins-${"a".repeat(12)}.webp`,
-        description: "INS candidate blot from Iconoplasm's free generation queue",
+        description: "INS candidate portrait from Iconoplasm's free generation queue",
       },
     ])
     assert.equal(calls[2].file.name, `iconoplasm-ins-${"a".repeat(12)}.webp`)
@@ -1030,8 +1030,8 @@ test("one ten-candidate publication spanning two genes sends exactly two Discord
       messages.map((message) => message.attachments.length),
       [5, 5],
     )
-    assert.match(messages[0].content, /5 free queue candidate blots for \*\*INS\*\*/)
-    assert.match(messages[1].content, /5 free queue candidate blots for \*\*TP53\*\*/)
+    assert.match(messages[0].content, /5 free queue candidate portraits for \*\*INS\*\*/)
+    assert.match(messages[1].content, /5 free queue candidate portraits for \*\*TP53\*\*/)
     assert.ok(rows.every((row) => row.discord_status === "sent"))
   } finally {
     globalThis.fetch = originalFetch

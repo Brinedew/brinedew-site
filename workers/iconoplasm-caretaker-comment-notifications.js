@@ -398,7 +398,7 @@ export async function deliverPendingCaretakerSupervoteNotifications(
         headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           content: boundedCodePoints(
-            `Your 10x preferred blot for **${row.gene_symbol}** is no longer canonical.\n${geneUrl}`,
+            `Your 10x preferred portrait for **${row.gene_symbol}** is no longer current.\n${geneUrl}`,
             2000,
           ),
           allowed_mentions: { parse: [] },

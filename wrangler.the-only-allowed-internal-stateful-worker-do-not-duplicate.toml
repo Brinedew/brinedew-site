@@ -41,7 +41,7 @@ not_found_handling = "404-page"
 run_worker_first = [
   "/api/*",
   "/blot/*",
-  # The public resolver hands out immutable_url = /blots/v1/<key>. Without this
+  # The public resolver hands out immutable_url = /blots/v2/<key>. Without this
   # entry the asset layer would answer it with the 404 page.
   "/blots/*",
   "/portraits/*",
