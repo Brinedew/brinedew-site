@@ -1594,12 +1594,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function loadPrintCopyPainter() {
-    var painterUrl = new URL(
-      "./generated/print-copy-painter.js?v=f63dc141376bc788",
-      import.meta.url,
-    ).href
+    var painterUrl = new URL("./generated/blot-painter.js?v=bb31f118da4dfc1f", import.meta.url).href
     return loadScriptOnce(painterUrl, function () {
-      return !!(window.IconoplasmPrintCopy && window.IconoplasmPrintCopy.paint)
+      return !!(window.IconoplasmBlot && window.IconoplasmBlot.paint)
     })
   }
 
@@ -1628,7 +1625,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     setPrintCopyTriggerState(key, "painting")
     loadPrintCopyPainter()
       .then(function () {
-        return window.IconoplasmPrintCopy.paint(card, {
+        return window.IconoplasmBlot.paint(card, {
           portraitUrl: publishedPortraitUrl(card, "full"),
         })
       })

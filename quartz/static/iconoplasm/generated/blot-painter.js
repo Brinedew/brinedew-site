@@ -1,15 +1,20 @@
-// The print copy: one picture with the card's name, symbol and shading baked
-// into its pixels, painted in the reader's own browser. The layout comes from
-// the shared card itself, laid out on the blot's own 384x512 borderless
-// artboard in an isolated frame (so the page's own styles can't move it);
-// the portrait's pixels are copied 1:1, so the print size is the portrait's
-// own size and nothing is resampled. B-1068.
+/* GENERATED FILE. Edit shared/iconoplasm-card/blot-painter.js and rerun node scripts/sync-iconoplasm-shared.mjs. */
+
+// The blot painter: one picture of the gene's current portrait with the card's
+// name, symbol and shading baked into its pixels. The layout comes from the
+// shared card itself, laid out on the blot's 384x512 borderless artboard in an
+// isolated frame (so the page's own styles can't move it). Two callers, one
+// painter (B-1068, B-1131):
+// - the print button paints in the reader's browser at the portrait's own size,
+//   copying its pixels 1:1;
+// - scripts/draw-iconoplasm-blots.mjs paints every gene's published blot at a
+//   fixed width (options.width, 768) in headless Chrome.
 ;(function () {
   const ARTBOARD_WIDTH = 384
   const ARTBOARD_HEIGHT = 512
   // The card's faces, filled in from font-contract.json by
   // scripts/sync-iconoplasm-shared.mjs: [{ family, url, weight }].
-  const FONT_FACES = []
+  const FONT_FACES = [{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2","weight":400},{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2","weight":500},{"family":"League Spartan","url":"/static/iconoplasm/fonts/LeagueSpartan-800.woff2","weight":800},{"family":"Special Elite","url":"/static/iconoplasm/fonts/SpecialElite-Regular.woff2","weight":400},{"family":"Caveat","url":"/static/iconoplasm/fonts/Caveat-400.woff2","weight":400}]
 
   // Split "a(b, c) d, e" at top-level commas.
   function splitTopLevel(value) {
@@ -125,7 +130,7 @@
       '</head><body><main id="artboard"></main></body></html>'
     const loaded = new Promise((resolve, reject) => {
       frame.addEventListener("load", resolve, { once: true })
-      frame.addEventListener("error", () => reject(new Error("print-copy artboard failed to load")), { once: true })
+      frame.addEventListener("error", () => reject(new Error("blot artboard failed to load")), { once: true })
     })
     document.body.appendChild(frame)
     await loaded
@@ -196,7 +201,7 @@
     draw()
   }
 
-  async function paintIconoplasmPrintCopy(card, options = {}) {
+  async function paintIconoplasmBlot(card, options = {}) {
     const shared = globalThis.IconoplasmCardShared
     if (!shared || typeof shared.renderLabLabelCardHtml !== "function") {
       throw new Error("Iconoplasm shared card renderer is unavailable")
@@ -220,7 +225,7 @@
       const body = shared.renderLabLabelCardHtml(card, {
         layoutVariant: "image-only",
         mode: "brick",
-        portraitAlt: `${symbol} blot`,
+        portraitAlt: `${symbol} portrait`,
         // Layout never depends on the picture; a blank pixel keeps the frame
         // from downloading the portrait a second time.
         portraitSrc: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
@@ -235,6 +240,11 @@
       link?.classList.add("icono-image-only-link--loaded")
       await doc.fonts.ready
       await Promise.all([...doc.fonts].map((face) => face.load().catch(() => null)))
+      // A published blot is never drawn in a fallback face: the drawing script
+      // asks for every face, and a face that failed to load stops the paint.
+      if (options.requireFonts && [...doc.fonts].some((face) => face.status !== "loaded")) {
+        throw new Error("A card font failed to load")
+      }
 
       // The photo fills the borderless card (the card CSS fences any inset).
       const view = doc.defaultView
@@ -243,19 +253,24 @@
       if (!photoBox || photoBox.left !== cardBox.left || photoBox.top !== cardBox.top || photoBox.width !== cardBox.width || photoBox.height !== cardBox.height) {
         throw new Error("The image-only card no longer fills its artboard with the portrait")
       }
-      // The print is the portrait's own pixels, never scaled. A portrait that
-      // isn't 3:4 is trimmed the way object-fit: cover trims it on the card, at
-      // 1:1, so the print is as large as the portrait allows.
-      const k = Math.min(portrait.width / ARTBOARD_WIDTH, portrait.height / ARTBOARD_HEIGHT)
+      // A portrait that isn't 3:4 is trimmed the way object-fit: cover trims it
+      // on the card. Without options.width the blot is the portrait's own
+      // pixels, copied 1:1, as large as the portrait allows; with it, the same
+      // trim is drawn at that width.
+      const native = Math.min(portrait.width / ARTBOARD_WIDTH, portrait.height / ARTBOARD_HEIGHT)
+      const sourceWidth = Math.round(ARTBOARD_WIDTH * native)
+      const sourceHeight = Math.round(ARTBOARD_HEIGHT * native)
+      const k = Number(options.width) > 0 ? Number(options.width) / ARTBOARD_WIDTH : native
       const width = Math.round(ARTBOARD_WIDTH * k)
       const height = Math.round(ARTBOARD_HEIGHT * k)
       const canvas = doc.createElement("canvas")
       canvas.width = width
       canvas.height = height
       const context = canvas.getContext("2d")
-      const sx = Math.round((portrait.width - width) / 2)
-      const sy = Math.round((portrait.height - height) / 2)
-      context.drawImage(portrait, sx, sy, width, height, 0, 0, width, height)
+      context.imageSmoothingQuality = "high"
+      const sx = Math.round((portrait.width - sourceWidth) / 2)
+      const sy = Math.round((portrait.height - sourceHeight) / 2)
+      context.drawImage(portrait, sx, sy, sourceWidth, sourceHeight, 0, 0, width, height)
       const shade = link ? view.getComputedStyle(link, "::after") : null
       if (shade && Number(shade.opacity) > 0 && shade.backgroundImage !== "none") {
         context.save()
@@ -276,8 +291,9 @@
       return out
     } finally {
       frame.remove()
+      portrait.close?.()
     }
   }
 
-  globalThis.IconoplasmPrintCopy = { paint: paintIconoplasmPrintCopy }
+  globalThis.IconoplasmBlot = { paint: paintIconoplasmBlot }
 })()

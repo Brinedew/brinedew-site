@@ -1,0 +1,75 @@
+name: Draw Iconoplasm blots
+
+# B-1131: the one drawer of blots (scripts/draw-iconoplasm-blots.mjs). A blot
+# is a gene's current portrait with its name and symbol painted on. Each run
+# reads the catalogue that "Publish Iconoplasm catalog" just wrote, lists the
+# blots Bunny storage already holds, paints the missing ones with the print
+# button's painter in the runner's Chrome, and uploads them. Storage is the
+# record, so there is no queue to drain: a failed run leaves its genes
+# missing and the next run draws them. No D1, no Worker requests.
+on:
+  workflow_run:
+    workflows: ["Publish Iconoplasm catalog"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Draw at most this many blots (empty: all missing)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Count the missing blots, draw nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run at a time; a run that waits replaces an older waiting one, which is
+# fine because every run draws everything still missing.
+concurrency:
+  group: iconoplasm-blots
+  cancel-in-progress: false
+
+jobs:
+  draw:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    # A full redraw of about 19,400 genes is the longest job; an ordinary run
+    # draws the handful of genes whose portrait or name changed.
+    timeout-minutes: 120
+    env:
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: ${{ secrets.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD:-}" ]; then
+            echo "Missing ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Draw missing blots
+        env:
+          LIMIT: ${{ inputs.limit }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [ -n "${LIMIT:-}" ]; then args+=(--limit "$LIMIT"); fi
+          if [ "${DRY_RUN:-}" = "true" ]; then args+=(--dry-run); fi
+          node scripts/draw-iconoplasm-blots.mjs "${args[@]}"
