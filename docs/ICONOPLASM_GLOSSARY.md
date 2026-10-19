@@ -47,16 +47,34 @@ server makes or stores it.
 code that paints a blot: the drawing script uses it at 768x1024 and the print
 button at full resolution.
 
-**Card.** The HTML rendering of a gene in the gallery, on its page and in the
-extension: its current portrait plus HTML text and controls. A card is not a
-picture file.
+**Card.** A gene's accession sheet: its current portrait combined with the
+specimen label ("ICONOPLASM HUMAN GENE REGISTRY / ACCESSION SHEET 03"). The
+label carries the family and family trait, the category and alignment options
+circled with rough.js loops, handwritten notes (age, mass, sex, alignment), the
+style row and the footer "seal after review / do not expose to open air". It
+is live HTML drawn by `shared/iconoplasm-card/lit-archival-card.js` and
+`shared-card-runtime.js` (code: the `lit-archival` variant, old name
+`lab-label`; `neo-drab` is a darker skin of the same sheet). The gene page,
+the gallery on phones and the extension's "Vintage lab label" hover show it.
+A card is neither a portrait nor a blot, and no image file of a card exists.
 
-- The **blot-only card** (code: the `image-only` variant, UI: "Blot only") is
-  the card that shows just the portrait with the name and symbol laid over
-  it. It looks like the gene's blot because the blot painter copies its
-  layout, but it is live HTML.
-- A style's **blot count** in the style picker is the number of genes whose
-  current portrait was made in that style, which is the number of their blots.
+These look like a gene but are not cards:
+
+- An **image tile** (code: the `image-only` variant; the desktop gallery's
+  default, and the extension's "Blot only" hover) is the portrait with the
+  name and symbol laid over it in HTML. It looks like the gene's blot because
+  the blot painter copies its layout.
+- The **simple tooltip** (code: `simple`, old name `classic`; the extension's
+  "Simple" hover) is a compact inline tooltip.
+
+Older code says "card" for two other things. The CSS class `icono-card` sits on
+every gallery tile, image tiles included, and many runtime names
+(`buildGeneCard`, "published card payload", a variable called `card`) hold
+the stable gene object. In prose, issues and new code, "card" means only the
+accession sheet.
+
+A style's **blot count** in the style picker is the number of genes whose
+current portrait was made in that style, which is the number of their blots.
 
 **Caretaker film.** The caretaker sidebar's imitation Western-blot
 autoradiograph (B-996): a protein ladder, one band at the gene's molecular
@@ -83,3 +101,7 @@ genes, each with its symbol, full name and current portrait.
 | "blot print" (B-996)                                  | caretaker film                               |
 | "AI blots"                                            | AI portraits                                 |
 | "materialized blot", "blot backlog"                   | (gone: the drawer paints what storage lacks) |
+| "card" or "card image" for the blot or any image file | blot, portrait                               |
+| "card" for an image tile or the simple tooltip        | image tile, simple tooltip                   |
+| "card" for `genes/v3/<SYMBOL>.json`                   | stable gene object                           |
+| "blot-only card"                                      | image tile                                   |
