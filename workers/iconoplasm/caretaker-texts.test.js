@@ -18,7 +18,7 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 // 5. a cross-site form or a non-JSON body writes;
 // 6. withdrawing the chosen line leaves the gene on a withdrawn text, falls back
 //    to a text without Tags, or restore brings back versions withdrawn earlier;
-// 7. the card is rebuilt on every hidden autosave, or not rebuilt when what
+// 7. the gene object is rebuilt on every hidden autosave, or not rebuilt when what
 //    readers see changes;
 // 8. the panel loses the chosen text or the factory's text beyond History's
 //    first page, or the Tags route hands out another gene's Tags;
@@ -243,7 +243,7 @@ test("6: withdrawing the chosen line falls back to a text with Tags; restore bri
   assert.equal(await h.chosen(), "The factory's MFNG.")
 })
 
-test("7: the card is rebuilt only when what readers see changes", async (t) => {
+test("7: the gene object is rebuilt only when what readers see changes", async (t) => {
   const h = await harness(t)
   const first = await h.save("Hidden one.")
   await h.save("Hidden two.")

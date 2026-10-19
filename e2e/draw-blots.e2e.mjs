@@ -5,7 +5,7 @@
 // Ways this can fail, written before the check:
 // 1. The script draws nothing, or a file that isn't a 768x1024 WebP.
 // 2. The file lands at an address the site doesn't ask for: its key must be
-//    the one the Worker computes from the gene's published card
+//    the one the Worker computes from the gene's stable object
 //    (genes/v3/<SYMBOL>.json), or every reader gets a 404 forever.
 // 3. The picture is another portrait, or stretched, or cropped differently
 //    from the card: the unshaded middle must match the published portrait
@@ -15,7 +15,7 @@
 //    device scale 2, which is how the earlier blots were made, few pixels may
 //    differ by more than 16 levels, overall and in the label band alone.
 //
-// What is real: the script, the live catalogue, the live published cards and
+// What is real: the script, the live catalogue, the live stable gene objects and
 // portraits, the site's own card stylesheet, runtime, painter and fonts, and
 // Chrome. Only the upload is skipped (--out): the run writes into
 // artifacts/e2e, where the blots, references and measurements land.
@@ -196,8 +196,8 @@ test("draw blots: the script paints each gene's blot at the address the site com
     const files = listFiles(out).filter((file) => file.endsWith(".webp"))
     const results = {}
     for (const symbol of SYMBOLS) {
-      const card = await (await fetch(`${CDN}/genes/v3/${symbol}.json`)).json()
-      const key = iconoplasmBlotObjectKey(symbol, iconoplasmBlotFingerprint(card))
+      const geneObject = await (await fetch(`${CDN}/genes/v3/${symbol}.json`)).json()
+      const key = iconoplasmBlotObjectKey(symbol, iconoplasmBlotFingerprint(geneObject))
       const file = files.find((candidate) => candidate.split(path.sep).join("/").endsWith(key))
       assert.ok(file, `${symbol}: no blot at ${key}; drew ${files.join(", ")}`)
       const bytes = readFileSync(file)
@@ -205,8 +205,8 @@ test("draw blots: the script paints each gene's blot at the address the site com
 
       const reference = await renderReference(browser, origin, {
         symbol,
-        full_name: card.full_name,
-        portrait: { status: "published", asset_sha256: card.portrait.asset_sha256 },
+        full_name: geneObject.full_name,
+        portrait: { status: "published", asset_sha256: geneObject.portrait.asset_sha256 },
       })
       writeFileSync(path.join(out, `${symbol}-reference.png`), reference)
       const page = await browser.newPage()
@@ -215,7 +215,7 @@ test("draw blots: the script paints each gene's blot at the address the site com
         const measured = await page.evaluate(measure, {
           blot: bytes.toString("base64"),
           reference: reference.toString("base64"),
-          portraitUrl: `/portrait/${card.portrait.asset_sha256}.webp`,
+          portraitUrl: `/portrait/${geneObject.portrait.asset_sha256}.webp`,
         })
         results[symbol] = { key, bytes: bytes.length, ...measured }
       } finally {

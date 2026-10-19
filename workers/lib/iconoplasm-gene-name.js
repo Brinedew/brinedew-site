@@ -9,7 +9,7 @@
 // labels the gallery), and the shelf rows. The essence row's full_name is the
 // UniProt protein name the workstation syncs; it names no gene in public, and
 // reading it ahead of the catalog row is what made the tab title change when
-// a gene page's card loaded.
+// a gene page finished loading its gene object.
 const GENE_NAME_MAX_LENGTH = 255
 
 export function iconoplasmGeneName(catalogFullName, symbol) {

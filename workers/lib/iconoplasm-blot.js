@@ -1,13 +1,13 @@
 // A blot is one WebP: the gene's current portrait with its name and symbol
 // painted on (docs/ICONOPLASM_GLOSSARY.md). This module is its identity: the
 // fingerprint, the storage key, the CDN address, the file name and the size.
-// The site computes a gene's blot address from its published card with these
+// The site computes a gene's blot address from its stable gene object with these
 // functions, and scripts/draw-iconoplasm-blots.mjs draws the file at that
 // address with the shared blot painter (shared/iconoplasm-card/blot-painter.js).
 // Nothing else records which blots exist: Bunny storage is the record (B-1131).
 //
 // ARCHITECTURE FENCE [IPD-011]: the fingerprint is derived from the exact
-// published card payload. This module never reconstructs a winner from votes.
+// published stable gene object. This module never reconstructs a winner from votes.
 
 // Change the revision whenever the painter's output changes, so every blot is
 // drawn again at a new address instead of a stale picture keeping its old one.
@@ -60,21 +60,21 @@ function fnv1a64(text, seed) {
 // What the painter sees: the symbol, the name and the published portrait. The
 // drawing script hands the painter exactly these, so a blot can't change
 // without its fingerprint changing too.
-export function iconoplasmBlotInputs(cardPayload) {
+export function iconoplasmBlotInputs(geneObject) {
   const portrait =
-    cardPayload?.portrait && typeof cardPayload.portrait === "object" ? cardPayload.portrait : {}
+    geneObject?.portrait && typeof geneObject.portrait === "object" ? geneObject.portrait : {}
   return {
-    symbol: normalizeSymbol(cardPayload?.symbol || cardPayload?.canonical_symbol || ""),
-    full_name: String(cardPayload?.full_name || cardPayload?.name || "").trim(),
+    symbol: normalizeSymbol(geneObject?.symbol || geneObject?.canonical_symbol || ""),
+    full_name: String(geneObject?.full_name || geneObject?.name || "").trim(),
     portrait_asset_sha256:
       portrait.status === "published" ? normalizeSha256(portrait.asset_sha256 || "") : "",
   }
 }
 
-export function iconoplasmBlotFingerprint(cardPayload) {
+export function iconoplasmBlotFingerprint(geneObject) {
   const material = stableJson({
     renderer: ICONOPLASM_BLOT_RENDERER_REVISION,
-    ...iconoplasmBlotInputs(cardPayload),
+    ...iconoplasmBlotInputs(geneObject),
   })
   return `${fnv1a64(material, 0xcbf29ce484222325n)}${fnv1a64(material, 0x84222325cbf29ce4n)}`
 }

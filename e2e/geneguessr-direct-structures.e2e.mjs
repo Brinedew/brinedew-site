@@ -104,7 +104,7 @@ import {
   ICONOPLASM_BACKGROUND_MINUTES,
   ICONOPLASM_RECURRING_CRON,
 } from "../workers/iconoplasm-background-schedule.js"
-import { LEADERBOARD_OBJECT_KEY } from "../workers/lib/iconoplasm-published-card-objects.js"
+import { LEADERBOARD_OBJECT_KEY } from "../workers/lib/iconoplasm-published-objects.js"
 import { OUT, ROOT, launchChrome } from "./harness.mjs"
 
 const STATIC = path.join(ROOT, "quartz", "static")

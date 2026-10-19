@@ -2,7 +2,7 @@
 // B-1087: the daily Bunny balance check (.github/workflows/check-bunny-balance.yml).
 //
 // Bunny is prepaid, auto-recharge is off, and Bunny takes every service offline four days after
-// the balance goes negative: the portraits, the blots and the gene card objects all live there.
+// the balance goes negative: the portraits, the blots and the stable gene objects all live there.
 // This fails (and GitHub emails the owner) while there are still months to top it up by hand:
 // when the balance covers fewer than three months at this month's pace, never less than Bunny's
 // $1 monthly minimum.

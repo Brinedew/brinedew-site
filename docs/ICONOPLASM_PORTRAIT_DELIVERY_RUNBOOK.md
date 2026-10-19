@@ -58,8 +58,8 @@ Portraits and blots load from `img.brinedew.bio` on every network (see
 arrive, never identity.
 
 The print copy is painted in the reader's own browser from the published
-portrait and the published card (`genes/v3/<SYMBOL>.json`). The browser copies
-the portrait's pixels 1:1 and bakes the card's label into them, so the print
+portrait and the stable gene object (`genes/v3/<SYMBOL>.json`). The browser copies
+the portrait's pixels 1:1 and bakes the gene's name and symbol into them, so the print
 size is the portrait's own size. No server renders, stores or serves a print
 copy, and no D1 row or Worker request is spent on one; the reader's click
 downloads a file the browser already holds. The print copy never chooses or
@@ -132,7 +132,7 @@ The extension reads hover detail from the gene's stable object on the free CDN,
 (`iconoplasm-extension/service-worker.js`). It sends no cookies and no
 client-version header, so every reader shares one CDN cache entry per gene, and
 it revalidates with `cache: "no-cache"`. The Worker purges that exact URL on
-every rewrite. A CDN 404 means the gene has no card. The service worker keeps at
+every rewrite. A CDN 404 means the gene has no stable object. The service worker keeps at
 most 512 objects in memory for five minutes. The pull zone's CORS extensions are
 owned by `bunny/the-only-iconoplasm-pull-zone-policy.json`, which
 `scripts/reconcile-iconoplasm-pull-zone.mjs` applies from the production deploy.
@@ -159,7 +159,7 @@ bills only cache misses. The zone records live in
 `bunny/the-only-iconoplasm-pull-zone-policy.json`.
 
 The website rewrites every delivered image URL onto that host
-(`quartz/static/iconoplasm/portrait-delivery.js`). Cards name an image by its
+(`quartz/static/iconoplasm/portrait-delivery.js`). Stable gene objects name an image by its
 canonical first-party URL, or by `iconoplasmportraits.b-cdn.net` if they were
 published before the switch; both are rewritten. There is no probe and no
 Worker fallback. Those existed because some ISP resolvers could not resolve

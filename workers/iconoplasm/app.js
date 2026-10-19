@@ -37,8 +37,8 @@ import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-
 import { registerCaretakerRoleRoutes } from "./caretaker-role-routes.js"
 import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
 
-// A card rebuild spends up to four of the 50 subrequests Cloudflare's free plan
-// allows one request (the canonical text's body, the card's PUT and its
+// A gene object rebuild spends up to four of the 50 subrequests Cloudflare's free plan
+// allows one request (the canonical text's body, the gene object's PUT and its
 // read-back), so one request rebuilds at most eight genes.
 export const MAX_GENES_PER_REQUEST = 8
 export const REGISTER_MAX_PORTRAITS = 100
@@ -351,13 +351,13 @@ export function createIconoplasmApp({
   /**
    * The factory registers portraits it has already uploaded to the CDN
    * (portraits/v1/<sha>/{full,medium,thumb}.webp), then each touched gene's
-   * card is rebuilt. Two D1 reads (which genes the catalogue carries, which
+   * gene object is rebuilt. Two D1 reads (which genes the catalogue carries, which
    * portraits exist), one D1 batch for the rows and a `candidate_added` event
-   * per new portrait (the catalogue builder follows those), then one card
+   * per new portrait (the catalogue builder follows those), then one gene object
    * build per gene, then the request picker's vision marks. A portrait of
    * a gene the catalogue doesn't carry is refused, not stored: it would have
-   * no card to land on. Re-sending the same body changes no row and rebuilds
-   * the cards and summaries again, so the factory retries a failed gene by
+   * no gene object to land on. Re-sending the same body changes no row and rebuilds
+   * the gene objects and summaries again, so the factory retries a failed gene by
    * sending its portraits again.
    */
   app.post(
@@ -435,9 +435,9 @@ export function createIconoplasmApp({
   )
 
   /**
-   * Rebuilds named genes' cards from what D1 holds now: the bulk sweep
+   * Rebuilds named genes' gene objects from what D1 holds now: the bulk sweep
    * (scripts/republish-iconoplasm-gene-objects.mjs) and the catalogue publisher in
-   * GitHub Actions call it for genes whose cards must change. Same path and answer
+   * GitHub Actions call it for genes whose gene objects must change. Same path and answer
    * as the legacy handler it replaces; a gene that fails is reported and the rest
    * still rebuild.
    */
@@ -453,7 +453,7 @@ export function createIconoplasmApp({
     ),
     shedBatchWork(
       () => "sheddable_plus",
-      (c) => ({ price: priceOf("card", new Set(c.req.valid("json").symbols).size) }),
+      (c) => ({ price: priceOf("gene_object", new Set(c.req.valid("json").symbols).size) }),
     ),
     async (c) => {
       const symbols = [...new Set(c.req.valid("json").symbols)]

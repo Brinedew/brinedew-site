@@ -111,5 +111,5 @@ gene page without the signed-in cookie and fails if any request matches the
 stateful config's `run_worker_first` list.
 
 Global authority is additionally protected by the public-media test under
-`workers/`. It must keep D1 portrait A and card portrait B intentionally different, then
+`workers/`. It must keep D1 portrait A and stable-object portrait B intentionally different, then
 prove that only a rewrite of the gene's stable object can move public media.

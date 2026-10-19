@@ -105,7 +105,7 @@ const VOTE_TABLES = [
   "icono_vote_person_day",
 ]
 const sha = (char) => char.repeat(64)
-// One asset's vote totals as readers see them (the summary the cards read).
+// One asset's vote totals as readers see them (the summary the gene objects are built from).
 const summaryOf = (db, symbol, asset) => {
   const row = db.rows(
     "SELECT score, vote_count FROM icono_vote_asset_summary WHERE gene_symbol = ? AND asset_sha256 = ?",
@@ -249,7 +249,7 @@ function seedAsset(
   )
 }
 
-// A catalogue row: the publisher builds a card only for a gene the catalogue carries.
+// A catalogue row: the publisher builds a gene object only for a gene the catalogue carries.
 function seedGene(db, symbol, { fullName = symbol, color = null } = {}) {
   db.exec(
     "INSERT OR IGNORE INTO icono_gene_catalog (gene_symbol, full_name, color_hex) VALUES (?, ?, ?)",
@@ -262,7 +262,7 @@ function seedGene(db, symbol, { fullName = symbol, color = null } = {}) {
 // The publisher's canonical text reader, for genes with no text (the manifestation
 // authority has its own tests).
 const noText = async () => null
-const upvotesOf = (card) => card.portrait_candidates[0]?.image_upvotes ?? 0
+const upvotesOf = (geneObject) => geneObject.portrait_candidates[0]?.image_upvotes ?? 0
 
 function seedPublished(db, symbol, asset, { override = 0 } = {}) {
   db.exec(
@@ -678,7 +678,7 @@ test("5: a failed stable-object publish never fails a committed vote", async (t)
   seedAsset(db, "TP53", sha("a"))
   seedAsset(db, "TP53", sha("b"))
   seedPublished(db, "TP53", sha("a"))
-  // The publisher's card materialization is the only statement that fails.
+  // The publisher's gene object build is the only statement that fails.
   db.failOn = /catalog_full_name/
   const result = await callApi(db, "/api/iconoplasm/votes/set", {
     symbol: "TP53",

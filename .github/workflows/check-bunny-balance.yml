@@ -1,6 +1,6 @@
 name: Check Bunny balance
 
-# B-1087: Bunny is prepaid with auto-recharge off, and takes the portraits, blots and gene card
+# B-1087: Bunny is prepaid with auto-recharge off, and takes the portraits, blots and stable gene
 # objects offline four days after the balance goes negative. This run fails, and GitHub emails
 # the owner, while the balance covers fewer than three months (scripts/check-bunny-balance.mjs).
 on:

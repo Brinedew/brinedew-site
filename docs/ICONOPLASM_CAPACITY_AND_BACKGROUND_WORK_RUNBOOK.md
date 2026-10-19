@@ -112,7 +112,7 @@ Verify all of the following from current sources:
    update until 2026-10-09. Take the numbers from Cloudflare's
    `d1QueriesAdaptiveGroups` (rows written per query text) or the measured
    table in `ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, never from "the route
-   only upserts". On 2026-10-09 a card sweep priced at "0 rows written" and the
+   only upserts". On 2026-10-09 a gene object sweep priced at "0 rows written" and the
    Drain's backlog spent the whole 100,000-row write wall by 21:00 UTC.
 2. **Check today's meter first:** if the account is already past 50% of a wall,
    find out who is spending before adding batch work.
@@ -162,7 +162,7 @@ The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-po
   the owner's own action on one gene, and the five generation lease routes the
   Drain uses to deliver a reader's requested portrait;
 - sheddable_plus, refused at 85% of a wall: work nobody is waiting on that must
-  still finish (portrait registration, card rebuilds, syncs, replication,
+  still finish (portrait registration, gene object rebuilds, syncs, replication,
   rewrites, blots, catalogue delivery);
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
   coverage, assets, storage audit, repair scope, the gallery listing).

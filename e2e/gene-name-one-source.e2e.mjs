@@ -9,7 +9,7 @@
 //    "tumor protein p53") while the stable object reads only the catalog
 //    column: row[1] and full_name disagree for nearly every gene.
 // 2. The static document is titled from row[1], so the tab title changes when
-//    the card payload arrives. The check records every value of document.title
+//    the gene object arrives. The check records every value of document.title
 //    from the static document's first paint to the loaded card, in a real
 //    browser, and wants exactly one.
 //    Measured with names already in agreement: the static document's title,
@@ -30,7 +30,7 @@
 //
 // What is real: a SQLite database built from every checked-in migration, the
 // catalog builder's own row SQL and row mapper, the stable-object publisher
-// (the Worker's per-gene card path), the static document writer, the shared
+// (the Worker's per-gene publication path), the static document writer, the shared
 // browser app and Chrome. What is stubbed: the two CDN objects are served from
 // what those producers just wrote, and the Worker answers nothing.
 //
@@ -46,7 +46,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { iconoplasmGenePageTitle } from "../quartz/static/iconoplasm/page-title.js"
-import { rowFromCard } from "../scripts/publish-iconoplasm-catalog.mjs"
+import { rowFromGeneObject } from "../scripts/publish-iconoplasm-catalog.mjs"
 import { writeIconoplasmGenePages } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { publishIconoplasmGeneStableObject } from "../workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "../workers/iconoplasm/gene-text-write.js"
@@ -182,10 +182,10 @@ function seedDatabase() {
   return db
 }
 
-// The catalog builder's own row mapper, over every published card (B-1064).
+// The catalog builder's own row mapper, over every published gene object (B-1064).
 function buildCatalogObject(stable) {
   const rows = [...stable.values()]
-    .map(rowFromCard)
+    .map(rowFromGeneObject)
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   return { schema: 3, generated_at: "2026-10-03T00:00:00.000Z", watermark_event_id: 1, genes: rows }
 }
