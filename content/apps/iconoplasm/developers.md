@@ -36,8 +36,8 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
       "images": {
         "gene_blot": {
           "canonical_url": "https://iconoplasm.brinedew.bio/blot/TP53.webp",
-          "immutable_url": "https://iconoplasm.brinedew.bio/blots/v1/T/TP53/19cc3b9c…/TP53-iconoplasm-gene-blot.webp",
-          "cdn_url": "https://iconoplasmportraits.b-cdn.net/blots/v1/T/TP53/19cc3b9c…/TP53-iconoplasm-gene-blot.webp",
+          "immutable_url": "https://iconoplasm.brinedew.bio/blots/v2/T/TP53-26b51a7e….webp",
+          "cdn_url": "https://img.brinedew.bio/blots/v2/T/TP53-26b51a7e….webp",
           "width": 768,
           "height": 1024,
           "rights": "CC0 1.0 Universal",
@@ -54,7 +54,7 @@ curl -s https://iconoplasm.brinedew.bio/api/public/v1/images/resolve \
 **2. Embed** the `cdn_url` in a page, a wiki or a figure:
 
 ```html
-<img src="https://iconoplasmportraits.b-cdn.net/blots/v1/T/TP53/19cc3b9c3e65e87f012b2364b0c406a8/TP53-iconoplasm-gene-blot.webp" alt="TP53 as an Iconoplasm character" width="384" height="512">
+<img src="https://img.brinedew.bio/blots/v2/T/TP53-26b51a7ee1e19d6afc31d4bfe68c14f7.webp" alt="TP53 as an Iconoplasm character" width="384" height="512">
 ```
 
 That address comes straight from our CDN and never changes, so the page keeps showing the card you picked, however many people read it.

@@ -5,7 +5,7 @@
 //   card = buildGeneCard(content, facts)
 //
 // - `content` is what the factory made for the gene: its catalogue row, its
-//   essence, its portraits and their blots. It lives in one private file per
+//   essence and its portraits. It lives in one private file per
 //   gene, content/v1/<SYMBOL>.json, and only the factory writes it.
 // - `facts` is what readers did: vote counts per portrait, the caretaker's
 //   supervote, an administrator's pin, the canonical text, and the gene's vote
@@ -20,15 +20,6 @@ import {
   ICONOPLASM_API_SCHEMA_VERSION,
   ICONOPLASM_PUBLIC_API_VERSION,
 } from "../iconoplasm-route-contract.js"
-import {
-  ICONOPLASM_GENE_BLOT_HEIGHT,
-  ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-  ICONOPLASM_GENE_BLOT_WIDTH,
-  iconoplasmGeneBlotCdnUrl,
-  iconoplasmGeneBlotFilename,
-  iconoplasmGeneBlotFingerprint,
-  iconoplasmGeneBlotObjectKey,
-} from "../iconoplasm-gene-card-materialization-runtime-inside-the-only-allowed-internal-stateful-worker-do-not-duplicate.js"
 import { CARETAKER_SUPERVOTE_WEIGHT } from "../iconoplasm/caretaker/caretaker-supervote.js"
 import { electGeneAuthorityWinner } from "../iconoplasm/vote-authority/gene-authority-election.js"
 import { iconoplasmGeneName } from "./iconoplasm-gene-name.js"
@@ -258,38 +249,6 @@ function winnerPortrait(candidate) {
   }
 }
 
-// The canonical blot the factory rendered for this winner, if it matches the
-// card exactly (renderer, symbol, name and winning portrait). A blot made for
-// another portrait waits until that portrait wins again.
-function readyBlot(card, blots) {
-  const winner = card.portrait?.asset_sha256
-  if (!winner) return null
-  const fingerprint = iconoplasmGeneBlotFingerprint(card)
-  const objectKey = iconoplasmGeneBlotObjectKey(card.symbol, fingerprint)
-  const blot = (Array.isArray(blots) ? blots : []).find(
-    (entry) =>
-      sha(entry?.portrait_asset_sha256) === winner &&
-      String(entry?.blot_fingerprint || "").toLowerCase() === fingerprint &&
-      String(entry?.object_key || "") === objectKey &&
-      sha(entry?.asset_sha256),
-  )
-  if (!blot) return null
-  return {
-    status: "ready",
-    blot_fingerprint: fingerprint,
-    portrait_asset_sha256: winner,
-    asset_sha256: sha(blot.asset_sha256),
-    object_key: objectKey,
-    image_url: iconoplasmGeneBlotCdnUrl(null, objectKey),
-    canonical_url: `${ICONOPLASM_CANONICAL_ORIGIN}/${objectKey}`,
-    semantic_url: `${ICONOPLASM_CANONICAL_ORIGIN}/blot/${encodeURIComponent(card.symbol)}.webp`,
-    width: wholeNumber(blot.width) || ICONOPLASM_GENE_BLOT_WIDTH,
-    height: wholeNumber(blot.height) || ICONOPLASM_GENE_BLOT_HEIGHT,
-    filename: iconoplasmGeneBlotFilename(card.symbol),
-    renderer_revision: ICONOPLASM_GENE_BLOT_RENDERER_REVISION,
-  }
-}
-
 // The gene's text as readers may see it (workers/lib/iconoplasm-gene-text.js):
 // an allowlist, so the Tags the caretaker panel promises to keep private (B-859)
 // can't reach a card whatever the fact reader hands over. The text itself only
@@ -327,7 +286,7 @@ function activeSupervote(facts) {
  * Builds genes/v3/<SYMBOL>.json.
  *
  * content: { symbol, catalog: { full_name, color_hex, tmh }, essence: {...},
- *            portraits: [...], blots: [...] }
+ *            portraits: [...] }
  * facts:   { votes: [{ asset_sha256, upvotes, downvotes, score }],
  *            supervote: { asset_sha256, direction } | null,
  *            pin: asset_sha256 | null,
@@ -387,7 +346,5 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
   ]) {
     if (value !== null) card[key] = value
   }
-  const blot = readyBlot(card, content?.blots)
-  if (blot) card.blot = blot
   return card
 }
