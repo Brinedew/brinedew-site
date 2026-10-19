@@ -54,16 +54,16 @@ circled with rough.js loops, handwritten notes (age, mass, sex, alignment), the
 style row and the footer "seal after review / do not expose to open air". It
 is live HTML drawn by `shared/iconoplasm-card/lit-archival-card.js` and
 `shared-card-runtime.js` (code: the `lit-archival` variant, old name
-`lab-label`; `neo-drab` is a darker skin of the same sheet). The gene page,
+`lab-label`; `neo-drab` is another skin of the same sheet). The gene page,
 the gallery on phones and the extension's "Vintage lab label" hover show it.
 A card is neither a portrait nor a blot, and no image file of a card exists.
 
 These look like a gene but are not cards:
 
 - An **image tile** (code: the `image-only` variant; the desktop gallery's
-  default, and the extension's "Blot only" hover) is the portrait with the
-  name and symbol laid over it in HTML. It looks like the gene's blot because
-  the blot painter copies its layout.
+  default, the clan pages' member reels, and the extension's "Blot only"
+  hover) is the portrait with the name and symbol laid over it in HTML. It
+  looks like the gene's blot because the blot painter copies its layout.
 - The **simple tooltip** (code: `simple`, old name `classic`; the extension's
   "Simple" hover) is a compact inline tooltip.
 
