@@ -1041,7 +1041,7 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
     if (
       url.pathname.startsWith("/portraits/") ||
       url.pathname.startsWith("/gene-cards/") ||
-      url.pathname.startsWith("/blots/v1/")
+      url.pathname.startsWith("/blots/")
     ) {
       const key = url.pathname.replace(/^\/+/, "")
       const object = await env.ICONOPLASM_PORTRAITS?.get?.(key)
