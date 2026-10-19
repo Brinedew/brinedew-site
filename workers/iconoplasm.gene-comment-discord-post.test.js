@@ -44,7 +44,7 @@ test("text-only post: header line with suppressed link, then bolded user inline"
   )
 })
 
-test("with image: multipart form-data with the card PNG attached", async () => {
+test("with image: multipart form-data with the blot attached", async () => {
   await withMockedFetch(
     () => new Response(JSON.stringify({ id: "2" }), { status: 200 }),
     async (calls) => {

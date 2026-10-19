@@ -5855,9 +5855,8 @@ async function setCachedKreaAssetUpload(
   const key = kreaAssetUploadCacheKvKey(userId, keyFingerprint, sourceSha)
   // Krea assets are user-account-scoped and the API key fingerprint bounds
   // the cache to a specific Krea account. 30-day TTL is the standard
-  // short-lived cache ceiling used elsewhere in the worker (see the
-  // gene-card image cache at line ~24160) and is well within the user's
-  // edit-retry window.
+  // short-lived cache ceiling used elsewhere in the worker and is well within
+  // the user's edit-retry window.
   try {
     await env.KV.put(
       key,

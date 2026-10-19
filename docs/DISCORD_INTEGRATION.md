@@ -224,10 +224,9 @@ The configured stateful Worker uses Cloudflare's five cron slots:
 ### What each feature costs per day
 
 - **Comment → #iconoplasm:** the mirror adds +0 D1 writes and +1 Discord POST
-  per new comment (capped 20/user/hr). The gene-card image adds **one Browser
-  Rendering pass per (gene, canonical version)**, gated by comment events and
-  cached in KV thereafter, so a gene that isn't re-voted is rendered once. If
-  the render fails it posts text-only.
+  per new comment (capped 20/user/hr). The post attaches the gene's blot:
+  **two Bunny Storage reads per comment** (the stable gene object, then the
+  blot). If either read fails it posts text-only.
 - **Daily recap:** per run, ~2 KV reads + ~2 KV writes (posted marker + the
   `puzzle_actual` write upstream), one set of D1 reads for winners/top guesses,
   and 1–2 subrequests (Bunny image GET if present + Discord POST). 0 D1 writes.

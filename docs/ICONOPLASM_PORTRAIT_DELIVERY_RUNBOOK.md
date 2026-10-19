@@ -150,7 +150,7 @@ Rules for any public cache in front of Iconoplasm:
 
 ### Protected image behavior
 
-**ARCHITECTURE FENCE [IPD-001]** — readers load portraits, card images and
+**ARCHITECTURE FENCE [IPD-001]** — readers load portraits, blots and
 the published objects from `https://img.brinedew.bio`, a Cloudflare-proxied
 CNAME for the Bunny pull zone (B-1087). Cloudflare's free cache answers repeat
 views, so a view costs neither a Worker request nor Bunny bandwidth; Bunny

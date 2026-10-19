@@ -1,4 +1,4 @@
-// B-1087: every portrait and card image loads from img.brinedew.bio, Cloudflare's
+// B-1087: every image a card shows loads from img.brinedew.bio, Cloudflare's
 // free cache in front of the Bunny pull zone. Cards name an image by its canonical
 // URL (iconoplasm.brinedew.bio) or, if published before the switch, by Bunny's own
 // host; both move onto the image host. Anything else is left as it is.

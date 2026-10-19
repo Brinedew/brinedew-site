@@ -56,14 +56,14 @@ export const ICONOPLASM_PUBLIC_OPENAPI = Object.freeze({
     title: "Iconoplasm public image resolver",
     version: "1.0.0",
     description:
-      "Resolve HGNC gene symbols (any case), curated literature aliases, and UniProt accessions to canonical Iconoplasm gene blots. HGNC IDs, Ensembl and NCBI Gene IDs are not resolved (found: false). A gene blot is the machine-downloadable card image with the gene name and symbol over the canonical character portrait.",
+      "Resolve HGNC gene symbols (any case), curated literature aliases, and UniProt accessions to each gene's Iconoplasm blot. HGNC IDs, Ensembl and NCBI Gene IDs are not resolved (found: false). A gene's blot is its current character portrait with the gene's full name and symbol painted into the image.",
   },
   servers: [{ url: "https://iconoplasm.brinedew.bio" }],
   paths: {
     "/api/public/v1/images/resolve": {
       post: {
         operationId: "resolveGeneImages",
-        summary: "Resolve up to 50 gene identifiers to canonical gene blots",
+        summary: "Resolve up to 50 gene identifiers to their blots",
         description:
           "No authentication is required. Prefer images.gene_blot for pathway diagrams and other machine image use. The portrait field is temporary migration coverage.",
         requestBody: {
