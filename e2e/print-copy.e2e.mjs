@@ -19,7 +19,7 @@
 // 4. The button leads nowhere: no viewer, no download, or a download with
 //    another name.
 //
-// What is real: the built site, the published card and portrait for KDM6B
+// What is real: the built site, the stable gene object and portrait for KDM6B
 // (a 1536x2048 portrait, so the reference renders at an integer scale), the
 // shared card stylesheet and fonts, and Chrome. Nothing is mocked except the
 // signed-in /api/* calls, which an anonymous reader never needs. The print,

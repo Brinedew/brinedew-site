@@ -67,11 +67,23 @@ These look like a gene but are not cards:
 - The **simple tooltip** (code: `simple`, old name `classic`; the extension's
   "Simple" hover) is a compact inline tooltip.
 
-Older code says "card" for two other things. The CSS class `icono-card` sits on
-every gallery tile, image tiles included, and many runtime names
-(`buildGeneCard`, "published card payload", a variable called `card`) hold
-the stable gene object. In prose, issues and new code, "card" means only the
-accession sheet.
+In prose, issues and new code, "card" means only the accession sheet. Server
+and script code no longer says "card" for the stable gene object
+(`buildStableGeneObject`, `createPublishedObjectStore`, variables called
+`geneObject`). Three old uses are left on purpose, because they are on the wire
+or in the browser and renaming them would break readers or the extension:
+
+- The CSS class `icono-card` and the `data-icono-card-*` attributes sit on every
+  gallery tile, image tiles included.
+- Public names that readers, the extension or stored data still use:
+  the `/api/iconoplasm/cards/<SYMBOL>` and `/api/public/v1/card-snapshots/`
+  routes, the `cards` and `card` keys of the mobile gallery responses, the
+  `card_snapshot_version` field, the `X-Iconoplasm-Card-Version` header, the
+  `CARD_ARTIFACT_UNAVAILABLE` error code, and the `resolved_from` value
+  `published_card_catalog_bulk` inside the stable gene object.
+- The mobile card view-model (`buildMobileCardVMFromGeneRecord`,
+  `iconoplasm.mobileCard.v1`), which is a phone-sized projection of the stable
+  gene object built for the gallery tile and the card on phones.
 
 A style's **blot count** in the style picker is the number of genes whose
 current portrait was made in that style, which is the number of their blots.

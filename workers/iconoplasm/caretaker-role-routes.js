@@ -39,7 +39,7 @@ function param(c, name) {
 }
 
 // `caretakerSession` resolves the signed-in Brinedew account (it 401s without
-// one). `settleGene` re-runs a gene's election and republishes its card, for a
+// one). `settleGene` re-runs a gene's election and republishes its gene object, for a
 // role that ended with its supervote on one of the gene's images.
 export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene }) {
   const signedIn = (c) => requireBrowserSession(c.req.raw, c.env, caretakerSession)

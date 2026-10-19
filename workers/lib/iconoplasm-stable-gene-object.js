@@ -1,8 +1,8 @@
 // ARCHITECTURE FENCE [IPD-011]: THE ONLY builder of the stable gene object,
-// genes/v3/<SYMBOL>.json (B-898, B-1063). A card is a pure function of two
+// genes/v3/<SYMBOL>.json (B-898, B-1063). The object is a pure function of two
 // inputs:
 //
-//   card = buildGeneCard(content, facts)
+//   object = buildStableGeneObject(content, facts)
 //
 // - `content` is what the factory made for the gene: its catalogue row, its
 //   essence and its portraits. It lives in one private file per
@@ -13,7 +13,7 @@
 //
 // The winner rule lives here and nowhere else. The function reads no storage,
 // network or clock (the clock is injected), so the Worker can rebuild one gene
-// right after a reader acts on it and a test can rebuild every live card.
+// right after a reader acts on it and a test can rebuild every live gene object.
 // The output keeps the exact shape readers already parse (the gene page, the
 // extension, the catalogue builder in GitHub Actions).
 import {
@@ -82,10 +82,10 @@ function portraitUrl(assetSha256, rendition) {
   return `${ICONOPLASM_CANONICAL_ORIGIN}/portraits/v1/${assetSha256.slice(0, 2)}/${assetSha256}/${rendition}.webp`
 }
 
-// The card's essence block: the factory's essence row, named by the catalogue
+// The gene object's essence block: the factory's essence row, named by the catalogue
 // (B-908), with the transmembrane flag standing in for a sex the essence row
 // doesn't give.
-function cardEssence(essence, catalog, fullName) {
+function geneObjectEssence(essence, catalog, fullName) {
   const aesthetics = textList(essence.aesthetics)
   const aestheticsOrigin = textList(essence.aesthetics_origin)
   const politicsOrigin = textList(essence.politics_origin)
@@ -251,7 +251,7 @@ function winnerPortrait(candidate) {
 
 // The gene's text as readers may see it (workers/lib/iconoplasm-gene-text.js):
 // an allowlist, so the Tags the caretaker panel promises to keep private (B-859)
-// can't reach a card whatever the fact reader hands over. The text itself only
+// can't reach the gene object whatever the fact reader hands over. The text itself only
 // when readers are meant to see it.
 function publicManifestation(record) {
   if (!record || typeof record !== "object") return null
@@ -294,7 +294,11 @@ function activeSupervote(facts) {
  *            manifestation: public text record | null,
  *            vote_version: integer | null }
  */
-export function buildGeneCard(content, facts = {}, { now = () => new Date().toISOString() } = {}) {
+export function buildStableGeneObject(
+  content,
+  facts = {},
+  { now = () => new Date().toISOString() } = {},
+) {
   const symbol = normalizeSymbol(content?.symbol)
   if (!symbol) throw new TypeError("Gene content needs a valid symbol")
   const catalog = content?.catalog && typeof content.catalog === "object" ? content.catalog : {}
@@ -317,7 +321,7 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
 
   const fullName = iconoplasmGeneName(catalog.full_name, symbol)
   const voteVersion = wholeNumber(facts?.vote_version)
-  const card = {
+  const geneObject = {
     api_version: ICONOPLASM_PUBLIC_API_VERSION,
     schema_version: ICONOPLASM_API_SCHEMA_VERSION,
     canonical_key: "symbol",
@@ -325,7 +329,7 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
     symbol,
     full_name: fullName,
     color: hexColor(catalog.color_hex),
-    essence: cardEssence(essence, catalog, fullName),
+    essence: geneObjectEssence(essence, catalog, fullName),
     portrait: winnerPortrait(pool.find((candidate) => candidate.is_current) || null),
     portrait_candidates: pool,
     candidate_count: pool.length,
@@ -344,7 +348,7 @@ export function buildGeneCard(content, facts = {}, { now = () => new Date().toIS
     ["loeuf", number(essence.loeuf)],
     ["constraint_percentile", number(essence.constraint_percentile)],
   ]) {
-    if (value !== null) card[key] = value
+    if (value !== null) geneObject[key] = value
   }
-  return card
+  return geneObject
 }

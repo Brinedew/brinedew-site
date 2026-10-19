@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { createPublishedCardObjectStore } from "./lib/iconoplasm-published-card-objects.js"
+import { createPublishedObjectStore } from "./lib/iconoplasm-published-objects.js"
 
 const env = {
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
@@ -9,7 +9,7 @@ const env = {
 function fixture({ alterRead, status = 200 } = {}) {
   const objects = new Map()
   const calls = []
-  const store = createPublishedCardObjectStore(env, {
+  const store = createPublishedObjectStore(env, {
     request: async (url, init, key) => {
       calls.push({ method: init.method, key })
       if (init.method === "PUT") {
@@ -34,7 +34,7 @@ test("a stable read miss is null and never writes or consults a relational datab
 
 test("a stalled response body has a deadline", async () => {
   let cancelled = false
-  const store = createPublishedCardObjectStore(env, {
+  const store = createPublishedObjectStore(env, {
     bodyTimeoutMs: 15,
     request: async () =>
       new Response(
@@ -57,7 +57,7 @@ test("a transient storage timeout is retried and the stable object commits (B-75
     ICONOPLASM_PORTRAIT_STORAGE_TIMEOUT_MS: "20",
     ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
   }
-  const store = createPublishedCardObjectStore(timeoutEnv)
+  const store = createPublishedObjectStore(timeoutEnv)
   const originalFetch = globalThis.fetch
   let putAttempts = 0
   let stored = null
@@ -94,7 +94,7 @@ test("a transient storage timeout is retried and the stable object commits (B-75
 test("a PUT stored but answered too late is a committed write, judged by its read-back", async () => {
   const objects = new Map()
   const calls = []
-  const store = createPublishedCardObjectStore(env, {
+  const store = createPublishedObjectStore(env, {
     request: async (url, init, key) => {
       calls.push(init.method)
       if (init.method === "PUT") {
@@ -112,7 +112,7 @@ test("a PUT stored but answered too late is a committed write, judged by its rea
 test("a PUT that never landed fails with its own error, whatever the read-back finds", async () => {
   const previous = new TextEncoder().encode('{"symbol":"C4B","old":true}')
   for (const stored of [previous, null]) {
-    const store = createPublishedCardObjectStore(env, {
+    const store = createPublishedObjectStore(env, {
       request: async (url, init) => {
         if (init.method === "PUT") throw new DOMException("The operation was aborted", "AbortError")
         return stored ? new Response(stored) : new Response(null, { status: 404 })
@@ -123,7 +123,7 @@ test("a PUT that never landed fails with its own error, whatever the read-back f
       /The operation was aborted/,
     )
   }
-  const unreachable = createPublishedCardObjectStore(env, {
+  const unreachable = createPublishedObjectStore(env, {
     request: async (url, init) => {
       if (init.method === "PUT") throw new Error("Stable gene object PUT failed (503)")
       throw new Error("read-back unreachable")
@@ -144,7 +144,7 @@ test("after a failed PUT, the same content under an earlier stamp is that conten
     published_at: "2026-10-09T14:37:15.760Z",
   }
   const stored = new TextEncoder().encode(JSON.stringify(earlier))
-  const late = createPublishedCardObjectStore(env, {
+  const late = createPublishedObjectStore(env, {
     request: async (url, init) => {
       if (init.method === "PUT") throw new DOMException("The operation was aborted", "AbortError")
       return new Response(stored)
@@ -166,7 +166,7 @@ test("after a failed PUT, the same content under an earlier stamp is that conten
     /The operation was aborted/,
   )
   // A PUT that succeeded is still held to its own bytes.
-  const answered = createPublishedCardObjectStore(env, {
+  const answered = createPublishedObjectStore(env, {
     request: async (url, init) =>
       init.method === "PUT" ? new Response(null, { status: 201 }) : new Response(stored),
   })
@@ -183,7 +183,7 @@ test("after a failed PUT, the same content under an earlier stamp is that conten
 test("the stable gene object is written to a fixed key with a short TTL and verified by read-back", async () => {
   const { store, calls, objects } = fixture()
   const headers = []
-  const seen = createPublishedCardObjectStore(env, {
+  const seen = createPublishedObjectStore(env, {
     request: async (url, init, key) => {
       if (init.method === "PUT") headers.push(init.headers)
       calls.push({ method: init.method, key, url })
@@ -239,7 +239,7 @@ test("the stable gene object rejects foreign keys, oversized bodies and unreadab
 test("a stable object rewrite sends only the PUT and its verifying GET, never a purge", async () => {
   const objects = new Map()
   const calls = []
-  const store = createPublishedCardObjectStore(
+  const store = createPublishedObjectStore(
     { ...env, BUNNY_ACCOUNT_API_KEY: "account-key" },
     {
       request: async (url, init, key) => {
@@ -271,7 +271,7 @@ test("a stable delete removes the object, treats a missing one as done, and thro
   const objects = new Map([["genes/v3/ADGRE4P.json", new Uint8Array([1])]])
   const calls = []
   let fault = false
-  const store = createPublishedCardObjectStore(env, {
+  const store = createPublishedObjectStore(env, {
     request: async (url, init, key) => {
       calls.push({ method: init.method, key, url: String(url) })
       if (fault) return new Response(null, { status: 500 })
@@ -295,7 +295,7 @@ test("a stable delete removes the object, treats a missing one as done, and thro
 })
 
 test("a stable delete refuses the catalog object and every non-gene key", async () => {
-  const store = createPublishedCardObjectStore(env, {
+  const store = createPublishedObjectStore(env, {
     request: async () => assert.fail("a refused delete must not reach storage"),
   })
   await assert.rejects(store.deleteStable("catalog/v3/index.json"), /Only a stable gene object/)

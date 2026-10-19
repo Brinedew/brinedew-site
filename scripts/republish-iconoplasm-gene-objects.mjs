@@ -220,7 +220,7 @@ export async function republishGeneObjects({
   let plan
   if (only) {
     // Named genes go as named. The CDN catalogue object is derived and can lag:
-    // the 600 genes the catalogue gained on 2026-10-09 had no card, so no build
+    // the 600 genes the catalogue gained on 2026-10-09 had no gene object, so no build
     // listed them. The route checks D1's catalogue itself and reports a gene it
     // doesn't carry as withdrawn.
     plan = [...new Set(only)].sort()
@@ -308,9 +308,12 @@ export async function republishGeneObjects({
         receipt.published += 1
         rewritten.push(symbol)
       } else if (result?.ok === true) {
-        // The catalog lists the gene but the publisher found no card, so the
+        // The catalog lists the gene but the publisher found no gene object, so the
         // old object, Tags included, was not rewritten.
-        receipt.failed.push({ symbol, error: "withdrawn: the publisher found no card for it" })
+        receipt.failed.push({
+          symbol,
+          error: "withdrawn: the publisher found no gene object for it",
+        })
       } else {
         receipt.failed.push({
           symbol,

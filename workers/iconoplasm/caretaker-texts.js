@@ -2,7 +2,7 @@
 // (migration 0125), next to the votes and roles. A gene's caretaker texts are rows of icono_caretaker_text_versions,
 // grouped into lines (`line_id`, one caretaker's run on one gene). The text the
 // gene uses is icono_gene_texts.chosen_caretaker_version_id, or the factory's own
-// text when that is empty or withdrawn (lib/iconoplasm-gene-text.js, which the card
+// text when that is empty or withdrawn (lib/iconoplasm-gene-text.js, which the stable gene object
 // and portrait requests read too).
 //
 // These routes replace the old authority's caretaker commands: a Bunny body per
@@ -640,13 +640,13 @@ export async function setCaretakerLineVisibility(env, { geneLocator, accountId, 
 const GENE = "/api/iconoplasm/caretaker/genes/:gene"
 
 // The panel's routes. `caretakerSession` resolves the signed-in Brinedew account
-// (it 401s without one); `publishGene` rebuilds the gene's published card.
+// (it 401s without one); `publishGene` rebuilds the gene's stable gene object.
 export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene }) {
   const session = async (c) =>
     (await requireBrowserSession(c.req.raw, c.env, caretakerSession)).accountId
 
-  // The card shows a caretaker text only while readers may see it, so it is
-  // rebuilt only when what readers see changes, not on every autosave of a
+  // The stable gene object carries a caretaker text only while readers may see it, so it
+  // is rebuilt only when what readers see changes, not on every autosave of a
   // hidden text. A failed rebuild tells the panel the public view is behind.
   async function publicText(env, symbol) {
     return publicGeneText(await readGeneText(rolesDb(env), symbol))

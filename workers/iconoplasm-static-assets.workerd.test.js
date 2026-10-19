@@ -138,7 +138,7 @@ test(
           method,
           redirect: "manual",
         })
-        assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
+        assert.equal(blotResponse.status, 599, "the exact blot handler owns the mutable alias")
         const portraitResponse = await runtime.dispatchFetch(
           "https://iconoplasm.test/portraits/v1/aa/" + "a".repeat(64) + "/full.webp",
           { method, redirect: "manual" },
@@ -289,7 +289,7 @@ test(
           method,
           redirect: "manual",
         })
-        assert.equal(blotResponse.status, 599, "the exact-card blot handler owns the mutable alias")
+        assert.equal(blotResponse.status, 599, "the exact blot handler owns the mutable alias")
       }
       for (const pathname of ["/search?q=TP53", "/api/auth/me"])
         assert.equal(

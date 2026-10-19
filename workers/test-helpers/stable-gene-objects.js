@@ -1,7 +1,7 @@
 // B-898 Stage 1: one fake Bunny Storage for the stable gene objects
-// (genes/v3/<SYMBOL>.json) that first-party and public card readers resolve.
+// (genes/v3/<SYMBOL>.json) that first-party and public readers resolve.
 // Tests seed objects by symbol; the fake answers the authenticated storage GET
-// the runtime's createPublishedCardObjectStore(env).readStable() issues, and
+// the runtime's createPublishedObjectStore(env).readStable() issues, and
 // records every storage read so a test can assert "one read per symbol".
 
 export const STABLE_GENE_STORAGE_ZONE = "test-zone"
@@ -21,9 +21,9 @@ export function stableGeneObjectPath(symbol) {
   return `/${STABLE_GENE_STORAGE_ZONE}/genes/v3/${String(symbol).toUpperCase()}.json`
 }
 
-// A stable object is the projected card record plus the candidate pool and
+// A stable object is the projected gene record plus the candidate pool and
 // publication stamp (composeStableGeneObject). Tests build one from the same
-// payload the old card-catalog fixtures carried.
+// payload the old card-catalog fixtures (the retired KV tree) carried.
 export function stableGeneObjectFromRecord(record, overrides = {}) {
   return {
     api_version: "v1",
