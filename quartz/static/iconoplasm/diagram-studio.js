@@ -28,16 +28,16 @@ import {
   relationshipKind,
   removeDiagramItem,
   updateDiagramItem,
-} from "./diagram-document.js?v=ae8ed02849975cc2"
+} from "./diagram-document.js?v=128a1dcb637288b1"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=86aca2cd81e8a3c5"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=f2e7077bc0436804"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
   diagramTemplate,
   templateSymbols,
   templateThumbnail,
-} from "./diagram-templates.js?v=04923f4d2ca1ba10"
+} from "./diagram-templates.js?v=220602dd298fbe51"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=0fd7513f3d3593c8"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible

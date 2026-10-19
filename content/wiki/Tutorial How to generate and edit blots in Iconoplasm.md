@@ -1,14 +1,14 @@
 ---
-title: "Tutorial: How to generate and edit blots in Iconoplasm"
+title: "Tutorial: How to generate and edit portraits in Iconoplasm"
 tags:
   - content/wiki
 date: 2026-06-14
 draft: false
 ---
 
-# Tutorial: How to generate and edit blots in Iconoplasm
+# Tutorial: How to generate and edit portraits in Iconoplasm
 
-This tutorial walks through the steps to request a new character portrait ("blot") for a gene on Iconoplasm.
+This tutorial walks through the steps to request a new character portrait for a gene on Iconoplasm.
 
 It's written for people unfamiliar with how image generation services work. It will take around 10 minutes of your time.
 
@@ -197,7 +197,7 @@ Now that you have a key from one of the providers above, save it in Iconoplasm s
 
 ## 4. Configure your emulsion
 
-The emulsion is a short text prompt (max 140 characters) that sets the visual style and atmosphere for every blot you generate.
+The emulsion is a short text prompt (max 140 characters) that sets the visual style and atmosphere for every portrait you generate.
 
 1. On the same Settings page, under **Iconoplasm** → **Emulsion**, find the **Text** field.
 2. Enter a description of the rendering style you want for the new images you request — for example: *"Real casual chaotic iphone snapshot photo from 2010s."*
@@ -210,10 +210,10 @@ Your saved emulsion appears in the **Load version** dropdown. You can maintain m
 2. Search for a gene by symbol or name, or browse the archive.
 3. Click a gene card, or go directly to `/gene/SYMBOL` (e.g. [iconoplasm.brinedew.bio/gene/INS](https://iconoplasm.brinedew.bio/gene/INS)).
 
-## 6. Generate a new candidate blot
+## 6. Generate a new candidate portrait
 
-1. Under the canonical blot, click **New candidate** button in the bottom right.
-   ![[image-37.png|Canonical blot with a new button candidate in the bottom right.]]
+1. Under the current portrait, click **New candidate** button in the bottom right.
+   ![[image-37.png|Current portrait with a new button candidate in the bottom right.]]
 2. You will see a menu for requesting a **new candidate**:
    ![[image-38.png|New candidate menu]] 
 3. The **Provider** selector should show your newly added provider (e.g. **OpenAI API · gpt-image-2**).
@@ -225,21 +225,21 @@ Your saved emulsion appears in the **Load version** dropdown. You can maintain m
 
 If your provider requires billing that hasn't been set up yet, the dialog will show: **"Billing hard limit has been reached."**
 
-## 7. Edit an existing candidate blot
+## 7. Edit an existing candidate portrait
 
-1. Click the **Edit blot** pencil icon under the canonical blot or under any candidate blot.
+1. Click the **Edit portrait** pencil icon under the current portrait or under any candidate portrait.
 2. The edit dialog will open, showing what characteristics you can request to edit.
-   ![[image-39.png|Edit blot menu. Edit button is in the lower left corner.]]
+   ![[image-39.png|Edit portrait menu. Edit button is in the lower left corner.]]
 3. Set checkmarks in the fields you want to edit. E.g. if the character looks bright green, but the "Surface tone" is dark, tap the "Surface tone" checkmark. You can set multiple checkmarks at once.
-4. Click **Edit** to request an edited blot.
+4. Click **Edit** to request an edited portrait.
 5. Wait 1-2 minutes for the new image to appear in the same dialog box. Drag the before/after slider to judge the results.
 6. Click **Publish** to add the new image to the gene's candidate list.
 
 ## 8. Vote on candidates
 
-- Click the checkmark (**Approve blot**) to upvote a candidate.
-- Click the X (**Reject blot**) to downvote it.
-- The canonical blot is the one with the highest approval score.
+- Click the checkmark (**Approve portrait**) to upvote a candidate.
+- Click the X (**Reject portrait**) to downvote it.
+- The current portrait is the one with the highest approval score.
 
 
 ## Model comparison

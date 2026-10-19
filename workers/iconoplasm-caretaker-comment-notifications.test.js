@@ -452,7 +452,10 @@ test("a positive preferred canonical loss enqueues and delivers one deduplicated
     })
     assert.equal(delivered.delivered, 1)
     assert.equal(messages.length, 1)
-    assert.match(messages[0].content, /10x preferred blot for \*\*TP53\*\* is no longer canonical/)
+    assert.match(
+      messages[0].content,
+      /10x preferred portrait for \*\*TP53\*\* is no longer current/,
+    )
     assert.deepEqual(messages[0].allowed_mentions, { parse: [] })
     assert.equal(
       primary.raw

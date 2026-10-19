@@ -160,7 +160,7 @@ ${symbols
 
 const iconoplasmLlms = `# Iconoplasm
 
-Iconoplasm maps human-gene biology onto memorable visual character cards called blots.
+Iconoplasm maps human-gene biology onto memorable character portraits. A gene's blot is its portrait with the gene's name and symbol painted into the image: the picture to reuse.
 
 - [Published gene-card archive](https://iconoplasm.brinedew.bio/)
 - [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)

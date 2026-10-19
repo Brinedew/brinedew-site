@@ -6,7 +6,7 @@ import {
   addTextNode,
   connectGeneNodes,
   createDiagramDocument,
-} from "./diagram-document.js?v=ae8ed02849975cc2"
+} from "./diagram-document.js?v=128a1dcb637288b1"
 
 // B-1050: the canvas templates. Each one is a kind of chart from the owner's
 // own writing, so the names are the owner's:

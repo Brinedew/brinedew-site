@@ -9,8 +9,8 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=1ad3bc21ce006f20"
-import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=30e670f98fbabf8f"
+import { createRequestInbox } from "./request-inbox.js?v=8aa9e9accf7dd374"
+import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
@@ -55,7 +55,7 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=1c095f38e5681270"
+} from "./diagram-studio.js?v=f7aaa5b67057ce80"
 import { iconoplasmPublicationReader } from "./publication-reader.js?v=0fd7513f3d3593c8"
 import {
   ICONOPLASM_HOME_TITLE,
@@ -138,7 +138,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px"><path d="M12.5 4 6.5 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   // Icon set used by the candidate action rail. Kept inline as `currentColor` SVGs so the rail
   // can adopt cream/lab-label or default theming without a separate icon font load.
-  // Source: B-467 (compact action rail for candidate blots) — replace earlier text buttons
+  // Source: B-467 (compact action rail for candidate portraits) — replace earlier text buttons
   // ("Remove", "Copy to gene") with consistent circular icon controls.
   var ICONO_TRASH_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M4.5 6h11M8.5 9.25v6M11.5 9.25v6M5.75 6 6.3 16.45a1.5 1.5 0 0 0 1.5 1.42h4.4a1.5 1.5 0 0 0 1.5-1.42L14.25 6M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
@@ -1163,10 +1163,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     navigate: function (href, link) {
       navigateTo(href, link)
     },
-    // B-996: the caretaker's blot print needs the gene's portrait and molecular
+    // B-996: the caretaker film needs the gene's portrait and molecular
     // weight. Signed-in caretakers only, once per symbol, through the same static
     // gene detail the page reads (no extra request when the gene page is open).
-    loadCaretakerBlot: function (symbol) {
+    loadCaretakerFilm: function (symbol) {
       return fetchGeneDetail(symbol).then(function (detail) {
         if (!detail) return null
         var kda = Number(detail.molecular_weight_kda)
@@ -1949,7 +1949,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(portraitUrl) +
       '" alt="' +
       esc(key) +
-      ' blot" loading="eager" decoding="async" fetchpriority="low" width="' +
+      ' portrait" loading="eager" decoding="async" fetchpriority="low" width="' +
       dims.width +
       '" height="' +
       dims.height +
@@ -2888,7 +2888,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var page = String((iconoSidebarState && iconoSidebarState.page) || "home")
     // B-996: the caretaking block belongs to the caretaker, so it shows on every
     // page. It used to show on gene pages only, and a caretaker on the archive
-    // never saw their blot print. Its data comes from the immutable gene file.
+    // never saw their caretaker film. Its data comes from the immutable gene file.
     var caretaker = requestInbox.caretakerPanelMarkup()
     if (page === "404") {
       return (
@@ -3979,7 +3979,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     options,
   ) {
     var opts = options || {}
-    var portraitAlt = String(opts.portraitAlt || "").trim() || normalizedSymbol(symbol) + " blot"
+    var portraitAlt =
+      String(opts.portraitAlt || "").trim() || normalizedSymbol(symbol) + " portrait"
     return IconoCardShared.renderLabLabelPortraitMediaHtml(
       symbol,
       portraitUrl,
@@ -4039,7 +4040,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           mode: "brick",
           layoutVariant: litLayoutVariantForCard(resolvedCardVariant),
           mobileReview: isMobileLabelReviewEnabled(),
-          portraitAlt: g.symbol + " blot",
+          portraitAlt: g.symbol + " portrait",
           portraitSrc: portraitUrl,
           titleHref: href,
           titleLinkAttrs: geneLinkAttrs,
@@ -4091,11 +4092,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               esc(portraitFullUrl) +
               '" data-icono-pswp-alt="' +
               esc(g.symbol) +
-              ' blot" data-pswp-width="' +
+              ' portrait" data-pswp-width="' +
               dims.width +
               '" data-pswp-height="' +
               dims.height +
-              '" aria-label="Open full-size blot for ' +
+              '" aria-label="Open full-size portrait for ' +
               esc(g.symbol) +
               '">' +
               '<img class="iconoplasm-tooltip-portrait-img" src="' +
@@ -4104,7 +4105,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               esc(g.symbol) +
               // Keep brick portraits eager once a card is rendered. Lazy here made fast mobile
               // scroll show empty portrait boxes for a beat before the browser picked them up.
-              ' blot" loading="eager" decoding="async" fetchpriority="' +
+              ' portrait" loading="eager" decoding="async" fetchpriority="' +
               (cardIndex < 6 ? "high" : "low") +
               '" width="' +
               dims.width +
@@ -4114,7 +4115,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               "</button>"
             : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
           '<div class="iconoplasm-tooltip-portrait-fallback">' +
-          '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
+          '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
           '<div class="iconoplasm-tooltip-portrait-symbol">' +
           esc(g.symbol) +
           "</div>" +
@@ -4229,7 +4230,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   "</span>"
               : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
                   '<div class="iconoplasm-tooltip-portrait-fallback">' +
-                  '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
+                  '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
                   '<div class="iconoplasm-tooltip-portrait-symbol">' +
                   esc(g.symbol) +
                   "</div>" +
@@ -4268,7 +4269,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             "</span>"
           : '<img class="iconoplasm-tooltip-portrait-img" alt="">' +
             '<div class="iconoplasm-tooltip-portrait-fallback">' +
-            '<div class="iconoplasm-tooltip-portrait-status">Blot pending</div>' +
+            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
             '<div class="iconoplasm-tooltip-portrait-symbol">' +
             esc(g.symbol) +
             "</div>" +
@@ -4385,7 +4386,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       isGeneLead
         ? normalizedSymbol(genePayload.symbol) +
             " character portrait used inside the Iconoplasm gene blot"
-        : normalizedSymbol(genePayload.symbol) + " blot",
+        : normalizedSymbol(genePayload.symbol) + " portrait",
     )
     card.style.setProperty("--width", String(dims.width))
     card.style.setProperty("--height", String(dims.height))
@@ -5475,7 +5476,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               }
             })
             .catch(function (error) {
-              var message = String((error && error.message) || "Could not copy candidate blot.")
+              var message = String((error && error.message) || "Could not copy candidate portrait.")
               if (/log in|auth/i.test(message))
                 message += " Use Discord Login first, then try again."
               setCopyStatus(message, "error")
@@ -5556,7 +5557,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var previews = Array.isArray(option && option.preview_assets) ? option.preview_assets : []
     if (!previews.length) {
       if (option && option.is_preallocated_without_preview) {
-        return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">First blot</span></span>'
+        return '<span class="icono-request-option-strip icono-request-option-strip--empty"><span class="icono-request-option-empty">First portrait</span></span>'
       }
       return ""
     }
@@ -5572,7 +5573,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<img class="icono-thumbnail-viewport-image" src="' +
         esc(url) +
         '" alt="' +
-        esc(String(asset.gene_symbol || "Example") + " example blot") +
+        esc(String(asset.gene_symbol || "Example") + " example portrait") +
         '" loading="lazy" decoding="async">' +
         "</span>"
     }
@@ -5739,9 +5740,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
           .join("")
       : '<span class="icono-request-card-empty">' +
-        (item.is_preallocated_without_preview ? "First blot" : "No blots yet") +
+        (item.is_preallocated_without_preview ? "First portrait" : "No portraits yet") +
         "</span>"
-    // Blots are the published portraits: the genes whose canonical portrait
+    // The count is of blots: the genes whose current portrait
     // the style drew now, across all its codes, not every image ever drawn in
     // it (owner, 2026-10-16). The worker counts them from the same
     // trigger-kept table as the pictures (migration 0130); the rollups'
@@ -5828,7 +5829,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-request-direct-result-placeholder" data-icono-request-direct-result-placeholder>' +
       "<span>No candidate yet</span>" +
       "</div>" +
-      '<img data-icono-request-direct-image alt="Generated candidate blot" loading="eager" hidden>' +
+      '<img data-icono-request-direct-image alt="Generated candidate portrait" loading="eager" hidden>' +
       "</div>" +
       '<div class="icono-request-direct-controls">' +
       '<div class="icono-request-direct-provider-row">' +
@@ -6109,7 +6110,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var visionId = String((sourceItem && sourceItem.vision_id) || "").trim()
     var sourceWidth = Number((sourceItem && sourceItem.width) || 0)
     var sourceHeight = Number((sourceItem && sourceItem.height) || 0)
-    var label = source === "candidate" ? "Edit candidate blot" : "Edit blot"
+    var label = source === "candidate" ? "Edit candidate portrait" : "Edit portrait"
     return (
       '<section class="icono-gene-request-surface icono-gene-edit-panel">' +
       '<button type="button" class="icono-candidate-action-btn icono-canonical-edit-btn icono-image-edit-open" data-icono-edit-source="' +
@@ -6181,7 +6182,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderImageEditDialogMarkup() {
     return dialogMarkup({
       id: "icono-image-edit-dialog",
-      title: "Edit blot",
+      title: "Edit portrait",
       size: "wide",
       className: "icono-image-edit-dialog",
       attributes: "data-icono-image-edit-dialog",
@@ -6189,7 +6190,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<div class="icono-image-edit-shell">' +
         '<div class="icono-image-edit-body">' +
         '<section class="icono-image-edit-preview">' +
-        '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source blot" loading="eager"></div>' +
+        '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source portrait" loading="eager"></div>' +
         '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
         '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
         '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
@@ -6202,7 +6203,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<sl-select label="Editing API" hoist data-icono-image-edit-provider></sl-select>' +
         '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
         '<section class="icono-image-edit-adjustments" aria-label="Adjustments">' +
-        '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source blot only</span></div>' +
+        '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source portrait only</span></div>' +
         '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="sex"><sl-checkbox data-icono-image-edit-adjustment="sex">Sex</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="sex"></span></div>' +
         '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="age_years"><sl-checkbox data-icono-image-edit-adjustment="age_years">Age</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="age_years"></span></div>' +
         '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="mass_kg"><sl-checkbox data-icono-image-edit-adjustment="mass_kg">Mass</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="mass_kg"></span></div>' +
@@ -6385,7 +6386,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       imageEditDialogState.providers = []
       imageEditDialogState.supportedProviders = []
       imageEditDialogState.lastUsed = null
-      imageEditSetStatus("Sign in to edit blots.", "warn")
+      imageEditSetStatus("Sign in to edit portraits.", "warn")
       renderImageEditProviders()
       return Promise.resolve()
     }
@@ -6412,7 +6413,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             ? "Image editing provider storage is not configured."
             : imageEditDialogState.providers.length
               ? ""
-              : "Set up a saved image editing provider before editing blots.",
+              : "Set up a saved image editing provider before editing portraits.",
           imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length
             ? ""
             : "warn",
@@ -6472,7 +6473,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function imageEditContextValueLabel(kind, value, context) {
-    if (kind === "remove_ai_generation_errors") return "Uses the source blot only"
+    if (kind === "remove_ai_generation_errors") return "Uses the source portrait only"
     if (kind === "age_years") return String(value) + " years"
     if (kind === "mass_kg") return String(value) + " kg"
     if (kind === "surface_tone_hex") {
@@ -6598,7 +6599,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
-    setDialogTitle(dialog, source.source === "candidate" ? "Edit candidate blot" : "Edit blot")
+    setDialogTitle(
+      dialog,
+      source.source === "candidate" ? "Edit candidate portrait" : "Edit portrait",
+    )
     if (sourceImg) {
       var syncNaturalRatio = function () {
         if (!source.width && sourceImg.naturalWidth > 0) source.width = sourceImg.naturalWidth
@@ -6607,7 +6611,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       sourceImg.onload = syncNaturalRatio
       portraitDelivery.bind(sourceImg, source.image_url || "")
-      sourceImg.alt = source.symbol + " " + source.source + " blot"
+      sourceImg.alt = source.symbol + " " + source.source + " portrait"
       if (sourceImg.complete) syncNaturalRatio()
     }
     applyImageEditAspectRatio(dialog, source)
@@ -6660,7 +6664,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.loading = true
     imageEditDialogState.job = null
     updateImageEditButtons()
-    imageEditSetStatus("Editing blot...", "")
+    imageEditSetStatus("Editing portrait...", "")
     var body = {
       provider_id: providerId,
       source_gene_symbol: source.symbol,
@@ -6774,7 +6778,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!state.job || !state.job.id) return
     state.loading = true
     updateImageEditButtons()
-    imageEditSetStatus("Publishing candidate blot...", "")
+    imageEditSetStatus("Publishing candidate portrait...", "")
     fetchAuthedJSON(
       "/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(state.job.id) + "/publish",
       {
@@ -7371,7 +7375,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!requestDirectState.job || !requestDirectState.job.id) return
         requestDirectState.loading = true
         updateDirectGenerationButtons()
-        setStatus("Publishing candidate blot...", "")
+        setStatus("Publishing candidate portrait...", "")
         fetchAuthedJSON(
           "/api/iconoplasm/candidate-generation/jobs/" +
             encodeURIComponent(requestDirectState.job.id) +
@@ -7382,7 +7386,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         )
           .then(function (payload) {
             requestDirectState.job = payload && payload.job ? payload.job : requestDirectState.job
-            setStatus("Published as a new candidate blot.", "success")
+            setStatus("Published as a new candidate portrait.", "success")
             var root = document.getElementById(ROOT_ID)
             if (root) renderGene(root, symbol, { forceFresh: true })
           })
@@ -8638,7 +8642,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           ? galleryState.total.toLocaleString() +
             " human genes, " +
             galleryState.publishedTotal.toLocaleString() +
-            " AI blots"
+            " AI portraits"
           : "Loading gallery..."
       } else if (galleryState.total) {
         countEl.textContent =
@@ -9230,7 +9234,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             esc(portraitUrl) +
             '" alt="' +
             esc(g.symbol) +
-            ' blot" loading="eager" decoding="async">' +
+            ' portrait" loading="eager" decoding="async">' +
             "</span>"
           : '<span class="icono-search-result-media icono-search-result-media--fallback" style="background:' +
             esc(g.color) +
@@ -9300,7 +9304,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             esc(portraitUrl) +
             '" alt="' +
             esc(g.symbol) +
-            ' blot" loading="' +
+            ' portrait" loading="' +
             (cardIndex < 12 ? "eager" : "lazy") +
             '" decoding="async" width="' +
             dims.width +
@@ -9347,7 +9351,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         mode: "brick",
         layoutVariant: "image-only",
         mobileReview: false,
-        portraitAlt: g.symbol + " blot",
+        portraitAlt: g.symbol + " portrait",
         portraitSrc: portraitUrl,
         titleHref: href,
         titleLinkAttrs: geneLinkAttrs,
@@ -9515,9 +9519,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(sampleLabel) +
           '" data-icono-emulsion-label="' +
           esc(emulsionInfo.primary) +
-          '" aria-label="Remove candidate blot for ' +
+          '" aria-label="Remove candidate portrait for ' +
           esc(genePayload.symbol) +
-          '" title="Remove candidate blot">' +
+          '" title="Remove candidate portrait">' +
           ICONO_TRASH_ICON +
           "<span>Remove</span>" +
           "</button>"
@@ -9543,11 +9547,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(String(sourceVoteCount(candidate, "image_score"))) +
           '"' +
           imageEditSourceAdjustmentContextAttr(genePayload, candidate) +
-          ' aria-label="Edit candidate blot for ' +
+          ' aria-label="Edit candidate portrait for ' +
           esc(genePayload.symbol) +
-          '" title="Edit candidate blot">' +
+          '" title="Edit candidate portrait">' +
           ICONO_EDIT_ICON +
-          "<span>Edit candidate blot</span>" +
+          "<span>Edit candidate portrait</span>" +
           "</button>"
         : ""
       html +=
@@ -9564,21 +9568,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         esc(fullUrl) +
         '" data-icono-pswp-alt="' +
         esc(genePayload.symbol) +
-        ' candidate blot" data-pswp-width="' +
+        ' candidate portrait" data-pswp-width="' +
         width +
         '" data-pswp-height="' +
         height +
-        '" aria-label="Open candidate blot for ' +
+        '" aria-label="Open candidate portrait for ' +
         esc(genePayload.symbol) +
         '">' +
         '<span class="icono-candidate-media">' +
         '<img src="' +
         esc(mediumUrl) +
-        '" data-iconoplasm-role="candidate-blot" data-gene-symbol="' +
+        '" data-iconoplasm-role="candidate-portrait" data-gene-symbol="' +
         esc(genePayload.symbol) +
         '" alt="' +
         esc(genePayload.symbol) +
-        ' candidate blot" loading="lazy" decoding="async" fetchpriority="low' +
+        ' candidate portrait" loading="lazy" decoding="async" fetchpriority="low' +
         '" width="' +
         width +
         '" height="' +
@@ -9624,9 +9628,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '">' +
         '<input class="icono-search-input icono-request-picker-input" data-icono-candidate-copy-query type="text" autocomplete="off" placeholder="target gene symbol" aria-label="Target gene">' +
         '<input type="hidden" data-icono-candidate-copy-target value="">' +
-        '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy blot to selected gene" title="Copy blot">' +
+        '<button type="submit" class="icono-request-inline-submit icono-candidate-copy-submit" aria-label="Copy portrait to selected gene" title="Copy portrait">' +
         ICONO_SEND_ICON +
-        '<span class="icono-candidate-copy-submit-label">Copy blot</span>' +
+        '<span class="icono-candidate-copy-submit-label">Copy portrait</span>' +
         "</button>" +
         '<div class="icono-search-results icono-request-results" data-icono-candidate-copy-results hidden></div>' +
         '<div data-icono-candidate-copy-note hidden style="font-size:0.92rem;"></div>' +
@@ -10011,7 +10015,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function hydrateServerCandidateActionIslands(container, genePayload) {
     if (!container || !genePayload) return
-    // The menu changes with sign-in (Edit candidate blot) and with admin (Remove),
+    // The menu changes with sign-in (Edit candidate portrait) and with admin (Remove),
     // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
     // answered after the first draw kept the guest menu (owner, 2026-10-19).
     var signature =
@@ -11099,7 +11103,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // the gene name (bottom-left) + symbol (bottom-right) caption, and the container-
   // query type scaling all match the archive cards instead of being reinvented.
   // The medium portrait variant is used (the thumb variant is a 256x256 square crop).
-  function renderClanBlotMarkup(member) {
+  function renderClanMemberTileMarkup(member) {
     var item = member || {}
     var symbol = String(item.symbol || "")
     var safeSymbol = esc(symbol)
@@ -11113,7 +11117,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(photo) +
           '" alt="' +
           safeSymbol +
-          ' blot" loading="lazy" decoding="async">'
+          ' portrait" loading="lazy" decoding="async">'
         : '<div class="icono-image-only-fallback" aria-hidden="true"></div>') +
       "</div>"
     var overlay =
@@ -11170,7 +11174,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // Foot line: total recorded, plus a page indicator only when the clan spans more
-  // than one page of blots (so small clans stay terse).
+  // than one page of tiles (so small clans stay terse).
   function clanFootText(total, page, totalPages) {
     var base = total + " recorded"
     if (totalPages > 1) base += " · page " + (page + 1) + " of " + totalPages
@@ -11183,12 +11187,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // so a clan with hundreds of discoveries never dumps them all into one card.
   // Both arrows are ALWAYS present; the non-navigable one (prev on the first page,
   // next on the last) is shown in a disabled state rather than hidden.
-  function renderRevealedClanCardMarkup(clan) {
+  function renderRevealedClanMarkup(clan) {
     var members = clan && Array.isArray(clan.members) ? clan.members : []
     var discovered = Number(clan && clan.discovered_count) || members.length
     var totalPages = Math.max(1, Math.ceil(discovered / ICONO_CLAN_PAGE_SIZE))
     var clanName = String((clan && clan.clan) || "")
-    var blots = members.map(renderClanBlotMarkup).join("")
+    var tiles = members.map(renderClanMemberTileMarkup).join("")
     var nextDisabled = totalPages > 1 ? "" : " disabled"
     return (
       '<article class="icono-clan" data-clan="' +
@@ -11207,7 +11211,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-clan-reel">' +
       '<button type="button" class="icono-clan-nav icono-clan-prev" data-icono-clan-prev disabled aria-label="Previous members">&#8249;</button>' +
       '<div class="icono-clan-strip" role="list" data-icono-clan-strip>' +
-      blots +
+      tiles +
       "</div>" +
       '<button type="button" class="icono-clan-nav icono-clan-next" data-icono-clan-next' +
       nextDisabled +
@@ -11244,7 +11248,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var page = Number(data.page) || 0
         var totalPages = Math.max(1, Number(data.total_pages) || 1)
         var totalMembers = Number(data.total_members) || members.length
-        strip.innerHTML = members.map(renderClanBlotMarkup).join("")
+        strip.innerHTML = members.map(renderClanMemberTileMarkup).join("")
         syncImageOnlyLoadState(strip)
         card.setAttribute("data-page", String(page))
         card.setAttribute("data-total-pages", String(totalPages))
@@ -11369,7 +11373,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!grid || getRoute().page !== "clans") return
       var end = Math.min(idx + CHUNK, revealed.length)
       var chunk = ""
-      for (; idx < end; idx++) chunk += renderRevealedClanCardMarkup(revealed[idx])
+      for (; idx < end; idx++) chunk += renderRevealedClanMarkup(revealed[idx])
       grid.insertAdjacentHTML("beforeend", chunk)
       syncImageOnlyLoadState(grid)
     }

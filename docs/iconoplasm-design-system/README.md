@@ -129,7 +129,7 @@ The metaphor decides which voice a text takes. On real lab paperwork, everything
 
 **Backgrounds / texture.** Subtle, never flashy. A faint **fractal-noise SVG grain** overlays the simple-tooltip surface. The lab sheet uses hairline **ruled column lines** and gentle vertical paper gradients. Portraits are full illustrated character art (warm, painterly, varied palettes) sitting in a bordered "specimen viewport." **No gradients-as-decoration, no glossy web affordances.**
 
-**Imagery vibe.** Gene portraits are rich, characterful illustrations — each gene rendered as a *person/creature* (e.g. RHO as an armored knight in a dark hall; insulin as a green frog-witch on a barrel). Painterly, often moody/cinematic, full color. Blot-only cards crop them 384×512 (3:4) and add a bottom protection gradient with the symbol + lowercase name overlaid.
+**Imagery vibe.** Gene portraits are rich, characterful illustrations — each gene rendered as a *person/creature* (e.g. RHO as an armored knight in a dark hall; insulin as a green frog-witch on a barrel). Painterly, often moody/cinematic, full color. Image tiles (the "Blot only" style) crop them 384×512 (3:4) and add a bottom protection gradient with the symbol + lowercase name overlaid.
 
 **Animation.** Restrained. The tooltip fades + rises subtly (`opacity` + `translateY(8px)→0` + `scale(.96)→1`, ~260ms, `cubic-bezier(0.16,1,0.3,1)`). The comment in `content.css` is explicit: **"Animation: fade only, no movement"** for highlights. No bounces. Mobile dossier opens with a measured `cubic-bezier(0.22,1,0.36,1)` height transition.
 
