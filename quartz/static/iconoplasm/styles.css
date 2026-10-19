@@ -5537,7 +5537,7 @@ a.icono-clan-acc:hover {
 a.icono-clan-ae:hover {
   text-decoration: underline;
 }
-/* Reel: prev arrow, a single page of cards, next arrow */
+/* Reel: prev arrow, a single page of member tiles, next arrow */
 .icono-clan-reel {
   display: flex;
   align-items: stretch;

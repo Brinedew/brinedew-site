@@ -11103,7 +11103,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // the gene name (bottom-left) + symbol (bottom-right) caption, and the container-
   // query type scaling all match the archive cards instead of being reinvented.
   // The medium portrait variant is used (the thumb variant is a 256x256 square crop).
-  function renderClanCardMarkup(member) {
+  function renderClanMemberTileMarkup(member) {
     var item = member || {}
     var symbol = String(item.symbol || "")
     var safeSymbol = esc(symbol)
@@ -11174,7 +11174,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // Foot line: total recorded, plus a page indicator only when the clan spans more
-  // than one page of cards (so small clans stay terse).
+  // than one page of tiles (so small clans stay terse).
   function clanFootText(total, page, totalPages) {
     var base = total + " recorded"
     if (totalPages > 1) base += " · page " + (page + 1) + " of " + totalPages
@@ -11187,12 +11187,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // so a clan with hundreds of discoveries never dumps them all into one card.
   // Both arrows are ALWAYS present; the non-navigable one (prev on the first page,
   // next on the last) is shown in a disabled state rather than hidden.
-  function renderRevealedClanCardMarkup(clan) {
+  function renderRevealedClanMarkup(clan) {
     var members = clan && Array.isArray(clan.members) ? clan.members : []
     var discovered = Number(clan && clan.discovered_count) || members.length
     var totalPages = Math.max(1, Math.ceil(discovered / ICONO_CLAN_PAGE_SIZE))
     var clanName = String((clan && clan.clan) || "")
-    var cards = members.map(renderClanCardMarkup).join("")
+    var tiles = members.map(renderClanMemberTileMarkup).join("")
     var nextDisabled = totalPages > 1 ? "" : " disabled"
     return (
       '<article class="icono-clan" data-clan="' +
@@ -11211,7 +11211,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-clan-reel">' +
       '<button type="button" class="icono-clan-nav icono-clan-prev" data-icono-clan-prev disabled aria-label="Previous members">&#8249;</button>' +
       '<div class="icono-clan-strip" role="list" data-icono-clan-strip>' +
-      cards +
+      tiles +
       "</div>" +
       '<button type="button" class="icono-clan-nav icono-clan-next" data-icono-clan-next' +
       nextDisabled +
@@ -11248,7 +11248,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var page = Number(data.page) || 0
         var totalPages = Math.max(1, Number(data.total_pages) || 1)
         var totalMembers = Number(data.total_members) || members.length
-        strip.innerHTML = members.map(renderClanCardMarkup).join("")
+        strip.innerHTML = members.map(renderClanMemberTileMarkup).join("")
         syncImageOnlyLoadState(strip)
         card.setAttribute("data-page", String(page))
         card.setAttribute("data-total-pages", String(totalPages))
@@ -11373,7 +11373,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!grid || getRoute().page !== "clans") return
       var end = Math.min(idx + CHUNK, revealed.length)
       var chunk = ""
-      for (; idx < end; idx++) chunk += renderRevealedClanCardMarkup(revealed[idx])
+      for (; idx < end; idx++) chunk += renderRevealedClanMarkup(revealed[idx])
       grid.insertAdjacentHTML("beforeend", chunk)
       syncImageOnlyLoadState(grid)
     }
