@@ -1,5 +1,9 @@
 # Website project rules
 
+## Iconoplasm words
+
+`docs/ICONOPLASM_GLOSSARY.md` defines the picture words once. A **portrait** is a character image with no text on it; a **blot** is a portrait with the gene's full name and symbol painted into the same file (owner, 2026-10-19). Use them exactly; when code or an issue says "blot" for a picture without text, rename it.
+
 ## Recovery ownership fence: RECOVERY-001
 
 The executor owns delivery through a verified user operation. Refusal is
