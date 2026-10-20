@@ -9,8 +9,8 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=8aa9e9accf7dd374"
-import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=e45af572f333a3d8"
+import { createRequestInbox } from "./request-inbox.js?v=865fadf418dd27a1"
+import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=155a9d5dde12e030"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
   createEmulsionFavoriteStore,
@@ -635,6 +635,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             },
             roleChanged: function () {
               refreshCaretakerRole(container, genePayload)
+            },
+            requestsChanged: function () {
+              void requestInbox.refresh()
             },
           })
           return

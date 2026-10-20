@@ -19,8 +19,9 @@
 //     the asker withdraws, or a cross-site page does either;
 // 10. a stale page sends a request against a caretaker who has changed;
 // 11. a queued message goes out after it stopped being true;
-// 12. the count of requests waiting on a caretaker (caretaker/me, for the
-//     sidebar) includes an answered or expired one, or another gene's.
+// 12. the count of requests waiting on a caretaker, or the faces beside it
+//     (caretaker/me, for the sidebar), includes an answered or expired one,
+//     or another gene's.
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -488,16 +489,27 @@ test("7, 11, 12: a rejection keeps its asker away from that gene for 14 days, an
   const h = harness(t)
   // 12: the count counts what still waits on the caretaker, and nothing once it
   // is answered or expired.
-  const waiting = async (account) =>
-    (await readCaretakerCoordination(h.db, { accountId: account })).caretaker.pending_request_count
+  const sidebar = async (account) =>
+    (await readCaretakerCoordination(h.db, { accountId: account, accountDb: h.accounts })).caretaker
+  const waiting = async (account) => (await sidebar(account)).pending_request_count
+  // Bob has no picture of his own, so his face is Discord's default for his id,
+  // at Discord's own address (the sidebar is signed-in only).
+  const bobFace = {
+    name: "bob",
+    avatar_url: `https://cdn.discordapp.com/embed/avatars/${(BigInt(discordIdOf(BOB)) >> 22n) % 6n}.png`,
+  }
   await h.claim("MFNG", ALICE)
   await h.claim("WEE1", CAROL)
   assert.equal(await waiting(ALICE), 0)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [])
   const sent = await h.ask("MFNG", BOB)
   assert.equal(await waiting(ALICE), 1)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [bobFace])
   assert.equal(await waiting(CAROL), 0, "only the gene asked for counts it")
+  assert.deepEqual((await sidebar(CAROL)).request_faces, [])
   const rejected = await h.decide("MFNG", sent.body.request_id, "reject", ALICE)
   assert.equal(await waiting(ALICE), 0)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [], "an answered request loses its face")
   assert.equal(rejected.body.status, "rejected")
   assert.equal((await h.decide("MFNG", sent.body.request_id, "reject", ALICE)).body.replayed, true)
   assert.equal((await h.accept("MFNG", sent.body.request_id)).status, 409)
@@ -515,6 +527,7 @@ test("7, 11, 12: a rejection keeps its asker away from that gene for 14 days, an
 
   t.mock.timers.tick(14 * DAY + MINUTE)
   assert.equal(await waiting(CAROL), 0, "an expired request stops counting before anyone reads it")
+  assert.deepEqual((await sidebar(CAROL)).request_faces, [])
   assert.deepEqual((await h.page("WEE1", CAROL)).incoming.requests, [], "Bob's request expired")
   assert.equal((await h.accept("WEE1", elsewhere.body.request_id, CAROL)).status, 409)
   const later = await h.ask("MFNG", BOB)
