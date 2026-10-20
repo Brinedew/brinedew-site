@@ -9,8 +9,8 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=bd9280f35cfd8a1c"
-import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=3cbd1e4a0f584f13"
+import { createRequestInbox } from "./request-inbox.js?v=8aa9e9accf7dd374"
+import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=e45af572f333a3d8"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
   createEmulsionFavoriteStore,
@@ -636,9 +636,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             roleChanged: function () {
               refreshCaretakerRole(container, genePayload)
             },
-            requestsChanged: function () {
-              void requestInbox.refresh()
-            },
           })
           return
         }
@@ -1238,11 +1235,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           kda: kda > 0 ? kda : 0,
         }
       })
-    },
-    openGeneRequests: function (symbol, href) {
-      if (window.location.pathname !== String(href).split("#")[0]) return false
-      window.history.replaceState(window.history.state, "", href)
-      return geneRequestControls.reopen(symbol)
     },
   })
 

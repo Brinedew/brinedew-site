@@ -25,10 +25,10 @@ function requirePrimaryDb(db) {
 // B-1065 B2b: a caretaker's own role, its unread gene comments and its
 // supervote, read from the role row (icono_caretaker_assignments) in the main
 // database. Until now they came from a copy of every role made by an event
-// replay. B-1137: also the requests for the gene waiting on this caretaker, so
-// the sidebar says so wherever they are on the site, the way Discord's Pending
-// tab or Figma's bell does; the Discord message is only the nudge for people who
-// aren't here.
+// replay. B-1137: also how many requests for the gene wait on this caretaker,
+// for the sidebar to show wherever they are on the site (the way Discord's
+// Pending tab or Figma's bell does); the Discord message is only the nudge for
+// people who aren't here.
 export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
   const db = requirePrimaryDb(primaryDb)
   const stableAccountId = requiredId(accountId, "account_id")

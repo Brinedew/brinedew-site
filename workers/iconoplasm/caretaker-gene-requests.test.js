@@ -19,8 +19,8 @@
 //     the asker withdraws, or a cross-site page does either;
 // 10. a stale page sends a request against a caretaker who has changed;
 // 11. a queued message goes out after it stopped being true;
-// 12. the site itself never says a request is waiting, so only a Discord
-//     message does (the sidebar counts them under the caretaker's gene).
+// 12. the count of requests waiting on a caretaker (caretaker/me, for the
+//     sidebar) includes an answered or expired one, or another gene's.
 import assert from "node:assert/strict"
 import test from "node:test"
 
@@ -486,8 +486,8 @@ test("4: every role change ends the requests that name it, and a gene left free 
 
 test("7, 11, 12: a rejection keeps its asker away from that gene for 14 days, and old requests expire", async (t) => {
   const h = harness(t)
-  // 12: the sidebar's "1 request" under the caretaker's gene counts what still
-  // waits on them, and nothing once it is answered or expired.
+  // 12: the count counts what still waits on the caretaker, and nothing once it
+  // is answered or expired.
   const waiting = async (account) =>
     (await readCaretakerCoordination(h.db, { accountId: account })).caretaker.pending_request_count
   await h.claim("MFNG", ALICE)
@@ -634,7 +634,12 @@ test("11: each message goes out once, and one that stopped being true is dropped
     if (String(url).endsWith("/users/@me/channels")) {
       return Response.json({ id: `dm-${body.recipient_id}` })
     }
-    sends.push({ channel: String(url).split("/channels/")[1].split("/")[0], content: body.content })
+    sends.push({
+      channel: String(url).split("/channels/")[1].split("/")[0],
+      content: body.content,
+      embeds: body.embeds ?? null,
+      components: body.components ?? null,
+    })
     return Response.json({ id: `message-${sends.length}` })
   }
   t.after(() => {
@@ -642,9 +647,17 @@ test("11: each message goes out once, and one that stopped being true is dropped
   })
   const deliver = () =>
     deliverPendingCaretakerGeneRequestNotifications({ ...h.env, DISCORD_BOT_TOKEN: "test-token" })
+  const button = (label, url) => [{ type: 1, components: [{ type: 2, style: 5, label, url }] }]
+  const wee1Portrait = "ab".repeat(32)
+  h.db.database
+    .prepare(
+      `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256) VALUES ('WEE1', ?)`,
+    )
+    .run(wee1Portrait)
 
   await h.claim("MFNG", ALICE)
-  const bob = await h.ask("MFNG", BOB)
+  await h.claim("WEE1", BOB)
+  const bob = await h.ask("MFNG", BOB, { note: "I *study* [Notch](https://x.test) glycosylation." })
   await deliver()
   await h.decide("MFNG", bob.body.request_id, "reject", ALICE)
   await deliver()
@@ -660,16 +673,35 @@ test("11: each message goes out once, and one that stopped being true is dropped
   )
   await h.claim("MFNG", CAROL) // MFNG is taken again before Dave hears it was free.
   await deliver()
+  await h.ask("MFNG", DAVE) // A handover with no note: the sentence and the button only.
+  await deliver()
   await deliver()
 
   assert.deepEqual(sends, [
     {
       channel: `dm-${discordIdOf(ALICE)}`,
-      content: "New request for **MFNG**\nhttps://iconoplasm.brinedew.bio/gene/MFNG#gene-requests",
+      content: "**bob** asked to swap **WEE1** for **MFNG**",
+      embeds: [
+        {
+          description: String.raw`I \*study\* \[Notch\](https://x.test) glycosylation.`,
+          thumbnail: {
+            url: `https://iconoplasm.brinedew.bio/portraits/v1/ab/${wee1Portrait}/thumb.webp`,
+          },
+        },
+      ],
+      components: button("Review", "https://iconoplasm.brinedew.bio/gene/MFNG#gene-requests"),
     },
     {
       channel: `dm-${discordIdOf(BOB)}`,
-      content: "Your request for **MFNG** was rejected.\nhttps://iconoplasm.brinedew.bio/gene/MFNG",
+      content: "Your request for **MFNG** was rejected.",
+      embeds: null,
+      components: button("Open", "https://iconoplasm.brinedew.bio/gene/MFNG"),
+    },
+    {
+      channel: `dm-${discordIdOf(CAROL)}`,
+      content: "**dave** asked to become a **MFNG** caretaker",
+      embeds: null,
+      components: button("Review", "https://iconoplasm.brinedew.bio/gene/MFNG#gene-requests"),
     },
   ])
   assert.deepEqual(
@@ -679,6 +711,7 @@ test("11: each message goes out once, and one that stopped being true is dropped
       ["rejected", BOB, "sent"],
       ["requested", ALICE, "suppressed"],
       ["freed", DAVE, "suppressed"],
+      ["requested", CAROL, "sent"],
     ],
   )
 })

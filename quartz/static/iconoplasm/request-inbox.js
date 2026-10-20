@@ -15,7 +15,6 @@ export function createRequestInbox({
   resolvePortraitUrl,
   navigate,
   loadCaretakerFilm,
-  openGeneRequests,
 }) {
   var state = {
     caretaker_films: Object.create(null),
@@ -616,7 +615,6 @@ export function createRequestInbox({
     var symbol = String(item.canonical_symbol || "Gene")
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
-    var requests = Math.max(0, Number(item.pending_request_count || 0) || 0)
     // B-996: the caretaker film is the caretaker's gene as an autoradiograph. Molecular weight and portrait
     // come from the published gene detail the page already reads, once per symbol;
     // until it arrives the film prints with the ladder alone.
@@ -663,20 +661,6 @@ export function createRequestInbox({
           escapeHtml(String(unread)) +
           "</strong> new " +
           (unread === 1 ? "comment" : "comments") +
-          "</a>"
-        : "") +
-      // B-1137: requests for the gene wait here until the caretaker answers them.
-      (requests
-        ? '<a class="icono-request-inbox__caretaker-comments" href="' +
-          escapeHtml(
-            item.requests_href || "/gene/" + encodeURIComponent(symbol) + "#gene-requests",
-          ) +
-          '" data-icono-caretaker-requests="' +
-          escapeHtml(symbol) +
-          '"><strong>' +
-          escapeHtml(String(requests)) +
-          "</strong> " +
-          (requests === 1 ? "request" : "requests") +
           "</a>"
         : "") +
       "</div>"
@@ -880,23 +864,6 @@ export function createRequestInbox({
           void markCaretakerCommentsRead(assignmentId).catch(function () {})
         })
       })(commentLinks[readIndex])
-    }
-    var requestLinks = stack.querySelectorAll("[data-icono-caretaker-requests]")
-    for (var requestIndex = 0; requestIndex < requestLinks.length; requestIndex++) {
-      ;(function (link) {
-        if (link._iconoCaretakerRequestsWired) return
-        link._iconoCaretakerRequestsWired = true
-        link.addEventListener("click", function (event) {
-          event.preventDefault()
-          var href = link.getAttribute("href") || "/"
-          var symbol = link.getAttribute("data-icono-caretaker-requests") || ""
-          // Already on the gene's page: open its requests there instead of
-          // navigating to the page that is already showing.
-          if (typeof openGeneRequests === "function" && openGeneRequests(symbol, href)) return
-          if (typeof navigate === "function") navigate(href, link)
-          else window.location.assign(href)
-        })
-      })(requestLinks[requestIndex])
     }
   }
 
