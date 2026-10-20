@@ -95,7 +95,8 @@ ${serviceDiscoveryHeaders}
 const iconoplasmRobots = `# Model-training crawlers are blocked (also at the edge, see
 # cloudflare/iconoplasm-crawler-policy.json). AI search crawlers and fetches
 # made on a user's behalf (OAI-SearchBot, Claude-SearchBot, PerplexityBot,
-# ChatGPT-User, Claude-User) are welcome. Card images are CC0; see /license.
+# ChatGPT-User, Claude-User) are welcome. Portraits and blots are CC0; see /license.
+# Every blot is also on GitHub: https://github.com/Brinedew/iconoplasm-blots
 User-agent: GPTBot
 Disallow: /
 
@@ -218,6 +219,9 @@ export const ICONOPLASM_REDIRECTS = `${[
 // the normal app and no Worker request is spent. The shell itself is ~340 KB
 // (inline font bootstrap), so copying it per gene would be ~6.5 GB.
 const ICONOPLASM_ORIGIN = "https://iconoplasm.brinedew.bio"
+// The public copy of every blot at blot/{FIRST LETTER}/{SYMBOL}.webp, kept by
+// the Brinedew/iconoplasm-blots repository's own hourly sync (B-1130).
+const BLOT_MIRROR_RAW = "https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main"
 const PUBLICATION_CDN = "https://img.brinedew.bio"
 
 function escapeHtml(value) {
@@ -249,6 +253,10 @@ export function iconoplasmGenePageHtml({ symbol, fullName }) {
   const description = `${symbol}${name ? ` (${name})` : ""} drawn as an Iconoplasm gene character card: a memorable labelled portrait for the human gene, free to reuse under CC0.`
   const url = `${ICONOPLASM_ORIGIN}/gene/${encodeURIComponent(symbol)}`
   const image = `${ICONOPLASM_ORIGIN}/blot/${encodeURIComponent(symbol)}.webp`
+  // B-1130: chatbot sandboxes that read this page can't download from our
+  // hosts, so the copy names the GitHub mirror's file for this gene.
+  const upper = String(symbol).toUpperCase()
+  const mirror = `${BLOT_MIRROR_RAW}/blot/${encodeURIComponent(upper[0])}/${encodeURIComponent(upper)}.webp`
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "CreativeWork",
@@ -284,6 +292,7 @@ ${SHELL_STUB_BOOT}
 <h1>${escapeHtml(symbol)}</h1>
 <p>${escapeHtml(name || symbol)}</p>
 <p><a href="/">Iconoplasm gene character cards</a></p>
+<p><a href="${escapeHtml(image)}">${escapeHtml(symbol)} blot</a>, free to reuse under CC0. For code that can't reach this site, such as Claude.ai's code sandbox, the same file on GitHub: ${escapeHtml(mirror)}</p>
 </main>
 </body>
 </html>

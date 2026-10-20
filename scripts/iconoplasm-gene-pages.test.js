@@ -54,6 +54,13 @@ test("gene documents carry their own title, canonical, description, image and li
   assert.ok(html.indexOf(boot) < html.indexOf("</head>"), "the shell request starts from <head>")
   new Function(boot.replace(/<\/?script>/g, ""))
   assert.doesNotMatch(html, /<img /)
+  // B-1130: a chatbot that reads this page learns the file its sandbox can
+  // download, in the mirror's blot/{FIRST LETTER}/{SYMBOL}.webp layout.
+  assert.ok(
+    html.includes(
+      "https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main/blot/T/TP53.webp",
+    ),
+  )
 })
 
 test("gene names are escaped in HTML and JSON-LD", () => {
