@@ -665,7 +665,7 @@ test("11: each message goes out once, and one that stopped being true is dropped
   assert.deepEqual(sends, [
     {
       channel: `dm-${discordIdOf(ALICE)}`,
-      content: "New request for **MFNG**\nhttps://iconoplasm.brinedew.bio/gene/MFNG",
+      content: "New request for **MFNG**\nhttps://iconoplasm.brinedew.bio/gene/MFNG#gene-requests",
     },
     {
       channel: `dm-${discordIdOf(BOB)}`,

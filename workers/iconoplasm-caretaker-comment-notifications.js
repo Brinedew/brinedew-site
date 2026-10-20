@@ -479,7 +479,11 @@ export async function deliverPendingCaretakerGeneRequestNotifications(
       await finishDelivery(db, table, row.notification_key, "failed", { error: "unknown_kind" })
       continue
     }
-    const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}`
+    // A new request links to the gene page with the requests open, the place the
+    // sidebar's "1 request" goes; the others link to the gene itself.
+    const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}${
+      row.kind === "requested" ? "#gene-requests" : ""
+    }`
     delivered += await deliverClaimedRow(
       db,
       table,
