@@ -11,20 +11,27 @@ aliases:
 
 **Who are caretakers?**
 
-Any Iconoplasm user can claim a gene and become its caretaker. Caretakers have control over the gene's character identity:
-* Modify gene prose description
-* Modify gene image tags
-* 
+Any Iconoplasm user can visit a gene page and become that gene's **caretaker**. 
 
-* **Quality control**: Some genes consistently  characters
-* **Real-time coordination**: Caretakers adjust to corrections in gene-to-character mappings and to new media modalities
-* Creative narratives
+**It's a 1-to-1 match:** each gene only gets to have one caretaker, and a caretaker can only care for one gene at a time. 
+
+However, **it's not a commitment:** as a caretaker, you can switch genes anytime.
+
+Caretakers have great control over the gene's character identity:
+* Caretaker can modify the gene lore snippet (up to 10,000 characters long).
+* Caretaker can modify gene visual tags that are used for image generation.
+* Caretaker can grant their single transferable supervote to the candidate portrait of their liking.
+
+Caretakers can help the Iconoplasm project in multiple ways:
+* **Worldbuilding:** you can modify the gene's lore and appearance in a way that suits your creative narrative.
+* **Quality control**: If the gene's portraits consistently come out to contradict their assigned value on the gene card, you can become a caretaker and correct the deviation.
+* **Social coordination**: Groups of caretakers can coordinate to propose a better mapping for a clan or a gene family.
 
 **How do I become a caretaker?**
 
 1. Go to any gene page
 2. Tap "Become this gene's caretaker" button under the gene card
-![[image-74.png]]
+![[image-76.png]]
 3. Read and accept the [caretaker terms](https://iconoplasm.brinedew.bio/caretaker-terms)
 ![[image-75.png]]
 
