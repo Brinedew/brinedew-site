@@ -1162,6 +1162,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-transform: uppercase;
 }
 
+/* Closed until "Add a note" opens it; the grid above would otherwise beat [hidden]. */
+.icono-gene-request-note__field[hidden] {
+  display: none;
+}
+
 .icono-gene-request-note__field textarea {
   width: 100%;
   letter-spacing: normal;
