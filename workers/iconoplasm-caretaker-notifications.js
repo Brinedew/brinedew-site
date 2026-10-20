@@ -25,7 +25,10 @@ function requirePrimaryDb(db) {
 // B-1065 B2b: a caretaker's own role, its unread gene comments and its
 // supervote, read from the role row (icono_caretaker_assignments) in the main
 // database. Until now they came from a copy of every role made by an event
-// replay.
+// replay. B-1137: also the requests for the gene waiting on this caretaker, so
+// the sidebar says so wherever they are on the site, the way Discord's Pending
+// tab or Figma's bell does; the Discord message is only the nudge for people who
+// aren't here.
 export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
   const db = requirePrimaryDb(primaryDb)
   const stableAccountId = requiredId(accountId, "account_id")
@@ -36,14 +39,18 @@ export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
               role.assignment_version, role.comments_read_through_id,
               CASE WHEN role.supervote_asset_sha256 IS NOT NULL THEN 1 ELSE 0 END
                 AS supervote_active,
-              role.supervote_direction, role.supervote_version
+              role.supervote_direction, role.supervote_version,
+              (SELECT COUNT(*) FROM icono_caretaker_gene_requests request
+                WHERE request.gene_symbol = role.gene_symbol AND request.status = 'pending'
+                  AND request.holder_assignment_id = role.caretaker_assignment_id
+                  AND request.expires_at > ?2) AS pending_request_count
          FROM icono_caretaker_assignments role
          LEFT JOIN icono_gene_texts texts ON texts.gene_symbol = role.gene_symbol
-        WHERE role.account_id = ?
+        WHERE role.account_id = ?1
           AND role.status IN ('pending_acceptance', 'active', 'suspended')
         LIMIT 1`,
     )
-    .bind(stableAccountId)
+    .bind(stableAccountId, new Date().toISOString())
     .first()
   if (!row || row.assignment_status === "pending_acceptance")
     return Object.freeze({ ok: true, caretaker: null })
@@ -68,6 +75,8 @@ export async function readCaretakerCoordination(primaryDb, { accountId } = {}) {
       comments_href: `${href}#gene-comments`,
       unread_comment_count: Number(commentState?.unread_count || 0),
       latest_comment_id: Number(commentState?.latest_comment_id || 0),
+      requests_href: `${href}#gene-requests`,
+      pending_request_count: Number(row.pending_request_count || 0),
       supervote_active: Number(row.supervote_active || 0) === 1,
       supervote_direction: [-1, 1].includes(Number(row.supervote_direction))
         ? Number(row.supervote_direction)

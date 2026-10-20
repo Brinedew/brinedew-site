@@ -18,11 +18,14 @@
 //  9. someone other than the caretaker accepts or rejects, someone other than
 //     the asker withdraws, or a cross-site page does either;
 // 10. a stale page sends a request against a caretaker who has changed;
-// 11. a queued message goes out after it stopped being true.
+// 11. a queued message goes out after it stopped being true;
+// 12. the site itself never says a request is waiting, so only a Discord
+//     message does (the sidebar counts them under the caretaker's gene).
 import assert from "node:assert/strict"
 import test from "node:test"
 
 import { deliverPendingCaretakerGeneRequestNotifications } from "../iconoplasm-caretaker-comment-notifications.js"
+import { readCaretakerCoordination } from "../iconoplasm-caretaker-notifications.js"
 import { changeCaretakerRoleAsAdmin } from "../iconoplasm-caretaker-admin-routes.js"
 import { blankDatabase, iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
@@ -481,12 +484,20 @@ test("4: every role change ends the requests that name it, and a gene left free 
   assert.equal(offer.reason, "caretaker_unavailable")
 })
 
-test("7, 11: a rejection keeps its asker away from that gene for 14 days, and old requests expire", async (t) => {
+test("7, 11, 12: a rejection keeps its asker away from that gene for 14 days, and old requests expire", async (t) => {
   const h = harness(t)
+  // 12: the sidebar's "1 request" under the caretaker's gene counts what still
+  // waits on them, and nothing once it is answered or expired.
+  const waiting = async (account) =>
+    (await readCaretakerCoordination(h.db, { accountId: account })).caretaker.pending_request_count
   await h.claim("MFNG", ALICE)
   await h.claim("WEE1", CAROL)
+  assert.equal(await waiting(ALICE), 0)
   const sent = await h.ask("MFNG", BOB)
+  assert.equal(await waiting(ALICE), 1)
+  assert.equal(await waiting(CAROL), 0, "only the gene asked for counts it")
   const rejected = await h.decide("MFNG", sent.body.request_id, "reject", ALICE)
+  assert.equal(await waiting(ALICE), 0)
   assert.equal(rejected.body.status, "rejected")
   assert.equal((await h.decide("MFNG", sent.body.request_id, "reject", ALICE)).body.replayed, true)
   assert.equal((await h.accept("MFNG", sent.body.request_id)).status, 409)
@@ -500,8 +511,10 @@ test("7, 11: a rejection keeps its asker away from that gene for 14 days, and ol
   assert.equal(again.headers.get("retry-after"), String(14 * 24 * 60 * 60))
   const elsewhere = await h.ask("WEE1", BOB)
   assert.equal(elsewhere.status, 200, "the block covers one gene, not the asker")
+  assert.equal(await waiting(CAROL), 1)
 
   t.mock.timers.tick(14 * DAY + MINUTE)
+  assert.equal(await waiting(CAROL), 0, "an expired request stops counting before anyone reads it")
   assert.deepEqual((await h.page("WEE1", CAROL)).incoming.requests, [], "Bob's request expired")
   assert.equal((await h.accept("WEE1", elsewhere.body.request_id, CAROL)).status, 409)
   const later = await h.ask("MFNG", BOB)

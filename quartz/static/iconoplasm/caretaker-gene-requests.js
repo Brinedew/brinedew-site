@@ -95,11 +95,36 @@ export function createGeneRequestControls({
     return sync
   }
 
+  // The sidebar's "2 requests" link points at the gene page with this hash; the
+  // page opens the list when it arrives.
+  const REQUESTS_HASH = "#gene-requests"
+  let current = null
+
+  function takeRequestsHash() {
+    if (window.location.hash !== REQUESTS_HASH) return false
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + window.location.search,
+    )
+    return true
+  }
+
   function render(context) {
     const { target, payload } = context
+    current = context
     if (payload?.request) return renderRequester(context, payload.request)
     if (payload?.incoming?.requests?.length) return renderHolder(context, payload.incoming)
+    takeRequestsHash()
     target.replaceChildren()
+  }
+
+  // The link was followed on the gene's own page: read the requests again (one
+  // may have arrived since the page loaded) and open them.
+  function reopen(symbol) {
+    if (!current || current.symbol !== symbol || !current.target.isConnected) return false
+    current.rehydrate()
+    return true
   }
 
   // --- The person asking -------------------------------------------------
@@ -346,6 +371,7 @@ export function createGeneRequestControls({
       post(symbol, "/requests/" + encodeURIComponent(item.request_id) + "/reject", {})
         .then(() => {
           items = items.filter((candidate) => candidate !== item)
+          context.requestsChanged?.()
           if (!items.length && !incoming.more) {
             closeDialog(dialog)
             context.rehydrate()
@@ -425,7 +451,11 @@ export function createGeneRequestControls({
       showList()
       openDialog(dialog)
     })
+    if (takeRequestsHash()) {
+      showList()
+      openDialog(dialog)
+    }
   }
 
-  return { render }
+  return { render, reopen }
 }

@@ -9,8 +9,8 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=97fc3cdee85de001"
-import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=ee0566e5a591e0c4"
+import { createRequestInbox } from "./request-inbox.js?v=bd9280f35cfd8a1c"
+import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=3cbd1e4a0f584f13"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
   createEmulsionFavoriteStore,
@@ -45,14 +45,19 @@ import { installCandidateStrips } from "./candidate-strip.js?v=06cec6e8e7de16ba"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
-} from "./lightbox.js?v=500608cd9d314449"
+} from "./lightbox.js?v=6811676792cc67ba"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=3848ccad31004e24"
+} from "./candidate-delete-dialog.js?v=e9b90dccfb37810b"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=2033cc31cb7f0de1"
+import {
+  registerDiagramWebMcp,
+  renderDiagramStudio,
+  unmountDiagramStudio,
+} from "./diagram-studio.js?v=f7aaa5b67057ce80"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=0fd7513f3d3593c8"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -300,7 +305,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=91feb5192143a3ce", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=5b49fb84f4900e0a", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -316,9 +321,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=ed32b5a55ea4f859"),
+      import("./caretaker-manifestations.js?v=335b5f6a79eb50ea"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=4b8d0da229b29318"),
+      import("./caretaker-candidate-sources.js?v=b09853cc7dd8e392"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -334,10 +339,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         loginUrl: voteLoginUrl(),
         onCanonicalChanged: function (symbol, expectation) {
           invalidateGeneDetail(symbol)
-          // The caretaker who just changed the text reads it from the origin:
-          // Bunny's edge would show the old text for up to a minute.
-          var fresh = { forceFresh: true, fromOrigin: true }
-          return fetchGeneDetail(symbol, fresh).then(function (gene) {
+          return fetchGeneDetail(symbol, { forceFresh: true }).then(function (gene) {
             var route = getRoute()
             var content = document.getElementById("icono-gene-content")
             if (
@@ -371,17 +373,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
-          // The toolbar's claim slot was drawn for the role this viewer had; after
-          // "Stop being caretaker" (or any role change here) it is drawn again, so
-          // the button to become caretaker comes back without a reload.
-          var previousRole = viewerCaretakerRoleByHost.get(detail.host)
-          viewerCaretakerRoleByHost.set(detail.host, viewerIsCaretaker)
-          if (previousRole !== undefined && previousRole !== viewerIsCaretaker) {
-            geneContent
-              .querySelector("[data-icono-caretaker-claim-action]")
-              ?.removeAttribute("data-icono-caretaker-claim-signature")
-            hydrateCaretakerClaimAction(geneContent, { symbol: detail.symbol })
-          }
           candidateSourceLinks.mount(geneContent, {
             dossier: detail.dossier,
             openVersion: function (revisionId) {
@@ -406,22 +397,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return caretakerPanelPromise
   }
 
-  // The sidebar's caretaker film links to the gene with ?caretaker=open. The
-  // request is used once and taken out of the address bar, so a reload or a
-  // copied link doesn't reopen the panel, and it opens the panel only for the
-  // gene's current caretaker: someone who just stopped needs the page and its
-  // become-caretaker button, not a panel for a role they gave up.
-  function takeCaretakerOpenRequest(symbol) {
-    var url = new URL(window.location.href)
-    if (url.searchParams.get("caretaker") !== "open") return false
-    url.searchParams.delete("caretaker")
-    history.replaceState(history.state, "", url.pathname + url.search + url.hash)
-    var role = iconoSidebarState.caretaker
-    return Boolean(role && normalizedSymbol(role.symbol) === symbol)
-  }
-  // Whether the viewer looked after the gene in each caretaker panel's last dossier.
-  var viewerCaretakerRoleByHost = new WeakMap()
-
   function hydrateCaretakerManifestationIsland(container, genePayload) {
     var host = container && container.querySelector("[data-icono-caretaker-island]")
     if (!host) return
@@ -441,7 +416,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
     var signature = accountId + ":" + symbol
     if (host.getAttribute("data-icono-caretaker-signature") === signature) {
-      if (takeCaretakerOpenRequest(symbol)) {
+      if (new URL(window.location.href).searchParams.get("caretaker") === "open") {
         void loadCaretakerPanel().then(function (panel) {
           panel.open(host)
         })
@@ -456,12 +431,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           currentUser: currentUser,
           authResolved: hasResolvedAuthState,
         })
-        // The panel reports the viewer's role (onDossierChanged) in a microtask
-        // it doesn't await; read the role after it.
-        await new Promise(function (resolve) {
-          setTimeout(resolve, 0)
-        })
-        if (takeCaretakerOpenRequest(symbol)) panel.open(host)
+        if (new URL(window.location.href).searchParams.get("caretaker") === "open") panel.open(host)
       })
       .catch(function () {
         host.removeAttribute("data-icono-caretaker-signature")
@@ -665,6 +635,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             },
             roleChanged: function () {
               refreshCaretakerRole(container, genePayload)
+            },
+            requestsChanged: function () {
+              void requestInbox.refresh()
             },
           })
           return
@@ -871,6 +844,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
+  function syncSelectAllFavoriteButtons(root) {
+    var buttons = (root || document).querySelectorAll("[data-icono-request-select-all-favorites]")
+    var favoriteCount = emulsionFavorites.ids().length
+    for (var i = 0; i < buttons.length; i++) {
+      // Phones drop the noun so the button shares the footer row with
+      // "Queue 20 candidates"; the accessible name keeps it.
+      // One outer span: .icono-button is a flex box, and a bare inner span
+      // would become its own flex item.
+      buttons[i].innerHTML =
+        "<span>Select all " +
+        favoriteCount +
+        '<span class="icono-request-select-all-noun"> favorites</span></span>'
+      buttons[i].setAttribute("aria-label", "Select all " + favoriteCount + " favorites")
+      buttons[i].hidden = !emulsionFavorites.isLoaded() || favoriteCount === 0
+    }
+  }
+
   function announceEmulsionFavoriteStatus(message) {
     var root = document.getElementById(ROOT_ID) || document.body
     var status = document.getElementById("icono-emulsion-favorite-status")
@@ -944,6 +934,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
+    syncSelectAllFavoriteButtons(document)
     document.dispatchEvent(new CustomEvent("icono-emulsion-favorites-change"))
   })
 
@@ -1247,6 +1238,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           kda: kda > 0 ? kda : 0,
         }
       })
+    },
+    openGeneRequests: function (symbol, href) {
+      if (window.location.pathname !== String(href).split("#")[0]) return false
+      window.history.replaceState(window.history.state, "", href)
+      return geneRequestControls.reopen(symbol)
     },
   })
 
@@ -4918,12 +4914,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         window.scrollBy(0, delta)
       }
     }
-    // B-1161: the card's height animates for a reader's tap, not for its first
-    // placement. Animated, a phone's first gene page drew the card at its
-    // default height and grew it over 260 ms, pushing the toolbar and the tabs
-    // off the screen (layout shift 0.2, twice: skeleton, then the gene).
-    var settling = !shouldPreserveTop
-    if (settling) card.style.transition = "none"
     syncMobileLabelDossierContent(card)
     var resolved = !!expanded
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
@@ -4942,7 +4932,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
       restoreCardTop()
-      if (settling) card.style.removeProperty("transition")
     }, 720)
   }
 
@@ -5784,21 +5773,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-request-grid" data-icono-request-results role="list" aria-label="Styles" aria-busy="true"></div>' +
       "</div>" +
       '<aside class="icono-request-batch" data-icono-request-batch aria-label="Your batch">' +
-      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><button type="button" class="icono-request-batch-clear" data-icono-request-batch-clear hidden>Clear</button></div>' +
-      // After a queue, the order just sent stays in view until the next pick.
-      '<div class="icono-request-batch-done" data-icono-request-batch-done hidden>' +
-      '<div class="icono-request-batch-mosaic icono-request-batch-mosaic--done" data-icono-request-batch-done-mosaic></div>' +
-      '<button type="button" class="icono-request-batch-link" data-icono-request-see-requests>See your requests</button>' +
-      "</div>" +
-      // B-1143: an empty batch shows the favorites it can take in one click;
-      // the count lives on the Queue button, so the tray carries no counter.
-      '<div class="icono-request-batch-fill" data-icono-request-batch-fill hidden>' +
-      '<div class="icono-request-batch-mosaic" aria-hidden="true" data-icono-request-batch-fill-mosaic></div>' +
-      '<button type="button" class="icono-button icono-request-add-favorites" data-icono-request-add-favorites>Add all favorites</button>' +
-      "</div>" +
+      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><span class="icono-request-batch-count" data-icono-request-batch-count>0 of 20</span></div>' +
+      '<div class="icono-request-batch-meter" aria-hidden="true"><span data-icono-request-batch-meter></span></div>' +
       // Divs with list roles: Quartz styles bare ul/li inside the article.
       '<div class="icono-request-batch-list" role="list" data-icono-request-batch-list></div>' +
-      '<button type="button" class="icono-request-batch-rest" data-icono-request-batch-rest hidden></button>' +
+      '<p class="icono-request-batch-empty" data-icono-request-batch-empty>Pick styles on the left. With none picked, the queue draws a random style.</p>' +
       "</aside>" +
       "</div>" +
       "</form>"
@@ -6006,10 +5985,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       footerClass: "icono-request-footer",
       footer:
         '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-        // Phones hide the tray, so its two actions join the action bar, left of
-        // Queue (B-1143; B-884 keeps the row above the cards for the view switch).
-        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-add-favorites hidden>Add all favorites</button>' +
-        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-batch-clear hidden>Clear</button>' +
+        // Secondary left, primary right: the dialog's one action bar (B-884).
+        '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
         '<button type="submit" form="icono-request-form-' +
         esc(safeSymbol) +
         '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
@@ -7110,6 +7087,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var queueSubmitButton = dialog
         ? dialog.querySelector("[data-icono-request-free-submit]")
         : null
+      var selectAllFavoritesButton = dialog
+        ? dialog.querySelector("[data-icono-request-select-all-favorites]")
+        : null
+      syncSelectAllFavoriteButtons(dialog || body)
       var providerSelect = body.querySelector("[data-icono-request-provider]")
       var directGenerateButton = dialog
         ? dialog.querySelector("[data-icono-request-image-generate]")
@@ -7146,12 +7127,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // After a failed page, the next scroll may try again only after this.
       var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
-      // The server's order limit (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in
-      // the stateful runtime, which says why). workers/iconoplasm.request-order.test.js
-      // fails if the two differ.
-      var requestSelectionLimit = 100
-      // The order just queued, shown in the tray until the next pick.
-      var justQueuedOptions = []
+      var requestSelectionLimit = 20
       var filteredOptions = []
       var requestView = ""
       var browse = body.querySelector("[data-icono-request-browse]")
@@ -7924,92 +7900,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         maybeLoadMoreRequestOptions()
       }
 
-      function requestOptionFirstPreview(option) {
-        return (Array.isArray(option && option.preview_assets) ? option.preview_assets : [])
-          .map(requestOptionPreviewUrl)
-          .filter(Boolean)[0]
-      }
-
-      function requestBatchTileMarkup(option, checked) {
-        var first = requestOptionFirstPreview(option)
-        return (
-          '<span class="icono-request-batch-tile">' +
-          (checked
-            ? '<span class="icono-request-card-check" aria-hidden="true">' +
-              ICONO_CHECK_ICON +
-              "</span>"
-            : "") +
-          (first ? '<img src="' + esc(first) + '" alt="" loading="lazy" decoding="async">' : "") +
-          "</span>"
-        )
-      }
-
-      // Covers in a mosaic two rows of `columns` high; the last tile counts the rest.
-      function requestBatchMosaicMarkup(options, columns, checked) {
-        var fits = options.length > columns * 2 ? columns * 2 - 1 : options.length
-        return (
-          options
-            .slice(0, fits)
-            .map(function (option) {
-              return requestBatchTileMarkup(option, checked)
-            })
-            .join("") +
-          (options.length > fits
-            ? '<span class="icono-request-batch-tile">+' + (options.length - fits) + "</span>"
-            : "")
-        )
-      }
-
-      // The favorites not in the batch yet, as far as one order holds.
-      function favoriteRequestOptionsToAdd() {
-        var room = Math.max(
-          0,
-          requestSelectionLimit - Array.from(selectedRequestVisionIds).filter(Boolean).length,
-        )
-        var options = emulsionFavorites
-          .ids()
-          .map(requestOptionForFavoriteFamilyId)
-          .filter(function (option) {
-            return option && !selectedRequestVisionIds.has(option.vision_id)
-          })
-        if (options.length <= room) return options
-        // More favorites than one order holds: right after an order, continue
-        // with the ones it left out instead of sending the same ones again.
-        var queued = new Set(
-          justQueuedOptions.map(function (option) {
-            return option.vision_id
-          }),
-        )
-        var unsent = options.filter(function (option) {
-          return !queued.has(option.vision_id)
-        })
-        return (unsent.length ? unsent : options).slice(0, room)
-      }
-
-      // B-1143: an empty tray offers the favorites in one click; a partly picked
-      // one offers the rest as one row; after a queue it shows what was sent.
       function paintRequestBatch() {
-        var picked = Array.from(selectedRequestVisionIds).filter(Boolean)
-        var toAdd = favoriteRequestOptionsToAdd()
-        var showDone = !picked.length && justQueuedOptions.length > 0
-        var addButtons = dialog ? dialog.querySelectorAll("[data-icono-request-add-favorites]") : []
-        for (var a = 0; a < addButtons.length; a++) {
-          addButtons[a].hidden = picked.length > 0 || !toAdd.length
-        }
-        var clearButtons = dialog ? dialog.querySelectorAll("[data-icono-request-batch-clear]") : []
-        for (var c = 0; c < clearButtons.length; c++) clearButtons[c].hidden = !picked.length
         if (!batchTray) return
-        var fill = batchTray.querySelector("[data-icono-request-batch-fill]")
-        if (fill) {
-          // Under a just-queued order the button stays, without its covers.
-          fill.hidden = picked.length > 0 || !toAdd.length
-          var fillMosaic = fill.querySelector("[data-icono-request-batch-fill-mosaic]")
-          if (fillMosaic) {
-            fillMosaic.hidden = showDone
-            if (!fill.hidden && !showDone)
-              fillMosaic.innerHTML = requestBatchMosaicMarkup(toAdd, 4, false)
-          }
-        }
+        var picked = Array.from(selectedRequestVisionIds).filter(Boolean)
+        var count = batchTray.querySelector("[data-icono-request-batch-count]")
+        if (count) count.textContent = picked.length + " of " + requestSelectionLimit
+        var meter = batchTray.querySelector("[data-icono-request-batch-meter]")
+        if (meter) meter.style.width = (picked.length / requestSelectionLimit) * 100 + "%"
         var list = batchTray.querySelector("[data-icono-request-batch-list]")
         if (list) {
           list.innerHTML = picked
@@ -8020,45 +7917,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             })
             .join("")
         }
-        var rest = batchTray.querySelector("[data-icono-request-batch-rest]")
-        if (rest) {
-          rest.hidden = !picked.length || !toAdd.length
-          if (!rest.hidden) {
-            rest.setAttribute(
-              "aria-label",
-              "Add the other " + toAdd.length + " favorite" + (toAdd.length === 1 ? "" : "s"),
-            )
-            rest.innerHTML =
-              '<span class="icono-request-batch-stack" aria-hidden="true">' +
-              toAdd
-                .slice(0, 3)
-                .map(function (option) {
-                  var src = requestOptionFirstPreview(option)
-                  return src ? '<img src="' + esc(src) + '" alt="">' : ""
-                })
-                .join("") +
-              '</span><span aria-hidden="true">+' +
-              toAdd.length +
-              "</span>" +
-              ICONO_PLUS_ICON
-          }
-        }
-        var done = batchTray.querySelector("[data-icono-request-batch-done]")
-        if (done) {
-          done.hidden = !showDone
-          var doneMosaic = done.querySelector("[data-icono-request-batch-done-mosaic]")
-          if (doneMosaic && showDone) {
-            doneMosaic.innerHTML = requestBatchMosaicMarkup(justQueuedOptions, 6, true)
-            doneMosaic.setAttribute("role", "img")
-            doneMosaic.setAttribute(
-              "aria-label",
-              justQueuedOptions.length +
-                " style" +
-                (justQueuedOptions.length === 1 ? "" : "s") +
-                " queued",
-            )
-          }
-        }
+        var empty = batchTray.querySelector("[data-icono-request-batch-empty]")
+        if (empty) empty.hidden = picked.length > 0
       }
 
       form._iconoRepaintRequestResults = function () {
@@ -8135,7 +7995,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function updateQueueSelectionControls() {
         var selectedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
-        if (selectedVisionIds.length) justQueuedOptions = []
         hiddenInput.value = selectedVisionIds.join(",")
         var optionButtons = results.querySelectorAll("[data-icono-request-option]")
         for (var i = 0; i < optionButtons.length; i++) {
@@ -8177,13 +8036,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return neutralSlot ? requestOptionFromImmediateNumericQuery(neutralSlot[1]) : null
       }
 
-      function addFavoriteRequestOptions() {
-        var adding = favoriteRequestOptionsToAdd()
-        if (!adding.length) return
-        rememberRequestOptions(adding)
-        selectedRequestVisionIds.delete("")
-        for (var i = 0; i < adding.length; i++) selectedRequestVisionIds.add(adding[i].vision_id)
+      function selectAllFavoriteRequestOptions() {
+        var favorites = emulsionFavorites
+          .ids()
+          .map(requestOptionForFavoriteFamilyId)
+          .filter(Boolean)
+        var selectable = favorites.slice(0, requestSelectionLimit)
+        if (!selectable.length) return
+        selectedRequestVisionIds.clear()
+        rememberRequestOptions(selectable)
+        for (var i = 0; i < selectable.length; i++) {
+          selectedRequestVisionIds.add(selectable[i].vision_id)
+        }
         updateQueueSelectionControls()
+        if (favorites.length > selectable.length) {
+          setStatus("Batch limit: " + requestSelectionLimit + " styles.", "")
+        }
       }
 
       function setSelection(option) {
@@ -8319,11 +8187,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           panel._iconoFavoriteViewsHandler,
         )
       }
-      panel._iconoFavoriteViewsHandler = function () {
-        paintRequestViews()
-        paintRequestBatch()
-      }
-      document.addEventListener("icono-emulsion-favorites-change", panel._iconoFavoriteViewsHandler)
+      panel._iconoFavoriteViewsHandler = paintRequestViews
+      document.addEventListener("icono-emulsion-favorites-change", paintRequestViews)
       if (browse) browse.addEventListener("scroll", maybeLoadMoreRequestOptions, { passive: true })
       var viewButtons = body.querySelectorAll("[data-icono-request-view]")
       for (var viewIndex = 0; viewIndex < viewButtons.length; viewIndex++) {
@@ -8468,29 +8333,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (providerSelect) {
         providerSelect.addEventListener("change", updateDirectGenerationButtons)
       }
-      // The tray's and the phone footer's batch actions (B-1143).
-      if (dialog && !dialog._iconoBatchActionsWired) {
-        dialog._iconoBatchActionsWired = true
-        // What was just queued belongs to this visit, not the next opening.
-        dialog.addEventListener("close", function () {
-          justQueuedOptions = []
-          paintRequestBatch()
-        })
-        dialog.addEventListener("click", function (event) {
-          var target = event.target.closest(
-            "[data-icono-request-add-favorites], [data-icono-request-batch-rest], [data-icono-request-batch-clear], [data-icono-request-see-requests]",
-          )
-          if (!target || !dialog.contains(target)) return
-          if (target.matches("[data-icono-request-batch-clear]")) {
-            setSelection(null)
-          } else if (target.matches("[data-icono-request-see-requests]")) {
-            closeDialog(dialog)
-            var inbox = document.getElementById("icono-request-inbox-panel")
-            if (inbox) inbox.scrollIntoView({ block: "nearest" })
-          } else {
-            addFavoriteRequestOptions()
-          }
-        })
+      if (selectAllFavoritesButton) {
+        selectAllFavoritesButton.addEventListener("click", selectAllFavoriteRequestOptions)
       }
       if (directGenerateButton) {
         directGenerateButton.addEventListener("click", submitDirectCandidateGeneration)
@@ -8550,13 +8394,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 return String((failure && failure.requested_vision_id) || "").trim()
               }),
             )
-            justQueuedOptions = requestedVisionIds
-              .filter(function (visionId) {
-                return !failedVisionIds.has(visionId)
-              })
-              .map(function (visionId) {
-                return requestOptionsByVisionId[visionId] || { vision_id: visionId }
-              })
             selectedRequestVisionIds.clear()
             failedVisionIds.forEach(function (visionId) {
               if (visionId) selectedRequestVisionIds.add(visionId)
@@ -8579,8 +8416,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   " could not be queued and remain selected.",
                 "error",
               )
-            } else if (!isBatch) {
-              setStatus("Queued 1 candidate.", "success")
+            } else {
+              setStatus(
+                "Queued " + queuedCount + " candidate" + (queuedCount === 1 ? "." : "s."),
+                "success",
+              )
             }
             void requestInbox.refresh()
             return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
@@ -9825,8 +9665,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</div>" +
         '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' +
         esc(assetSha) +
-        '" data-icono-candidate-actions-signature="' +
-        candidateActionsSignature() +
         '">' +
         '<button type="button" class="icono-candidate-icon-btn icono-candidate-more" popovertarget="' +
         esc(menuId) +
@@ -10243,20 +10081,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     } catch (_notFoundHeadError) {}
   }
 
-  // The menu changes with sign-in (Edit candidate portrait) and with admin (Remove),
-  // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
-  // answered after the first draw kept the guest menu (owner, 2026-10-19). The
-  // gallery stamps it as it draws (B-1161): unstamped, every gene page drew the
-  // whole gallery a second time, off screen, to copy menus it already had.
-  function candidateActionsSignature() {
-    return (
-      (currentUser ? "signed-in" : "guest") + ":" + (currentUserIsIconoAdmin ? "admin" : "public")
-    )
-  }
-
   function hydrateServerCandidateActionIslands(container, genePayload) {
     if (!container || !genePayload) return
-    var signature = candidateActionsSignature()
+    // The menu changes with sign-in (Edit candidate portrait) and with admin (Remove),
+    // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
+    // answered after the first draw kept the guest menu (owner, 2026-10-19).
+    var signature =
+      (currentUser ? "signed-in" : "guest") + ":" + (currentUserIsIconoAdmin ? "admin" : "public")
     var targets = Array.prototype.slice.call(
       container.querySelectorAll("[data-icono-candidate-actions-island]"),
     )
@@ -10768,20 +10599,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  // Caretakers break paragraphs with one newline. Each becomes a block line
-  // inside the one <p>, so the Overview's four-line clamp still holds.
-  function loreParagraphs(prose) {
-    return prose
-      .split(/\n+/)
-      .filter(function (part) {
-        return part.trim()
-      })
-      .map(function (part) {
-        return '<span class="icono-public-manifestation__para">' + esc(part) + "</span>"
-      })
-      .join("")
-  }
-
   function publicManifestationMarkup(g) {
     var publicManifestation = g && g.canonical_manifestation
     if (
@@ -10793,9 +10610,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     return (
       '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
-      '<h2 id="icono-public-manifestation-title">Lore</h2>' +
+      '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
       '<p class="icono-public-manifestation__body">' +
-      loreParagraphs(String(publicManifestation.prose)) +
+      esc(String(publicManifestation.prose)) +
       "</p></section>"
     )
   }
@@ -12024,28 +11841,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  // B-1161: Diagram Studio and its editor are about 270 KB of the app's 950 KB
-  // of modules, and only /studio uses them. Loaded up front they kept a phone's
-  // first gene page waiting two extra network rounds.
-  var diagramStudio = null
-  var diagramStudioPromise = null
-  var diagramStudioRenders = 0
-  function loadDiagramStudio() {
-    if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=4893a9a309a70414").then(
-        function (module) {
-          diagramStudio = module
-          return module
-        },
-        function (error) {
-          diagramStudioPromise = null
-          throw error
-        },
-      )
-    }
-    return diagramStudioPromise
-  }
-
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
@@ -12060,8 +11855,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
-    diagramStudioRenders += 1
-    if (diagramStudio) diagramStudio.unmountDiagramStudio()
+    unmountDiagramStudio()
     clearActiveHomeRenderState()
     destroyHomeMasonry()
     lastRenderedPath = window.location.pathname + window.location.search
@@ -12112,16 +11906,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       iconoSidebarState.page = "studio"
       renderIconoplasmSidebar()
       scrollWindowInstantly(0, 0)
-      var studioRender = diagramStudioRenders
-      loadDiagramStudio()
-        .then(function (studio) {
-          // Startup renders twice (init, then Quartz's nav event); only the
-          // latest render may draw, or the Studio and its tour mount twice.
-          if (studioRender === diagramStudioRenders) studio.renderDiagramStudio(root)
-        })
-        .catch(function (error) {
-          console.error("[Iconoplasm] failed to load Diagram Studio:", error)
-        })
+      renderDiagramStudio(root)
     } else {
       scrollWindowInstantly(0, 0)
       render404(root)
@@ -12244,20 +12029,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       currentUserIsIconoAdmin = false
     }
     render()
-    // The studio's WebMCP tools matter only to a browser that has WebMCP.
-    if (document.modelContext && typeof document.modelContext.registerTool === "function") {
-      loadDiagramStudio()
-        .then(function (studio) {
-          return studio.registerDiagramWebMcp({
-            openStudio: function () {
-              if (getRoute().page !== "studio") navigateTo("/studio")
-            },
-          })
-        })
-        .catch(function (error) {
-          console.warn("[Iconoplasm] WebMCP tool registration failed:", error)
-        })
-    }
+    void registerDiagramWebMcp({
+      openStudio: function () {
+        if (getRoute().page !== "studio") navigateTo("/studio")
+      },
+    }).catch(function (error) {
+      console.warn("[Iconoplasm] WebMCP tool registration failed:", error)
+    })
   }
 
   // Quartz uses SPA navigation, so the root might already be in the DOM
