@@ -162,13 +162,18 @@ const iconoplasmLlms = `# Iconoplasm
 
 Iconoplasm maps human-gene biology onto memorable character portraits. A gene's blot is its portrait with the gene's name and symbol painted into the image: the picture to reuse.
 
-- [Published gene-card archive](https://iconoplasm.brinedew.bio/)
+- [Gene archive](https://iconoplasm.brinedew.bio/)
 - [Sitemap](https://iconoplasm.brinedew.bio/sitemap.xml)
 - [Every gene, A to Z](https://iconoplasm.brinedew.bio/genes): one plain list per first letter, /genes/{LETTER}
 - Caretakers and their genes (JSON): https://iconoplasm.brinedew.bio/api/public/v1/caretakers
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
-- Canonical gene blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
+- A gene's current blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 - [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
+
+## Blots in figures
+
+- Download the blots and embed them in the figure. Don't link a shared figure to /blot/ addresses: every view of one runs on our server.
+- [Every blot on GitHub](https://github.com/Brinedew/iconoplasm-blots), CC0, for code that can't reach this site (Claude.ai's sandbox reaches only GitHub and package registries): https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main/blot/{FIRST_LETTER}/{HGNC_SYMBOL}.webp, symbol in upper case. If only github.com is reachable: git clone --depth 1 --filter=blob:none --no-checkout https://github.com/Brinedew/iconoplasm-blots.git, then git checkout main -- blot/N/NOTCH1.webp
 `
 
 // B-818: this host has one URL convention, clean lowercase paths (a gene page

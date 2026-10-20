@@ -82,6 +82,12 @@
       "description": "B-1087: img.brinedew.bio's origin is the Bunny pull zone, which presents its own *.b-cdn.net certificate; Full encrypts the hop without matching the name",
       "expression": "(http.host eq \"img.brinedew.bio\")",
       "ssl": "full"
+    },
+    {
+      "ref": "public_reads_no_browser_integrity_check",
+      "description": "B-1130: Cloudflare's Browser Integrity Check answers 403 (error 1010) to Python's built-in downloader, the default in chatbot sandboxes and scripts. Public images, the public API and llms.txt stay open to it; the crawler rule still blocks training crawlers",
+      "expression": "(http.host eq \"img.brinedew.bio\") or (http.host eq \"iconoplasm.brinedew.bio\" and (starts_with(http.request.uri.path, \"/api/public/\") or starts_with(http.request.uri.path, \"/blot/\") or starts_with(http.request.uri.path, \"/blots/\") or http.request.uri.path in {\"/llms.txt\" \"/robots.txt\" \"/developers\"}))",
+      "bic": false
     }
   ],
   "cacheRulesetName": "Brinedew static edge cache",
