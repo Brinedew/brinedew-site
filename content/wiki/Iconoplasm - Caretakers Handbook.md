@@ -82,18 +82,6 @@ I expect other people might use the character designs for downstream content:
 - Selling merch or figurines based on the character
 
 **Please note:** As explained in Caretaker Terms, when you contribute to Iconoplasm, you dedicate your creative work (lore writing and curation) to public domain under the CC0 license where applicable. This means that anyone else can modify your Iconoplasm design, monetize it, and distribute it as they see fit, without needing to credit you.
-
-**I contribute work for free and others will benefit from it - how is this fair?**
-
-This is the only arrangement in which foundational projects of this scale can happen at all: this is why many fundamental scientific discoveries are still made in public research institutes and not in corporate R&D departments. Profit capture is only possible at the later stages of the pipeline, when de-risking has been done by non-profits - and we're still too early for that.
-
-It's completely understandable to feel taken advantage of, when you craft a design and someone else gets fame and fortune for putting it on a mug. Money and status are easily observable immediately. What is harder to see are diffuse long-term benefits of working on a large-scale public-benefit project like this:
-- Iconoplasm  
-- Participating in mission-driven online communities builds long-term bonds of trust with people who are interested in similar things as you. Digital spaces are known to spin off into real-world organizations, businesses and movements (see: Lesswrong, Effective altruism, SCP wiki)
-- In 40 years, the doctor treating you from cancer might not have been there if not for using Iconoplasm characters as a study reference. Looking at your work this way, you're making your own future healthcare cheaper and better quality.
-
-If you're interested in the idea of Iconoplasm, but you need stronger attribution and ownership of your labor, I will be happy to collaborate with you on the distribution side of things.
-
 ### Generation tips
 
 **I struggle to make the characters look 20kg or 200kg
