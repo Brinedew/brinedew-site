@@ -84,9 +84,11 @@ I expect other people might use the character designs for downstream content:
 **Please note:** As explained in Caretaker Terms, when you contribute to Iconoplasm, you dedicate your creative work (lore writing and curation) to public domain under the CC0 license where applicable. This means that anyone else can modify your Iconoplasm design, monetize it, and distribute it as they see fit, without needing to credit you.
 ### Generation tips
 
-**I struggle to make the characters look 20kg or 200kg
+**I struggle to make the characters look the right mass**
 
-Adding descriptor tags like "petite" or "sturdy" can fail to intuitively translate character mass to the viewer. In my testing, I found three approaches to make the weight readable from an image:
+The auto-tagger's default tendency is to add descriptor tags like "petite" or "sturdy" to the character's tag cloud. However, this can fail to intuitively translate character mass to the viewer. The problem becomes bigger at the extremes like 10kg or 500kg characters.
+
+In my testing, I found three approaches to make the weight readable from an image:
 
 1. Specify a head-to-body ratio as a separate character tag
 
@@ -94,13 +96,15 @@ Adding descriptor tags like "petite" or "sturdy" can fail to intuitively transla
 | ------ | ------------------- |
 | 5 kg   | 2                   |
 | 10 kg  | 3                   |
-| 20 kg  | 5                   |
+| 20 kg  | 4                   |
+| 30 kg  | 5                   |
 | 40 kg  | 6                   |
+| 60 kg  | 7                   |
 | 80 kg  | 8                   |
 | 160 kg | 9                   |
 | 320 kg | 10                  |
 2. "Banana for scale" - describe how big or small the surrounding props are. Character who "dwarfed by the height of the doorframe" comes off as smaller mass compared to the character who "crouches to fit into doorframe".
-3. Compare the physique to known characters: "hulk physique", "goblin appearance"
+3. Compare the physique to known characters: "hulk physique", "goblin proportions", ""
 
 
 **I struggle to make the character look their age**
