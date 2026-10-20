@@ -117,7 +117,7 @@ git -C iconoplasm-blots checkout main -- blot/N/NOTCH1.webp blot/R/RBPJ.webp
 
 - [`index.json`](https://github.com/Brinedew/iconoplasm-blots/blob/main/index.json) lists every symbol with its full name and path.
 
-Embed the downloaded files in your figure (an SVG `<image>` with a `data:` URL works offline and in slides) rather than linking to `/blot/` addresses.
+Embed the downloaded files in your figure (an SVG `<image>` with a `data:` URL works offline and in slides) rather than linking to `/blot/` addresses. If your code can't download files at all (a sandbox with network access off), link the `raw.githubusercontent.com` addresses instead: GitHub serves them, and the figure shows them wherever it is opened online. Claude.ai's file preview shows only embedded images, so a linked figure looks empty there until it is opened in a browser.
 
 ## Resolver
 
