@@ -217,7 +217,11 @@ The configured stateful Worker uses Cloudflare's five cron slots:
 - one recurring minute-list expression, checked against
   `workers/iconoplasm-background-schedule.js`, gives each Iconoplasm job its own
   invocation. Comment delivery uses four batches of 20/hour; supervote delivery
-  uses five batches of 16/hour. Both retain 80 messages/hour;
+  uses five batches of 16/hour. Both retain 80 messages/hour. Gene request
+  delivery (B-1137: a request reached a caretaker, was accepted or rejected, or
+  its gene became free) uses four batches of 16/hour, 64 messages/hour; each
+  request or decision also sends its message at once, and the batches retry
+  what that missed;
 - `56,58,59 23 * * *`: nightly archive, canon repair and gallery, each in a
   separate invocation.
 
