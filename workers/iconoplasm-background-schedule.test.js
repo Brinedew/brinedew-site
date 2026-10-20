@@ -54,6 +54,7 @@ test("every configured background event invokes exactly its one job, including d
   )
   assert.equal(totals.caretakerComments * CARETAKER_COMMENT_DELIVERY_LIMIT, 80 * 24)
   assert.equal(totals.caretakerSupervotes * CARETAKER_SUPERVOTE_DELIVERY_LIMIT, 80 * 24)
+  assert.equal(totals.caretakerGeneRequests, 96)
   assert.equal(totals.fulfillment, 96)
   assert.equal(totals.gallery, 97)
   assert.equal(totals.geneguessrBoard, 144)

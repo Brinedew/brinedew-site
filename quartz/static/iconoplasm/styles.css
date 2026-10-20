@@ -1138,6 +1138,168 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   overflow-wrap: anywhere;
 }
 
+/* B-1137: asking a gene's caretaker for the gene, and the caretaker's list of who
+   asked. Printed text in the form's mono face; the asker's note is typed text. */
+.icono-gene-request-lead {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.icono-gene-request-note {
+  display: grid;
+  justify-items: start;
+}
+
+.icono-gene-request-note__field {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  color: var(--dark);
+  font: 500 var(--icono-action-font-size) / 1.2 var(--icono-action-font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Closed until "Add a note" opens it; the grid above would otherwise beat [hidden]. */
+.icono-gene-request-note__field[hidden] {
+  display: none;
+}
+
+.icono-gene-request-note__field textarea {
+  width: 100%;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.icono-gene-request-note__count {
+  justify-self: end;
+  color: color-mix(in srgb, var(--dark) 60%, var(--light));
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.icono-gene-request-count {
+  min-width: 1.4em;
+  margin-left: 0.45em;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  background: var(--dark);
+  color: var(--light);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.icono-gene-request-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.icono-gene-request {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "who offer"
+    "note note"
+    "actions actions"
+    "status status";
+  gap: 0.55rem 1rem;
+  align-items: center;
+  padding: 0.85rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+}
+
+.icono-gene-request:first-child {
+  padding-top: 0.2rem;
+  border-top: 0;
+}
+
+.icono-gene-request__who {
+  display: flex;
+  grid-area: who;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+}
+
+.icono-gene-request__name {
+  overflow: hidden;
+  color: var(--dark);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icono-gene-request__age {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--dark) 58%, var(--light));
+  font-size: 0.75rem;
+}
+
+.icono-gene-request__avatar-blank {
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dark) 14%, var(--light));
+}
+
+.icono-gene-request__offer {
+  display: flex;
+  grid-area: offer;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.icono-gene-request__swap {
+  color: var(--secondary);
+  font-size: 1.1rem;
+}
+
+.icono-gene-request__portrait {
+  width: 2.25rem;
+  height: 3rem;
+  border: 1px solid var(--ui-border);
+  object-fit: cover;
+}
+
+.icono-gene-request__symbol {
+  color: var(--dark);
+  font:
+    800 1.05rem / 1 "League Spartan",
+    sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.icono-gene-request__note {
+  grid-area: note;
+  margin: 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid color-mix(in srgb, var(--secondary) 55%, transparent);
+  color: var(--dark);
+  font-family: "Special Elite", Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.icono-gene-request__actions {
+  grid-area: actions;
+}
+
+.icono-gene-request > .icono-caretaker-status {
+  grid-area: status;
+  margin: 0;
+}
+
 /* B-1104: on phones the switch dialog fits one screen with no scroll bar. */
 @media (max-width: 599px) {
   .icono-caretaker-claim-form {

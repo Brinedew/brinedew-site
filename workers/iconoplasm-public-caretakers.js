@@ -47,39 +47,14 @@ function chunks(values) {
   return result
 }
 
-export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSymbols) {
-  const symbols = uniqueSymbols(requestedSymbols)
-  if (!symbols.length || !iconoplasmDb || !accountDb) return Object.freeze({})
-
-  const assignmentResults = await Promise.all(
-    chunks(symbols).map((symbolChunk) =>
-      iconoplasmDb
-        .prepare(
-          // The open-role filter matches the partial unique index on gene_symbol.
-          `SELECT gene_symbol AS canonical_symbol, account_id, status
-             FROM icono_caretaker_assignments
-            WHERE gene_symbol IN (${symbolChunk.map(() => "?").join(", ")})
-              AND status IN ('pending_acceptance', 'active', 'suspended')`,
-        )
-        .bind(...symbolChunk)
-        .all(),
-    ),
+// B-1137: each account's Discord name and avatar, as the toolbar shows a
+// caretaker. A gene request shows its asker the same way. Accounts without a
+// usable profile are left out.
+export async function readAccountProfiles(accountDb, requestedAccountIds) {
+  const accountIds = Array.from(
+    new Set((requestedAccountIds || []).map((id) => String(id || "").trim()).filter(Boolean)),
   )
-
-  const accountBySymbol = new Map()
-  for (const assignmentResult of assignmentResults) {
-    for (const row of rowsFrom(assignmentResult)) {
-      const symbol = normalizedSymbol(row?.canonical_symbol)
-      const accountId = String(row?.account_id || "").trim()
-      if (!CURRENT_CARETAKER_STATUSES.includes(row?.status)) continue
-      if (symbol && accountId && !accountBySymbol.has(symbol)) {
-        accountBySymbol.set(symbol, accountId)
-      }
-    }
-  }
-  const accountIds = Array.from(new Set(accountBySymbol.values()))
-  if (!accountIds.length) return Object.freeze({})
-
+  if (!accountIds.length || !accountDb) return new Map()
   const profileResults = await Promise.all(
     chunks(accountIds).map((accountChunk) =>
       accountDb
@@ -116,6 +91,42 @@ export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSym
       )
     }
   }
+  return profileByAccount
+}
+
+export async function readPublicCaretakers(iconoplasmDb, accountDb, requestedSymbols) {
+  const symbols = uniqueSymbols(requestedSymbols)
+  if (!symbols.length || !iconoplasmDb || !accountDb) return Object.freeze({})
+
+  const assignmentResults = await Promise.all(
+    chunks(symbols).map((symbolChunk) =>
+      iconoplasmDb
+        .prepare(
+          // The open-role filter matches the partial unique index on gene_symbol.
+          `SELECT gene_symbol AS canonical_symbol, account_id, status
+             FROM icono_caretaker_assignments
+            WHERE gene_symbol IN (${symbolChunk.map(() => "?").join(", ")})
+              AND status IN ('pending_acceptance', 'active', 'suspended')`,
+        )
+        .bind(...symbolChunk)
+        .all(),
+    ),
+  )
+
+  const accountBySymbol = new Map()
+  for (const assignmentResult of assignmentResults) {
+    for (const row of rowsFrom(assignmentResult)) {
+      const symbol = normalizedSymbol(row?.canonical_symbol)
+      const accountId = String(row?.account_id || "").trim()
+      if (!CURRENT_CARETAKER_STATUSES.includes(row?.status)) continue
+      if (symbol && accountId && !accountBySymbol.has(symbol)) {
+        accountBySymbol.set(symbol, accountId)
+      }
+    }
+  }
+  const accountIds = Array.from(new Set(accountBySymbol.values()))
+  if (!accountIds.length) return Object.freeze({})
+  const profileByAccount = await readAccountProfiles(accountDb, accountIds)
 
   const result = {}
   for (const symbol of symbols) {

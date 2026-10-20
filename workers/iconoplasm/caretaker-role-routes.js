@@ -2,7 +2,12 @@
 // main database (caretaker-roles.js): whether this account can become the
 // gene's caretaker, claiming or switching to it, accepting or declining an
 // offer, leaving, and the Make Tags helper. The JSON is the one the gene page
-// already speaks (quartz/static/iconoplasm/caretaker-*.js).
+// already speaks (quartz/static/iconoplasm/caretaker-*.js). B-1137 adds asking a
+// gene's caretaker for the gene: sending, accepting, rejecting and withdrawing a
+// request (caretaker-gene-requests.js).
+import * as z from "zod/mini"
+
+import { deliverPendingCaretakerGeneRequestNotifications } from "../iconoplasm-caretaker-comment-notifications.js"
 import { createCaretakerSwitchPolicy } from "./caretaker/caretaker-switch-cooldown.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
 import {
@@ -21,14 +26,35 @@ import {
   taggerizerDisabled,
 } from "./caretaker/taggerizer.js"
 import {
-  changeOwnRole,
-  claimGene,
-  readClaimAvailability,
-  requireSteward,
-  rolesDb,
-} from "./caretaker-roles.js"
+  createGeneRequest,
+  decideGeneRequest,
+  readGenePageCaretaking,
+} from "./caretaker-gene-requests.js"
+import { changeOwnRole, claimGene, requireSteward, rolesDb } from "./caretaker-roles.js"
 
 const GENE = "/api/iconoplasm/caretaker/genes/:gene"
+const boundedText = (max) => z.string().check(z.maxLength(max))
+const REQUEST_BODY = z.object({
+  command_id: z.string().check(z.minLength(8), z.maxLength(128)),
+  holder_assignment_id: boundedText(128),
+  offered_assignment_id: z.nullable(boundedText(128)),
+  replace_request_id: z.nullish(boundedText(64)),
+  note: z.nullish(boundedText(2000)),
+  terms_accepted: z.literal(true),
+  terms_version_id: boundedText(200),
+})
+const DECISION_BODY = z.object({
+  expected_assignment_version: z.optional(z.int().check(z.positive())),
+  terms_accepted: z.optional(z.boolean()),
+  terms_version_id: z.optional(boundedText(200)),
+})
+
+// Zod checks the shape; caretaker-gene-requests.js checks the meaning.
+function parsed(schema, body) {
+  const result = schema.safeParse(body ?? {})
+  if (!result.success) throw authorityError("INVALID_GENE_REQUEST", "Request body is invalid", 400)
+  return result.data
+}
 
 function param(c, name) {
   try {
@@ -59,6 +85,19 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
     }
   }
 
+  // A request's Discord message goes out at once; the scheduled delivery retries
+  // whatever this misses.
+  function deliverSoon(c) {
+    let ctx
+    try {
+      ctx = c.executionCtx
+    } catch {}
+    const delivery = deliverPendingCaretakerGeneRequestNotifications(c.env, { limit: 2 }).catch(
+      (error) => console.warn("[iconoplasm-gene-request-dm] inline delivery failed", error),
+    )
+    ctx?.waitUntil?.(delivery)
+  }
+
   async function mutation(c, run, bodyLimit) {
     try {
       requireStrictSameOriginMutation(c.req.raw)
@@ -74,7 +113,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
     try {
       const { accountId, session } = await signedIn(c)
       return jsonResponse(
-        await readClaimAvailability(rolesDb(c.env), {
+        await readGenePageCaretaking(rolesDb(c.env), c.env.DB, {
           geneLocator: param(c, "gene"),
           accountId,
           now: now(),
@@ -113,6 +152,35 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
         now: now(),
       })
       await settle(c, reElect)
+      return jsonResponse(result)
+    }),
+  )
+
+  app.post(`${GENE}/requests`, (c) =>
+    mutation(c, async ({ accountId, body, db }) => {
+      const { result, notify } = await createGeneRequest(db, {
+        geneLocator: param(c, "gene"),
+        accountId,
+        body: parsed(REQUEST_BODY, body),
+        now: now(),
+      })
+      if (notify) deliverSoon(c)
+      return jsonResponse(result)
+    }),
+  )
+
+  app.post(`${GENE}/requests/:request/:action{accept|reject|withdraw}`, (c) =>
+    mutation(c, async ({ accountId, body, db }) => {
+      const { result, reElect, notify } = await decideGeneRequest(db, {
+        geneLocator: param(c, "gene"),
+        requestId: param(c, "request"),
+        action: c.req.param("action"),
+        accountId,
+        body: parsed(DECISION_BODY, body),
+        now: now(),
+      })
+      await settle(c, reElect)
+      if (notify) deliverSoon(c)
       return jsonResponse(result)
     }),
   )
