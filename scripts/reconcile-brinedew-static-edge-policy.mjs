@@ -98,10 +98,12 @@ export function desiredRewriteRule(rule) {
 // off for every matching request, whatever the Web Analytics site settings say
 // ("Configuration rules have precedence over any Web Analytics rules").
 // B-1087: one also sets the origin TLS mode for a single host.
+// B-1130: one turns off the Browser Integrity Check for public reads.
 export function desiredConfigRule(rule) {
   const parameters = {}
   if (rule.disableRum !== undefined) parameters.disable_rum = rule.disableRum === true
   if (rule.ssl) parameters.ssl = rule.ssl
+  if (rule.bic !== undefined) parameters.bic = rule.bic === true
   return {
     ref: rule.ref,
     description: rule.description,

@@ -70,6 +70,7 @@ Just trying it out in a notebook or a slide? `https://iconoplasm.brinedew.bio/bl
 | Blots on a page many people will see: a lab wiki, a blog post, a published figure | The resolver's `cdn_url` for each blot | 1 request per 50 blots, then nothing per view |
 | Every gene, or offline use: a mirror, a figure pipeline, an ML dataset | The bulk file: one JSONL download of every gene | 1 download (19 MB) |
 | A mirror you want to keep current | The bulk file once, then the change feed, polled at most hourly | 1 small request per poll |
+| Code that can reach GitHub but not this site, such as Claude.ai's code sandbox | The [GitHub copy](#from-a-chatbots-code-sandbox): `blot/{FIRST LETTER}/{SYMBOL}.webp` | Nothing: GitHub serves the files |
 
 Rule of thumb: if you would call the resolver more than about 20 times in a row, download the bulk file instead.
 
@@ -100,6 +101,23 @@ So for anything many people will see:
 2. Or download the images once and serve them from your own site. CC0 means you may.
 
 Please don't point a popular page at `/blot/{SYMBOL}.webp`. It is for trying things out and for small, private use.
+
+### From a chatbot's code sandbox
+
+Some AI chatbots run code in a sandbox that can reach only GitHub and package registries. Claude.ai's sandbox is one, by default. For them, every blot is also in a public GitHub repository, [Brinedew/iconoplasm-blots](https://github.com/Brinedew/iconoplasm-blots): the same files, CC0, updated every hour.
+
+- A blot's path is `blot/{FIRST LETTER}/{SYMBOL}.webp`, with the HGNC symbol in upper case. Map aliases first: p53 is `blot/T/TP53.webp`.
+- One file: `https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main/blot/N/NOTCH1.webp`
+- If only `github.com` is reachable, use git, which fetches just the files you name:
+
+```sh
+git clone --depth 1 --filter=blob:none --no-checkout https://github.com/Brinedew/iconoplasm-blots.git
+git -C iconoplasm-blots checkout main -- blot/N/NOTCH1.webp blot/R/RBPJ.webp
+```
+
+- [`index.json`](https://github.com/Brinedew/iconoplasm-blots/blob/main/index.json) lists every symbol with its full name and path.
+
+Embed the downloaded files in your figure (an SVG `<image>` with a `data:` URL works offline and in slides) rather than linking to `/blot/` addresses.
 
 ## Resolver
 
