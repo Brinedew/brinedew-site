@@ -92,21 +92,23 @@ In my testing, I found three approaches to make the weight readable from an imag
 
 1. Specify a head-to-body ratio as a separate character tag
 
+Some rough numbers you can take as a starting point:
+
 | Weight | How many heads tall |
 | ------ | ------------------- |
-| 5 kg   | 2                   |
-| 10 kg  | 3                   |
-| 20 kg  | 4                   |
-| 30 kg  | 5                   |
+| 2 kg   | 2                   |
+| 5 kg   | 3                   |
+| 10 kg  | 4                   |
+| 20 kg  | 5                   |
 | 40 kg  | 6                   |
 | 60 kg  | 7                   |
 | 80 kg  | 8                   |
-| 160 kg | 9                   |
-| 320 kg | 10                  |
-2. "Banana for scale" - describe how big or small the surrounding props are. Character who "dwarfed by the height of the doorframe" comes off as smaller mass compared to the character who "crouches to fit into doorframe".
-3. Compare the physique to known characters: "hulk physique", "goblin proportions", ""
-
+| 120 kg | 9                   |
+| 160 kg | 10                  |
+2. "Banana for scale" method - add action tags that describe how big or small the surrounding props are in relation to your character. A character who is "dwarfed by the height of the doorframe" comes off as smaller mass compared to the character who "crouches to fit into doorframe".
+3. Namedrop a known character archetype: "hulk physique", "goblin proportions", "chibi".
 
 **I struggle to make the character look their age**
 
-In my experience, eye-to-head ratio is great at conveying maturity at a glance. 
+In my experience, eye-to-head ratio is great at conveying maturity at a glance.
+
