@@ -34,6 +34,10 @@ picture other sites, chatbots, share previews and search engines use.
   Bunny storage is the record of which blots exist (B-1131).
 - A blot changes when the current portrait, the full name or the symbol
   changes. Votes that don't change the winner leave it alone.
+- The public GitHub repository `Brinedew/iconoplasm-blots` holds a copy of
+  every current blot at `blot/<initial>/<SYMBOL>.webp`, for chatbot sandboxes
+  that reach GitHub but not our hosts (B-1130). Its own hourly Action copies
+  whatever this drawer painted. It is a copy, never a record.
 
 A portrait never has text on it. A blot always does. Nothing else is a blot.
 

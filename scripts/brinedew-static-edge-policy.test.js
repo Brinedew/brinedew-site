@@ -139,8 +139,8 @@ test("an unmatched Web Analytics site is drift, and apply refuses", async () => 
     { site_tag: "t", host: "elsewhere.example", site_token: "x" },
   ])
   const options = { apiToken: "t", accountId: "a", stage: "rules", fetchImpl, log: () => {} }
-  // Four drifts: the two missing configuration rules, the missing cache rule and the unmatched site.
-  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 4 })
+  // Five drifts: the three missing configuration rules, the missing cache rule and the unmatched site.
+  assert.deepEqual(await reconcileStaticEdgePolicy({ ...options, mode: "check" }), { drift: 5 })
   await assert.rejects(reconcileStaticEdgePolicy({ ...options, mode: "apply" }), /not found/)
 })
 
@@ -185,6 +185,14 @@ test("the rules stage writes the configuration and cache rules and turns Cloudfl
             expression: '(http.host eq "img.brinedew.bio")',
             action: "set_config",
             action_parameters: { ssl: "full" },
+            enabled: true,
+          },
+          {
+            ref: "public_reads_no_browser_integrity_check",
+            description: policy.configRules[2].description,
+            expression: policy.configRules[2].expression,
+            action: "set_config",
+            action_parameters: { bic: false },
             enabled: true,
           },
         ],
