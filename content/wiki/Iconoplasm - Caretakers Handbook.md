@@ -92,6 +92,8 @@ In my testing, I found three approaches to make the weight readable from an imag
 
 1. Specify a head-to-body ratio as a separate character tag
 
+https://pinterest.com/pin/476326098091768543/
+
 Some rough numbers you can take as a starting point:
 
 | Weight | How many heads tall |
