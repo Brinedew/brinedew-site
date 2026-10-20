@@ -467,6 +467,43 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_caretaker_supervote_notifications.caretaker_account_id"],
     },
     {
+      // B-1137: a request for someone's gene is a private exchange with its own note and no
+      // public value; the person's role already ended, which voided what was pending.
+      id: "caretaker_gene_requests_sent",
+      database: "iconoplasm",
+      table: "icono_caretaker_gene_requests",
+      action: "delete",
+      key: "rowid",
+      where: "requester_account_id = ?",
+      whereBinds: [A],
+      weight: 5,
+      covers: ["icono_caretaker_gene_requests.requester_account_id"],
+    },
+    {
+      id: "caretaker_gene_requests_received",
+      database: "iconoplasm",
+      table: "icono_caretaker_gene_requests",
+      action: "delete",
+      key: "rowid",
+      where: "holder_account_id = ?",
+      whereBinds: [A],
+      scan: true,
+      weight: 5,
+      covers: ["icono_caretaker_gene_requests.holder_account_id"],
+    },
+    {
+      id: "caretaker_gene_request_deliveries",
+      database: "iconoplasm",
+      table: "icono_caretaker_gene_request_notifications",
+      action: "delete",
+      key: "rowid",
+      where: "recipient_account_id = ?",
+      whereBinds: [A],
+      scan: true,
+      weight: 3,
+      covers: ["icono_caretaker_gene_request_notifications.recipient_account_id"],
+    },
+    {
       // Published portraits keep their provenance; the creator is the opaque account id.
       id: "portrait_creators",
       database: "iconoplasm",

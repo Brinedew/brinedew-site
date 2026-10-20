@@ -12,9 +12,12 @@
 // A role is offered (pending_acceptance, B-1083 brings the admin's offer back),
 // active, suspended by the admin, or ended. The caretaker claims a free gene,
 // switches to another one, accepts or declines an offer, and leaves; the admin
-// cancels an offer, suspends, resumes and ends a role.
+// cancels an offer, suspends, resumes and ends a role. B-1137: a person can also
+// ask a gene's caretaker for the gene (caretaker-gene-requests.js); every change
+// here voids the requests it leaves stale, in the same batch.
 import { sha256Hex } from "../lib/iconoplasm-sha256.js"
 import { CURRENT_CARETAKER_TERMS } from "./caretaker/caretaker-terms-registry.js"
+import { geneRequestVoidStatements } from "./caretaker/gene-request-voids.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
 import { geneVoteVersionBumpStatement } from "./votes/vote-guards.js"
 
@@ -38,7 +41,7 @@ export const ROLE_COLUMNS = `caretaker_assignment_id, gene_symbol, account_id, s
 // that vote out of the election (it counts only while the role is open). The
 // gene's vote version advances in the same batch, and the caller re-runs the
 // election for the genes in `reElect`.
-function endedSupervoteBump(db, symbol, roleId, version) {
+export function endedSupervoteBump(db, symbol, roleId, version) {
   return geneVoteVersionBumpStatement(db, symbol, {
     whenSql: `EXISTS (SELECT 1 FROM icono_caretaker_assignments
                        WHERE caretaker_assignment_id = ?2 AND assignment_version = ?3
@@ -48,7 +51,7 @@ function endedSupervoteBump(db, symbol, roleId, version) {
 }
 
 // A caretaker starts with every comment already on the gene read.
-const LATEST_COMMENT_SQL = (symbolSql) =>
+export const LATEST_COMMENT_SQL = (symbolSql) =>
   `COALESCE((SELECT MAX(id) FROM icono_gene_comments
               WHERE gene_symbol = ${symbolSql} AND status = 'visible'), 0)`
 
@@ -150,7 +153,7 @@ export function caretakerTerms() {
   return CURRENT_CARETAKER_TERMS
 }
 
-function publicTerms(terms) {
+export function publicTerms(terms) {
   return {
     terms_version_id: terms.terms_version_id,
     terms_sha256: terms.terms_sha256,
@@ -190,10 +193,13 @@ async function switchCooldown(db, switchPolicy, session, accountId, nowIso) {
 
 // What the gene page's "Become caretaker" button needs. The wire keeps the old
 // fields the browser echoes back (gene_revision, entitlement_policy_version).
-export async function readClaimAvailability(
-  db,
-  { geneLocator, accountId, now, switchPolicy, session },
-) {
+export async function readClaimAvailability(db, input) {
+  return (await readClaimContext(db, input)).availability
+}
+
+// The same, with the two open roles it read: the gene's and the account's. The
+// gene page's request button (B-1137) starts from them.
+export async function readClaimContext(db, { geneLocator, accountId, now, switchPolicy, session }) {
   const gene = await resolveGene(db, geneLocator)
   const [geneRole, accountRole] = await Promise.all([
     openRoleOfGene(db, gene.canonical_symbol),
@@ -219,7 +225,7 @@ export async function readClaimAvailability(
   const cooldown =
     reason == null ? await switchCooldown(db, switchPolicy, session, accountId, now) : null
   if (cooldown) reason = "switch_cooldown"
-  return {
+  const availability = {
     enabled: true,
     gene: { gene_id: gene.gene_id, canonical_symbol: gene.canonical_symbol },
     claim: {
@@ -237,9 +243,10 @@ export async function readClaimAvailability(
       terms: publicTerms(caretakerTerms()),
     },
   }
+  return { availability, gene, geneRole, accountRole }
 }
 
-function readCommandId(body) {
+export function readCommandId(body) {
   const commandId = String(body?.command_id || "").trim()
   if (!COMMAND_ID.test(commandId))
     throw authorityError("COMMAND_ID_REQUIRED", "A command_id is required", 400)
@@ -255,7 +262,7 @@ async function roleIdFor(accountId, commandId) {
   return `assignment_${digest.slice(0, 48)}`
 }
 
-function isConstraintError(error) {
+export function isConstraintError(error) {
   return /UNIQUE constraint failed|SQLITE_CONSTRAINT|constraint failed/i.test(
     String(error?.message || error),
   )
@@ -265,7 +272,7 @@ function claimUnavailable(message = "Caretaking is no longer available for this 
   return authorityError("CARETAKER_CLAIM_UNAVAILABLE", message, 409)
 }
 
-function requireCurrentTerms(body) {
+export function requireCurrentTerms(body) {
   if (body?.terms_accepted !== true)
     throw authorityError(
       "TERMS_ACCEPTANCE_REQUIRED",
@@ -380,6 +387,17 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
         now,
         gene.canonical_symbol,
       ),
+    ...geneRequestVoidStatements(db, {
+      role: previous
+        ? {
+            caretaker_assignment_id: previous.caretaker_assignment_id,
+            gene_symbol: previous.canonical_symbol,
+          }
+        : null,
+      accountId,
+      now,
+      reason: previous ? "caretaker_switched_gene" : "caretaker_claimed_gene",
+    }),
   )
   try {
     // A switch whose old role moved on ends nothing, and then the insert meets
@@ -502,17 +520,17 @@ export function changeRoleStatement(
 // itself on the change having applied.
 export async function changeRole(db, input, { extraStatements = () => [] } = {}) {
   const transition = TRANSITIONS[input.action]
-  const before =
-    transition?.to === "ended"
-      ? await first(
-          db,
-          `SELECT gene_symbol FROM icono_caretaker_assignments WHERE caretaker_assignment_id = ?`,
-          input.roleId,
-        )
-      : null
+  const before = transition
+    ? await first(
+        db,
+        `SELECT gene_symbol, account_id FROM icono_caretaker_assignments
+          WHERE caretaker_assignment_id = ?`,
+        input.roleId,
+      )
+    : null
   const results = await db.batch([
     changeRoleStatement(db, input),
-    ...(before
+    ...(before && transition.to === "ended"
       ? [
           endedSupervoteBump(
             db,
@@ -521,6 +539,14 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
             Number(input.expectedVersion) + 1,
           ),
         ]
+      : []),
+    ...(before
+      ? geneRequestVoidStatements(db, {
+          role: { caretaker_assignment_id: input.roleId, gene_symbol: before.gene_symbol },
+          accountId: before.account_id,
+          now: input.now,
+          reason: `caretaker_role_${input.action}`,
+        })
       : []),
     ...extraStatements(db),
   ])

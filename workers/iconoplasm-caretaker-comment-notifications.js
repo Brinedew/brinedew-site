@@ -3,6 +3,7 @@ const DELIVERY_STATUSES = Object.freeze(["pending", "retry"])
 // also uses two Discord requests. The scheduler gives these separate invocations.
 export const CARETAKER_COMMENT_DELIVERY_LIMIT = 20
 export const CARETAKER_SUPERVOTE_DELIVERY_LIMIT = 16
+export const CARETAKER_GENE_REQUEST_DELIVERY_LIMIT = 16
 
 function bounded(value, limit = 2000) {
   return String(value || "")
@@ -101,10 +102,12 @@ export function caretakerCommentOutboxStatement(db, notification) {
     )
 }
 
-async function finish(db, key, status, fields = {}) {
+// Records one delivery attempt on any of the caretaker outboxes; they share
+// their delivery columns.
+async function finishDelivery(db, table, key, status, fields = {}) {
   await db
     .prepare(
-      `UPDATE icono_caretaker_comment_notifications
+      `UPDATE ${table}
           SET discord_status = ?, discord_channel_id = ?, discord_message_id = ?,
               discord_error = ?, discord_next_attempt_at = ?, updated_at = CURRENT_TIMESTAMP,
               sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE sent_at END
@@ -124,6 +127,95 @@ async function finish(db, key, status, fields = {}) {
 
 function deliveryError(response, body) {
   return `discord_${response.status}:${bounded(body, 300)}`
+}
+
+// Opens the bot's DM channel with one person and posts one message. Answers
+// "sent", "retry" (worth trying again later), "failed", or "unknown" when the
+// message POST may have reached Discord: retrying that could send it twice.
+async function sendDiscordDirectMessage(token, recipientId, content) {
+  let channelResponse
+  try {
+    channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: recipientId }),
+    })
+  } catch (error) {
+    return { status: "retry", error: bounded(error?.message || "network_error", 300) }
+  }
+  const channelBody = await channelResponse.text()
+  if (!channelResponse.ok) {
+    const retryable = channelResponse.status === 429 || channelResponse.status >= 500
+    return {
+      status: retryable ? "retry" : "failed",
+      error: deliveryError(channelResponse, channelBody),
+    }
+  }
+  let channel
+  try {
+    channel = JSON.parse(channelBody)
+  } catch {
+    channel = null
+  }
+  if (!channel?.id) return { status: "failed", error: "discord_dm_channel_missing" }
+  let messageResponse
+  try {
+    messageResponse = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: boundedCodePoints(content, 2000),
+        allowed_mentions: { parse: [] },
+      }),
+    })
+  } catch (error) {
+    return {
+      status: "unknown",
+      channelId: channel.id,
+      error: bounded(error?.message || "ambiguous_message_post", 300),
+    }
+  }
+  const messageBody = await messageResponse.text()
+  if (!messageResponse.ok) {
+    const retryable = messageResponse.status === 429 || messageResponse.status >= 500
+    return {
+      status: retryable ? "retry" : "failed",
+      channelId: channel.id,
+      error: deliveryError(messageResponse, messageBody),
+    }
+  }
+  let message
+  try {
+    message = JSON.parse(messageBody)
+  } catch {
+    message = null
+  }
+  return { status: "sent", channelId: channel.id, messageId: message?.id || "" }
+}
+
+// Sends one claimed outbox row and records the outcome. Returns 1 when sent.
+async function deliverClaimedRow(db, table, token, row, recipientId, content) {
+  const outcome = await sendDiscordDirectMessage(token, recipientId, content)
+  await finishDelivery(db, table, row.notification_key, outcome.status, {
+    ...outcome,
+    nextAttemptAt:
+      outcome.status === "retry" ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
+  })
+  return outcome.status === "sent" ? 1 : 0
+}
+
+// The recipient's linked Discord id, read when the message is sent.
+async function discordIdOfAccount(accounts, accountId) {
+  const identity = await accounts
+    .prepare(
+      `SELECT provider_subject
+         FROM brinedew_account_identities
+        WHERE account_id = ? AND provider = 'discord' AND unlinked_at IS NULL
+        ORDER BY link_version DESC LIMIT 1`,
+    )
+    .bind(accountId)
+    .first()
+  return bounded(identity?.provider_subject, 64)
 }
 
 export async function deliverPendingCaretakerCommentNotifications(env, { limit = 20 } = {}) {
@@ -167,105 +259,20 @@ export async function deliverPendingCaretakerCommentNotifications(env, { limit =
       )
       .first()
     if (claim?.discord_status !== "sending") continue
-    let channelResponse
-    try {
-      channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
-        method: "POST",
-        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ recipient_id: row.caretaker_discord_user_id }),
-      })
-    } catch (error) {
-      await finish(db, row.notification_key, "retry", {
-        error: bounded(error?.message || "network_error", 300),
-        nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
-      })
-      continue
-    }
-    const channelBody = await channelResponse.text()
-    if (!channelResponse.ok) {
-      const retryable = channelResponse.status === 429 || channelResponse.status >= 500
-      await finish(db, row.notification_key, retryable ? "retry" : "failed", {
-        error: deliveryError(channelResponse, channelBody),
-        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
-      })
-      continue
-    }
-    let channel
-    try {
-      channel = JSON.parse(channelBody)
-    } catch {
-      channel = null
-    }
-    if (!channel?.id) {
-      await finish(db, row.notification_key, "failed", { error: "discord_dm_channel_missing" })
-      continue
-    }
     const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}#gene-comments`
-    let messageResponse
-    try {
-      messageResponse = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: boundedCodePoints(
-            `New comment on **${row.gene_symbol}**\n${geneUrl}\n\n**${row.comment_author_name}:** ${row.comment_body}`,
-            2000,
-          ),
-          allowed_mentions: { parse: [] },
-        }),
-      })
-    } catch (error) {
-      // The POST may have reached Discord. Retrying could duplicate a user-visible DM.
-      await finish(db, row.notification_key, "unknown", {
-        channelId: channel.id,
-        error: bounded(error?.message || "ambiguous_message_post", 300),
-      })
-      continue
-    }
-    const messageBody = await messageResponse.text()
-    if (!messageResponse.ok) {
-      const retryable = messageResponse.status === 429 || messageResponse.status >= 500
-      await finish(db, row.notification_key, retryable ? "retry" : "failed", {
-        channelId: channel.id,
-        error: deliveryError(messageResponse, messageBody),
-        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
-      })
-      continue
-    }
-    let message
-    try {
-      message = JSON.parse(messageBody)
-    } catch {
-      message = null
-    }
-    await finish(db, row.notification_key, "sent", {
-      channelId: channel.id,
-      messageId: message?.id || "",
-    })
-    delivered += 1
+    delivered += await deliverClaimedRow(
+      db,
+      "icono_caretaker_comment_notifications",
+      token,
+      row,
+      row.caretaker_discord_user_id,
+      `New comment on **${row.gene_symbol}**
+${geneUrl}
+
+**${row.comment_author_name}:** ${row.comment_body}`,
+    )
   }
   return { ok: true, delivered }
-}
-
-async function finishSupervote(db, key, status, fields = {}) {
-  await db
-    .prepare(
-      `UPDATE icono_caretaker_supervote_notifications
-          SET discord_status = ?, discord_channel_id = ?, discord_message_id = ?,
-              discord_error = ?, discord_next_attempt_at = ?, updated_at = CURRENT_TIMESTAMP,
-              sent_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE sent_at END
-        WHERE notification_key = ?`,
-    )
-    .bind(
-      status,
-      bounded(fields.channelId, 64) || null,
-      bounded(fields.messageId, 64) || null,
-      bounded(fields.error, 500),
-      fields.nextAttemptAt || null,
-      status,
-      key,
-    )
-    .run()
 }
 
 export async function deliverPendingCaretakerSupervoteNotifications(
@@ -330,108 +337,145 @@ export async function deliverPendingCaretakerSupervoteNotifications(
       )
       .first()
     if (claim?.discord_status !== "sending") continue
-    let identity
+    let discordUserId
     try {
-      identity = await accounts
-        .prepare(
-          `SELECT provider_subject
-             FROM brinedew_account_identities
-            WHERE account_id = ? AND provider = 'discord' AND unlinked_at IS NULL
-            ORDER BY link_version DESC LIMIT 1`,
-        )
-        .bind(row.caretaker_account_id)
-        .first()
+      discordUserId = await discordIdOfAccount(accounts, row.caretaker_account_id)
     } catch (error) {
-      await finishSupervote(db, row.notification_key, "retry", {
+      await finishDelivery(
+        db,
+        "icono_caretaker_supervote_notifications",
+        row.notification_key,
+        "retry",
+        {
+          error: bounded(error?.message || "account_identity_read_failed", 300),
+          nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
+        },
+      )
+      continue
+    }
+    if (!discordUserId) {
+      await finishDelivery(
+        db,
+        "icono_caretaker_supervote_notifications",
+        row.notification_key,
+        "suppressed",
+        {
+          error: "discord_identity_missing",
+        },
+      )
+      continue
+    }
+    const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}`
+    delivered += await deliverClaimedRow(
+      db,
+      "icono_caretaker_supervote_notifications",
+      token,
+      row,
+      discordUserId,
+      `Your 10x preferred portrait for **${row.gene_symbol}** is no longer current.
+${geneUrl}`,
+    )
+  }
+  return { ok: true, delivered }
+}
+
+// B-1137: the messages a gene request sends (caretaker-gene-requests.js). Each is
+// checked again when it is sent, and suppressed once it no longer holds: a
+// "requested" message whose request was answered or already seen on the gene
+// page, a "freed" message for a gene somebody has taken again.
+const GENE_REQUEST_MESSAGES = Object.freeze({
+  requested: (symbol) => `New request for **${symbol}**`,
+  accepted: (symbol) => `Your request for **${symbol}** was accepted.`,
+  rejected: (symbol) => `Your request for **${symbol}** was rejected.`,
+  freed: (symbol) => `**${symbol}** has no caretaker now, so you can claim it.`,
+})
+
+export async function deliverPendingCaretakerGeneRequestNotifications(
+  env,
+  { limit = CARETAKER_GENE_REQUEST_DELIVERY_LIMIT } = {},
+) {
+  const db = env?.ICONOPLASM_DB
+  const accounts = env?.DB
+  const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
+  if (!db?.prepare || !accounts?.prepare || !token) {
+    return { ok: false, delivered: 0, skipped: "unavailable" }
+  }
+  const table = "icono_caretaker_gene_request_notifications"
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      CARETAKER_GENE_REQUEST_DELIVERY_LIMIT,
+      Math.trunc(Number(limit) || CARETAKER_GENE_REQUEST_DELIVERY_LIMIT),
+    ),
+  )
+  const due = await dueNotificationsStatement(db, table, safeLimit).all()
+  let delivered = 0
+  for (const row of due?.results || []) {
+    const claim = await db
+      .prepare(
+        `WITH eligible AS MATERIALIZED (
+           SELECT 1 FROM icono_caretaker_gene_requests request
+            WHERE request.request_id = ?1
+              AND CASE ?2
+                WHEN 'requested' THEN request.status = 'pending' AND request.seen_at IS NULL
+                                      AND request.holder_account_id = ?3
+                WHEN 'accepted' THEN request.status = 'accepted' AND request.requester_account_id = ?3
+                WHEN 'rejected' THEN request.status = 'rejected' AND request.requester_account_id = ?3
+                WHEN 'freed' THEN request.status = 'void' AND request.requester_account_id = ?3
+                  AND NOT EXISTS (SELECT 1 FROM icono_caretaker_assignments role
+                                   WHERE role.gene_symbol = request.gene_symbol
+                                     AND role.status IN ('pending_acceptance', 'active', 'suspended'))
+                ELSE 0 END
+         )
+         UPDATE icono_caretaker_gene_request_notifications
+            SET discord_status = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN 'sending' ELSE 'suppressed' END,
+                discord_attempt_count = discord_attempt_count + 1,
+                updated_at = CURRENT_TIMESTAMP,
+                discord_error = CASE WHEN EXISTS (SELECT 1 FROM eligible) THEN '' ELSE 'request_no_longer_current' END
+          WHERE notification_key = ?4 AND discord_status IN ('pending', 'retry')
+            AND discord_attempt_count = ?5
+          RETURNING discord_status`,
+      )
+      .bind(
+        row.request_id,
+        row.kind,
+        row.recipient_account_id,
+        row.notification_key,
+        row.discord_attempt_count,
+      )
+      .first()
+    if (claim?.discord_status !== "sending") continue
+    let discordUserId
+    try {
+      discordUserId = await discordIdOfAccount(accounts, row.recipient_account_id)
+    } catch (error) {
+      await finishDelivery(db, table, row.notification_key, "retry", {
         error: bounded(error?.message || "account_identity_read_failed", 300),
         nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
       })
       continue
     }
-    const discordUserId = bounded(identity?.provider_subject, 64)
     if (!discordUserId) {
-      await finishSupervote(db, row.notification_key, "suppressed", {
+      await finishDelivery(db, table, row.notification_key, "suppressed", {
         error: "discord_identity_missing",
       })
       continue
     }
-    let channelResponse
-    try {
-      channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
-        method: "POST",
-        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ recipient_id: discordUserId }),
-      })
-    } catch (error) {
-      await finishSupervote(db, row.notification_key, "retry", {
-        error: bounded(error?.message || "network_error", 300),
-        nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
-      })
-      continue
-    }
-    const channelBody = await channelResponse.text()
-    if (!channelResponse.ok) {
-      const retryable = channelResponse.status === 429 || channelResponse.status >= 500
-      await finishSupervote(db, row.notification_key, retryable ? "retry" : "failed", {
-        error: deliveryError(channelResponse, channelBody),
-        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
-      })
-      continue
-    }
-    let channel
-    try {
-      channel = JSON.parse(channelBody)
-    } catch {
-      channel = null
-    }
-    if (!channel?.id) {
-      await finishSupervote(db, row.notification_key, "failed", {
-        error: "discord_dm_channel_missing",
-      })
+    const message = GENE_REQUEST_MESSAGES[row.kind]
+    if (!message) {
+      await finishDelivery(db, table, row.notification_key, "failed", { error: "unknown_kind" })
       continue
     }
     const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}`
-    let messageResponse
-    try {
-      messageResponse = await fetch(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: boundedCodePoints(
-            `Your 10x preferred portrait for **${row.gene_symbol}** is no longer current.\n${geneUrl}`,
-            2000,
-          ),
-          allowed_mentions: { parse: [] },
-        }),
-      })
-    } catch (error) {
-      await finishSupervote(db, row.notification_key, "unknown", {
-        channelId: channel.id,
-        error: bounded(error?.message || "ambiguous_message_post", 300),
-      })
-      continue
-    }
-    const messageBody = await messageResponse.text()
-    if (!messageResponse.ok) {
-      const retryable = messageResponse.status === 429 || messageResponse.status >= 500
-      await finishSupervote(db, row.notification_key, retryable ? "retry" : "failed", {
-        channelId: channel.id,
-        error: deliveryError(messageResponse, messageBody),
-        nextAttemptAt: retryable ? retryAt(Number(row.discord_attempt_count || 0) + 1) : null,
-      })
-      continue
-    }
-    let message
-    try {
-      message = JSON.parse(messageBody)
-    } catch {
-      message = null
-    }
-    await finishSupervote(db, row.notification_key, "sent", {
-      channelId: channel.id,
-      messageId: message?.id || "",
-    })
-    delivered += 1
+    delivered += await deliverClaimedRow(
+      db,
+      table,
+      token,
+      row,
+      discordUserId,
+      `${message(row.gene_symbol)}
+${geneUrl}`,
+    )
   }
   return { ok: true, delivered }
 }
