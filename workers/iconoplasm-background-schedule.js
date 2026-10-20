@@ -13,6 +13,8 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   caretakerComments: quarterHours(2),
   fulfillment: quarterHours(5),
   caretakerSupervotes: Object.freeze([3, 15, 27, 39, 51]),
+  // B-1137: gene request messages that missed their inline send.
+  caretakerGeneRequests: quarterHours(11),
   gallery: quarterHours(8),
   recognition: quarterHours(14),
   // Every ten minutes or so, on the minutes no other job uses; the gap never exceeds 12.

@@ -811,6 +811,38 @@ export async function seedWorld() {
     discord_channel_id: `dm-channel-${ERASED_USER}`,
   })
 
+  // B-1137 gene requests: one Alice sent, one sent to her (both notes name her, as people do), and
+  // the message that told her about the second.
+  const geneRequest = (requestId, symbol, holder, requester, note) => ({
+    request_id: requestId,
+    gene_symbol: symbol,
+    holder_assignment_id: `assignment-${holder}`,
+    holder_account_id: holder,
+    requester_account_id: requester,
+    note,
+    terms_version_id: "terms-1",
+    created_at: "2026-10-01T00:00:00.000Z",
+    expires_at: "2026-10-15T00:00:00.000Z",
+  })
+  insert(
+    iconoplasm,
+    "icono_caretaker_gene_requests",
+    geneRequest("request-1", "SOX11", otherAccount, erasedAccount, `${ERASED_NAME} here.`),
+  )
+  insert(
+    iconoplasm,
+    "icono_caretaker_gene_requests",
+    geneRequest("request-2", "TP53", erasedAccount, otherAccount, `Hi ${ERASED_NAME}.`),
+  )
+  insert(iconoplasm, "icono_caretaker_gene_request_notifications", {
+    notification_key: "request-2:requested",
+    request_id: "request-2",
+    kind: "requested",
+    recipient_account_id: erasedAccount,
+    gene_symbol: "TP53",
+    discord_channel_id: `dm-channel-${ERASED_USER}`,
+  })
+
   // Publish events, hot and cold.
   for (const actor of [ERASED_USER, ERASED_USER, OTHER_USER, "vote_authority"]) {
     insert(iconoplasm, "icono_publish_events", { gene_symbol: "TP53", action: "publish", actor })

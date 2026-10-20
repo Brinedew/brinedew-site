@@ -27,8 +27,14 @@ function safeErrorResponse(error) {
         ? error.status
         : 400
     const retry = Number.isInteger(error.retryAfterSeconds) ? error.retryAfterSeconds : null
+    // Every authority error's message is a sentence written for the person on the
+    // page ("This gene's caretaker changed; refresh the gene page"), never an
+    // internal; without it the page could only show the code in capitals.
     return jsonResponse(
-      { error: { code: error.code }, ...(retry ? { retry_after_seconds: retry } : {}) },
+      {
+        error: { code: error.code, message: error.message },
+        ...(retry ? { retry_after_seconds: retry } : {}),
+      },
       status,
       retry ? { "Retry-After": String(retry) } : {},
     )

@@ -10,6 +10,7 @@ import {
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
 import { createRequestInbox } from "./request-inbox.js?v=8aa9e9accf7dd374"
+import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=ee0566e5a591e0c4"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
   createEmulsionFavoriteStore,
@@ -460,14 +461,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // B-1027: a switch on cooldown keeps its button, disabled, with a shade that drains
   // as the wait passes and the time left on it, like an ability cooldown in a MOBA.
   // It used to vanish, and a caretaker read that as a bug.
-  function renderCaretakerClaimCooldown(target, symbol, claim, onReady) {
+  // B-1137: a rejected gene request waits on the same button, with its own label.
+  function renderCaretakerClaimCooldown(target, symbol, claim, onReady, buttonLabel) {
     var endsAt = Date.parse(claim.available_at || "")
     if (!Number.isFinite(endsAt)) {
       target.replaceChildren()
       return
     }
     var total = Math.max(1, Number(claim.cooldown_seconds) || 0) * 1000
-    var label = claim.switch_from ? "Switch to " + symbol : "Become a " + symbol + " caretaker"
+    var label =
+      buttonLabel ||
+      (claim.switch_from ? "Switch to " + symbol : "Become a " + symbol + " caretaker")
     target.innerHTML =
       '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn icono-caretaker-claim-btn--cooldown" disabled>' +
       '<span class="icono-caretaker-claim-btn__sweep" aria-hidden="true"></span><span>' +
@@ -498,10 +502,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // line answers one fear a switching caretaker has: their lore, their supervote,
   // editing, the way back. The words began as Echo's ("Wikipedia utility page"
   // voice, 17 Oct 2026), were read for misreadings, then merged and trimmed so the
-  // dialog fits a 375 x 548 phone screen without a scroll bar.
+  // dialog fits a 375 x 548 phone screen without a scroll bar. B-1137: with no
+  // `symbol`, the gene is given away and nothing is gained in return.
   function caretakerSwitchInventoryMarkup(switchFrom, symbol) {
     var from = esc(switchFrom.canonical_symbol)
-    var to = esc(symbol)
+    var to = symbol ? esc(symbol) : ""
     var item = function (text) {
       return "<li>" + text + "</li>"
     }
@@ -531,15 +536,66 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               from +
               " supervote is withdrawn, so ordinary votes decide " +
               from +
-              "'s portrait. You gain a supervote on " +
-              to +
-              "'s portraits.",
+              "'s portrait." +
+              (to ? " You gain a supervote on " + to + "'s portraits." : ""),
           )
         : "") +
-      item("You can no longer edit " + from + "'s lore. You can now edit " + to + "'s lore.") +
+      item(
+        "You can no longer edit " +
+          from +
+          "'s lore." +
+          (to ? " You can now edit " + to + "'s lore." : ""),
+      ) +
       "</ul></section>" +
       "</div>"
     )
+  }
+
+  var CARETAKER_CAPABILITIES_MARKUP =
+    '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div>'
+
+  function caretakerTermsMarkup(terms, checked) {
+    return (
+      '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
+      (checked ? " checked" : "") +
+      '>I accept the <a href="' +
+      esc(terms.document_url) +
+      '" target="_blank" rel="noopener">' +
+      esc(terms.display_label || "caretaker terms") +
+      "</a>.</sl-checkbox>"
+    )
+  }
+
+  // B-1137: on a gene someone else looks after, the claim slot asks its caretaker
+  // for it; on your own gene, it lists who asked.
+  var geneRequestControls = createGeneRequestControls({
+    fetchJSON: fetchAuthedJSON,
+    esc: esc,
+    commandId: caretakerCommandId,
+    switchInventoryMarkup: caretakerSwitchInventoryMarkup,
+    capabilitiesMarkup: CARETAKER_CAPABILITIES_MARKUP,
+    termsMarkup: caretakerTermsMarkup,
+    renderCooldown: renderCaretakerClaimCooldown,
+    portraitUrl: function (symbol) {
+      return fetchGeneDetail(symbol).then(function (detail) {
+        return detail ? publishedPortraitUrl(detail, "thumb") : ""
+      })
+    },
+  })
+
+  // After a claim, a switch or an accepted request: the island, the claim slot
+  // and the sidebar read the new role.
+  function refreshCaretakerRole(container, genePayload) {
+    var target = container.querySelector("[data-icono-caretaker-claim-action]")
+    if (target) {
+      target.replaceChildren()
+      target.removeAttribute("data-icono-caretaker-claim-signature")
+    }
+    container.querySelector("[data-icono-caretaker-claim-dialog-host]")?.replaceChildren()
+    var host = container.querySelector("[data-icono-caretaker-island]")
+    if (host) host.removeAttribute("data-icono-caretaker-signature")
+    hydrateCaretakerManifestationIsland(container, genePayload)
+    void requestInbox.refresh()
   }
 
   function hydrateCaretakerClaimAction(container, genePayload) {
@@ -567,6 +623,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       { cache: "no-store" },
     )
       .then(function (payload) {
+        if (payload?.enabled && (payload.request || payload.incoming)) {
+          geneRequestControls.render({
+            target: target,
+            dialogHost: container.querySelector("[data-icono-caretaker-claim-dialog-host]"),
+            symbol: symbol,
+            payload: payload,
+            rehydrate: function () {
+              target.removeAttribute("data-icono-caretaker-claim-signature")
+              hydrateCaretakerClaimAction(container, genePayload)
+            },
+            roleChanged: function () {
+              refreshCaretakerRole(container, genePayload)
+            },
+          })
+          return
+        }
         if (payload?.enabled && payload.claim?.reason === "switch_cooldown") {
           renderCaretakerClaimCooldown(target, symbol, payload.claim, function () {
             target.removeAttribute("data-icono-caretaker-claim-signature")
@@ -587,14 +659,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var termsAccepted = Boolean(
           switchFrom && switchFrom.terms_version_id === terms.terms_version_id,
         )
-        var termsMarkup =
-          '<sl-checkbox class="icono-caretaker-claim-terms" data-icono-caretaker-claim-terms' +
-          (termsAccepted ? " checked" : "") +
-          '>I accept the <a href="' +
-          esc(terms.document_url) +
-          '" target="_blank" rel="noopener">' +
-          esc(terms.display_label || "caretaker terms") +
-          "</a>.</sl-checkbox>"
+        var termsMarkup = caretakerTermsMarkup(terms, termsAccepted)
         target.innerHTML =
           '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-caretaker-claim-open aria-haspopup="dialog" aria-controls="' +
           esc(dialogId) +
@@ -611,7 +676,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               '<form class="icono-caretaker-claim-form" data-icono-caretaker-claim-form>' +
               (switchFrom
                 ? caretakerSwitchInventoryMarkup(switchFrom, symbol)
-                : '<div class="icono-caretaker-capabilities"><p>For their chosen gene, caretakers can:</p><ul><li>Write and revise gene character design (&quot;manifestation&quot;) as prose and tags</li><li>Rollback to an earlier manifestation version</li><li>Show or hide manifestation prose on the gene page.</li><li>Long-press the vote button to assign a 10x supervote to a single candidate image.</li><li>Get contacted on Discord by other caretakers</li></ul></div>') +
+                : CARETAKER_CAPABILITIES_MARKUP) +
               termsMarkup +
               '<p class="icono-caretaker-status" data-icono-caretaker-claim-status hidden role="status"></p>' +
               "</form>",
@@ -694,12 +759,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           )
             .then(function () {
               dialog.close()
-              target.replaceChildren()
-              if (scope !== target) scope.replaceChildren()
-              var host = container.querySelector("[data-icono-caretaker-island]")
-              if (host) host.removeAttribute("data-icono-caretaker-signature")
-              hydrateCaretakerManifestationIsland(container, genePayload)
-              void requestInbox.refresh()
+              refreshCaretakerRole(container, genePayload)
             })
             .catch(function (error) {
               status.hidden = false

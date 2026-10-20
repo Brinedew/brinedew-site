@@ -375,6 +375,7 @@ import {
 } from "./iconoplasm-request-notifications.js"
 import {
   deliverPendingCaretakerCommentNotifications,
+  deliverPendingCaretakerGeneRequestNotifications,
   deliverPendingCaretakerSupervoteNotifications,
 } from "./iconoplasm-caretaker-comment-notifications.js"
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
@@ -1874,6 +1875,7 @@ export default {
         },
         caretakerComments: () => deliverPendingCaretakerCommentNotifications(env),
         caretakerSupervotes: () => deliverPendingCaretakerSupervoteNotifications(env),
+        caretakerGeneRequests: () => deliverPendingCaretakerGeneRequestNotifications(env),
         archive: () => archiveColdIconoplasmPublishEvents(env),
         canonRepair: () => repairCanonInvariantsForScheduled(env),
       })
