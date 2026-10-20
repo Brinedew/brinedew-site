@@ -174,6 +174,7 @@ Iconoplasm maps human-gene biology onto memorable character portraits. A gene's 
 ## Blots in figures
 
 - Download the blots and embed them in the figure. Don't link a shared figure to /blot/ addresses: every view of one runs on our server.
+- If you can't download files at all (a sandbox with no network), link the GitHub addresses below instead of /blot/ ones.
 - [Every blot on GitHub](https://github.com/Brinedew/iconoplasm-blots), CC0, for code that can't reach this site (Claude.ai's sandbox reaches only GitHub and package registries): https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main/blot/{FIRST_LETTER}/{HGNC_SYMBOL}.webp, symbol in upper case. If only github.com is reachable: git clone --depth 1 --filter=blob:none --no-checkout https://github.com/Brinedew/iconoplasm-blots.git, then git checkout main -- blot/N/NOTCH1.webp
 `
 
@@ -292,7 +293,7 @@ ${SHELL_STUB_BOOT}
 <h1>${escapeHtml(symbol)}</h1>
 <p>${escapeHtml(name || symbol)}</p>
 <p><a href="/">Iconoplasm gene character cards</a></p>
-<p><a href="${escapeHtml(image)}">${escapeHtml(symbol)} blot</a>, free to reuse under CC0. For code that can't reach this site, such as Claude.ai's code sandbox, the same file on GitHub: ${escapeHtml(mirror)}</p>
+<p><a href="${escapeHtml(image)}">${escapeHtml(symbol)} blot</a>, free to reuse under CC0. The same file on GitHub, for figures and for code that can't reach this site, such as Claude.ai's code sandbox: ${escapeHtml(mirror)}. Download it and embed it in the figure; if you can't download files, link this GitHub address rather than this site.</p>
 </main>
 </body>
 </html>
