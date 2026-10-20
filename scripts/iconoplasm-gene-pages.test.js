@@ -48,9 +48,17 @@ test("gene documents carry their own title, canonical, description, image and li
   assert.match(html, /fetch\("\/",\{credentials:"same-origin"\}\)/)
   // B-836: a reader never sees the crawler copy; it paints the site background,
   // stays hidden, and shows the copy only if the shell fetch fails.
-  assert.match(html, /body\{visibility:hidden\}/)
-  assert.match(html, /icono-stub-failed/)
+  // B-1130: the script does the hiding, so a reader that runs no scripts
+  // (ChatGPT's browsing tool) still reads the body text.
+  const style = html.match(/<style>([^<]*)<\/style>/)?.[1] || ""
+  assert.match(style, /html\.icono-stub-boot body\{visibility:hidden\}/)
+  assert.doesNotMatch(style.replace("html.icono-stub-boot body{", ""), /body\{visibility:hidden/)
   const boot = html.match(/<script>\(function\(\)[\s\S]*?<\/script>/)?.[0] || ""
+  assert.match(
+    boot,
+    /^<script>\(function\(\)\{var d=document\.documentElement;d\.classList\.add\("icono-stub-boot"\)/,
+  )
+  assert.match(boot, /\.catch\(function\(\)\{d\.classList\.remove\("icono-stub-boot"\)\}\)/)
   assert.ok(html.indexOf(boot) < html.indexOf("</head>"), "the shell request starts from <head>")
   new Function(boot.replace(/<\/?script>/g, ""))
   assert.doesNotMatch(html, /<img /)
