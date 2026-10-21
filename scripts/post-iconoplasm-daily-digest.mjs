@@ -9,7 +9,8 @@
 // 3. Draws the strip (scripts/iconoplasm-daily-digest/template.html) in Chrome.
 // 4. Sends the WebP and its gene-link text back to the site, which posts it.
 // --dry-run stops after step 3 and writes the picture and text to --out.
-// A day with nothing in it, or one already posted, posts nothing.
+// A day with nothing in it, one already posted, or any day while the admin
+// panel's "Iconoplasm daily digest" switch (/admin#discord) is off, posts nothing.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -213,6 +214,8 @@ async function main() {
   const day = await admin(`/daily-digest/day?day=${args.day}`)
   if (day.posted && !args.dryRun)
     return console.log(JSON.stringify({ day: args.day, already_posted: day.posted }))
+  if (day.switched_on === false && !args.dryRun)
+    return console.log(JSON.stringify({ day: args.day, switched_off: true }))
   const page = await digestPage(day)
   const content = discordText(page)
   if (!content) return console.log(JSON.stringify({ day: args.day, empty: true }))
