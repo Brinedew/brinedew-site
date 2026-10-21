@@ -23,73 +23,6 @@ const SUPPORT_ALIAS_PATHS = new Set([
   "/posts/Support-me/",
   "/posts/Support-me.html",
 ])
-const ANALYTICS_CONSENT_COUNTRIES = new Set([
-  "AT",
-  "BE",
-  "BG",
-  "CY",
-  "CZ",
-  "DE",
-  "DK",
-  "EE",
-  "ES",
-  "FI",
-  "FR",
-  "GB",
-  "GR",
-  "HR",
-  "HU",
-  "IE",
-  "IS",
-  "IT",
-  "LI",
-  "LT",
-  "LU",
-  "LV",
-  "MT",
-  "NL",
-  "NO",
-  "PL",
-  "PT",
-  "RO",
-  "SE",
-  "SI",
-  "SK",
-])
-
-function parseCookies(cookieHeader) {
-  const cookies = {}
-  for (const segment of String(cookieHeader || "").split(";")) {
-    const separator = segment.indexOf("=")
-    if (separator < 0) continue
-    const name = segment.slice(0, separator).trim()
-    if (!name) continue
-    const value = segment.slice(separator + 1).trim()
-    try {
-      cookies[name] = decodeURIComponent(value)
-    } catch {
-      cookies[name] = value
-    }
-  }
-  return cookies
-}
-
-function requestRequiresAnalyticsConsent(request) {
-  const country = String(
-    request.headers.get("CF-IPCountry") || request.cf?.country || "",
-  ).toUpperCase()
-  return ANALYTICS_CONSENT_COUNTRIES.has(country)
-}
-
-function requestHasAnalyticsConsent(request) {
-  return parseCookies(request.headers.get("Cookie")).brinedew_analytics_consent === "accepted"
-}
-
-function injectAnalyticsConsentBootstrap(html, request) {
-  if (!requestRequiresAnalyticsConsent(request) || requestHasAnalyticsConsent(request)) return html
-  const bootstrap = "<script>window.__brinedewAnalyticsConsentRequired=true</script>"
-  return String(html).replace(/<head([^>]*)>/i, `<head$1>${bootstrap}`)
-}
 
 function publicContentSecurityPolicy(request) {
   const url = new URL(request.url)
@@ -105,21 +38,6 @@ function applyPublicDocumentHeaders(response, request) {
   }
   headers.set("Content-Security-Policy", publicContentSecurityPolicy(request))
   headers.set("X-Brinedew-Static-Route", "public-edge")
-  const contentType = String(headers.get("Content-Type") || "").toLowerCase()
-  if (
-    contentType.includes("text/html") &&
-    requestRequiresAnalyticsConsent(request) &&
-    !requestHasAnalyticsConsent(request)
-  ) {
-    const cacheControl = String(headers.get("Cache-Control") || "").trim()
-    const directives = cacheControl
-      .split(",")
-      .map((part) => part.trim().toLowerCase())
-      .filter(Boolean)
-    if (!directives.includes("no-transform")) {
-      headers.set("Cache-Control", cacheControl ? `${cacheControl}, no-transform` : "no-transform")
-    }
-  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -273,7 +191,6 @@ async function maybeServeHostnameSensitiveStaticDocument(request) {
   }
 
   let html = await upstream.text()
-  html = injectAnalyticsConsentBootstrap(html, request)
   const responseHeaders = new Headers(upstream.headers)
   responseHeaders.delete("Content-Encoding")
   responseHeaders.delete("Content-Length")

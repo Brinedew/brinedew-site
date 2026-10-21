@@ -93,6 +93,7 @@ import { authorizeIconoplasmAuthorityGenerationBearer } from "./iconoplasm-autho
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
 import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
+import { noteRequestRoute } from "./lib/the-only-request-record.js"
 import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
 import {
   CARETAKER_SUPERVOTES_SQL,
@@ -1154,6 +1155,14 @@ const sharedPublishedPortraitFingerprintCache = {
 const PUBLISHED_PORTRAIT_FINGERPRINT_CACHE_TTL_MS = 5 * 60 * 1000
 
 const PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION = "v3"
+// B-1147: the versions whose KV keys are current; the retired-key sweep
+// (workers/iconoplasm/kv-retired-sweep.js) deletes the others.
+export function currentIconoplasmKvVersions() {
+  return {
+    catalogArtifactVersionToken: CATALOG_ARTIFACT_VERSION_TOKEN,
+    portraitSnapshotSchemaVersion: PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION,
+  }
+}
 const galleryPublishedRowsCache = {
   version: null,
   value: null,
@@ -1935,25 +1944,47 @@ async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catal
   }
   // A catalog replacement prepares both old and new base versions before the
   // shared portrait pointer moves. Readers can observe either manifest safely.
+  const keys = []
   for (const [baseHash, artifact] of preparedCatalogs) {
     const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, rows)
     if (!isCurrentCatalogArtifact(hydrated)) throw new Error("Catalog publication is invalid")
-    const key = buildPortraitAwareManifestHash(baseHash, fingerprint)
-    await env.KV.put(`${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${key}`, JSON.stringify(hydrated))
+    const key = `${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${buildPortraitAwareManifestHash(baseHash, fingerprint)}`
+    await env.KV.put(key, JSON.stringify(hydrated))
+    keys.push(key)
   }
   const version = portraitSnapshotVersion(fingerprint)
   // These are required publication writes, not best-effort cache warming.
   // A failed payload write must leave the prior pointer and isolate caches intact.
-  await env.KV.put(`${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${version}`, JSON.stringify(rows))
+  const refsKey = `${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${version}`
+  await env.KV.put(refsKey, JSON.stringify(rows))
+  keys.push(refsKey)
+  // B-1147: KV keeps this version and the previous one. Every version used to
+  // stay forever: 516 snapshots of the whole catalogue and 539 portrait lists by
+  // 2026-10-21. A reader or extension still on the previous version keeps
+  // working; one two versions behind gets the unavailable error and refreshes
+  // its manifest, as for any missing snapshot.
+  const pointerKey = `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`
+  let prior = null
+  try {
+    prior = JSON.parse((await env.KV.get(pointerKey)) || "null")
+  } catch {}
+  const priorKeys = Array.isArray(prior?.keys) ? prior.keys : []
   const now = Date.now()
   await env.KV.put(
-    `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`,
+    pointerKey,
     JSON.stringify({
       schema: "iconoplasm.publishedPortraitFingerprint.v1",
       published_at: new Date(now).toISOString(),
       fingerprint,
+      keys,
+      previous_keys: priorKeys,
     }),
   )
+  const kept = new Set([...keys, ...priorKeys])
+  const retired = (Array.isArray(prior?.previous_keys) ? prior.previous_keys : []).filter(
+    (key) => typeof key === "string" && !kept.has(key),
+  )
+  await Promise.all(retired.map((key) => env.KV.delete(key)))
   publishedPortraitRefsCache.key = version
   publishedPortraitRefsCache.value = rows
   sharedPublishedPortraitFingerprintCache.loadedAt = now
@@ -11499,7 +11530,11 @@ async function verifyTurnstileSubmission(env, request, token) {
   }
 }
 
+// B-1147: the request's one line is written by the request record
+// (workers/lib/the-only-request-record.js); this names its route. Outside a
+// record (a direct call in a test) it logs on its own as before.
 async function logReq(route, request, status, started, schema = null) {
+  if (noteRequestRoute(request, route, { schema, extVersion: extVersion(request) })) return
   console.log(
     JSON.stringify({
       service: "iconoplasm",

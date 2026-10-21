@@ -154,6 +154,39 @@ GET /api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M
 Do not use application D1 reads to discover whether D1 read capacity is already
 exhausted. Use provider analytics.
 
+### Who did what, and what it cost (B-1147)
+
+Every request to the stateful Worker leaves one record, written by
+`workers/lib/the-only-request-record.js` after the response: `route`, `method`,
+`status`, `latency_ms`, `rows_read`, `rows_written` and `d1_calls` (summed from
+each statement's own D1 receipt), `actor` (a 16-hex keyed hash of the account,
+or of IP and user agent for a guest, that changes every UTC day), `actor_kind`
+(`account` or `guest`), `channel` (the `ref` or `utm_source` of the page the
+request came from) and `country`.
+
+- **During a burst:** Workers Logs (dashboard → Workers → the internal stateful
+  Worker → Logs), filtered on `service = iconoplasm`, shows the lines within
+  seconds; kept 3 days, 200,000 events a day on the free plan.
+- **Afterwards:** the same row is in Workers Analytics Engine, dataset
+  `iconoplasm_requests` (about three months), through the SQL API with the
+  laptop's `CLOUDFLARE_API_TOKEN`:
+
+```sql
+-- blob1 route, blob2 method, blob3 actor_kind, blob4 channel, blob5 country,
+-- double1 status, double2 latency_ms, double3 rows_read, double4 rows_written,
+-- index1 actor
+SELECT blob4 AS channel, blob1 AS route,
+       COUNT(DISTINCT index1) AS people, SUM(_sample_interval) AS requests,
+       SUM(_sample_interval * double3) AS rows_read,
+       SUM(_sample_interval * double4) AS rows_written
+FROM iconoplasm_requests
+WHERE timestamp > NOW() - INTERVAL '1' HOUR
+GROUP BY channel, route ORDER BY rows_written DESC
+```
+
+Page views on the static pages never reach the Worker; Cloudflare Web Analytics
+counts them (cookieless, for every visitor since 2026-10-22).
+
 ## Admission behavior
 
 The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-policy.js`):

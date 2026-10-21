@@ -6,15 +6,12 @@
 // to light, then vanish about 300 ms later, with no message (B-909); and every further tap sent
 // another refused request (B-912).
 //
-// Ways this can fail, written before the code, each asserted below at 1280 and 400 px, with
-// the analytics consent prompt showing (every visitor from the EU/EEA/UK, and the prompt is
-// bottom-right at the top z-index) and already answered:
+// Ways this can fail, written before the code, each asserted below at 1280 and 400 px:
 //  1. the page shows no message at all after a refused vote;
 //  2. the message is not the server's own sentence (it reads "HTTP 429", or is generic);
 //  3. the sentence is put into the page as HTML instead of text;
 //  4. the message is not announced to a screen reader (role="status"), or it sits outside the
-//     viewport, or another element covers it (the consent prompt did), so a reader cannot see
-//     it; with the prompt showing the message must sit above it, not on it;
+//     viewport, or another element covers it, so a reader cannot see it;
 //  5. the tick stays lit after the refusal (the vote the server did not take);
 //  6. a refused vote costs more than the one refused request (no second snapshot read);
 //  7. further taps still reach the server (B-912): three more taps send nothing;
@@ -163,9 +160,6 @@ async function openGenePage(browser, origin, { width, height }, requests, mode, 
   // (and the notice lifted above it) cover the vote row, and the forced taps below would land
   // on the banner instead of the button.
   await up.evaluate((element) => element.scrollIntoView({ block: "center" }))
-  if (consent === "prompt") {
-    await page.waitForSelector(".brinedew-analytics-consent", { timeout: 10_000 })
-  }
   return { context, page, up }
 }
 
@@ -177,7 +171,9 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
   const report = []
   try {
     for (const [width, height, label] of VIEWPORTS) {
-      for (const consent of ["prompt", "answered"]) {
+      // B-1147: the analytics consent prompt is gone; "answered" is a visitor who once said
+      // No thanks, whose page must look the same as anyone else's.
+      for (const consent of ["answered"]) {
         const where = `${label}, consent ${consent}`
         const requests = []
         const mode = { open: false, sentence: PAUSED, retryAfterSeconds: RESET_SECONDS }
@@ -215,7 +211,7 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
           PAUSED,
           `${where}: the notice must be the server's sentence`,
         )
-        // 4. Announced, on screen, uncovered, and above the consent prompt when it shows.
+        // 4. Announced, on screen, uncovered, in its corner.
         assert.equal(first.notice.role, "status", `${where}: the notice must be announced`)
         const { box, viewport } = first.notice
         assert.ok(
@@ -230,13 +226,7 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
           true,
           `${where}: ${first.notice.coveredBy} covers the notice`,
         )
-        if (consent === "prompt") {
-          assert.notEqual(first.consentTop, null, `${where}: the consent prompt is not showing`)
-          assert.ok(
-            box.bottom <= first.consentTop,
-            `${where}: the notice (bottom ${box.bottom}) must sit above the prompt (top ${first.consentTop})`,
-          )
-        } else {
+        {
           assert.equal(first.consentTop, null, `${where}: the prompt must be gone`)
           assert.ok(
             viewport.height - box.bottom < 40,

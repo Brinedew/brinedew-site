@@ -80,7 +80,9 @@ No requests are made to any other domain.
 
 Gene pages on the website load the Discord server's public invite preview (its icon and member counts) from Discord. The signed-in website may also contact Discord for login and the image API provider you choose for generation or editing.
 
-The website may load Cloudflare Web Analytics only after you allow analytics in the site prompt. Cloudflare Web Analytics is cookieless and used for aggregate page-visit counts.
+The website loads Cloudflare Web Analytics, which is cookieless, stores nothing on your device, and is used for aggregate page-visit counts. If you declined analytics in the site's earlier prompt, that choice is still honored.
+
+Each request to the website's API leaves one log line: the route, the time it took, how much database work it caused, the visitor's country, the campaign tag of the page it came from (such as `?ref=reddit`), and a visitor code. The visitor code is a keyed hash of your account (when signed in) or of your IP address and browser (when not), and the key changes every day, so it can count one visitor within a day but cannot follow anyone from one day to the next or be turned back into an account or address. Your IP address itself is not stored. These lines are kept for 3 days in Cloudflare Workers Logs and about 3 months in Cloudflare Workers Analytics Engine.
 
 ## Content Script Scope
 
@@ -105,7 +107,7 @@ The extension's content script runs on all web pages (except `iconoplasm.brinede
 ## Third Parties
 
 - **Cloudflare**: Infrastructure provider for `iconoplasm.brinedew.bio`. See [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
-- **Cloudflare Web Analytics**: Used on the website only after analytics consent, for aggregate traffic measurement.
+- **Cloudflare Web Analytics**: Cookieless aggregate traffic measurement on the website.
 - **Bunny CDN (BunnyWay d.o.o.)**: Content delivery provider for `iconoplasmportraits.b-cdn.net`. See [Bunny's privacy policy](https://bunny.net/privacy/).
 - **Discord**: Used for website login and the server invite preview on gene pages.
 - **Image API providers you choose**: Used only when you start direct generation or editing.
