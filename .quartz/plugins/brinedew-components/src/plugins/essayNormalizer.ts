@@ -100,7 +100,17 @@ function normalizeStructure(tree: Root): void {
 
         // Lone phrasing paragraph inside a list item → unwrap to bare phrasing.
         // Prevents <li><p>title</p><ul>…</ul></li> from having an extra block box.
-        if (parent.type === "element" && parent.tagName === "li" && isPhrasingOnly(node.children)) {
+        // A loose item with several paragraphs keeps them: unwrapping each one
+        // would run them together into a single line.
+        const paragraphs = parent.children.filter(
+          (child) => isElement(child) && child.tagName === "p",
+        )
+        if (
+          parent.type === "element" &&
+          parent.tagName === "li" &&
+          paragraphs.length === 1 &&
+          isPhrasingOnly(node.children)
+        ) {
           parent.children.splice(index, 1, ...node.children)
           return
         }
