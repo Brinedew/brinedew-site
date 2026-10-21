@@ -67,9 +67,14 @@ export const VOTE_PERSON_DAILY_LIMIT = 200
 export const VOTE_DAILY_BUDGET_EXHAUSTED = "VOTE_DAILY_BUDGET_EXHAUSTED"
 
 // Publishing an image edit brings the edit's source's votes along: 90% of the
-// source's upvotes, as synthetic voters, on the new candidate. Each one is a
-// real vote (rows written, a budget unit), so what one click can spend is
-// capped: at most this many inherited votes, plus the publisher's own.
+// source's net score (upvotes minus downvotes, never below zero), as synthetic
+// voters, on the new candidate. An edit is the same portrait improved, so it
+// carries the crowd's opinion of it, disapproval included: copying upvotes
+// alone let a one-click edit of a disliked portrait start well ahead of it.
+// A caretaker's supervote is not in these counts, so it is never copied. Each
+// inherited vote is a real vote (rows written, a budget unit), so what one
+// click can spend is capped: at most this many inherited votes, plus the
+// publisher's own.
 export const IMAGE_EDIT_INHERITED_UPVOTE_LIMIT = 25
 const IMAGE_EDIT_INHERITED_UPVOTE_SHARE = 0.9
 
@@ -81,10 +86,10 @@ export function capImageEditInheritedUpvotes(stored) {
   return Math.min(IMAGE_EDIT_INHERITED_UPVOTE_LIMIT, Math.max(0, count))
 }
 
-// What a new image edit inherits from a source with `sourceUpvotes` upvotes.
-export function imageEditInheritedUpvotes(sourceUpvotes) {
-  const upvotes = Math.max(0, Number(sourceUpvotes) || 0)
-  return capImageEditInheritedUpvotes(Math.floor(upvotes * IMAGE_EDIT_INHERITED_UPVOTE_SHARE))
+// What a new image edit inherits from a source with these ordinary votes.
+export function imageEditInheritedUpvotes({ upvotes, downvotes }) {
+  const net = Math.max(0, (Number(upvotes) || 0) - Math.max(0, Number(downvotes) || 0))
+  return capImageEditInheritedUpvotes(Math.floor(net * IMAGE_EDIT_INHERITED_UPVOTE_SHARE))
 }
 
 // A vote import is one Worker invocation, so what counts is the number of
