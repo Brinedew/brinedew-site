@@ -1176,10 +1176,50 @@
     text-decoration: underline;
   }
 
-  .icono-request-inbox__caretaker-supervote small {
+  /* The unused supervote: its seal lies on the film's corner, the caption
+     under the film says how to use it. Seal colour and angle as on a vote
+     button that holds it (caretaker-supervote.css). */
+  .icono-request-inbox__caretaker-supervote {
+    position: relative;
     display: block;
+    margin: -0.5rem 0 0.75rem;
     color: var(--secondary);
-    font-size: 0.68rem;
+    font-size: 0.72rem;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .icono-request-inbox__caretaker-seal {
+    position: absolute;
+    right: -0.4rem;
+    bottom: calc(100% - 0.4rem);
+    width: 5.25rem;
+    aspect-ratio: 1;
+    background: #993b34;
+    mask: url("/static/iconoplasm/caretaker-seal-positive.png") center / contain no-repeat;
+    transform: rotate(-13deg);
+    transition: transform 160ms ease;
+  }
+
+  .icono-request-inbox__caretaker-supervote:hover,
+  .icono-request-inbox__caretaker-supervote:focus-visible {
+    color: var(--accent);
+  }
+
+  .icono-request-inbox__caretaker-supervote:hover .icono-request-inbox__caretaker-seal,
+  .icono-request-inbox__caretaker-supervote:focus-visible .icono-request-inbox__caretaker-seal {
+    transform: rotate(-6deg) scale(1.06);
+  }
+
+  .icono-request-inbox__caretaker-supervote:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icono-request-inbox__caretaker-seal {
+      transition: none;
+    }
   }
 
   .icono-request-inbox__queue-mark {

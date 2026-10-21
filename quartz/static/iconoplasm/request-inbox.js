@@ -649,6 +649,7 @@ export function createRequestInbox({
       }) +
       "</a>" +
       (suspended ? '<small class="icono-film-status">Caretaking suspended</small>' : "") +
+      supervoteHintMarkup(item, symbol) +
       (unread
         ? '<a class="icono-request-inbox__caretaker-comments" href="' +
           escapeHtml(
@@ -662,28 +663,23 @@ export function createRequestInbox({
           (unread === 1 ? "comment" : "comments") +
           "</a>"
         : "") +
-      supervoteHintMarkup(item, symbol) +
       "</div>"
     )
   }
 
   // Owner, 2026-10-21: caretakers didn't know they hold a supervote. Until it
-  // sits on one of their gene's candidates, the sidebar says so and leads to
-  // them; the long-press itself stays on the vote buttons.
+  // is on one of their gene's candidates, its seal (the same one a vote button
+  // wears once it has it) lies on the corner of the film, and leaves when used.
   function supervoteHintMarkup(item, symbol) {
     if (item.assignment_status !== "active" || item.supervote_active === true) return ""
     return (
-      '<a class="icono-request-inbox__caretaker-comments icono-request-inbox__caretaker-supervote" href="' +
+      '<a class="icono-request-inbox__caretaker-supervote" href="' +
       escapeHtml("/gene/" + encodeURIComponent(symbol) + "#candidates") +
-      '" data-icono-caretaker-assignment data-icono-caretaker-supervote-hint title="' +
-      escapeHtml(
-        "Long-press any vote button on " +
-          symbol +
-          "'s candidates to give one of them your ±10 supervote. You can move it later.",
-      ) +
-      '"><strong>±10</strong> supervote unused<small>Long-press a vote on ' +
+      '" data-icono-caretaker-assignment data-icono-caretaker-supervote-hint>' +
+      '<span class="icono-request-inbox__caretaker-seal" aria-hidden="true"></span>' +
+      "Long-press a vote on " +
       escapeHtml(symbol) +
-      "</small></a>"
+      " to stamp it</a>"
     )
   }
 
