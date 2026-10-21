@@ -264,25 +264,6 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       ),
     )
   }
-  const chosenLine = lineRows.find((line) =>
-    [...revisions, ...pinned].some(
-      (revision) =>
-        revision.manifestation_revision_id === canonicalId &&
-        revision.manifestation_id === line.line_id,
-    ),
-  )
-  let fallbackLabel = "the current canonical manifestation"
-  if (ownLine && chosenLine?.line_id === ownLine.line_id) {
-    const fallback = await first(
-      db,
-      `SELECT version_id FROM icono_caretaker_text_versions
-        WHERE gene_symbol = ? AND line_id <> ? AND withdrawn_at IS NULL AND tags IS NOT NULL
-        LIMIT 1`,
-      symbol,
-      ownLine.line_id,
-    )
-    fallbackLabel = fallback ? "an earlier caretaker manifestation" : "Original manifestation"
-  }
   const labels = await authorLabels(
     env,
     lineRows.map((line) => line.account_id),
@@ -300,10 +281,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       author_is_viewer: false,
       belongs_to_current_assignment: false,
       author_label: "Original manifestation",
-      can_withdraw: false,
-      can_restore: false,
       created_at: factory.updated_at,
-      withdrawal_preview: null,
       revisions: [],
     })
   }
@@ -321,10 +299,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       author_is_viewer: own,
       belongs_to_current_assignment: currentRole(line),
       author_label: authorLabel(labels, line.account_id, viewerId),
-      can_withdraw: steward && !withdrawn,
-      can_restore: steward && withdrawn,
       created_at: line.created_at,
-      withdrawal_preview: own ? { fallback_label: fallbackLabel } : null,
       revisions: revisions.filter((revision) => revision.manifestation_id === line.line_id),
     })
   }
@@ -352,7 +327,6 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
             effective_at: terms.effective_at,
           }
         : null,
-      withdrawal_preview: ownLine ? { fallback_label: fallbackLabel } : null,
     },
     viewer: {
       is_caretaker: OPEN_STATUSES.has(assignment.status),
@@ -557,62 +531,6 @@ async function runWrite(db, statements) {
   }
 }
 
-export async function withdrawCaretakerLine(env, { geneLocator, accountId, lineId }) {
-  const db = rolesDb(env)
-  const { gene } = await requireSteward(db, geneLocator, accountId)
-  if (lineId === FACTORY_LINE_ID)
-    throw authorityError("MANIFESTATION_NOT_WITHDRAWABLE", "The original text stays", 409)
-  await requireLine(db, gene, lineId)
-  await runWrite(
-    db,
-    withdrawCaretakerTextStatements(db, {
-      symbol: gene.canonical_symbol,
-      lineId,
-      at: new Date().toISOString(),
-    }),
-  )
-  return { ok: true, manifestation_id: lineId, gene }
-}
-
-// Restoring brings back the versions withdrawn with the line's newest one and
-// makes the line the gene's text again ("restored and made canonical").
-export async function restoreCaretakerLine(env, { geneLocator, accountId, lineId }) {
-  const db = rolesDb(env)
-  const { gene } = await requireSteward(db, geneLocator, accountId)
-  await requireLine(db, gene, lineId)
-  const head = await first(
-    db,
-    `SELECT withdrawn_at FROM icono_caretaker_text_versions
-      WHERE line_id = ? ORDER BY version DESC LIMIT 1`,
-    lineId,
-  )
-  const statements = []
-  if (head?.withdrawn_at)
-    statements.push(
-      db
-        .prepare(
-          `UPDATE icono_caretaker_text_versions SET withdrawn_at = NULL
-            WHERE line_id = ? AND withdrawn_at = ?`,
-        )
-        .bind(lineId, head.withdrawn_at),
-    )
-  statements.push(
-    db
-      .prepare(
-        `UPDATE icono_gene_texts
-            SET chosen_caretaker_version_id = COALESCE((
-              SELECT version_id FROM icono_caretaker_text_versions
-               WHERE line_id = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
-               ORDER BY version DESC LIMIT 1), chosen_caretaker_version_id),
-                updated_at = CURRENT_TIMESTAMP
-          WHERE gene_symbol = ?`,
-      )
-      .bind(lineId, gene.canonical_symbol),
-  )
-  await runWrite(db, statements)
-  return { ok: true, manifestation_id: lineId, gene }
-}
-
 export async function setCaretakerLineVisibility(env, { geneLocator, accountId, lineId, body }) {
   const db = rolesDb(env)
   const { gene } = await requireSteward(db, geneLocator, accountId)
@@ -722,12 +640,6 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
   )
   app.post(`${GENE}/revisions`, (c) =>
     write(c, (input) => saveCaretakerText(c.env, { ...input, withTags: false })),
-  )
-  app.delete(`${GENE}/manifestations/:line`, (c) =>
-    write(c, (input) => withdrawCaretakerLine(c.env, { ...input, lineId: line(c) })),
-  )
-  app.post(`${GENE}/manifestations/:line/restore`, (c) =>
-    write(c, (input) => restoreCaretakerLine(c.env, { ...input, lineId: line(c) })),
   )
   app.post(`${GENE}/manifestations/:line/page-visibility`, (c) =>
     write(c, (input) => setCaretakerLineVisibility(c.env, { ...input, lineId: line(c) })),

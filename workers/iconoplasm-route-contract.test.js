@@ -42,10 +42,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   caretaker_revision_create: "/api/iconoplasm/caretaker/genes/TP53/revisions",
   caretaker_save_with_tags: "/api/iconoplasm/caretaker/genes/TP53/saves",
   caretaker_taggerize: "/api/iconoplasm/caretaker/genes/TP53/taggerize",
-  caretaker_manifestation_withdraw:
-    "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001",
-  caretaker_manifestation_restore:
-    "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001/restore",
   caretaker_manifestation_page_visibility:
     "/api/iconoplasm/caretaker/genes/TP53/manifestations/manifestation_0001/page-visibility",
   caretaker_assignment_action:
