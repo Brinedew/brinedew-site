@@ -7144,10 +7144,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // After a failed page, the next scroll may try again only after this.
       var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
-      // One order is one delivery: the server's batch limit
-      // (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in the stateful runtime),
-      // the most requests the Drain publishes at once. Keep the two equal.
-      var requestSelectionLimit = 50
+      // The server's order limit (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in
+      // the stateful runtime, which says why). workers/iconoplasm.request-order.test.js
+      // fails if the two differ.
+      var requestSelectionLimit = 100
       // The order just queued, shown in the tray until the next pick.
       var justQueuedOptions = []
       var filteredOptions = []
