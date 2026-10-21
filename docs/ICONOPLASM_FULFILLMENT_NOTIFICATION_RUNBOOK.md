@@ -10,8 +10,12 @@ in the order that can still finish has finished, however many Drain sessions
 drew it (B-1145). Two orders for the same gene are two receipts.
 
 - An order of ten produces one DM with ten previews.
-- An order of one hundred, drawn by the Drain in two sessions of fifty, still
+- An order of one hundred, drawn by the Drain over many sessions, still
   produces one DM: ten previews and a link to all one hundred on the gene page.
+- The queue is fair, not first come first served (B-1146, migration 0135): the
+  Drain claims in turn order, one request per waiting reader per round, in
+  sessions of ten. A reader who orders one style while someone's hundred wait
+  is drawn in the next session.
 - A request whose exact source disappears is cancelled, leaves its order's
   group, and the receipt goes out with the rest.
 

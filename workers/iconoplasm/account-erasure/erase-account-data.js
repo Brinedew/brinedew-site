@@ -120,13 +120,16 @@ function applyByRowidSql(step) {
 
 // The slice each still-open step may run in the next pass: ERASURE_SLICE_ROWS, or what is left of
 // the row-write budget after the worst case of the steps before it. Reserving the worst case
-// keeps a request's writes under its budget whatever the data holds.
+// keeps a request's writes under its budget whatever the data holds. A step that doesn't fit ends
+// the pass: steps run in order, and a lighter step after it could otherwise act on rows it was
+// meant to remove first (an unpublished edit job was once renamed to the anonymous account
+// instead of deleted, because its delete didn't fit and the rename after it did).
 function planPass(open, budget) {
   const planned = []
   let reserved = 0
   for (const step of open.values()) {
     const limit = Math.min(ERASURE_SLICE_ROWS, Math.floor((budget.writes - reserved) / step.weight))
-    if (limit < 1) continue
+    if (limit < 1) break
     planned.push({ step, limit })
     reserved += limit * step.weight
   }
