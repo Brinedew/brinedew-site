@@ -138,7 +138,7 @@ function statusMarkup(message, tone, escapeHtml) {
 // settings patterns of Google Docs, Notion and GitHub. History is a compact
 // timeline (when, who, what changed) beside a preview that shows the selected
 // version as a diff against the one before it; the full text of every version is
-// never dumped in a column. Destructive actions live in Settings > Danger zone.
+// never dumped in a column. Stopping as caretaker lives in Settings > Danger zone.
 
 function wordDelta(before, after) {
   let added = 0
@@ -508,44 +508,6 @@ export function historyMarkup(dossier, selectedId, escapeHtml, expandedSessions)
   )
 }
 
-// Settings rows for the viewer's own manifestation records: restore is a normal
-// row, delete belongs to the danger zone.
-function lineageRows(dossier, escapeHtml) {
-  const lineages = dossier.manifestations.filter(function (item) {
-    return item?.can_withdraw || item?.can_restore
-  })
-  const restore = []
-  const danger = []
-  for (const manifestation of lineages) {
-    const id = escapeHtml(String(manifestation.manifestation_id || ""))
-    const current = manifestation.belongs_to_current_assignment === true
-    const date = String(manifestation.created_at_label || manifestation.created_at || "")
-    const which = current
-      ? "the current manifestation"
-      : "an earlier manifestation" + (date ? " (" + date + ")" : "")
-    if (manifestation.can_restore) {
-      restore.push(
-        '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Restore ' +
-          escapeHtml(which) +
-          "</h4><p>It was deleted. Restoring brings it back and makes it public.</p></div>" +
-          '<button type="button" class="icono-button icono-button--primary" data-icono-caretaker-restore="' +
-          id +
-          '">Restore</button></div>',
-      )
-    } else if (manifestation.can_withdraw) {
-      danger.push(
-        '<div class="icono-setting-row"><div class="icono-setting-row__text"><h4>Delete ' +
-          escapeHtml(which) +
-          "</h4><p>Hidden at once; new images go back to the next available version. It is removed from public view on the site, though not from backups.</p></div>" +
-          '<button type="button" class="icono-button icono-button--danger" data-icono-caretaker-withdraw="' +
-          id +
-          '">Delete…</button></div>',
-      )
-    }
-  }
-  return { restore: restore.join(""), danger: danger.join("") }
-}
-
 function canonicalRevisionBody(dossier) {
   const canonicalId = String(dossier?.head?.canonical_revision_id || "")
   if (!canonicalId) return ""
@@ -628,14 +590,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       '<p class="icono-caretaker-callout" data-tone="warn">This caretaker role is suspended. History remains readable and your local draft is preserved, but saving and canonical changes are paused.</p>'
   }
 
-  if (editable && own?.status === "withdrawn") {
-    body +=
-      '<p class="icono-caretaker-callout" data-tone="warn">Your current caretaker manifestation is withdrawn. Restore it before writing another version.</p>' +
-      (own.can_restore
-        ? ""
-        : '<p class="icono-caretaker-callout" data-tone="warn">This manifestation can no longer be restored because its retained body is unavailable.</p>')
-  }
-
   body +=
     '<div class="icono-caretaker-tabs" role="tablist" aria-label="Caretaker sections">' +
     '<button type="button" role="tab" aria-selected="true" aria-controls="icono-caretaker-tab-manifestation" id="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tab="manifestation">Manifestation</button>' +
@@ -713,7 +667,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
   body +=
     '<div class="icono-caretaker-tabpanel" role="tabpanel" id="icono-caretaker-tab-settings" aria-labelledby="icono-caretaker-tab-button-settings" data-icono-caretaker-tabpanel="settings" hidden>'
 
-  const rows = lineageRows(dossier, esc)
   body += '<div class="icono-caretaker-settings">'
   if (editable) {
     // B-1106: the switch shows or hides the text the gene uses now, which for
@@ -728,10 +681,7 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       (visible ? " checked" : "") +
       (dossier.head?.manifestation_id ? "" : " disabled") +
       '><span aria-hidden="true"></span></label></div>' +
-      rows.restore +
       "</section>"
-  } else if (rows.restore) {
-    body += '<section class="icono-settings-group">' + rows.restore + "</section>"
   }
   const leave =
     editable && assignment
@@ -742,11 +692,10 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
         '<span class="icono-button icono-button--danger" aria-hidden="true">Stop…</span></summary>' +
         '<div class="icono-actions"><button type="button" class="icono-button icono-button--danger" data-icono-caretaker-end>Stop being caretaker</button></div></details>'
       : ""
-  if (rows.danger || leave) {
+  if (leave) {
     body +=
       '<section class="icono-danger-zone" aria-labelledby="icono-caretaker-danger-title">' +
       '<h3 id="icono-caretaker-danger-title">Danger zone</h3>' +
-      rows.danger +
       leave +
       "</section>"
   }

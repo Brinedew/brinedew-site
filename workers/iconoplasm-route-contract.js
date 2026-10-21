@@ -574,26 +574,6 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
   }),
   iconoplasmApiContract({
     apiHandler: "caretaker_manifestations",
-    id: "caretaker_manifestation_withdraw",
-    match: pattern(/^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)$/, [
-      "gene",
-      "manifestation_id",
-    ]),
-    methods: Object.freeze(["DELETE"]),
-    auth: "authenticated-caretaker",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
-    id: "caretaker_manifestation_restore",
-    match: pattern(
-      /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/restore$/,
-      ["gene", "manifestation_id"],
-    ),
-    methods: POST,
-    auth: "authenticated-caretaker",
-  }),
-  iconoplasmApiContract({
-    apiHandler: "caretaker_manifestations",
     id: "caretaker_manifestation_page_visibility",
     match: pattern(
       /^\/api\/iconoplasm\/caretaker\/genes\/([^/]+)\/manifestations\/([^/]+)\/page-visibility$/,
