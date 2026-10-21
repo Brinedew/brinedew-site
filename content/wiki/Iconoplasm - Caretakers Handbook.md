@@ -23,6 +23,14 @@ Caretakers have great control over the gene's character identity:
 - Caretakers can modify the gene's visual tags that are used for image generation.
 - Caretakers can grant their single transferable supervote to the candidate portrait of their liking.
 
+All of these changes instantly propagate to the image generation engine. As a result, here's what you can do in just 10 minutes:
+1. See a new gene you like
+2. Become its caretaker 
+3. Modify the gene's visual tags to your liking
+4. Order new free portraits in your favorite styles
+5. See new portraits arrive 
+6. And finally, supervote the best portrait so it becomes a canonical blot for that gene.
+
 Caretakers can help the Iconoplasm project in multiple ways:
 
 - **Worldbuilding:** you can modify the gene's lore and appearance in a way that suits your creative narrative.
@@ -77,8 +85,9 @@ For now, I will adjudicate the conflicts personally. In the future, a formal con
 
 ## Can the displayed lore snippet on a gene page conflict with the canonical image on the same page?
 
-Yes, but not forever. One case where this might happen is if you're trying to redesign the character and you make a fresh portrait for the new design, but the previous portrait was highly upvoted, so it will take some time for the new portrait to get enough votes to replace it.
+Yes, but not forever. 
 
+One case where this might happen is if you're trying to redesign a popular character. You can make a fresh portrait for the new design pretty much instantly, but if the old canonical portrait was highly upvoted, it will take some time for the new candidate to get enough votes to replace it.
 ## I contribute work: how is it going to be used?
 
 I expect other people might use the character designs for downstream content:
