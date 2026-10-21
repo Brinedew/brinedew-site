@@ -78,8 +78,8 @@ We use the following cookies:
 | `geneguessr_session` | Tracks your current game session (guest players) | Session |
 | `oauth_session` | Temporary cookie during Discord login flow | 10 minutes |
 
-Cloudflare Web Analytics may load only after you allow analytics in the site prompt. It is cookieless and used for aggregate page-visit counts. We do not use advertising cookies or tracking pixels.
-All cookies above are strictly necessary for authentication and game session continuity; the optional analytics consent cookie stores only your analytics choice.
+Cloudflare Web Analytics loads on every page. It is cookieless, stores nothing on your device, and is used for aggregate page-visit counts; if you declined analytics in the site's earlier prompt, that choice is still honored. We do not use advertising cookies or tracking pixels.
+All cookies above are strictly necessary for authentication and game session continuity; an analytics cookie from the earlier prompt, if you have one, stores only your choice.
 
 ## Data Sharing
 
@@ -88,7 +88,7 @@ We do not sell your data.
 We share data only with:
 
 - **Cloudflare**: Our infrastructure provider (see "Where Data Is Stored" below). Cloudflare processes data on our behalf under their [privacy policy](https://www.cloudflare.com/privacypolicy/).
-- **Cloudflare Web Analytics**: Used only after analytics consent, for aggregate traffic measurement.
+- **Cloudflare Web Analytics**: Cookieless aggregate traffic measurement.
 - **Public leaderboard viewers**: If you opt in, your Discord username, avatar, and best streak are visible to visitors in the in-app leaderboard.
 - **Discord CDN (server-side only)**: Avatar images may be fetched by our backend and served via our own domain or Bunny CDN. Visitors do not request avatar images directly from Discord.
 - **Bunny CDN (BunnyWay d.o.o.)**: When you open GeneGuessr, your web browser establishes a direct connection to Bunny CDN to load the public leaderboard, so that Bunny – technically unavoidable – learns your IP address and other data about your browser, which it automatically sends along. Bunny processes data on our behalf under their [privacy policy](https://bunny.net/privacy/).
