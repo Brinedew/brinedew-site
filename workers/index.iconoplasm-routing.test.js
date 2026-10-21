@@ -307,7 +307,9 @@ test("apex Iconoplasm routes send readers to the one working app host", async ()
   assert.equal(stateful.calls.length, 0)
 })
 
-test("public document responses inject analytics consent only when the visitor requires it", async () => {
+// B-1147: the cookieless beacon loads for every visitor from the page itself, so
+// the edge passes a document through for a German visitor exactly as for anyone.
+test("public document responses carry no analytics consent bootstrap for any country", async () => {
   globalThis.fetch = async () =>
     new Response("<html><head></head><body></body></html>", {
       headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -315,28 +317,14 @@ test("public document responses inject analytics consent only when the visitor r
   const stateful = statefulSpy()
   const env = { THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: stateful.binding }
 
-  const requiresConsent = await worker.fetch(
-    new Request("https://brinedew.bio/", {
-      headers: { "CF-IPCountry": "DE" },
-    }),
-    env,
-    {},
-  )
-  const alreadyConsented = await worker.fetch(
-    new Request("https://brinedew.bio/", {
-      headers: {
-        "CF-IPCountry": "DE",
-        Cookie: "brinedew_analytics_consent=accepted",
-      },
-    }),
+  const german = await worker.fetch(
+    new Request("https://brinedew.bio/", { headers: { "CF-IPCountry": "DE" } }),
     env,
     {},
   )
 
-  assert.match(await requiresConsent.text(), /__brinedewAnalyticsConsentRequired=true/)
-  assert.match(requiresConsent.headers.get("Cache-Control"), /no-transform/)
-  assert.doesNotMatch(await alreadyConsented.text(), /__brinedewAnalyticsConsentRequired=true/)
-  assert.doesNotMatch(alreadyConsented.headers.get("Cache-Control") || "", /no-transform/)
+  assert.doesNotMatch(await german.text(), /__brinedewAnalyticsConsentRequired/)
+  assert.doesNotMatch(german.headers.get("Cache-Control") || "", /no-transform/)
 })
 
 test("public edge proxies apex iconoplasm admin me to the only allowed stateful worker", async () => {

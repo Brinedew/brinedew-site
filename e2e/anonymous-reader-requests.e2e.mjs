@@ -201,8 +201,9 @@ async function beaconCount(beacon, atLeast, ms) {
   return beacon.length
 }
 
-async function openWithCountry(browser, origin, country, beacon) {
+async function openWithCountry(browser, origin, country, beacon, cookies = []) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 860 } })
+  if (cookies.length) await context.addCookies(cookies)
   await routeProduction(context, origin, () => new HttpStatus(404), { session: false })
   // Registered after routeProduction, so these win over its catch-all.
   await context.route(`${HOST}/cdn-cgi/trace`, (route) =>
@@ -218,43 +219,38 @@ async function openWithCountry(browser, origin, country, beacon) {
   return { context, page }
 }
 
-test("the analytics beacon waits for consent in a consent country and stays off after No thanks", async (t) => {
+// B-1147: the beacon is cookieless and stores nothing on the device, so every
+// visitor is counted with no prompt; one who said No thanks before it went keeps that.
+test("the cookieless beacon loads once for every visitor, with no prompt, except an old No thanks", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
   const { server, origin } = await startSite()
   try {
-    // A visitor from Germany: the prompt shows, and nothing loads until they answer.
+    for (const country of ["DE", "US"]) {
+      const beacon = []
+      const visit = await openWithCountry(browser, origin, country, beacon)
+      assert.equal(await beaconCount(beacon, 1, 10_000), 1, `${country}: the beacon loads`)
+      assert.equal(
+        await visit.page.locator("[role=dialog][aria-label='Analytics consent']").count(),
+        0,
+      )
+      assert.equal(await beaconCount(beacon, 2, 1_500), 1, `${country}: and only once`)
+      await visit.context.close()
+    }
     const declined = []
-    const eu = await openWithCountry(browser, origin, "DE", declined)
-    await eu.page.waitForSelector(".brinedew-analytics-consent", { timeout: 15_000 })
-    assert.equal(await beaconCount(declined, 1, 1_500), 0, "no beacon while the prompt is open")
-    await eu.page.click("[data-analytics-consent-decline]")
-    assert.equal(await beaconCount(declined, 1, 1_500), 0, "no beacon after No thanks")
-    assert.match(
-      await eu.page.evaluate(() => document.cookie),
-      new RegExp(`${CONSENT_COOKIE}=declined`),
-    )
-    await eu.page.reload()
-    await eu.page.waitForLoadState("networkidle")
-    assert.equal(await eu.page.locator(".brinedew-analytics-consent").count(), 0, "answered once")
-    assert.equal(await beaconCount(declined, 1, 1_500), 0, "still no beacon on the next visit")
-    await eu.context.close()
-
-    // The same visitor accepting: the beacon loads, once.
-    const accepted = []
-    const yes = await openWithCountry(browser, origin, "DE", accepted)
-    await yes.page.waitForSelector(".brinedew-analytics-consent", { timeout: 15_000 })
-    assert.equal(await beaconCount(accepted, 1, 1_000), 0, "no beacon before they accept")
-    await yes.page.click("[data-analytics-consent-accept]")
-    assert.equal(await beaconCount(accepted, 1, 5_000), 1, "the beacon loads after Allow")
-    await yes.context.close()
-
-    // A visitor outside the consent countries gets the cookieless beacon with no prompt.
-    const outside = []
-    const us = await openWithCountry(browser, origin, "US", outside)
-    assert.equal(await beaconCount(outside, 1, 10_000), 1, "the beacon loads without a prompt")
-    assert.equal(await us.page.locator(".brinedew-analytics-consent").count(), 0, "no prompt")
-    await us.context.close()
+    const before = await openWithCountry(browser, origin, "DE", declined, [
+      {
+        name: CONSENT_COOKIE,
+        value: "declined",
+        domain: ".brinedew.bio",
+        path: "/",
+        secure: true,
+        sameSite: "Lax",
+      },
+    ])
+    await before.page.waitForLoadState("networkidle")
+    assert.equal(await beaconCount(declined, 1, 2_000), 0, "an earlier No thanks still holds")
+    await before.context.close()
   } finally {
     server.close()
     await browser.close()

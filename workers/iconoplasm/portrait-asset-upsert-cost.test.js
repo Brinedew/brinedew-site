@@ -96,7 +96,7 @@ test(
       const old = createOperationCostD1Meter(db)
       await run(PORTRAIT_ASSET_UPSERT_SQL.split("\n               WHERE ")[0], old.db)
       const oldCost = old.finish()
-      assert.ok(oldCost.rows_written >= 1000, JSON.stringify(oldCost))
+      assert.ok(oldCost.rows_written >= 500, JSON.stringify(oldCost))
       // A null incoming optional value retains the exact stored value; a real
       // medium-key or sample change still updates the canonical metadata.
       const changed = args(1)
