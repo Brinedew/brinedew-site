@@ -33,13 +33,12 @@ Caretakers can help the Iconoplasm project in multiple ways:
 
 1. Go to any gene page.
 2. Tap the "Become this gene's caretaker" button under the gene card.
-
    ![[image-76.png]]
 
 3. Read and accept the [caretaker terms](https://iconoplasm.brinedew.bio/caretaker-terms).
-
    ![[image-75.png]]
-
+4. Operate the caretaker panel as you see fit.
+![[image-77.png]]
 ## Who can become a caretaker?
 
 At the moment, anyone with a Discord account can become a caretaker. You don't need to be a member of the Brinedew.bio Discord server to be a caretaker. This might change in the future.
