@@ -668,18 +668,21 @@ export function createRequestInbox({
   }
 
   // Owner, 2026-10-21: caretakers didn't know they hold a supervote. Until it
-  // is on one of their gene's candidates, its seal (the same one a vote button
-  // wears once it has it) lies on the corner of the film, and leaves when used.
+  // is on one of their gene's candidates, the Caretaking block carries it as
+  // an inbox-style row: its seal (the one a vote button wears once it holds
+  // it), what it is, and how to give it. The row leaves when it is used.
   function supervoteHintMarkup(item, symbol) {
     if (item.assignment_status !== "active" || item.supervote_active === true) return ""
     return (
-      '<a class="icono-request-inbox__caretaker-supervote" href="' +
+      '<a class="icono-request-inbox__item icono-request-inbox__caretaker-supervote" href="' +
       escapeHtml("/gene/" + encodeURIComponent(symbol) + "#candidates") +
       '" data-icono-caretaker-assignment data-icono-caretaker-supervote-hint>' +
       '<span class="icono-request-inbox__caretaker-seal" aria-hidden="true"></span>' +
-      "Long-press a vote on " +
+      '<span class="icono-request-inbox__copy">' +
+      "<strong>Super vote</strong>" +
+      "<small>Long-press a vote on " +
       escapeHtml(symbol) +
-      " to stamp it</a>"
+      "</small></span></a>"
     )
   }
 
