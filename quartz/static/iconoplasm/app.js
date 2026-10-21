@@ -411,6 +411,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return caretakerPanelPromise
   }
 
+  // The sidebar's caretaker film links to the gene with ?caretaker=open. The
+  // request is used once and taken out of the address bar, so a reload or a
+  // copied link doesn't reopen the panel, and it opens the panel only for the
+  // gene's current caretaker: someone who just stopped needs the page and its
+  // become-caretaker button, not a panel for a role they gave up.
+  function takeCaretakerOpenRequest(symbol) {
+    var url = new URL(window.location.href)
+    if (url.searchParams.get("caretaker") !== "open") return false
+    url.searchParams.delete("caretaker")
+    history.replaceState(history.state, "", url.pathname + url.search + url.hash)
+    var role = iconoSidebarState.caretaker
+    return Boolean(role && normalizedSymbol(role.symbol) === symbol)
+  }
   // Whether the viewer looked after the gene in each caretaker panel's last dossier.
   var viewerCaretakerRoleByHost = new WeakMap()
 
@@ -433,7 +446,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
     var signature = accountId + ":" + symbol
     if (host.getAttribute("data-icono-caretaker-signature") === signature) {
-      if (new URL(window.location.href).searchParams.get("caretaker") === "open") {
+      if (takeCaretakerOpenRequest(symbol)) {
         void loadCaretakerPanel().then(function (panel) {
           panel.open(host)
         })
@@ -448,7 +461,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           currentUser: currentUser,
           authResolved: hasResolvedAuthState,
         })
-        if (new URL(window.location.href).searchParams.get("caretaker") === "open") panel.open(host)
+        // The panel reports the viewer's role (onDossierChanged) in a microtask
+        // it doesn't await; read the role after it.
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 0)
+        })
+        if (takeCaretakerOpenRequest(symbol)) panel.open(host)
       })
       .catch(function () {
         host.removeAttribute("data-icono-caretaker-signature")
