@@ -21348,7 +21348,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const jobId = crypto.randomUUID()
-      const inheritedUpvotes = imageEditInheritedUpvotes(sourceRow.image_upvotes)
+      const inheritedUpvotes = imageEditInheritedUpvotes({
+        upvotes: sourceRow.image_upvotes,
+        downvotes: sourceRow.image_downvotes,
+      })
       const promptTemplatesByKind = await getImageEditPromptTemplatesByKind(env)
       const materializedAdjustments = materializeImageEditAdjustments(
         adjustmentsResult.items,

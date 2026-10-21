@@ -78,6 +78,7 @@ import {
 import { changeRole } from "./iconoplasm/caretaker-roles.js"
 import {
   IMAGE_EDIT_INHERITED_UPVOTE_LIMIT,
+  imageEditInheritedUpvotes,
   VOTE_DAILY_BUDGET_EXHAUSTED,
   VOTE_PERSON_DAILY_LIMIT,
   VOTE_IMPORT_MAX_GENES,
@@ -1465,6 +1466,36 @@ test("20: an image edit's publish imports at most 25 inherited votes and the pub
     db.rows("SELECT changes FROM icono_vote_person_day WHERE user_id = 'reader-1'")[0].changes,
     36,
   )
+})
+
+// 20b. An image edit copies its source's upvotes but drops its downvotes, so a
+//      one-click edit of a disliked portrait starts ahead of it; or repeated
+//      edits (each moving the caretaker's supervote along) climb past the
+//      source instead of settling.
+test("20b: an edit copies 90% of its source's net score, so disliked portraits and edit chains gain nothing", () => {
+  const cases = [
+    // [upvotes, downvotes, inherited]
+    [10, 0, 9],
+    [10, 30, 0], // disliked: the edit starts at the publisher's own vote
+    [12, 11, 0],
+    [40, 10, 25], // 90% of 30 is 27, over the limit
+    [1000, 0, 25],
+    [0, 5, 0],
+  ]
+  for (const [upvotes, downvotes, inherited] of cases) {
+    assert.equal(
+      imageEditInheritedUpvotes({ upvotes, downvotes }),
+      inherited,
+      `${upvotes} up, ${downvotes} down`,
+    )
+  }
+  // The chain: each edit holds what it copied plus its publisher's vote. With
+  // the caretaker's 10 moving to the newest edit, every hop stays at 20.
+  let ordinary = 10
+  for (let hop = 0; hop < 20; hop += 1) {
+    ordinary = imageEditInheritedUpvotes({ upvotes: ordinary, downvotes: 0 }) + 1
+    assert.ok(ordinary <= 10, `hop ${hop + 1}: ${ordinary} ordinary votes`)
+  }
 })
 
 // 22. Something still addresses the deleted vote coordinator, so the first
