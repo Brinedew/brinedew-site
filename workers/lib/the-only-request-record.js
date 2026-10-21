@@ -94,8 +94,16 @@ export function meteredEnv(env) {
   if (!env || typeof env !== "object") return env
   let metered = meteredEnvs.get(env)
   if (metered) return metered
-  metered = { ...env }
-  for (const name of D1_BINDINGS) if (env[name]) metered[name] = meterDatabase(env[name])
+  // Lazy, so a handler that never opens a database never reads its binding.
+  const databases = new Map()
+  metered = new Proxy(env, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver)
+      if (!value || !D1_BINDINGS.includes(key)) return value
+      if (!databases.has(key)) databases.set(key, meterDatabase(value))
+      return databases.get(key)
+    },
+  })
   meteredEnvs.set(env, metered)
   return metered
 }
