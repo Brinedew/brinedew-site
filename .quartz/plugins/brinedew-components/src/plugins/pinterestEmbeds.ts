@@ -6,7 +6,8 @@ import type { Root, Element, ElementContent, RootContent } from "hast"
 // the link; the frame and its size come from Pinterest's oEmbed answer at
 // build time. A pin oEmbed can't describe (deleted, private, network down)
 // stays a plain link.
-const PIN_LINK = /^https?:\/\/(?:(?:[a-z]{2,3}\.|www\.)?pinterest\.[a-z.]+\/pin\/[^\s]+|pin\.it\/[A-Za-z0-9]+\/?)$/i
+const PIN_LINK =
+  /^https?:\/\/(?:(?:[a-z]{2,3}\.|www\.)?pinterest\.[a-z.]+\/pin\/[^\s]+|pin\.it\/[A-Za-z0-9]+\/?)$/i
 const EMBED_ID = /assets\.pinterest\.com\/ext\/embed\.html\?id=(\d+)/
 
 type Container = Root | Element
@@ -36,7 +37,8 @@ function barePinLink(node: ElementContent): string | undefined {
 function lonePinLinks(node: Element): string[] | undefined {
   const lines = node.children.filter(
     (child) =>
-      !(child.type === "text" && !child.value.trim()) && !(isElement(child) && child.tagName === "br"),
+      !(child.type === "text" && !child.value.trim()) &&
+      !(isElement(child) && child.tagName === "br"),
   )
   const urls = lines.map(barePinLink)
   if (urls.length === 0 || urls.some((url) => !url)) return undefined
