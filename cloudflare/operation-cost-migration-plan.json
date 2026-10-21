@@ -15,19 +15,13 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0135_fair_queue_turns.sql": {
+    "iconoplasm/0136_drop_retired_projection_ledgers.sql": {
       "online": true,
       "prediction": {
-        "rows_read": 12000,
-        "rows_written": 2000,
+        "rows_read": 1000,
+        "rows_written": 100,
         "requests": 1
-      },
-      "guards": [
-        {
-          "sql": "SELECT COUNT(*) AS waiting FROM icono_generation_requests WHERE status = 'open'",
-          "max": 500
-        }
-      ]
+      }
     }
   }
 }

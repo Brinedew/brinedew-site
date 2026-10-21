@@ -1,4 +1,5 @@
 import { withErrorReporting, withScheduledErrorReporting } from "./lib/the-only-error-reporter.js"
+import { withRequestRecord } from "./lib/the-only-request-record.js"
 import { iconoplasmPageTitle } from "../quartz/static/iconoplasm/page-title.js"
 import { matchIconoplasmRouteContract } from "./iconoplasm-route-contract.js"
 import {
@@ -65,67 +66,6 @@ const STATIC_SITE_ORIGIN_STAGING = "https://brinedew-bio-staging.pages.dev"
 // must not silently repeat Iconoplasm's full maintenance eight minutes later.
 const KATEX_VENDOR_PREFIX = "/static/vendor/katex/"
 const KATEX_VENDOR_VERSION = "0.16.21"
-
-const ANALYTICS_CONSENT_COUNTRIES = new Set([
-  "AT",
-  "BE",
-  "BG",
-  "CY",
-  "CZ",
-  "DE",
-  "DK",
-  "EE",
-  "ES",
-  "FI",
-  "FR",
-  "GB",
-  "GR",
-  "HR",
-  "HU",
-  "IE",
-  "IS",
-  "IT",
-  "LI",
-  "LT",
-  "LU",
-  "LV",
-  "MT",
-  "NL",
-  "NO",
-  "PL",
-  "PT",
-  "RO",
-  "SE",
-  "SI",
-  "SK",
-])
-
-function requestCountryCode(request) {
-  return String(request.headers.get("CF-IPCountry") || request.cf?.country || "").toUpperCase()
-}
-
-function requestRequiresAnalyticsConsent(request) {
-  return ANALYTICS_CONSENT_COUNTRIES.has(requestCountryCode(request))
-}
-
-function shouldShowAnalyticsConsentPrompt(request) {
-  try {
-    const host = new URL(request.url).hostname
-    return (
-      isProductionBrinedewHtmlHost(host) &&
-      requestRequiresAnalyticsConsent(request) &&
-      !requestHasAnalyticsConsent(request)
-    )
-  } catch {
-    return false
-  }
-}
-
-function injectAnalyticsConsentBootstrap(html, request) {
-  if (!html || !shouldShowAnalyticsConsentPrompt(request)) return html
-  const bootstrap = "<script>window.__brinedewAnalyticsConsentRequired=true</script>"
-  return String(html).replace(/<head([^>]*)>/i, `<head$1>${bootstrap}`)
-}
 
 function iconoplasmGeneNotFoundResponse(method) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow,noarchive"><title>${iconoplasmPageTitle("Gene not found")}</title></head><body><main><h1>Gene not found</h1><p>This symbol is not in the published Iconoplasm catalog.</p><p><a href="/">Iconoplasm gene character archive</a></p></main></body></html>`
@@ -354,6 +294,7 @@ import {
 import { readSession } from "./lib/sealed-session.js"
 // Import Iconoplasm stateful handlers
 import {
+  currentIconoplasmKvVersions,
   isIconoplasmRequest,
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   publishSharedGeneDiscoverySymbols,
@@ -686,11 +627,6 @@ function isProductionBrinedewHtmlHost(hostname) {
   )
 }
 
-function requestHasAnalyticsConsent(request) {
-  const cookies = parseCookies(request.headers.get("Cookie") || "")
-  return cookies.brinedew_analytics_consent === "accepted"
-}
-
 function enforceNoTransformForHtml(headers, request) {
   const contentType = String(headers.get("content-type") || "").toLowerCase()
   if (!contentType.includes("text/html")) {
@@ -703,20 +639,13 @@ function enforceNoTransformForHtml(headers, request) {
       return ""
     }
   })()
-  if (
-    isProductionBrinedewHtmlHost(host) &&
-    (!requestRequiresAnalyticsConsent(request) || requestHasAnalyticsConsent(request))
-  ) {
+  if (isProductionBrinedewHtmlHost(host)) {
     const updated = removeCacheControlDirective(headers.get("cache-control"), "no-transform")
     if (updated) headers.set("Cache-Control", updated)
     else headers.delete("Cache-Control")
     return
   }
-  // Hard-path rationale:
-  // Cloudflare Web Analytics automatic setup mutates HTML by injecting its beacon.
-  // Keep that transform blocked unless the visitor has explicitly opted in. This
-  // gives EU visitors analytics coverage after consent without tracking anyone on
-  // the first page load or relying on a client-only race.
+  // Other hosts (previews, staging) keep Cloudflare from rewriting their HTML.
   const updated = appendCacheControlDirective(headers.get("cache-control"), "no-transform")
   headers.set("Cache-Control", updated)
 }
@@ -1182,7 +1111,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
       if (contentType.includes("text/html")) {
         let html = await upstreamResp.text()
         const responseHeaders = new Headers(upstreamResp.headers)
-        html = injectAnalyticsConsentBootstrap(html, request)
         return new Response(request.method === "HEAD" ? null : html, {
           status: upstreamResp.status,
           statusText: upstreamResp.statusText,
@@ -1347,7 +1275,6 @@ export async function handleRequestAtTheOnlyAllowedInternalStatefulWorkerDoNotDu
           /<link\b[^>]*rel=["']preconnect["'][^>]*href=["']https:\/\/cdn\.jsdelivr\.net["'][^>]*>/gi,
           "",
         )
-        html = injectAnalyticsConsentBootstrap(html, request)
         return new Response(html, {
           status: response.status,
           statusText: response.statusText,
@@ -1808,15 +1735,18 @@ const app = createIconoplasmApp({
 export default {
   async fetch(request, env, ctx) {
     // B-832: thrown errors and 5xx responses go to Sentry after the response.
-    return withErrorReporting(env, ctx, request, "internal", async () => {
-      // Rate limiting belongs at the one runtime that actually owns these
-      // routes. Enforcing here applies exactly once to direct custom-domain and
-      // service-binding traffic and cannot be bypassed by changing entry hosts.
-      const rateLimit = await enforceIconoplasmRateLimit(request, env)
-      if (rateLimit.response) return rateLimit.response
-      const response = await app.fetch(request, env, ctx)
-      return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
-    })
+    return withErrorReporting(env, ctx, request, "internal", () =>
+      // B-1147: one line per request with its actor, route and D1 rows.
+      withRequestRecord(request, env, ctx, async (env) => {
+        // Rate limiting belongs at the one runtime that actually owns these
+        // routes. Enforcing here applies exactly once to direct custom-domain and
+        // service-binding traffic and cannot be bypassed by changing entry hosts.
+        const rateLimit = await enforceIconoplasmRateLimit(request, env)
+        if (rateLimit.response) return rateLimit.response
+        const response = await app.fetch(request, env, ctx)
+        return withIconoplasmRateLimitHeaders(response, rateLimit.headers)
+      }),
+    )
   },
 
   /**
@@ -1926,6 +1856,14 @@ export default {
         console.log("[CRON] Feed post result:", result)
       } catch (err) {
         console.error("[CRON] Feed posting failed:", err)
+      }
+      // B-1147: a day's share of the retired KV keys.
+      try {
+        const { sweepRetiredIconoplasmKvKeys } = await import("./iconoplasm/kv-retired-sweep.js")
+        const result = await sweepRetiredIconoplasmKvKeys(env.KV, currentIconoplasmKvVersions())
+        console.log("[CRON] Retired KV sweep:", JSON.stringify(result))
+      } catch (err) {
+        console.error("[CRON] Retired KV sweep failed:", err)
       }
       return
     }
@@ -2091,17 +2029,6 @@ async function runDailyPreWarm(env) {
   console.log(`[CRON] Bootstrap cache warmed for ${tomorrowStr} (${origins.length} origins)`)
 
   console.log(`[CRON] Pre-warm complete: ${targetProtein.uniprot} (${source})`)
-}
-
-function parseCookies(cookieHeader) {
-  const cookies = {}
-  cookieHeader.split(";").forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split("=")
-    if (name) {
-      cookies[name] = rest.join("=")
-    }
-  })
-  return cookies
 }
 
 async function getAuthenticatedUserIdFromRequest(request, env) {

@@ -741,84 +741,24 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
         {pageJs
           .filter((resource) => resource.loadTime === "beforeDOMReady")
           .map((res) => JSResourceToScriptElement(res, true))}
-        {/* B-883: the consent box sits bottom-right above everything, which is
-            where dialogs keep their main button. It steps aside while a modal
-            dialog is open and returns when the dialog closes. */}
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `.brinedew-analytics-consent{position:fixed;z-index:2147483000;right:1rem;bottom:1rem;max-width:min(28rem,calc(100vw - 2rem));padding:.85rem .95rem;border:1px solid var(--lightgray);background:var(--light);color:var(--dark);box-shadow:0 .5rem 1.75rem rgba(0,0,0,.16);font-family:var(--bodyFont);font-size:.92rem;line-height:1.35}.brinedew-analytics-consent p{margin:0 0 .65rem}.brinedew-analytics-consent a{color:var(--secondary)}.brinedew-analytics-consent__actions{display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap}.brinedew-analytics-consent button{appearance:none;border:1px solid var(--darkgray);border-radius:.25rem;padding:.45rem .75rem;background:transparent;color:var(--dark);font:inherit;cursor:pointer}.brinedew-analytics-consent button[data-analytics-consent-accept]{background:var(--dark);color:var(--light);border-color:var(--dark)}body:has(sl-dialog[open],dialog[open]) .brinedew-analytics-consent{display:none}`,
-          }}
-        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
-  // B-834: pages are static (no Worker per request), so the consent decision
-  // is made here. Cloudflare's free /cdn-cgi/trace names the visitor country;
-  // EU/EEA/UK visitors see the prompt, everyone else gets the cookieless beacon.
-  const COOKIE = "brinedew_analytics_consent"
+  // B-1147: cookieless Cloudflare Web Analytics on every visit, so a busy day
+  // is counted in full; it stores nothing on the device. Until 2026-10-22
+  // visitors from the EU, EEA and UK saw a consent prompt first (B-834, B-883)
+  // and were counted only after "Allow", which hid most of them. A visitor who
+  // already answered "No thanks" keeps that answer.
   const BEACON_TOKEN = "381c356e1ba64a2bbd4924e73d532992"
-  const CONSENT_COUNTRIES = new Set(["AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GB","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MT","NL","NO","PL","PT","RO","SE","SI","SK"])
   const hosts = new Set(["brinedew.bio", "www.brinedew.bio", "iconoplasm.brinedew.bio", "geneguessr.brinedew.bio"])
-  const host = String(location.hostname || "").toLowerCase()
-  if (!hosts.has(host)) return
-  const readCookie = (name) => {
-    const parts = (document.cookie || "").split(";")
-    for (const rawPart of parts) {
-      const part = rawPart.trim()
-      const eq = part.indexOf("=")
-      if (eq > -1 && part.slice(0, eq) === name) return decodeURIComponent(part.slice(eq + 1))
-    }
-    return ""
-  }
-  const loadBeacon = () => {
-    if (document.querySelector("script[data-cf-beacon]")) return
-    const script = document.createElement("script")
-    script.defer = true
-    script.src = "https://static.cloudflareinsights.com/beacon.min.js"
-    script.setAttribute("data-cf-beacon", JSON.stringify({ token: BEACON_TOKEN, spa: true }))
-    document.head.appendChild(script)
-  }
-  const decision = readCookie(COOKIE)
-  if (decision === "accepted") return loadBeacon()
-  if (decision === "declined") return
-  const writeCookie = (value) => {
-    const attrs = ["Path=/", "Max-Age=31536000", "SameSite=Lax"]
-    if (location.protocol === "https:") attrs.push("Secure")
-    attrs.push("Domain=.brinedew.bio")
-    document.cookie = COOKIE + "=" + encodeURIComponent(value) + "; " + attrs.join("; ")
-  }
-  const show = () => {
-    if (document.querySelector(".brinedew-analytics-consent")) return
-    const privacyHref = host === "iconoplasm.brinedew.bio" ? "/privacy" : host === "geneguessr.brinedew.bio" ? "/privacy" : "https://iconoplasm.brinedew.bio/privacy"
-    const box = document.createElement("aside")
-    box.className = "brinedew-analytics-consent"
-    box.setAttribute("role", "dialog")
-    box.setAttribute("aria-label", "Analytics consent")
-    box.innerHTML = '<p>Allow cookieless Cloudflare Web Analytics so we can count visits from your region? It is aggregate traffic data only.</p><div class="brinedew-analytics-consent__actions"><a href="' + privacyHref + '">Privacy</a><button type="button" data-analytics-consent-decline>No thanks</button><button type="button" data-analytics-consent-accept>Allow analytics</button></div>'
-    box.querySelector("[data-analytics-consent-accept]").addEventListener("click", () => {
-      writeCookie("accepted")
-      box.remove()
-      loadBeacon()
-    })
-    box.querySelector("[data-analytics-consent-decline]").addEventListener("click", () => {
-      writeCookie("declined")
-      box.remove()
-    })
-    document.body.appendChild(box)
-  }
-  const decide = (needsConsent) => {
-    if (!needsConsent) return loadBeacon()
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show, { once: true })
-    else show()
-  }
-  if (window.__brinedewAnalyticsConsentRequired === true) return decide(true)
-  fetch("/cdn-cgi/trace", { cache: "no-store", credentials: "omit" })
-    .then((response) => response.text())
-    .then((text) => {
-      const match = /^loc=([A-Z]{2})$/m.exec(text)
-      decide(match ? CONSENT_COUNTRIES.has(match[1]) : true)
-    })
-    .catch(() => decide(true))
+  if (!hosts.has(String(location.hostname || "").toLowerCase())) return
+  if ((document.cookie || "").split(";").some((c) => c.trim() === "brinedew_analytics_consent=declined")) return
+  if (document.querySelector("script[data-cf-beacon]")) return
+  const script = document.createElement("script")
+  script.defer = true
+  script.src = "https://static.cloudflareinsights.com/beacon.min.js"
+  script.setAttribute("data-cf-beacon", JSON.stringify({ token: BEACON_TOKEN, spa: true }))
+  document.head.appendChild(script)
 })()`,
           }}
         />
