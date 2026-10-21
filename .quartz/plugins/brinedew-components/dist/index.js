@@ -2685,7 +2685,10 @@ function normalizeStructure(tree) {
           return;
         }
         node.children = stripBreaks(meaningful);
-        if (parent.type === "element" && parent.tagName === "li" && isPhrasingOnly(node.children)) {
+        const paragraphs = parent.children.filter(
+          (child) => isElement3(child) && child.tagName === "p"
+        );
+        if (parent.type === "element" && parent.tagName === "li" && paragraphs.length === 1 && isPhrasingOnly(node.children)) {
           parent.children.splice(index, 1, ...node.children);
           return;
         }
