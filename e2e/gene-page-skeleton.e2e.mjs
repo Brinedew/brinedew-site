@@ -22,7 +22,15 @@ import { mkdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { HOST, OUT, VIEWPORTS, launchChrome, routeProduction, startSite } from "./harness.mjs"
+import {
+  HOST,
+  OUT,
+  VIEWPORTS,
+  fulfillWithoutLore,
+  launchChrome,
+  routeProduction,
+  startSite,
+} from "./harness.mjs"
 
 const SYMBOL = "TP53"
 const PARTS = {
@@ -93,7 +101,8 @@ test("the gene page skeleton holds the loaded page's boxes", async (t) => {
     const skeleton = await page.evaluate(boxes, [".icono-gene-skeleton", PARTS])
     assert.deepEqual(await page.evaluate(skeletonLeaks), [], label)
 
-    while (held.length) await held.shift().continue()
+    // The skeleton holds no lore box: a gene with public lore grows after it loads.
+    while (held.length) await fulfillWithoutLore(held.shift())
     await context.unroute("**/genes/v3/**")
     await page.waitForSelector("#icono-gene-content .icono-candidate-strip .icono-candidate-card")
     await page.waitForTimeout(1500)

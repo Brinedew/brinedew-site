@@ -30,7 +30,15 @@ import { mkdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { HOST, OUT, VIEWPORTS, launchChrome, routeProduction, startSite } from "./harness.mjs"
+import {
+  HOST,
+  OUT,
+  VIEWPORTS,
+  fulfillWithoutLore,
+  launchChrome,
+  routeProduction,
+  startSite,
+} from "./harness.mjs"
 
 const SYMBOL = "TP53"
 const TABS = "[data-icono-gene-tabs]"
@@ -215,9 +223,10 @@ test("gene page tabs: Overview slices lead into Lore, Comments and Candidates", 
       await context.close()
     }
 
-    // 5: TP53's lore as production publishes it today (not public): no Lore tab.
+    // 5: TP53 with its lore hidden from readers: no Lore tab.
     const context = await browser.newContext({ viewport: { width: 1280, height: 860 } })
     await routeProduction(context, origin)
+    await context.route(`**/genes/v3/${SYMBOL}.json`, fulfillWithoutLore)
     const page = await context.newPage()
     await page.goto(`${HOST}/gene/${SYMBOL}`)
     await page.waitForSelector(`${TABS} [data-icono-gene-tab]`, { timeout: 30_000 })
