@@ -7,10 +7,10 @@
 // 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop;
 // 2. anything artist-shaped reaches the page: the search offers artists, a
 //    card shows an artist label, or typing an artist name finds a style;
-// 3. "Select all N favorites" is not a shared `.icono-button`, or it is not
-//    in the footer on the Queue button's row, to its left (B-884: in the top
-//    panel it cost phones a whole row). On a phone it reads "Select all N" so
-//    it fits beside "Queue 20 candidates" without wrapping;
+// 3. "Add all favorites" (B-1143) is not a shared `.icono-button`, or it is
+//    not where the batch is: in the desktop tray, under the favorites' covers;
+//    on a phone (no tray) in the footer on the Queue button's row, to its left
+//    (B-884: in the top panel it cost phones a whole row);
 // 4. the view switch offers anything beyond Favorites and All styles;
 // 5. the dialog explains open requests in prose instead of marking the card
 //    ("2 queued") of a style that is already queued for this gene;
@@ -19,9 +19,12 @@
 //    docked below it (where it stays visible while the grid scrolls);
 // 7. the primary action is not at the bottom-right of the dialog;
 // 8. the primary label does not follow the batch (random, one number, N);
-// 9. the desktop tray is missing, miscounts, or cannot remove a style, or the
-//    tray shows on a phone;
-// 10. Select all favorites breaks the 20-style limit;
+// 9. the desktop tray is missing, lists other than the picked styles, or
+//    cannot remove a style, or the tray shows on a phone; a partly picked
+//    batch does not offer the other favorites as one row; a queued order does
+//    not stay in the tray, with "Add all favorites" still offered;
+// 10. "Add all favorites" adds other than every favorite not yet picked
+//     (22 here, under the 50-style order limit), or Clear does not empty it;
 // 11. the queue request payload changes shape (random vs specific batch);
 // 12. the card star no longer toggles a favorite, covers the art, or leaves
 //     the style number's line (it sits right after the number, as on the gene
@@ -255,7 +258,8 @@ function measurePicker() {
     .map((card) => card.querySelector(".icono-request-card-art"))
     .filter((art) => visible(art))
   const images = [...dialog.querySelectorAll(".icono-request-card-art img")].filter(visible)
-  const selectAll = dialog.querySelector("[data-icono-request-select-all-favorites]")
+  const addAll = [...dialog.querySelectorAll("[data-icono-request-add-favorites]")].find(visible)
+  const clear = [...dialog.querySelectorAll("[data-icono-request-batch-clear]")].find(visible)
   const primary = dialog.querySelector("[data-icono-request-free-submit]")
   const footer = dialog.querySelector("[data-icono-request-free-footer]")
   const tray = dialog.querySelector("[data-icono-request-batch]")
@@ -281,7 +285,8 @@ function measurePicker() {
     browse: box(browse),
     browseScrolls: browse ? browse.scrollHeight > browse.clientHeight : false,
     viewsInsideBrowse: views.length > 0 && views.every((v) => browse && browse.contains(v)),
-    selectAllInFooter: !!(footer && selectAll && footer.contains(selectAll)),
+    addAllInFooter: !!(footer && addAll && footer.contains(addAll)),
+    addAllInTray: !!(tray && addAll && tray.contains(addAll)),
     tabsInsideBrowse: !!(browse && tabs && browse.contains(tabs)),
     viewSwitch: box(viewSwitch),
     find: box(find),
@@ -311,21 +316,31 @@ function measurePicker() {
         card: b.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
         text: b.textContent.trim(),
       })),
-    selectAll: selectAll
+    addAll: addAll
       ? {
-          tag: selectAll.tagName,
-          className: String(selectAll.className),
-          text: selectAll.innerText.trim(),
-          ariaLabel: selectAll.getAttribute("aria-label") || "",
-          visible: visible(selectAll),
-          ...box(selectAll),
+          tag: addAll.tagName,
+          className: String(addAll.className),
+          text: addAll.innerText.trim(),
+          ...box(addAll),
         }
       : null,
+    clear: clear ? box(clear) : null,
     primary: primary
       ? { text: primary.textContent.trim(), className: String(primary.className), ...box(primary) }
       : null,
     trayVisible: visible(tray),
-    trayCount: tray?.querySelector("[data-icono-request-batch-count]")?.textContent.trim() || "",
+    trayFillTiles: tray
+      ? [...tray.querySelectorAll("[data-icono-request-batch-fill-mosaic] > *")].filter(visible)
+          .length
+      : 0,
+    trayRest: tray
+      ? visible(tray.querySelector("[data-icono-request-batch-rest]")) &&
+        tray.querySelector("[data-icono-request-batch-rest]").getAttribute("aria-label")
+      : false,
+    trayDoneTiles: tray
+      ? [...tray.querySelectorAll("[data-icono-request-batch-done-mosaic] > *")].filter(visible)
+          .length
+      : 0,
     trayRows: tray ? [...tray.querySelectorAll("[data-icono-request-batch-row]")].length : 0,
     mentionsArtist: /artist/i.test(text) || /secretartist|secret artist/i.test(attributes),
     mentionsOpenRequests: /open request/i.test(text),
@@ -419,23 +434,24 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.equal(/artist/i.test(first.searchPlaceholder || ""), false, `${where}: placeholder`)
         assert.equal(/artist/i.test(first.searchLabel || ""), false, `${where}: search label`)
 
-        // 3. Select all favorites is a shared button in the footer, left of Queue.
+        // 3. "Add all favorites" is a shared button where the batch is.
         const desktop = size === "desktop"
-        assert.ok(first.selectAll && first.selectAll.visible, `${where}: Select all is missing`)
-        assert.equal(first.selectAll.tag, "BUTTON", `${where}: Select all is not a button`)
-        assert.match(first.selectAll.className, /\bicono-button\b/, `${where}: Select all style`)
-        assert.equal(
-          first.selectAll.text,
-          desktop ? "Select all 22 favorites" : "Select all 22",
-          `${where}: Select all label`,
-        )
-        assert.equal(first.selectAll.ariaLabel, "Select all 22 favorites", `${where}: aria-label`)
-        assert.equal(first.selectAllInFooter, true, `${where}: Select all is not in the footer`)
-        assert.ok(first.selectAll.right < first.primary.left, `${where}: Select all is not left`)
-        assert.ok(
-          Math.abs(first.selectAll.top - first.primary.top) < 2,
-          `${where}: Select all and Queue are on different rows`,
-        )
+        assert.ok(first.addAll, `${where}: Add all favorites is missing`)
+        assert.equal(first.addAll.tag, "BUTTON", `${where}: Add all is not a button`)
+        assert.match(first.addAll.className, /\bicono-button\b/, `${where}: Add all style`)
+        assert.equal(first.addAll.text, "Add all favorites", `${where}: Add all label`)
+        if (desktop) {
+          assert.equal(first.addAllInTray, true, `${where}: Add all is not in the tray`)
+          // Seven covers and a "+15" tile.
+          assert.equal(first.trayFillTiles, 8, `${where}: the empty tray's covers`)
+        } else {
+          assert.equal(first.addAllInFooter, true, `${where}: Add all is not in the footer`)
+          assert.ok(first.addAll.right < first.primary.left, `${where}: Add all is not left`)
+          assert.ok(
+            Math.abs(first.addAll.top - first.primary.top) < 2,
+            `${where}: Add all and Queue are on different rows`,
+          )
+        }
 
         // 4. Two views only.
         assert.deepEqual(
@@ -516,7 +532,7 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         // 8 + 9. Labels and tray follow the batch.
         assert.equal(p.text, "Queue random", `${where}: empty-batch label`)
         assert.equal(first.trayVisible, desktop, `${where}: tray visibility`)
-        if (desktop) assert.equal(first.trayCount, "0 of 20", `${where}: empty tray count`)
+        if (desktop) assert.equal(first.trayRows, 0, `${where}: the empty tray lists styles`)
 
         await page.click(card(36978))
         let m = await page.evaluate(measurePicker)
@@ -526,14 +542,14 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         m = await page.evaluate(measurePicker)
         assert.equal(m.primary.text, "Queue 2 candidates", `${where}: two-pick label`)
         if (desktop) {
-          assert.equal(m.trayCount, "2 of 20", `${where}: tray count`)
           assert.equal(m.trayRows, 2, `${where}: tray rows`)
+          assert.equal(m.trayRest, "Add the other 20 favorites", `${where}: the rest row`)
         }
         await page.screenshot({ path: shot("two-picked") })
         if (desktop) {
           await page.click("[data-icono-request-batch-remove='anima-v1-36978']")
           m = await page.evaluate(measurePicker)
-          assert.equal(m.trayCount, "1 of 20", `${where}: tray count after remove`)
+          assert.equal(m.trayRows, 1, `${where}: tray rows after remove`)
           assert.equal(m.primary.text, "Queue 31261", `${where}: label after remove`)
         } else {
           await page.click(card(36978))
@@ -554,18 +570,33 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           `${where}: client batch id`,
         )
 
-        // 10. Select all respects the 20-style limit.
-        await page.click("[data-icono-request-select-all-favorites]")
+        // 9. The queued order stays in the tray, and Add all is still offered.
         m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue 20 candidates", `${where}: select-all label`)
-        if (desktop) assert.equal(m.trayCount, "20 of 20", `${where}: select-all tray`)
-        // 3. The longest Queue label still shares the row, on one line each.
-        assert.ok(
-          Math.abs(m.selectAll.top - m.primary.top) < 2 && m.selectAll.right < m.primary.left,
-          `${where}: Select all and "Queue 20 candidates" do not share the footer row`,
-        )
-        assert.ok(m.primary.h < 48 && m.selectAll.h < 48, `${where}: a footer label wrapped`)
+        if (desktop) {
+          assert.equal(m.trayDoneTiles, 1, `${where}: the queued order left the tray`)
+          assert.equal(m.addAllInTray, true, `${where}: Add all is gone after queueing`)
+        }
+
+        // 10. Add all favorites takes every favorite, then Clear empties the batch.
+        await page.click("[data-icono-request-add-favorites]:visible")
+        m = await page.evaluate(measurePicker)
+        assert.equal(m.primary.text, "Queue 22 candidates", `${where}: add-all label`)
+        if (desktop) {
+          assert.equal(m.trayRows, 22, `${where}: add-all tray`)
+          assert.equal(m.trayDoneTiles, 0, `${where}: the queued order outlived a pick`)
+        } else {
+          // 3. Clear and the longest Queue label share the footer row, one line each.
+          assert.ok(
+            m.clear && Math.abs(m.clear.top - m.primary.top) < 2 && m.clear.right < m.primary.left,
+            `${where}: Clear and "Queue 22 candidates" do not share the footer row`,
+          )
+          assert.ok(m.primary.h < 48 && m.clear.h < 48, `${where}: a footer label wrapped`)
+        }
         await page.screenshot({ path: shot("all-favorites") })
+        await page.click("[data-icono-request-batch-clear]:visible")
+        m = await page.evaluate(measurePicker)
+        assert.equal(m.primary.text, "Queue random", `${where}: label after Clear`)
+        await page.click("[data-icono-request-add-favorites]:visible")
 
         // 2 again: typing an artist name finds nothing; a number finds its card.
         await page.click("[data-icono-request-view='all']")

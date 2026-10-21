@@ -12,9 +12,13 @@
 // 3. a retried submit of the same order adds rows instead of returning them.
 
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT,
+  handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
 import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
@@ -143,4 +147,48 @@ test("a refused style leaves an order whose size is the rows that exist", async 
     .all()
     .map((row) => row.size)
   assert.deepEqual(sizes, [2, 2])
+})
+
+// B-1143: an order at the limit must be placed in one Worker run (1,000 D1
+// calls on the free plan), including the worst case where a refused style makes
+// the order prepare twice.
+test("an order at the batch limit fits in one Worker run", async (t) => {
+  const { db, raw, seen } = watchedDatabase()
+  t.after(() => raw.close())
+  await writeFactoryGeneText(
+    { ICONOPLASM_DB: db },
+    { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
+  )
+  const styles = Array.from(
+    { length: ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT },
+    (_, index) => `anima-v1-${index + 1}`,
+  )
+  // Slot 999999 is refused, which forces the second preparation.
+  styles[styles.length - 1] = "anima-v1-999999"
+  seen.length = 0
+  const placed = await order(db, {
+    symbol: "CA3",
+    requested_vision_ids: styles,
+    client_batch_id: "order-at-limit",
+  })
+  assert.equal(placed.status, 200, JSON.stringify(placed.payload))
+  assert.equal(placed.payload.queued_count, ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT - 1)
+  assert.ok(seen.length < 1000, `the order made ${seen.length} D1 calls`)
+
+  const over = await order(db, {
+    symbol: "CA3",
+    requested_vision_ids: [...styles.slice(0, -1), "anima-v1-200", "anima-v1-201"],
+    client_batch_id: "order-over-limit",
+  })
+  assert.equal(over.status, 400)
+
+  // The picker holds the same number.
+  const picker = readFileSync(
+    new URL("../quartz/static/iconoplasm/app.js", import.meta.url),
+    "utf8",
+  )
+  assert.match(
+    picker,
+    new RegExp(`var requestSelectionLimit = ${ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT}(?!\\d)`),
+  )
 })

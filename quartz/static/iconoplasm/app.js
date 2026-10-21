@@ -876,23 +876,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  function syncSelectAllFavoriteButtons(root) {
-    var buttons = (root || document).querySelectorAll("[data-icono-request-select-all-favorites]")
-    var favoriteCount = emulsionFavorites.ids().length
-    for (var i = 0; i < buttons.length; i++) {
-      // Phones drop the noun so the button shares the footer row with
-      // "Queue 20 candidates"; the accessible name keeps it.
-      // One outer span: .icono-button is a flex box, and a bare inner span
-      // would become its own flex item.
-      buttons[i].innerHTML =
-        "<span>Select all " +
-        favoriteCount +
-        '<span class="icono-request-select-all-noun"> favorites</span></span>'
-      buttons[i].setAttribute("aria-label", "Select all " + favoriteCount + " favorites")
-      buttons[i].hidden = !emulsionFavorites.isLoaded() || favoriteCount === 0
-    }
-  }
-
   function announceEmulsionFavoriteStatus(message) {
     var root = document.getElementById(ROOT_ID) || document.body
     var status = document.getElementById("icono-emulsion-favorite-status")
@@ -966,7 +949,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
-    syncSelectAllFavoriteButtons(document)
     document.dispatchEvent(new CustomEvent("icono-emulsion-favorites-change"))
   })
 
@@ -5800,11 +5782,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-request-grid" data-icono-request-results role="list" aria-label="Styles" aria-busy="true"></div>' +
       "</div>" +
       '<aside class="icono-request-batch" data-icono-request-batch aria-label="Your batch">' +
-      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><span class="icono-request-batch-count" data-icono-request-batch-count>0 of 20</span></div>' +
-      '<div class="icono-request-batch-meter" aria-hidden="true"><span data-icono-request-batch-meter></span></div>' +
+      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><button type="button" class="icono-request-batch-clear" data-icono-request-batch-clear hidden>Clear</button></div>' +
+      // After a queue, the order just sent stays in view until the next pick.
+      '<div class="icono-request-batch-done" data-icono-request-batch-done hidden>' +
+      '<div class="icono-request-batch-mosaic icono-request-batch-mosaic--done" data-icono-request-batch-done-mosaic></div>' +
+      '<button type="button" class="icono-request-batch-link" data-icono-request-see-requests>See your requests</button>' +
+      "</div>" +
+      // B-1143: an empty batch shows the favorites it can take in one click;
+      // the count lives on the Queue button, so the tray carries no counter.
+      '<div class="icono-request-batch-fill" data-icono-request-batch-fill hidden>' +
+      '<div class="icono-request-batch-mosaic" aria-hidden="true" data-icono-request-batch-fill-mosaic></div>' +
+      '<button type="button" class="icono-button icono-request-add-favorites" data-icono-request-add-favorites>Add all favorites</button>' +
+      "</div>" +
       // Divs with list roles: Quartz styles bare ul/li inside the article.
       '<div class="icono-request-batch-list" role="list" data-icono-request-batch-list></div>' +
-      '<p class="icono-request-batch-empty" data-icono-request-batch-empty>Pick styles on the left. With none picked, the queue draws a random style.</p>' +
+      '<button type="button" class="icono-request-batch-rest" data-icono-request-batch-rest hidden></button>' +
       "</aside>" +
       "</div>" +
       "</form>"
@@ -6012,8 +6004,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       footerClass: "icono-request-footer",
       footer:
         '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-        // Secondary left, primary right: the dialog's one action bar (B-884).
-        '<button type="button" class="icono-button icono-request-select-all-favorites" data-icono-request-select-all-favorites hidden>Select all 0 favorites</button>' +
+        // Phones hide the tray, so its two actions join the action bar, left of
+        // Queue (B-1143; B-884 keeps the row above the cards for the view switch).
+        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-add-favorites hidden>Add all favorites</button>' +
+        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-batch-clear hidden>Clear</button>' +
         '<button type="submit" form="icono-request-form-' +
         esc(safeSymbol) +
         '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
@@ -7114,10 +7108,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var queueSubmitButton = dialog
         ? dialog.querySelector("[data-icono-request-free-submit]")
         : null
-      var selectAllFavoritesButton = dialog
-        ? dialog.querySelector("[data-icono-request-select-all-favorites]")
-        : null
-      syncSelectAllFavoriteButtons(dialog || body)
       var providerSelect = body.querySelector("[data-icono-request-provider]")
       var directGenerateButton = dialog
         ? dialog.querySelector("[data-icono-request-image-generate]")
@@ -7154,7 +7144,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // After a failed page, the next scroll may try again only after this.
       var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
-      var requestSelectionLimit = 20
+      // One order is one delivery: the server's batch limit
+      // (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in the stateful runtime),
+      // the most requests the Drain publishes at once. Keep the two equal.
+      var requestSelectionLimit = 50
+      // The order just queued, shown in the tray until the next pick.
+      var justQueuedOptions = []
       var filteredOptions = []
       var requestView = ""
       var browse = body.querySelector("[data-icono-request-browse]")
@@ -7927,13 +7922,92 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         maybeLoadMoreRequestOptions()
       }
 
+      function requestOptionFirstPreview(option) {
+        return (Array.isArray(option && option.preview_assets) ? option.preview_assets : [])
+          .map(requestOptionPreviewUrl)
+          .filter(Boolean)[0]
+      }
+
+      function requestBatchTileMarkup(option, checked) {
+        var first = requestOptionFirstPreview(option)
+        return (
+          '<span class="icono-request-batch-tile">' +
+          (checked
+            ? '<span class="icono-request-card-check" aria-hidden="true">' +
+              ICONO_CHECK_ICON +
+              "</span>"
+            : "") +
+          (first ? '<img src="' + esc(first) + '" alt="" loading="lazy" decoding="async">' : "") +
+          "</span>"
+        )
+      }
+
+      // Covers in a mosaic two rows of `columns` high; the last tile counts the rest.
+      function requestBatchMosaicMarkup(options, columns, checked) {
+        var fits = options.length > columns * 2 ? columns * 2 - 1 : options.length
+        return (
+          options
+            .slice(0, fits)
+            .map(function (option) {
+              return requestBatchTileMarkup(option, checked)
+            })
+            .join("") +
+          (options.length > fits
+            ? '<span class="icono-request-batch-tile">+' + (options.length - fits) + "</span>"
+            : "")
+        )
+      }
+
+      // The favorites not in the batch yet, as far as one order holds.
+      function favoriteRequestOptionsToAdd() {
+        var room = Math.max(
+          0,
+          requestSelectionLimit - Array.from(selectedRequestVisionIds).filter(Boolean).length,
+        )
+        var options = emulsionFavorites
+          .ids()
+          .map(requestOptionForFavoriteFamilyId)
+          .filter(function (option) {
+            return option && !selectedRequestVisionIds.has(option.vision_id)
+          })
+        if (options.length <= room) return options
+        // More favorites than one order holds: right after an order, continue
+        // with the ones it left out instead of sending the same ones again.
+        var queued = new Set(
+          justQueuedOptions.map(function (option) {
+            return option.vision_id
+          }),
+        )
+        var unsent = options.filter(function (option) {
+          return !queued.has(option.vision_id)
+        })
+        return (unsent.length ? unsent : options).slice(0, room)
+      }
+
+      // B-1143: an empty tray offers the favorites in one click; a partly picked
+      // one offers the rest as one row; after a queue it shows what was sent.
       function paintRequestBatch() {
-        if (!batchTray) return
         var picked = Array.from(selectedRequestVisionIds).filter(Boolean)
-        var count = batchTray.querySelector("[data-icono-request-batch-count]")
-        if (count) count.textContent = picked.length + " of " + requestSelectionLimit
-        var meter = batchTray.querySelector("[data-icono-request-batch-meter]")
-        if (meter) meter.style.width = (picked.length / requestSelectionLimit) * 100 + "%"
+        var toAdd = favoriteRequestOptionsToAdd()
+        var showDone = !picked.length && justQueuedOptions.length > 0
+        var addButtons = dialog ? dialog.querySelectorAll("[data-icono-request-add-favorites]") : []
+        for (var a = 0; a < addButtons.length; a++) {
+          addButtons[a].hidden = picked.length > 0 || !toAdd.length
+        }
+        var clearButtons = dialog ? dialog.querySelectorAll("[data-icono-request-batch-clear]") : []
+        for (var c = 0; c < clearButtons.length; c++) clearButtons[c].hidden = !picked.length
+        if (!batchTray) return
+        var fill = batchTray.querySelector("[data-icono-request-batch-fill]")
+        if (fill) {
+          // Under a just-queued order the button stays, without its covers.
+          fill.hidden = picked.length > 0 || !toAdd.length
+          var fillMosaic = fill.querySelector("[data-icono-request-batch-fill-mosaic]")
+          if (fillMosaic) {
+            fillMosaic.hidden = showDone
+            if (!fill.hidden && !showDone)
+              fillMosaic.innerHTML = requestBatchMosaicMarkup(toAdd, 4, false)
+          }
+        }
         var list = batchTray.querySelector("[data-icono-request-batch-list]")
         if (list) {
           list.innerHTML = picked
@@ -7944,8 +8018,45 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             })
             .join("")
         }
-        var empty = batchTray.querySelector("[data-icono-request-batch-empty]")
-        if (empty) empty.hidden = picked.length > 0
+        var rest = batchTray.querySelector("[data-icono-request-batch-rest]")
+        if (rest) {
+          rest.hidden = !picked.length || !toAdd.length
+          if (!rest.hidden) {
+            rest.setAttribute(
+              "aria-label",
+              "Add the other " + toAdd.length + " favorite" + (toAdd.length === 1 ? "" : "s"),
+            )
+            rest.innerHTML =
+              '<span class="icono-request-batch-stack" aria-hidden="true">' +
+              toAdd
+                .slice(0, 3)
+                .map(function (option) {
+                  var src = requestOptionFirstPreview(option)
+                  return src ? '<img src="' + esc(src) + '" alt="">' : ""
+                })
+                .join("") +
+              '</span><span aria-hidden="true">+' +
+              toAdd.length +
+              "</span>" +
+              ICONO_PLUS_ICON
+          }
+        }
+        var done = batchTray.querySelector("[data-icono-request-batch-done]")
+        if (done) {
+          done.hidden = !showDone
+          var doneMosaic = done.querySelector("[data-icono-request-batch-done-mosaic]")
+          if (doneMosaic && showDone) {
+            doneMosaic.innerHTML = requestBatchMosaicMarkup(justQueuedOptions, 6, true)
+            doneMosaic.setAttribute("role", "img")
+            doneMosaic.setAttribute(
+              "aria-label",
+              justQueuedOptions.length +
+                " style" +
+                (justQueuedOptions.length === 1 ? "" : "s") +
+                " queued",
+            )
+          }
+        }
       }
 
       form._iconoRepaintRequestResults = function () {
@@ -8022,6 +8133,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function updateQueueSelectionControls() {
         var selectedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
+        if (selectedVisionIds.length) justQueuedOptions = []
         hiddenInput.value = selectedVisionIds.join(",")
         var optionButtons = results.querySelectorAll("[data-icono-request-option]")
         for (var i = 0; i < optionButtons.length; i++) {
@@ -8063,22 +8175,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return neutralSlot ? requestOptionFromImmediateNumericQuery(neutralSlot[1]) : null
       }
 
-      function selectAllFavoriteRequestOptions() {
-        var favorites = emulsionFavorites
-          .ids()
-          .map(requestOptionForFavoriteFamilyId)
-          .filter(Boolean)
-        var selectable = favorites.slice(0, requestSelectionLimit)
-        if (!selectable.length) return
-        selectedRequestVisionIds.clear()
-        rememberRequestOptions(selectable)
-        for (var i = 0; i < selectable.length; i++) {
-          selectedRequestVisionIds.add(selectable[i].vision_id)
-        }
+      function addFavoriteRequestOptions() {
+        var adding = favoriteRequestOptionsToAdd()
+        if (!adding.length) return
+        rememberRequestOptions(adding)
+        selectedRequestVisionIds.delete("")
+        for (var i = 0; i < adding.length; i++) selectedRequestVisionIds.add(adding[i].vision_id)
         updateQueueSelectionControls()
-        if (favorites.length > selectable.length) {
-          setStatus("Batch limit: " + requestSelectionLimit + " styles.", "")
-        }
       }
 
       function setSelection(option) {
@@ -8214,8 +8317,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           panel._iconoFavoriteViewsHandler,
         )
       }
-      panel._iconoFavoriteViewsHandler = paintRequestViews
-      document.addEventListener("icono-emulsion-favorites-change", paintRequestViews)
+      panel._iconoFavoriteViewsHandler = function () {
+        paintRequestViews()
+        paintRequestBatch()
+      }
+      document.addEventListener("icono-emulsion-favorites-change", panel._iconoFavoriteViewsHandler)
       if (browse) browse.addEventListener("scroll", maybeLoadMoreRequestOptions, { passive: true })
       var viewButtons = body.querySelectorAll("[data-icono-request-view]")
       for (var viewIndex = 0; viewIndex < viewButtons.length; viewIndex++) {
@@ -8360,8 +8466,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (providerSelect) {
         providerSelect.addEventListener("change", updateDirectGenerationButtons)
       }
-      if (selectAllFavoritesButton) {
-        selectAllFavoritesButton.addEventListener("click", selectAllFavoriteRequestOptions)
+      // The tray's and the phone footer's batch actions (B-1143).
+      if (dialog && !dialog._iconoBatchActionsWired) {
+        dialog._iconoBatchActionsWired = true
+        // What was just queued belongs to this visit, not the next opening.
+        dialog.addEventListener("close", function () {
+          justQueuedOptions = []
+          paintRequestBatch()
+        })
+        dialog.addEventListener("click", function (event) {
+          var target = event.target.closest(
+            "[data-icono-request-add-favorites], [data-icono-request-batch-rest], [data-icono-request-batch-clear], [data-icono-request-see-requests]",
+          )
+          if (!target || !dialog.contains(target)) return
+          if (target.matches("[data-icono-request-batch-clear]")) {
+            setSelection(null)
+          } else if (target.matches("[data-icono-request-see-requests]")) {
+            closeDialog(dialog)
+            var inbox = document.getElementById("icono-request-inbox-panel")
+            if (inbox) inbox.scrollIntoView({ block: "nearest" })
+          } else {
+            addFavoriteRequestOptions()
+          }
+        })
       }
       if (directGenerateButton) {
         directGenerateButton.addEventListener("click", submitDirectCandidateGeneration)
@@ -8421,6 +8548,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 return String((failure && failure.requested_vision_id) || "").trim()
               }),
             )
+            justQueuedOptions = requestedVisionIds
+              .filter(function (visionId) {
+                return !failedVisionIds.has(visionId)
+              })
+              .map(function (visionId) {
+                return requestOptionsByVisionId[visionId] || { vision_id: visionId }
+              })
             selectedRequestVisionIds.clear()
             failedVisionIds.forEach(function (visionId) {
               if (visionId) selectedRequestVisionIds.add(visionId)
@@ -8443,11 +8577,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   " could not be queued and remain selected.",
                 "error",
               )
-            } else {
-              setStatus(
-                "Queued " + queuedCount + " candidate" + (queuedCount === 1 ? "." : "s."),
-                "success",
-              )
+            } else if (!isBatch) {
+              setStatus("Queued 1 candidate.", "success")
             }
             void requestInbox.refresh()
             return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
