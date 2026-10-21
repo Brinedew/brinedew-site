@@ -662,7 +662,10 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
       const { gene, ...result } = await run({ geneLocator, accountId, body: parsed.value })
       const after = await publicText(c.env, gene.canonical_symbol)
       let pending = false
-      if (before?.prose !== after?.prose) {
+      // Tells the panel whether readers' view changed, so it refreshes the
+      // gene page only then.
+      const changed = before?.prose !== after?.prose
+      if (changed) {
         try {
           await publishGene(c.env, gene.canonical_symbol)
         } catch (error) {
@@ -670,7 +673,11 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
           pending = true
         }
       }
-      return jsonResponse(pending ? { ...result, projection_pending: true } : result)
+      return jsonResponse({
+        ...result,
+        public_text_changed: changed,
+        ...(pending ? { projection_pending: true } : {}),
+      })
     } catch (error) {
       return safeErrorResponse(error)
     }

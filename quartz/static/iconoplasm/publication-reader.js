@@ -157,6 +157,15 @@ export function createIconoplasmPublicationReader(options = {}) {
     }
   }
 
+  async function originFirstObject(cdnPath, originPath, limit, unavailable) {
+    try {
+      return await fetchFrom(ORIGIN, originPath, limit, undefined, STABLE_FETCH)
+    } catch (error) {
+      if (isHttpError(error) && !error.message.endsWith(" 429")) return null
+    }
+    return stableObject(cdnPath, originPath, limit, unavailable)
+  }
+
   function validStableGene(value, key) {
     return (
       value &&
@@ -168,15 +177,18 @@ export function createIconoplasmPublicationReader(options = {}) {
     )
   }
 
-  async function gene(symbol) {
+  // fromOrigin: the reader who just changed this gene. Bunny's edge keeps the
+  // object up to 60 s after a rewrite, so that one reader reads the canonical
+  // origin's copy (one Worker request) and sees the change at once.
+  async function gene(symbol, { fromOrigin = false } = {}) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
-    const value = await stableObject(
-      `${STABLE_GENE_PATH_PREFIX}${key}.json`,
-      `${STABLE_GENE_ORIGIN_PREFIX}${key}.json`,
-      STABLE_GENE_OBJECT_LIMIT,
-      "The published gene object is unavailable",
-    )
+    const cdnPath = `${STABLE_GENE_PATH_PREFIX}${key}.json`
+    const originPath = `${STABLE_GENE_ORIGIN_PREFIX}${key}.json`
+    const unavailable = "The published gene object is unavailable"
+    const value = fromOrigin
+      ? await originFirstObject(cdnPath, originPath, STABLE_GENE_OBJECT_LIMIT, unavailable)
+      : await stableObject(cdnPath, originPath, STABLE_GENE_OBJECT_LIMIT, unavailable)
     if (value === null) return null
     if (!validStableGene(value, key)) throw new Error(`Invalid published gene object: ${key}`)
     return withImmutableMedia(value)

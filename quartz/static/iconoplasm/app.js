@@ -56,8 +56,8 @@ import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=f7aaa5b67057ce80"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=0fd7513f3d3593c8"
+} from "./diagram-studio.js?v=4a74f2bf190cebab"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=70e368f9de347316"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -321,7 +321,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=335b5f6a79eb50ea"),
+      import("./caretaker-manifestations.js?v=f0b71c7507ba9084"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
       import("./caretaker-candidate-sources.js?v=b09853cc7dd8e392"),
     ]).then(function (modules) {
@@ -339,7 +339,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         loginUrl: voteLoginUrl(),
         onCanonicalChanged: function (symbol, expectation) {
           invalidateGeneDetail(symbol)
-          return fetchGeneDetail(symbol, { forceFresh: true }).then(function (gene) {
+          // The caretaker who just changed the text reads it from the origin:
+          // Bunny's edge would show the old text for up to a minute.
+          var fresh = { forceFresh: true, fromOrigin: true }
+          return fetchGeneDetail(symbol, fresh).then(function (gene) {
             var route = getRoute()
             var content = document.getElementById("icono-gene-content")
             if (
@@ -10591,6 +10594,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
+  // Caretakers break paragraphs with one newline. Each becomes a block line
+  // inside the one <p>, so the Overview's four-line clamp still holds.
+  function loreParagraphs(prose) {
+    return prose
+      .split(/\n+/)
+      .filter(function (part) {
+        return part.trim()
+      })
+      .map(function (part) {
+        return '<span class="icono-public-manifestation__para">' + esc(part) + "</span>"
+      })
+      .join("")
+  }
+
   function publicManifestationMarkup(g) {
     var publicManifestation = g && g.canonical_manifestation
     if (
@@ -10602,9 +10619,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     return (
       '<section class="icono-public-manifestation" aria-labelledby="icono-public-manifestation-title">' +
-      '<h2 id="icono-public-manifestation-title">How this gene manifests</h2>' +
+      '<h2 id="icono-public-manifestation-title">Lore</h2>' +
       '<p class="icono-public-manifestation__body">' +
-      esc(String(publicManifestation.prose)) +
+      loreParagraphs(String(publicManifestation.prose)) +
       "</p></section>"
     )
   }
