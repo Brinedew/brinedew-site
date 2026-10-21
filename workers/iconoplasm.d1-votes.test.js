@@ -2347,18 +2347,18 @@ test("31: emulsion favorites are per account, idempotent, refused to guests, and
   assert.deepEqual((await routeRequest(db, "GET", favoritesPath)).payload.favorite_emulsion_ids, [])
 })
 
-// 32. One request action queues at most one order (50 styles). Above that it is refused before it
+// 32. One request action queues at most one order (100 styles). Above that it is refused before it
 //     writes anything, so a hand-made request cannot turn one click into a hundred rows.
 test("32: a request batch above the order limit is refused before any write, and a guest is refused", async () => {
   const db = new SqliteD1()
   const body = {
     symbol: "A1BG",
-    requested_vision_ids: Array.from({ length: 51 }, (_, index) => `anima-v1-${index + 1}`),
+    requested_vision_ids: Array.from({ length: 101 }, (_, index) => `anima-v1-${index + 1}`),
     client_batch_id: "batch-too-large",
   }
   const tooMany = await routeRequest(db, "POST", "/api/iconoplasm/requests", { body })
   assert.equal(tooMany.status, 400)
-  assert.match(tooMany.payload.error, /no more than 50 styles/i)
+  assert.match(tooMany.payload.error, /no more than 100 styles/i)
   assert.deepEqual(tooMany.payload.failures, [])
   assert.equal(db.rows("SELECT COUNT(*) AS n FROM icono_generation_requests")[0].n, 0)
 

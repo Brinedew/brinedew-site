@@ -437,23 +437,15 @@ test("IPD-009 keeps the cold path and deployment topology explicit", () => {
 })
 
 // ARCHITECTURE FENCE [IPD-006]
-test("IPD-006 preserves durable publication groups and bounded Discord receipts", () => {
+// The behaviour (one receipt per order across sessions, cancellations leaving
+// the group) is tested end to end in workers/iconoplasm.request-order.test.js.
+test("IPD-006 groups receipts by order and bounds Discord receipts", () => {
   const delivery = readRepositoryFile("workers/iconoplasm-request-notifications.js")
-  const runtime = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-  const migration = readRepositoryFile(
-    "migrations-iconoplasm/0062_fulfillment_publication_notification_groups.sql",
-  )
+  const migration = readRepositoryFile("migrations-iconoplasm/0134_delivery_groups_by_order.sql")
   assert.match(delivery, /DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10/)
   assert.match(delivery, /DISCORD_ATTACHMENT_BATCH_MAX_BYTES/)
-  assert.match(delivery, /fulfillment_publication_id/)
-  assert.match(delivery, /fulfillment_group_size/)
   assert.match(delivery, /full\.webp/)
-  assert.match(runtime, /fulfillmentPublicationId: p\?\.fulfillment_publication_id/)
-  assert.match(runtime, /fulfillment_publication_id = \?/)
-  assert.match(runtime, /fulfillment_group_size = \?/)
-  assert.match(migration, /legacy-request:/)
+  assert.match(migration, /trg_icono_generation_request_cancel_shrinks_delivery_group/)
   assert.doesNotMatch(delivery, /setTimeout|setInterval/)
 })
 
