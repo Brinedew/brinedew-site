@@ -12,11 +12,14 @@
 // 3. a retried submit of the same order adds rows instead of returning them.
 
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
+import { createRequire } from "node:module"
+import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import {
   ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT,
+  generationRequestLeaseClaim,
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
@@ -322,3 +325,222 @@ test("an order drawn in two Drain sessions is one receipt, and a cancelled style
   assert.equal(again.delivered_requests, 2)
   assert.equal(sent.length, 2)
 })
+
+// B-1146: fair turns. A reader who orders one style is drawn in the next Drain
+// session, not after someone else's 100.
+//
+// Ways it could go wrong, written before the fix:
+// 1. first come first served: B's one style waits behind all of A's order;
+// 2. the order's rows all take the same turn, so A's whole order still goes
+//    before anyone who came later;
+// 3. a reader who already waits jumps back to the head with a second order;
+// 4. diagnostics lose their place at the front.
+test("a one-style order is drawn before the rest of a big order queued ahead of it", async (t) => {
+  const { db, raw } = watchedDatabase()
+  t.after(() => raw.close())
+  await writeFactoryGeneText(
+    { ICONOPLASM_DB: db },
+    { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
+  )
+  const styles = (from, count) =>
+    Array.from({ length: count }, (_, index) => `anima-v1-${from + index}`)
+  const place = async (userId, ids, batch) => {
+    const placed = await order(
+      db,
+      { symbol: "CA3", requested_vision_ids: ids, client_batch_id: batch },
+      userId,
+    )
+    assert.equal(placed.status, 200, JSON.stringify(placed.payload))
+  }
+  await place("reader-a", styles(1, 30), "a-big")
+  await place("reader-b", styles(31, 1), "b-one")
+  await place("reader-c", styles(32, 5), "c-five")
+  // 3. A orders again while 30 still wait: it goes after A's own turns.
+  await place("reader-a", styles(37, 2), "a-again")
+
+  // The Drain: claim a batch of 10, draw it, finish it, claim the next.
+  const env = { ICONOPLASM_DB: db, ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters" }
+  const session = async () => {
+    const claim = await generationRequestLeaseClaim(env, {
+      limit: 10,
+      leaseOwnerId: "drain-test",
+    })
+    assert.equal(claim.blocked_count, 0, JSON.stringify(claim.blocked_rows))
+    const drawn = claim.leases.map((lease) =>
+      raw
+        .prepare(
+          "SELECT id, requester_user_id, request_batch_id FROM icono_generation_requests WHERE generation_request_id = ?",
+        )
+        .get(lease.generation_request_id),
+    )
+    for (const row of drawn)
+      raw
+        .prepare("UPDATE icono_generation_requests SET status = 'delivery_pending' WHERE id = ?")
+        .run(row.id)
+    return drawn
+  }
+  const first = await session()
+  const second = await session()
+  assert.equal(first.length, 10)
+  assert.deepEqual(
+    first.map((row) => row.requester_user_id),
+    [
+      "reader-a",
+      "reader-a",
+      "reader-b",
+      "reader-c",
+      "reader-a",
+      "reader-c",
+      "reader-a",
+      "reader-c",
+      "reader-a",
+      "reader-c",
+    ],
+  )
+  assert.equal(second[0].requester_user_id, "reader-a")
+  assert.equal(second[1].requester_user_id, "reader-c")
+  assert.ok(second.slice(2).every((row) => row.requester_user_id === "reader-a"))
+
+  // A's second order is drawn only after A's first.
+  const rest = []
+  for (let drawn = await session(); drawn.length; drawn = await session()) rest.push(...drawn)
+  const aOrder = [...first, ...second, ...rest]
+    .filter((row) => row.requester_user_id === "reader-a")
+    .map((row) => row.request_batch_id)
+  assert.equal(aOrder.length, 32)
+  assert.deepEqual(aOrder.slice(-2), ["a-again", "a-again"])
+  assert.ok(aOrder.slice(0, 30).every((batch) => batch === "a-big"))
+
+  // 4. A diagnostic cell queued now holds turn 0 and goes first.
+  await place("reader-b", styles(40, 1), "b-later")
+  raw
+    .prepare(
+      `INSERT INTO icono_generation_requests (gene_symbol, requester_user_id, request_origin, status)
+       VALUES ('CA3', 'owner', 'diagnostic_matrix', 'open')`,
+    )
+    .run()
+  const turns = raw
+    .prepare(
+      "SELECT request_origin, queue_turn FROM icono_generation_requests WHERE status = 'open' ORDER BY queue_turn, id",
+    )
+    .all()
+  assert.deepEqual(
+    turns.map((row) => [row.request_origin, row.queue_turn > 0]),
+    [
+      ["diagnostic_matrix", false],
+      ["user", true],
+    ],
+  )
+})
+
+// The Drain asks the site about the queue once a minute. Each question used to
+// read every waiting request twice, so about 1,750 waiting requests spent
+// Cloudflare's whole 5M daily reads on polling alone (B-1146).
+test(
+  "the Drain's queue poll and claim read the same few rows at 2,000 waiting as at 20",
+  { timeout: 120000 },
+  async () => {
+    const require = createRequire(import.meta.url)
+    const { Miniflare, convertV4MiniflareOptions } = createRequire(
+      require.resolve("wrangler/package.json"),
+    )("miniflare")
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('local')}}",
+        compatibilityDate: "2026-08-01",
+        d1Databases: ["SMALL", "LARGE"],
+      }),
+    )
+    const schema = new DatabaseSync(":memory:")
+    const directory = new URL("../migrations-iconoplasm/", import.meta.url)
+    for (const file of readdirSync(directory)
+      .filter((name) => name.endsWith(".sql"))
+      .sort())
+      schema.exec(readFileSync(new URL(file, directory), "utf8"))
+    const definitions = schema
+      .prepare(
+        "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+      )
+      .all()
+    schema.close()
+    const reads = async (binding, waiting) => {
+      const db = await runtime.getD1Database(binding)
+      for (let i = 0; i < definitions.length; i += 20)
+        await db.batch(definitions.slice(i, i + 20).map(({ sql }) => db.prepare(sql)))
+      // `waiting` requests from waiting/20 readers, behind 3,600 finished ones.
+      await db
+        .prepare(
+          `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<?)
+           INSERT INTO icono_generation_requests (gene_symbol, requester_user_id, status, queue_turn)
+           SELECT 'G' || (i % 500), 'reader-' || (i % ?),
+                  CASE WHEN i > 3600 THEN 'open' ELSE 'fulfilled' END, i
+           FROM n`,
+        )
+        .bind(waiting + 3600, Math.max(1, Math.floor(waiting / 20)))
+        .run()
+      let rowsRead = 0
+      const measured = {
+        prepare(sql) {
+          const wrap = (statement) => ({
+            bind: (...args) => wrap(statement.bind(...args)),
+            first: async () => {
+              const result = await statement.all()
+              rowsRead += result.meta.rows_read
+              return result.results[0] ?? null
+            },
+            all: async () => {
+              const result = await statement.all()
+              rowsRead += result.meta.rows_read
+              return result
+            },
+            run: async () => {
+              const result = await statement.run()
+              rowsRead += result.meta.rows_read
+              return result
+            },
+          })
+          return wrap(db.prepare(sql))
+        },
+      }
+      const env = {
+        ICONOPLASM_DB: measured,
+        ICONOPLASM_ADMIN_TOKEN: "test-admin",
+        ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+      }
+      const poll = await handleApi(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/requests/open?limit=12", {
+          headers: { Authorization: "Bearer test-admin" },
+        }),
+        env,
+        { waitUntil() {} },
+      )
+      const polled = await poll.json()
+      assert.equal(poll.status, 200, JSON.stringify(polled))
+      assert.equal(polled.rows.length, 12)
+      assert.equal(polled.eligible_count, Math.min(waiting, polled.count_cap))
+      const claim = await generationRequestLeaseClaim(
+        env,
+        { limit: 10, leaseOwnerId: "drain-test" },
+        {
+          validateRows: async ({ rows }) => ({ validRows: rows, blockedRows: [] }),
+          quarantineRequests: async () => ({ quarantined_count: 0 }),
+          claimLeases: async ({ rows }) => ({ leases: rows.slice(0, 10) }),
+        },
+      )
+      assert.equal(claim.leases.length, 10)
+      // Turn order: the scan starts at the queue's head.
+      assert.equal(claim.leases[0].id, 3601)
+      return rowsRead
+    }
+    try {
+      const small = await reads("SMALL", 20)
+      const large = await reads("LARGE", 2000)
+      // Before B-1146 the large queue read over 6,000 rows here.
+      assert.ok(large < 1000, `2,000 waiting: ${large} rows read (20 waiting: ${small})`)
+      assert.ok(large - small < 300, `2,000 waiting: ${large} rows read (20 waiting: ${small})`)
+    } finally {
+      await runtime.dispose()
+    }
+  },
+)
