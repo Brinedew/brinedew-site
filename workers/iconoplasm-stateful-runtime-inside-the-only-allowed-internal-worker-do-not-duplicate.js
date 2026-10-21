@@ -123,6 +123,7 @@ import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
 import { renderIconoplasmAdminHtml } from "./iconoplasm-admin-assets.js"
 import { createIconoplasmAdminAssetHandlers } from "./iconoplasm-admin-asset-routes.js"
 import { createIconoplasmAdminPullZoneHandlers } from "./iconoplasm-admin-pull-zone-route.js"
+import { createIconoplasmDailyDigestHandlers } from "./iconoplasm-daily-digest-route.js"
 import { createIconoplasmAdminCatalogObjectHandlers } from "./iconoplasm-admin-catalog-object-route.js"
 import { MAX_GENES_PER_REQUEST } from "./iconoplasm/app.js"
 import { createIconoplasmCandidateRemoval } from "./iconoplasm-admin-candidate-removal.js"
@@ -19104,6 +19105,7 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     stateSymbolMax: 25000,
   }),
   ...createIconoplasmAdminPullZoneHandlers({ isAdmin: isIconoplasmAdmin, json }),
+  ...createIconoplasmDailyDigestHandlers({ isAdmin: isIconoplasmAdmin, json }),
   ...createIconoplasmAdminCatalogObjectHandlers({
     isAdmin: isIconoplasmAdmin,
     json,

@@ -1,0 +1,478 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Plex Mono";
+        src: url(fonts/IBMPlexMono-Regular.woff2);
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "Plex Mono";
+        src: url(fonts/IBMPlexMono-Medium.woff2);
+        font-weight: 500;
+      }
+      @font-face {
+        font-family: "League Spartan";
+        src: url(fonts/LeagueSpartan-800.woff2);
+        font-weight: 800;
+      }
+      @font-face {
+        font-family: "Special Elite";
+        src: url(fonts/SpecialElite-Regular.woff2);
+      }
+      @font-face {
+        font-family: "Caveat";
+        src: url(fonts/Caveat-400.woff2);
+      }
+      /* One 800 px column, the width Webtoon reads at on a phone; rendered at 2x. */
+      :root {
+        --paper: #f4ede5;
+        --ink: #20120b;
+        --muted: rgba(32, 18, 11, 0.62);
+        --rule: rgba(32, 18, 11, 0.2);
+        --rule-strong: rgba(32, 18, 11, 0.45);
+        --teal: #1b7269;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        width: 800px;
+        color: var(--ink);
+        font-family: "Plex Mono", monospace;
+        background: var(--paper) url(paper.jpg) center top / 800px auto repeat-y;
+        background-blend-mode: multiply;
+        padding: 36px 32px 40px;
+      }
+      .mast {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        padding-bottom: 12px;
+        border-bottom: 3px double var(--ink);
+      }
+      .mast b {
+        font: 800 46px/0.9 "League Spartan";
+        letter-spacing: 0.02em;
+      }
+      .mast time {
+        font: 400 24px/1 "Special Elite";
+        text-align: right;
+      }
+      section {
+        margin-top: 38px;
+      }
+      h2 {
+        font: 500 17px/1 "Plex Mono";
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: 11px;
+        border-bottom: 1px solid var(--rule-strong);
+        margin-bottom: 18px;
+      }
+      h2 span {
+        color: var(--muted);
+        letter-spacing: 0.08em;
+        margin-left: 8px;
+      }
+      .sym {
+        font: 800 var(--s, 26px)/1 "League Spartan";
+        letter-spacing: 0.01em;
+      }
+      .name {
+        font: 400 var(--n, 17px)/1.25 "Special Elite";
+        color: var(--muted);
+      }
+      .note {
+        font: 400 26px/1 "Caveat";
+        color: var(--teal);
+      }
+      .who {
+        font: 500 var(--w, 20px)/1.1 "Plex Mono";
+      }
+      .frame {
+        display: block;
+        width: 100%;
+        aspect-ratio: 3 / 4;
+        object-fit: cover;
+        border: 1px solid var(--rule-strong);
+        background: #2a221c;
+      }
+      .avatar {
+        border-radius: 50%;
+        display: block;
+        object-fit: cover;
+        border: 1px solid var(--rule-strong);
+        width: var(--a, 40px);
+        height: var(--a, 40px);
+        flex: 0 0 auto;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+        gap: var(--gap, 18px) var(--colgap, 14px);
+      }
+      .more {
+        margin-top: 16px;
+        font: 400 26px/1 "Caveat";
+        color: var(--teal);
+      }
+      .clamp {
+        display: -webkit-box;
+        -webkit-line-clamp: var(--lines);
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* Canonical portrait updates: previous portrait › new blot, same size */
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr var(--arrow, 20px) 1fr;
+        align-items: center;
+      }
+      .pair i {
+        font: 400 var(--af, 32px)/1 "Caveat";
+        color: var(--teal);
+        text-align: center;
+        font-style: normal;
+      }
+      .update .label {
+        margin-top: 8px;
+        display: grid;
+        gap: 4px;
+      }
+
+      /* People rows: caretakers and comments */
+      .row {
+        display: grid;
+        grid-template-columns: auto 1fr var(--thumb, 72px);
+        gap: 16px;
+        align-items: start;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      .row:last-child {
+        border-bottom: 0;
+      }
+      .row .body {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+      }
+      .row .line {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .row p {
+        font: 400 var(--t, 21px)/1.42 "Special Elite";
+      }
+      .chip {
+        display: grid;
+        gap: 6px;
+        justify-items: center;
+        text-align: center;
+        min-width: 0;
+      }
+      .chip .who {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* An avatar Discord no longer serves (the person changed it) becomes their initial. */
+      .initial {
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--teal);
+        color: var(--paper);
+        font: 800 calc(var(--a, 40px) * 0.5)/1 "League Spartan";
+        flex: 0 0 auto;
+      }
+
+      /* Lore */
+      .entry {
+        display: grid;
+        grid-template-columns: var(--blot, 200px) 1fr;
+        gap: 20px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      .entry:last-child {
+        border-bottom: 0;
+      }
+      .entry .line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .entry .line .sym {
+        margin-right: auto;
+      }
+      .entry p {
+        font: 400 var(--t, 21px)/1.45 "Special Elite";
+      }
+
+      /* New candidates */
+      .strip {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+      .strip .line {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+      }
+      .single b {
+        display: block;
+        margin-top: 4px;
+        font: 800 var(--s, 15px)/1 "League Spartan";
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="mast"><b>ICONOPLASM</b><time id="date"></time></header>
+    <main id="main"></main>
+    <script>
+      // Every section has density levels, densest last. Each level holds up to `max`
+      // items; the last level shows `max` and a "+N more" line. The page picks the
+      // roomiest level that fits the count, then, while the strip is taller than
+      // BUDGET, steps the tallest section one level denser.
+      const BUDGET = 7800
+      const d = window.DIGEST
+      document.getElementById("date").textContent = d.date
+      const blot = (s) => d.blots[s] || ""
+      const nm = (s) => d.names[s] || ""
+      const esc = (t) =>
+        String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])
+      const head = (title, count) => `<h2>${title}<span>${count}</span></h2>`
+      const more = (n, what) =>
+        n > 0 ? `<div class="more">+ ${n.toLocaleString("en")} more ${what}</div>` : ""
+      const take = (items, max) => [items.slice(0, max), Math.max(0, items.length - max)]
+
+      const sections = [
+        {
+          key: "updates",
+          items: d.updates,
+          title: "Canonical portrait updates",
+          levels: [
+            { max: 8, cols: 2, s: 30, n: 18, af: 36 },
+            { max: 24, cols: 3, s: 24, n: 15, af: 28 },
+            { max: 60, cols: 4, s: 19, n: 0, af: 22 },
+            { max: 120, cols: 6, s: 15, n: 0, af: 16 },
+          ],
+          render(l, items, rest) {
+            return (
+              `<div class="grid" style="--cols:${l.cols};--colgap:${l.cols > 3 ? 12 : 22}px">` +
+              items
+                .map(
+                  (u) =>
+                    `<div class="update"><div class="pair" style="--af:${l.af}px;--arrow:${l.af * 0.6}px"><img class="frame" src="${u.from}"><i>›</i><img class="frame" src="${blot(u.symbol)}"></div>` +
+                    `<div class="label"><span class="sym" style="--s:${l.s}px">${u.symbol}</span>${l.n ? `<span class="name" style="--n:${l.n}px">${esc(nm(u.symbol))}</span>` : ""}</div></div>`,
+                )
+                .join("") +
+              `</div>` +
+              more(rest, "canonical portrait updates")
+            )
+          },
+        },
+        {
+          key: "caretakers",
+          items: d.caretakers,
+          title: "New caretakers",
+          levels: [
+            { max: 8, mode: "rows" },
+            { max: 40, mode: "chips", cols: 5, a: 64 },
+            { max: 120, mode: "chips", cols: 8, a: 48 },
+          ],
+          render(l, items, rest) {
+            if (l.mode === "rows")
+              return (
+                items
+                  .map(
+                    (c) =>
+                      `<div class="row" style="--thumb:96px"><img class="avatar" style="--a:88px" src="${c.who.avatar}"><div class="body">` +
+                      `<span class="who" style="--w:24px">${esc(c.who.name)}</span><span class="line"><span class="name">caretaker of</span><span class="sym" style="--s:24px">${c.symbol}</span></span>` +
+                      `${c.from ? `<span class="note">moved from ${c.from}</span>` : ""}</div><img class="frame" src="${blot(c.symbol)}"></div>`,
+                  )
+                  .join("") + more(rest, "new caretakers")
+              )
+            return (
+              `<div class="grid" style="--cols:${l.cols}">` +
+              items
+                .map(
+                  (c) =>
+                    `<div class="chip"><img class="avatar" style="--a:${l.a}px" src="${c.who.avatar}">` +
+                    `<span class="who" style="--w:${l.cols > 5 ? 12 : 15}px">${esc(c.who.name)}</span><span class="sym" style="--s:${l.cols > 5 ? 15 : 19}px">${c.symbol}</span></div>`,
+                )
+                .join("") +
+              `</div>` +
+              more(rest, "new caretakers")
+            )
+          },
+        },
+        {
+          key: "lore",
+          items: d.lore,
+          title: "Lore",
+          levels: [
+            { max: 6, blot: 200, lines: 8, t: 21 },
+            { max: 20, blot: 120, lines: 4, t: 19 },
+            { max: 60, blot: 72, lines: 2, t: 17 },
+            { max: 150, mode: "chips", cols: 8 },
+          ],
+          render(l, items, rest) {
+            if (l.mode === "chips")
+              return (
+                `<div class="grid" style="--cols:${l.cols};--gap:14px">` +
+                items
+                  .map(
+                    (e) =>
+                      `<div class="single"><img class="frame" src="${blot(e.symbol)}">` +
+                      `<b style="display:flex;gap:5px;align-items:center"><img class="avatar" style="--a:18px" src="${e.who.avatar}">${e.symbol}</b></div>`,
+                  )
+                  .join("") +
+                `</div>` +
+                more(rest, "genes with new lore")
+              )
+            return (
+              items
+                .map(
+                  (e) =>
+                    `<div class="entry" style="--blot:${l.blot}px"><img class="frame" src="${blot(e.symbol)}"><div>` +
+                    `<div class="line"><span class="sym" style="--s:${l.blot > 150 ? 28 : 22}px">${e.symbol}</span><img class="avatar" style="--a:${l.blot > 150 ? 34 : 26}px" src="${e.who.avatar}"><span class="who" style="--w:${l.blot > 150 ? 18 : 15}px">${esc(e.who.name)}</span></div>` +
+                    `<p class="clamp" style="--lines:${l.lines};--t:${l.t}px">${esc(e.text)}</p></div></div>`,
+                )
+                .join("") + more(rest, "genes with new lore")
+            )
+          },
+        },
+        {
+          key: "comments",
+          items: d.comments,
+          title: "Comments",
+          levels: [
+            { max: 10, lines: 4, t: 21, a: 52, thumb: 72 },
+            { max: 30, lines: 2, t: 18, a: 40, thumb: 54 },
+            { max: 80, lines: 1, t: 16, a: 30, thumb: 40 },
+          ],
+          render(l, items, rest) {
+            return (
+              items
+                .map(
+                  (c) =>
+                    `<div class="row" style="--thumb:${l.thumb}px;padding:${l.lines > 1 ? 14 : 8}px 0"><img class="avatar" style="--a:${l.a}px" src="${c.who.avatar}"><div class="body">` +
+                    `<span class="line"><span class="who" style="--w:${l.t}px">${esc(c.who.name)}</span><span class="name">on</span><span class="sym" style="--s:${l.t + 2}px">${c.symbol}</span></span>` +
+                    `<p class="clamp" style="--lines:${l.lines};--t:${l.t}px">${esc(c.text)}</p></div><img class="frame" src="${blot(c.symbol)}"></div>`,
+                )
+                .join("") + more(rest, "comments")
+            )
+          },
+        },
+        {
+          key: "candidates",
+          items: d.candidates,
+          title: "New candidates",
+          count: () =>
+            `${d.candidates.reduce((a, c) => a + c.portraits.length, 0).toLocaleString("en")} portraits on ${d.candidates.length.toLocaleString("en")} genes`,
+          levels: [
+            { max: 60, strips: 6, cols: 5, s: 17 },
+            { max: 180, strips: 4, cols: 7, s: 13 },
+            { max: 400, strips: 3, cols: 10, s: 10 },
+            { max: 700, strips: 0, cols: 14, s: 0 },
+          ],
+          render(l, items, rest) {
+            const strips = items.filter((c) => c.portraits.length >= 3).slice(0, l.strips)
+            const singles = items
+              .filter((c) => !strips.includes(c))
+              .map((c) => ({ symbol: c.symbol, p: c.portraits[0], n: c.portraits.length }))
+            return (
+              strips
+                .map(
+                  (c) =>
+                    `<div class="strip"><div class="line"><span class="sym">${c.symbol}</span><span class="name">${esc(nm(c.symbol))}</span><span class="note">${c.portraits.length} new</span></div>` +
+                    `<div class="grid" style="--cols:${l.cols + 1};--gap:8px;--colgap:8px">${c.portraits
+                      .slice(0, (l.cols + 1) * 2)
+                      .map((p) => `<img class="frame" src="${p}">`)
+                      .join("")}</div></div>`,
+                )
+                .join("") +
+              `<div class="grid" style="--cols:${l.cols};--gap:${l.s ? 12 : 6}px;--colgap:${l.s ? 10 : 6}px">${singles.map((c) => `<div class="single"><img class="frame" src="${c.p}">${l.s ? `<b style="--s:${l.s}px">${c.symbol}</b>` : ""}</div>`).join("")}</div>` +
+              more(rest, "genes with new candidates")
+            )
+          },
+        },
+      ]
+
+      const main = document.getElementById("main")
+      const levelFor = (s) => {
+        const i = s.levels.findIndex((l) => l.max >= s.items.length)
+        return i < 0 ? s.levels.length - 1 : i
+      }
+      for (const s of sections) s.level = levelFor(s)
+      function draw() {
+        main.innerHTML = sections
+          .filter((s) => s.items.length)
+          .map((s) => {
+            const l = s.levels[s.level]
+            const [items, rest] = take(s.items, Math.min(l.max, s.cap ?? Infinity))
+            return `<section data-key="${s.key}">${head(s.title, s.count ? s.count() : s.items.length.toLocaleString("en"))}${s.render(l, items, rest)}</section>`
+          })
+          .join("")
+      }
+      draw()
+      const log = []
+      for (let i = 0; i < 20 && document.body.scrollHeight > BUDGET; i++) {
+        const heights = sections
+          .filter((s) => s.items.length && s.level < s.levels.length - 1)
+          .map((s) => [s, main.querySelector(`[data-key=${s.key}]`).offsetHeight])
+          .sort((a, b) => b[1] - a[1])
+        if (!heights.length) break
+        heights[0][0].level++
+        log.push(`${heights[0][0].key}->${heights[0][0].level}`)
+        draw()
+      }
+      // Every section is at its densest and the strip is still too tall: show fewer
+      // items in the tallest section (the rest go to "+N more"), 20% at a time.
+      for (let i = 0; i < 40 && document.body.scrollHeight > BUDGET; i++) {
+        const [s] = sections
+          .filter((x) => x.items.length)
+          .map((x) => [x, main.querySelector(`[data-key=${x.key}]`).offsetHeight])
+          .sort((a, b) => b[1] - a[1])[0]
+        const shown = Math.min(s.levels[s.level].max, s.cap ?? Infinity, s.items.length)
+        s.cap = Math.max(4, Math.floor(shown * 0.8))
+        log.push(`${s.key} cap ${s.cap}`)
+        draw()
+      }
+      // Called by the renderer once every image has settled.
+      window.replaceBrokenAvatars = () => {
+        for (const img of document.querySelectorAll("img.avatar")) {
+          if (img.naturalWidth) continue
+          const who =
+            img.closest(".row, .chip, .entry, .single")?.querySelector(".who")?.textContent || "?"
+          const el = document.createElement("span")
+          el.className = "initial"
+          el.style.cssText = `${img.getAttribute("style") || ""};width:var(--a,40px);height:var(--a,40px)`
+          el.textContent = who.trim()[0]?.toUpperCase() || "?"
+          img.replaceWith(el)
+        }
+      }
+      window.DIGEST_LAYOUT = {
+        height: document.body.scrollHeight,
+        levels: Object.fromEntries(sections.map((s) => [s.key, s.level])),
+        steps: log,
+      }
+    </script>
+  </body>
+</html>

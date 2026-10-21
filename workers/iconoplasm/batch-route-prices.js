@@ -100,6 +100,12 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_assets_state: batch(CATALOGUE_READ),
   admin_publication_pull_zone: critical("no D1 rows: it applies the Bunny pull-zone policy"),
   admin_publication_bunny_account: critical("no D1 rows: it reads the Bunny account's numbers"),
+  // B-733: two id seeks per event table (about 40 one-row reads), then the
+  // day's own publish events, candidates and comments; at 100x today's busiest
+  // day (2026-10-19: 127 candidates, 101 publishes) that is about 25,000 rows.
+  // Measured on that day's nightly copy: 303 rows; the integration test: 77.
+  admin_daily_digest_day: batch({ rows_written: 0, rows_read: 60_000 }),
+  admin_daily_digest_post: critical("no D1 rows: one KV read and write and one Discord post"),
   admin_publication_catalog_object: batch(SMALL_WRITE),
   admin_gallery: owner(SMALL_READ),
   admin_extension_blocklist: critical(OWN_ACTION),
