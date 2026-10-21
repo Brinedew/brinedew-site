@@ -1345,16 +1345,16 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   justify-content: space-between;
 }
 
-/* B-883: the queue action sits at the dialog's bottom-right. B-884: "Select
-   all N favorites" is the bar's secondary action, on the left; Queue stays
-   right even when it is hidden (no favorites) or the row ever wraps. */
+/* B-883: the queue action sits at the dialog's bottom-right. */
 .icono-request-free-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.6rem;
 }
 
-.icono-request-free-actions > .icono-request-select-all-favorites {
+/* The tray holds these on desktop; phones show them here (below). */
+.icono-request-free-actions > .icono-request-footer-batch-action {
+  display: none;
   margin-right: auto;
 }
 
@@ -2088,23 +2088,143 @@ img-comparison-slider.rendered [slot="second"] {
   font: 600 0.88rem / 1.2 var(--icono-action-font);
 }
 
-.icono-request-batch-count {
+.icono-request-batch-clear,
+.icono-request-batch-link {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
   color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
-  font: 0.78rem / 1.2 var(--icono-action-font);
+  font: 600 0.76rem / 1.2 var(--icono-action-font);
+  cursor: pointer;
+}
+
+.icono-request-batch-link {
+  justify-self: start;
+  color: var(--accent);
+}
+
+.icono-request-batch-clear:hover,
+.icono-request-batch-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.icono-request-batch-clear:focus-visible,
+.icono-request-batch-link:focus-visible,
+.icono-request-batch-rest:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-request-batch-fill,
+.icono-request-batch-done {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.icono-request-batch-fill .icono-request-add-favorites {
+  justify-self: start;
+}
+
+/* Covers of the styles an action would add (or just queued), 3:4 like the
+   cards; the last tile counts the ones that don't fit. */
+.icono-request-batch-mosaic {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.icono-request-batch-mosaic--done {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.icono-request-batch-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--icono-radius-sm);
+  background: color-mix(in srgb, var(--ui-border) 50%, var(--light) 50%);
+  color: var(--dark);
+  font: 600 0.84rem / 1 var(--icono-action-font);
   font-variant-numeric: tabular-nums;
 }
 
-.icono-request-batch-meter {
-  height: 3px;
-  background: color-mix(in srgb, var(--ui-border) 70%, var(--light) 30%);
+.icono-request-batch-tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.icono-request-batch-meter span {
-  display: block;
-  width: 0;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.18s var(--icono-ease-out);
+.icono-request-batch-mosaic--done .icono-request-batch-tile img {
+  opacity: 0.72;
+}
+
+/* The card's own check, at tile size. */
+.icono-request-batch-tile .icono-request-card-check {
+  z-index: 1;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: var(--icono-radius-sm);
+  opacity: 1;
+}
+
+.icono-request-batch-tile .icono-request-card-check svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* The favorites not yet in the batch, as one row that adds them. */
+.icono-request-batch-rest {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px dashed color-mix(in srgb, var(--ui-border) 70%, var(--dark) 30%);
+  background: transparent;
+  color: var(--dark);
+  font: 600 0.84rem / 1.2 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.icono-request-batch-rest:hover {
+  border-color: var(--accent);
+}
+
+.icono-request-batch-rest svg {
+  width: 1rem;
+  height: 1rem;
+  margin-left: auto;
+  color: color-mix(in srgb, var(--dark) 70%, transparent);
+}
+
+.icono-request-batch-stack {
+  display: flex;
+}
+
+.icono-request-batch-stack img {
+  width: 1.6rem;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--icono-radius-sm);
+  outline: 2px solid var(--light);
+}
+
+.icono-request-batch-stack img + img {
+  margin-left: -0.75rem;
+}
+
+.icono-request-batch [hidden] {
+  display: none;
 }
 
 .icono-request-batch-list {
@@ -2151,16 +2271,6 @@ img-comparison-slider.rendered [slot="second"] {
   font-variant-numeric: tabular-nums;
 }
 
-.icono-request-batch-empty {
-  margin: 0;
-  color: color-mix(in srgb, var(--dark) 62%, var(--light) 38%);
-  font: 0.78rem / 1.5 var(--icono-action-font);
-}
-
-.icono-request-batch-empty[hidden] {
-  display: none;
-}
-
 /* Phones and narrow dialogs: no tray (the queue button carries the count),
    two columns of cards. */
 @media (max-width: 899px) {
@@ -2170,6 +2280,10 @@ img-comparison-slider.rendered [slot="second"] {
 
   .icono-request-batch {
     display: none;
+  }
+
+  .icono-request-free-actions > .icono-request-footer-batch-action:not([hidden]) {
+    display: inline-flex;
   }
 
   .icono-request-grid {
@@ -2216,16 +2330,23 @@ img-comparison-slider.rendered [slot="second"] {
   }
 }
 
-/* Phones: narrower gutters, so the grid gains width and the footer holds
-   "Select all N" beside "Queue 20 candidates" on one line down to 360 px. */
+/* The narrowest phones (360 px) hold "Add all favorites" and "Queue random"
+   on one row only with tighter buttons. */
+@media (max-width: 379px) {
+  .icono-request-free-actions {
+    gap: var(--icono-space-2);
+  }
+
+  .icono-request-free-actions > .icono-button {
+    padding: 0 var(--icono-space-2);
+  }
+}
+
+/* Phones: narrower gutters, so the grid gains width. */
 @media (max-width: 599px) {
   /* The signed-out request dialog is compact and has no footer bar, so it keeps its gap. */
   .icono-request-dialog:not(.icono-dialog--compact) .icono-dialog__body {
     padding-bottom: 0;
-  }
-
-  .icono-request-select-all-noun {
-    display: none;
   }
 }
 
