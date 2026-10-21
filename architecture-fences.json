@@ -177,8 +177,8 @@
     },
     {
       "id": "IPD-006",
-      "title": "Fulfillment is one bounded receipt per completed publication, recipient, and gene",
-      "decision": "One completed publication has one durable fulfillment identity per recipient and gene. Notifications and inbox state derive from that receipt.",
+      "title": "Fulfillment is one bounded receipt per reader order, recipient, and gene",
+      "decision": "One reader order (request_batch_id) has one durable fulfillment receipt per recipient and gene, whichever Drain sessions finish its requests. Cancelled requests leave the group. Notifications and inbox state derive from that receipt.",
       "reason": "Timing and row adjacency cannot reliably identify a complete human-visible result.",
       "change_control": "A replacement must preserve group completeness, idempotency, bounded payloads, and one acknowledgement boundary. Presentation and delivery mechanisms may change.",
       "runbook": "docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md",
@@ -197,6 +197,11 @@
         {
           "category": "source",
           "file": "workers/iconoplasm-request-notifications.js",
+          "token": "ARCHITECTURE FENCE [IPD-006]"
+        },
+        {
+          "category": "source",
+          "file": "migrations-iconoplasm/0134_delivery_groups_by_order.sql",
           "token": "ARCHITECTURE FENCE [IPD-006]"
         },
         {

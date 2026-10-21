@@ -24,7 +24,7 @@
 //    batch does not offer the other favorites as one row; a queued order does
 //    not stay in the tray, with "Add all favorites" still offered;
 // 10. "Add all favorites" adds other than every favorite not yet picked
-//     (22 here, under the 50-style order limit), or Clear does not empty it;
+//     (22 here, under the 100-style order limit), or Clear does not empty it;
 // 11. the queue request payload changes shape (random vs specific batch);
 // 12. the card star no longer toggles a favorite, covers the art, or leaves
 //     the style number's line (it sits right after the number, as on the gene

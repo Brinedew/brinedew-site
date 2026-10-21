@@ -103,7 +103,7 @@ Caretaker autosave creates the caretaker's own version; new image requests use t
 
 Off-Cloudflare recovery for every D1 database is the nightly dump from `scripts/backup-d1-rotation.mjs` (B-830). The authoring D1 tables `icono_manifestation_cutover_backup_*` hold an abandoned backup whose status reads `building`; no code reads or resumes it, and nothing should.
 
-**ARCHITECTURE FENCE [IPD-006]** — One completed workstation publication yields one bounded receipt per recipient and gene; never infer groups. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md`.
+**ARCHITECTURE FENCE [IPD-006]** — One reader order yields one bounded receipt per recipient and gene, however many Drain sessions draw it; never infer groups. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_FULFILLMENT_NOTIFICATION_RUNBOOK.md`.
 
 **ARCHITECTURE FENCE [IPD-007]** — Iconoplasm anonymous documents use one Static Assets SPA shell; healthy portrait reads go directly to Bunny. The stable first-party `/blot/{symbol}.webp` route enters the existing Worker to read the gene's stable object. Canonical first-party `/portraits/*` URLs enter that Worker only as the Bunny-backed fallback; never redirect them to a static placeholder. Explicit mutation/admin APIs use the same Worker. Never enable Workers Cache as a quota workaround. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_CAPACITY_AND_BACKGROUND_WORK_RUNBOOK.md`.
 

@@ -2,7 +2,6 @@ import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js
 import {
   visionRollupBatchWriteUnits,
   generationClaimBounds,
-  GENERATION_COMPLETION_MAX_REQUESTS,
 } from "./lib/iconoplasm-mutation-write-bounds.js"
 import { admitBatchWork } from "./iconoplasm/batch-admission.js"
 import {
@@ -3450,15 +3449,16 @@ async function createGenerationRequest(env, options = {}) {
   return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
 }
 
-// B-1143: an order is the reader's one delivery, so it must fit the smallest
-// step it passes through. Placing it is one D1 batch (5 calls a style, 9 when a
-// refused style makes it prepare twice: 450 of Cloudflare's 1,000 per run). The
-// Drain then draws and publishes at most 50 requests a session
-// (SESSION_PUBLICATION_REQUEST_LIMIT in Iconoplasm's drain config), and a claim
-// and a completion carry the same 50, so a larger order would come back as two
-// publications and two Discord messages. The picker's requestSelectionLimit
-// (quartz/static/iconoplasm/app.js) is the same number.
-export const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = GENERATION_COMPLETION_MAX_REQUESTS
+// The one limit a reader meets: how many styles one order holds. Placing an
+// order is one Worker run and one D1 batch, so the order must fit Cloudflare's
+// 1,000 D1 calls per run: 5 a style, 9 when a refused style makes it prepare
+// twice (workers/iconoplasm.request-order.test.js places one at this limit and
+// counts). Nothing after placing bounds it: the Drain may draw an order across
+// several sessions, and its receipt still waits for the whole order (B-1145,
+// migrations-iconoplasm/0134_delivery_groups_by_order.sql). The picker's
+// requestSelectionLimit (quartz/static/iconoplasm/app.js) must equal it; the
+// same test checks.
+export const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 100
 
 async function createGenerationRequestBatch(
   env,
@@ -9580,41 +9580,21 @@ export async function fulfillGenerationRequests(
     )
   }
 
-  // Writes a row only when the notification's state moves: it is not yet on this
-  // publication and group size, or it failed before Discord and goes back to retry.
-  // The workstation sends the identical completion until every Discord group is
-  // delivered (one group per call), so most calls find every request already
-  // bound. The last clause is what makes that a no-op instead of a rewrite of
-  // the row, its indexes and the delivery-ready projection it triggers (B-962).
-  async function bindNotificationToPublication(requestId, fulfillmentGroupSize) {
+  // The notification is born in its order's delivery group (the D1 trigger in
+  // migrations-iconoplasm/0134_delivery_groups_by_order.sql), so a completion
+  // never regroups it. A receipt that failed before Discord goes back to retry
+  // when the workstation resends the completion. Anything else writes nothing,
+  // so a resent completion is a no-op (B-962).
+  async function retryFailedNotification(requestId) {
     await env.ICONOPLASM_DB.prepare(
       `UPDATE icono_request_notifications
-       SET fulfillment_publication_id = ?,
-           fulfillment_group_size = ?,
-           discord_status = CASE WHEN discord_status = 'failed' THEN 'retry' ELSE discord_status END,
-           discord_error = CASE WHEN discord_status = 'failed' THEN '' ELSE discord_error END,
-           discord_next_attempt_at = CASE WHEN discord_status = 'failed' THEN NULL ELSE discord_next_attempt_at END
+       SET discord_status = 'retry',
+           discord_error = '',
+           discord_next_attempt_at = NULL
        WHERE request_id = ?
-         AND discord_status <> 'sent'
-         AND (
-           fulfillment_publication_id = ''
-           OR fulfillment_publication_id = 'legacy-request:' || request_id
-           OR fulfillment_publication_id = ?
-         )
-         AND (
-           fulfillment_publication_id IS NOT ?
-           OR fulfillment_group_size IS NOT ?
-           OR discord_status = 'failed'
-         )`,
+         AND discord_status = 'failed'`,
     )
-      .bind(
-        publicationIdNorm,
-        fulfillmentGroupSize,
-        requestId,
-        publicationIdNorm,
-        publicationIdNorm,
-        fulfillmentGroupSize,
-      )
+      .bind(requestId)
       .run()
   }
 
@@ -9715,20 +9695,8 @@ export async function fulfillGenerationRequests(
     }
   }
 
-  const fulfillmentGroupSizes = new Map()
-  for (const intent of intentsByRequestId.values()) {
-    const row = preflightRows.get(intent.requestId)
-    const groupKey = `${normalizeUserId(row?.requester_user_id || "")}|${normalizeSymbol(row?.gene_symbol || "")}`
-    fulfillmentGroupSizes.set(groupKey, Number(fulfillmentGroupSizes.get(groupKey) || 0) + 1)
-  }
-
   for (const intent of intentsByRequestId.values()) {
     const preflightRow = preflightRows.get(intent.requestId)
-    const fulfillmentGroupKey = `${normalizeUserId(preflightRow?.requester_user_id || "")}|${normalizeSymbol(preflightRow?.gene_symbol || "")}`
-    const fulfillmentGroupSize = Math.max(
-      1,
-      Number(fulfillmentGroupSizes.get(fulfillmentGroupKey) || 1),
-    )
     const preflightStatus = String(preflightRow?.status || "")
       .trim()
       .toLowerCase()
@@ -9839,8 +9807,7 @@ export async function fulfillGenerationRequests(
              fulfilled_model_id = ?,
              fulfilled_prompt_sha256 = ?,
              fulfillment_note = ?,
-             fulfillment_publication_id = ?,
-             fulfillment_group_size = ?
+             fulfillment_publication_id = ?
          WHERE id = ?
            AND status = 'open'
            AND generation_request_id = ?`,
@@ -9855,13 +9822,11 @@ export async function fulfillGenerationRequests(
           intent.promptSha,
           intent.note,
           publicationIdNorm,
-          fulfillmentGroupSize,
           intent.requestId,
           intent.generationRequestId,
         )
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
-        await bindNotificationToPublication(intent.requestId, fulfillmentGroupSize)
         deliveryRequestIds.add(intent.requestId)
         startedDeliveryIds.add(intent.requestId)
         continue
@@ -9893,21 +9858,16 @@ export async function fulfillGenerationRequests(
         })
         continue
       }
-      // A request already on this publication and group size has nothing to
-      // rewrite. Only a request on an older binding is moved, so a pass writes
-      // for what changed and a settle loop's cost does not grow with the number
-      // of requests still pending (B-962). The notification is bound on its own
-      // state below, not on this row's: a pass that stopped between the two
-      // leaves the request bound and the notification not.
-      let resumed =
-        currentRow.fulfillment_publication_id === publicationIdNorm &&
-        Number(currentRow.fulfillment_group_size) === fulfillmentGroupSize
+      // A request already on this publication has nothing to rewrite. Only a
+      // request on an older binding is moved, so a pass writes for what changed
+      // and a settle loop's cost does not grow with the number of requests still
+      // pending (B-962).
+      let resumed = currentRow.fulfillment_publication_id === publicationIdNorm
       if (!resumed) {
         const resumeResp = await env.ICONOPLASM_DB.prepare(
           `UPDATE icono_generation_requests
            SET updated_at = CURRENT_TIMESTAMP,
-               fulfillment_publication_id = ?,
-               fulfillment_group_size = ?
+               fulfillment_publication_id = ?
            WHERE id = ?
              AND status = 'delivery_pending'
              AND fulfilled_asset_sha256 = ?
@@ -9915,7 +9875,6 @@ export async function fulfillGenerationRequests(
         )
           .bind(
             publicationIdNorm,
-            fulfillmentGroupSize,
             intent.requestId,
             intent.fulfilledAssetSha,
             intent.fulfilledVisionId,
@@ -9924,7 +9883,7 @@ export async function fulfillGenerationRequests(
         resumed = Number(resumeResp?.meta?.changes || 0) > 0
       }
       if (resumed) {
-        await bindNotificationToPublication(intent.requestId, fulfillmentGroupSize)
+        await retryFailedNotification(intent.requestId)
         deliveryRequestIds.add(intent.requestId)
         continue
       }

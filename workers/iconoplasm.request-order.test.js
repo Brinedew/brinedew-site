@@ -20,6 +20,10 @@ import {
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
+import {
+  deliverPendingRequestFulfillmentNotifications,
+  ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID,
+} from "./iconoplasm-request-notifications.js"
 import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
@@ -66,13 +70,13 @@ function watchedDatabase() {
   return { db: proxy, raw: db.database, seen }
 }
 
-async function order(db, body) {
+async function order(db, body, userId = "reader-1") {
   const response = await handleApi(
     new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/requests", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await sessionCookieFor({ user_id: "reader-1", username: "reader" }),
+        Cookie: await sessionCookieFor({ user_id: userId, username: "reader" }),
       },
       body: JSON.stringify(body),
     }),
@@ -191,4 +195,130 @@ test("an order at the batch limit fits in one Worker run", async (t) => {
     picker,
     new RegExp(`var requestSelectionLimit = ${ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT}(?!\\d)`),
   )
+})
+
+// B-1145: one order is one receipt, whichever Drain sessions finish it.
+//
+// Ways it could go wrong, written before the fix:
+// 1. the Drain draws an order in two sessions and each publication sends its own
+//    Discord message (54 orders in the 2026-10-20 nightly copy);
+// 2. a request in the order is cancelled (its exact source is gone) and the
+//    receipt waits forever for it;
+// 3. the cancellation lands before any request finishes, and the order's size
+//    still counts it.
+test("an order drawn in two Drain sessions is one receipt, and a cancelled style leaves it", async (t) => {
+  const { db, raw } = watchedDatabase()
+  t.after(() => raw.close())
+  await writeFactoryGeneText(
+    { ICONOPLASM_DB: db },
+    { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
+  )
+  const placed = await order(
+    db,
+    { symbol: "CA3", requested_vision_ids: SIX_STYLES, client_batch_id: "order-split" },
+    ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID,
+  )
+  assert.equal(placed.status, 200, JSON.stringify(placed.payload))
+  const ids = raw
+    .prepare("SELECT id FROM icono_generation_requests ORDER BY id")
+    .all()
+    .map((row) => row.id)
+
+  // What the fulfillment route and the quarantine do to a request row; the D1
+  // triggers under test fire on exactly these transitions.
+  const finish = (requestIds, publicationId) => {
+    for (const id of requestIds)
+      raw
+        .prepare(
+          `UPDATE icono_generation_requests
+           SET status = 'delivery_pending', fulfillment_publication_id = ?,
+               fulfilled_asset_sha256 = ?, fulfilled_vision_id = requested_vision_id
+           WHERE id = ?`,
+        )
+        .run(publicationId, String(id).padStart(64, "a"), id)
+  }
+  const cancel = (id) =>
+    raw.prepare("UPDATE icono_generation_requests SET status = 'cancelled' WHERE id = ?").run(id)
+
+  const sent = []
+  const originalFetch = globalThis.fetch
+  t.after(() => (globalThis.fetch = originalFetch))
+  globalThis.fetch = async (url, init) => {
+    const value = String(url)
+    if (value.startsWith("https://storage.bunnycdn.com/"))
+      return new Response(
+        new Uint8Array([82, 73, 70, 70, 8, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]),
+        { headers: { "Content-Type": "image/webp" } },
+      )
+    if (value === "https://discord.com/api/v10/users/@me/channels")
+      return Response.json({ id: "dm-channel" })
+    assert.equal(value, "https://discord.com/api/v10/channels/dm-channel/messages")
+    sent.push(JSON.parse(init.body.get("payload_json")))
+    return Response.json({ id: `message-${sent.length}` })
+  }
+  const deliver = () =>
+    deliverPendingRequestFulfillmentNotifications({
+      ICONOPLASM_DB: db,
+      DISCORD_BOT_TOKEN: "test-only",
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+    })
+
+  // The Drain's first session finishes half the order: nothing is sent yet.
+  finish(ids.slice(0, 3), "pub-a")
+  assert.equal((await deliver()).delivered, 0)
+  assert.equal(sent.length, 0)
+
+  // One style's source disappears; the second session finishes the rest.
+  cancel(ids[3])
+  finish(ids.slice(4), "pub-b")
+  const delivered = await deliver()
+  assert.equal(delivered.delivered, 1)
+  assert.equal(delivered.delivered_requests, 5)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].content, /Your 5 free queue candidate portraits for \*\*CA3\*\*/)
+  assert.deepEqual(
+    raw
+      .prepare(
+        "SELECT DISTINCT fulfillment_publication_id AS receipt FROM icono_request_notifications",
+      )
+      .all()
+      .map((row) => row.receipt),
+    ["order-split"],
+  )
+  // The request rows keep the publication that finished them.
+  assert.deepEqual(
+    raw
+      .prepare(
+        "SELECT DISTINCT fulfillment_publication_id AS p FROM icono_generation_requests WHERE status <> 'cancelled' ORDER BY p",
+      )
+      .all()
+      .map((row) => row.p),
+    ["pub-a", "pub-b"],
+  )
+
+  // 3. A cancellation before anything finishes: the order of three is a
+  // receipt of two.
+  const second = await order(
+    db,
+    {
+      symbol: "CA3",
+      requested_vision_ids: ["anima-v1-7", "anima-v1-8", "anima-v1-9"],
+      client_batch_id: "order-early-cancel",
+    },
+    ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID,
+  )
+  assert.equal(second.status, 200, JSON.stringify(second.payload))
+  const later = raw
+    .prepare(
+      "SELECT id FROM icono_generation_requests WHERE request_batch_id = 'order-early-cancel' ORDER BY id",
+    )
+    .all()
+    .map((row) => row.id)
+  cancel(later[0])
+  finish(later.slice(1), "pub-c")
+  const again = await deliver()
+  assert.equal(again.delivered_requests, 2)
+  assert.equal(sent.length, 2)
 })

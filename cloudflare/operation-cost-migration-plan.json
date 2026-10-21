@@ -15,7 +15,7 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0133_caretaker_gene_requests.sql": {
+    "iconoplasm/0134_delivery_groups_by_order.sql": {
       "online": true,
       "prediction": {
         "rows_read": 100,

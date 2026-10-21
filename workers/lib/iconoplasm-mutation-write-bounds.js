@@ -64,11 +64,11 @@ export function generationClaimBounds(rawLimit) {
   return { claimLimit, scanLimit }
 }
 
-// A completion carries the requests of one generation session. One claim leases
-// at most GENERATION_CLAIM_LIMIT_CEILING, every downstream slice (delivery,
-// settlement) already takes 50 request ids, and production's largest publication
-// holds exactly 50 (read-only count, 2026-10-03). A body above the bound is
-// refused before any write.
+// A completion carries the requests of one generation session, which one claim
+// leased. These are batch sizes for the workstation's own work, not limits a
+// reader meets: an order may be drawn across several sessions, and its receipt
+// is grouped by the order (migrations-iconoplasm/0134_delivery_groups_by_order.sql).
+// A body above the bound is refused before any write.
 export const GENERATION_COMPLETION_MAX_REQUESTS = GENERATION_CLAIM_LIMIT_CEILING
 
 // What a completion body asks for: how many items, and how many distinct
