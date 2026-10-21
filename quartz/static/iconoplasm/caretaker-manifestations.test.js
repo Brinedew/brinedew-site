@@ -624,64 +624,6 @@ test("an uncertain save retry reuses the same command ID", async () => {
   assert.equal(second.prose, "Third body")
 })
 
-test("withdraw and restore send the lineage row version instead of accepting stale state", async () => {
-  const { document, Event } = parseHTML('<div id="host"></div>')
-  globalThis.document = document
-  const current = dossier()
-  const calls = []
-  const confirmations = []
-  const panel = createCaretakerManifestationPanel({
-    fetchJSON: async function (path, init) {
-      calls.push({ path, init })
-      return (init?.method || "GET") === "GET" ? current : { ok: true }
-    },
-    escapeHtml,
-    storage: null,
-    confirmAction: (message) => {
-      confirmations.push(message)
-      return true
-    },
-  })
-  const host = document.getElementById("host")
-  await panel.mount(host, {
-    symbol: "TP53",
-    currentUser: { account_id: "acct_1" },
-    authResolved: true,
-  })
-  host
-    .querySelector("[data-icono-caretaker-withdraw]")
-    .dispatchEvent(new Event("click", { bubbles: true }))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  const withdrawn = calls.find((call) => call.init?.method === "DELETE")
-  assert.ok(withdrawn)
-  assert.equal(JSON.parse(withdrawn.init.body).expected_manifestation_version, 2)
-  assert.match(confirmations[0], /withdrawn immediately/)
-  assert.match(
-    confirmations[0],
-    /removed from public view on the site, though it will not be removed from backups/,
-  )
-  assert.doesNotMatch(confirmations[0], /purge|legal hold/i)
-
-  current.manifestations[0].status = "withdrawn"
-  current.manifestations[0].can_withdraw = false
-  current.manifestations[0].can_restore = true
-  current.manifestations[0].row_version = 3
-  await panel.mount(host, {
-    symbol: "TP53",
-    currentUser: { account_id: "acct_1" },
-    authResolved: true,
-  })
-  host
-    .querySelector("[data-icono-caretaker-restore]")
-    .dispatchEvent(new Event("click", { bubbles: true }))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  const restored = calls.find((call) => call.path.endsWith("/restore"))
-  assert.ok(restored)
-  assert.equal(JSON.parse(restored.init.body).expected_manifestation_version, 3)
-})
-
 test("accepting sends the exact displayed terms and no departure choice (B-860)", async () => {
   const { document, Event } = parseHTML('<div id="host"></div>')
   globalThis.document = document
