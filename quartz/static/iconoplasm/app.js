@@ -376,6 +376,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
+          // The toolbar's claim slot was drawn for the role this viewer had; after
+          // "Stop being caretaker" (or any role change here) it is drawn again, so
+          // the button to become caretaker comes back without a reload.
+          var previousRole = viewerCaretakerRoleByHost.get(detail.host)
+          viewerCaretakerRoleByHost.set(detail.host, viewerIsCaretaker)
+          if (previousRole !== undefined && previousRole !== viewerIsCaretaker) {
+            geneContent
+              .querySelector("[data-icono-caretaker-claim-action]")
+              ?.removeAttribute("data-icono-caretaker-claim-signature")
+            hydrateCaretakerClaimAction(geneContent, { symbol: detail.symbol })
+          }
           candidateSourceLinks.mount(geneContent, {
             dossier: detail.dossier,
             openVersion: function (revisionId) {
@@ -399,6 +410,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
     return caretakerPanelPromise
   }
+
+  // Whether the viewer looked after the gene in each caretaker panel's last dossier.
+  var viewerCaretakerRoleByHost = new WeakMap()
 
   function hydrateCaretakerManifestationIsland(container, genePayload) {
     var host = container && container.querySelector("[data-icono-caretaker-island]")
