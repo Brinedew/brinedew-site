@@ -262,6 +262,15 @@
       "commit": "a1c1fe0a9c6a5ce1acf6efa01d473a7d9850e2a3",
       "installedAt": "2026-06-03T13:32:36.002Z"
     },
+    "pinterest-embeds": {
+      "source": {
+        "name": "pinterest-embeds",
+        "repo": "./.quartz/local-plugins/pinterest-embeds"
+      },
+      "resolved": "./.quartz/local-plugins/pinterest-embeds",
+      "commit": "local",
+      "installedAt": "2026-10-21T06:57:05.594Z"
+    },
     "publication-date": {
       "source": {
         "name": "publication-date",
