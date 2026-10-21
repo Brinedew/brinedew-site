@@ -1176,6 +1176,12 @@
     text-decoration: underline;
   }
 
+  .icono-request-inbox__caretaker-supervote small {
+    display: block;
+    color: var(--secondary);
+    font-size: 0.68rem;
+  }
+
   .icono-request-inbox__queue-mark {
     width: 8px;
     height: 28px;

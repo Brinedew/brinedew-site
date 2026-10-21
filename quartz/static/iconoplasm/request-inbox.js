@@ -662,7 +662,28 @@ export function createRequestInbox({
           (unread === 1 ? "comment" : "comments") +
           "</a>"
         : "") +
+      supervoteHintMarkup(item, symbol) +
       "</div>"
+    )
+  }
+
+  // Owner, 2026-10-21: caretakers didn't know they hold a supervote. Until it
+  // sits on one of their gene's candidates, the sidebar says so and leads to
+  // them; the long-press itself stays on the vote buttons.
+  function supervoteHintMarkup(item, symbol) {
+    if (item.assignment_status !== "active" || item.supervote_active === true) return ""
+    return (
+      '<a class="icono-request-inbox__caretaker-comments icono-request-inbox__caretaker-supervote" href="' +
+      escapeHtml("/gene/" + encodeURIComponent(symbol) + "#candidates") +
+      '" data-icono-caretaker-assignment data-icono-caretaker-supervote-hint title="' +
+      escapeHtml(
+        "Long-press any vote button on " +
+          symbol +
+          "'s candidates to give one of them your ±10 supervote. You can move it later.",
+      ) +
+      '"><strong>±10</strong> supervote unused<small>Long-press a vote on ' +
+      escapeHtml(symbol) +
+      "</small></a>"
     )
   }
 
