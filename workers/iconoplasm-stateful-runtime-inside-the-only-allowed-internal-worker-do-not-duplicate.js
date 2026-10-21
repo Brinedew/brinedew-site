@@ -2,6 +2,7 @@ import { PORTRAIT_ASSET_UPSERT_SQL } from "./iconoplasm/portrait-asset-upsert.js
 import {
   visionRollupBatchWriteUnits,
   generationClaimBounds,
+  GENERATION_COMPLETION_MAX_REQUESTS,
 } from "./lib/iconoplasm-mutation-write-bounds.js"
 import { admitBatchWork } from "./iconoplasm/batch-admission.js"
 import {
@@ -3449,13 +3450,15 @@ async function createGenerationRequest(env, options = {}) {
   return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
 }
 
-// B-1143: one order is one Worker run, so one D1 batch, one delivery and one
-// Discord message. Cloudflare's free plan allows 1,000 D1 calls per invocation;
-// a style costs 5 calls, and up to 9 when refused styles make the order prepare
-// twice, so 100 styles stay under it (workers/iconoplasm.request-order.test.js
-// orders 100 and counts the calls). The picker's requestSelectionLimit
+// B-1143: an order is the reader's one delivery, so it must fit the smallest
+// step it passes through. Placing it is one D1 batch (5 calls a style, 9 when a
+// refused style makes it prepare twice: 450 of Cloudflare's 1,000 per run). The
+// Drain then draws and publishes at most 50 requests a session
+// (SESSION_PUBLICATION_REQUEST_LIMIT in Iconoplasm's drain config), and a claim
+// and a completion carry the same 50, so a larger order would come back as two
+// publications and two Discord messages. The picker's requestSelectionLimit
 // (quartz/static/iconoplasm/app.js) is the same number.
-export const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 100
+export const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = GENERATION_COMPLETION_MAX_REQUESTS
 
 async function createGenerationRequestBatch(
   env,

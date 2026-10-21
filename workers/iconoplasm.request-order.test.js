@@ -149,9 +149,9 @@ test("a refused style leaves an order whose size is the rows that exist", async 
   assert.deepEqual(sizes, [2, 2])
 })
 
-// B-1143: the order bound is Cloudflare's, not ours. One order must fit in one
-// Worker run (1,000 D1 calls on the free plan), including the worst case where a
-// refused style makes the order prepare twice.
+// B-1143: an order at the limit must be placed in one Worker run (1,000 D1
+// calls on the free plan), including the worst case where a refused style makes
+// the order prepare twice.
 test("an order at the batch limit fits in one Worker run", async (t) => {
   const { db, raw, seen } = watchedDatabase()
   t.after(() => raw.close())

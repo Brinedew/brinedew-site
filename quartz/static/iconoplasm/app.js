@@ -7144,10 +7144,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // After a failed page, the next scroll may try again only after this.
       var requestOptionsMoreRetryAt = 0
       var selectedRequestVisionIds = new Set([""])
-      // One order is one Worker run: the server's batch limit
+      // One order is one delivery: the server's batch limit
       // (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in the stateful runtime),
-      // set by Cloudflare's 1,000 D1 calls per invocation. Keep the two equal.
-      var requestSelectionLimit = 100
+      // the most requests the Drain publishes at once. Keep the two equal.
+      var requestSelectionLimit = 50
       // The order just queued, shown in the tray until the next pick.
       var justQueuedOptions = []
       var filteredOptions = []
@@ -7964,13 +7964,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           0,
           requestSelectionLimit - Array.from(selectedRequestVisionIds).filter(Boolean).length,
         )
-        return emulsionFavorites
+        var options = emulsionFavorites
           .ids()
           .map(requestOptionForFavoriteFamilyId)
           .filter(function (option) {
             return option && !selectedRequestVisionIds.has(option.vision_id)
           })
-          .slice(0, room)
+        // More favorites than one order holds: right after an order, continue
+        // with the ones it left out instead of sending the same ones again.
+        var queued = new Set(
+          justQueuedOptions.map(function (option) {
+            return option.vision_id
+          }),
+        )
+        var unsent = options.filter(function (option) {
+          return !queued.has(option.vision_id)
+        })
+        return (unsent.length ? unsent : options).slice(0, room)
       }
 
       // B-1143: an empty tray offers the favorites in one click; a partly picked
