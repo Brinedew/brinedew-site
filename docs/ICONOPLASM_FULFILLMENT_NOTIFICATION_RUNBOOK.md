@@ -4,16 +4,21 @@
 
 ## Product contract
 
-A Discord DM and a Ready item in the Request inbox are receipts for a completed
-generation publication, not for an individual button press. Both surfaces are
-grouped by durable publication ID, requester, and canonical gene after the
-images have been generated. Separate publications for the same gene remain
-separate receipts.
+A Discord DM and a Ready item in the Request inbox are receipts for one reader
+order: one press of Queue, for one gene. The receipt waits until every request
+in the order that can still finish has finished, however many Drain sessions
+drew it (B-1145). Two orders for the same gene are two receipts.
 
-- Ten candidates for one gene produce one DM with ten previews.
-- Ten candidates split across two genes produce two DMs, one per gene.
-- One hundred candidates for one gene produce one DM with ten previews and a
-  link to all one hundred on the gene page.
+- An order of ten produces one DM with ten previews.
+- An order of one hundred, drawn by the Drain in two sessions of fifty, still
+  produces one DM: ten previews and a link to all one hundred on the gene page.
+- A request whose exact source disappears is cancelled, leaves its order's
+  group, and the receipt goes out with the rest.
+
+Until 2026-10-21 receipts were grouped by the publication that finished them
+(migration 0062). An order drawn across two sessions then came back as two
+messages; the nightly copy of 2026-10-20 had 54 such orders.
+
 - The Request inbox mirrors that receipt as one item with a bounded preview
   mosaic and one group-level read acknowledgement.
 - A group is not sent until all of its expected notification rows exist. This
@@ -29,24 +34,28 @@ therefore treats ten as a hard preview-attachment ceiling and also applies a
 
 ## Durable ownership
 
-Drain owns a durable `publication_id` tied one-to-one to a completed
-generation session. The fulfillment API requires that ID, persists it with the
-recipient-and-gene group size while moving requests to `delivery_pending`, and
-the D1 trigger copies both values into the notification outbox. Request-time
-`request_batch_id` is provenance only. Rows created before publication grouping
-carry unique `legacy-request:{id}` delivery groups; never guess their grouping
-from row order or completion time.
+Placing an order persists one `request_batch_id` (a single request is an order
+of one, `single-<uuid>`) and `request_batch_size` on every request in it. When a
+request reaches `delivery_pending`, the D1 trigger in
+`migrations-iconoplasm/0134_delivery_groups_by_order.sql` creates its
+notification with `fulfillment_publication_id` set to the order id (on a
+notification this column is the delivery-group key) and `fulfillment_group_size`
+set to the order's size minus its cancelled requests. A second trigger shrinks
+the group when a request in a waiting order is cancelled. The request row keeps
+the Drain's `publication_id`, which is provenance and the replay check. Never
+guess grouping from row order or completion time.
 
 `workers/iconoplasm-request-notifications.js` selects only complete
-publication-recipient-and-gene group leaders, claims every outbox row in the
+order-recipient-and-gene group leaders, claims every outbox row in the
 group, downloads no more than ten full
 renditions, posts one nonce-enforced multipart DM, and applies the same delivery
 result to every row. The per-file 10 MiB guard and 24 MiB aggregate guard bound
 memory without reducing image quality. Reconciliation can mark each associated
 request fulfilled only after that shared Discord receipt is confirmed.
 
-Repeated fulfillment calls for the same publication reuse the same durable ID.
-The sender must not deliver rows whose publication group is incomplete.
+Repeated fulfillment calls for the same publication reuse the same durable ID
+and write nothing to a notification unless it failed and goes back to retry.
+The sender must not deliver rows whose order group is incomplete.
 
 ## Failure rules
 
