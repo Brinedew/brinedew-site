@@ -2801,8 +2801,13 @@ function openGenerationRequestFilters({
     ),
   )
   const safeStatuses = requestStatuses.length ? requestStatuses : ["open"]
-  const whereParts = [`gr.status IN (${safeStatuses.map(() => "?").join(",")})`]
-  const params = [...safeStatuses]
+  // The waiting queue is spelled as a literal so SQLite can use the indexes
+  // that hold only waiting rows (migrations-iconoplasm/0135_fair_queue_turns.sql).
+  const waitingOnly = safeStatuses.length === 1 && safeStatuses[0] === "open"
+  const whereParts = [
+    waitingOnly ? "gr.status = 'open'" : `gr.status IN (${safeStatuses.map(() => "?").join(",")})`,
+  ]
+  const params = waitingOnly ? [] : [...safeStatuses]
   // A matrix becomes visible to Drain atomically only after every cell exists.
   // This keeps the polling workstation from consuming a half-built experiment.
   whereParts.push(
@@ -2835,7 +2840,7 @@ async function listOpenGenerationRequests(
     requesterUserId = "",
     statuses = ["open"],
     includeDiagnostics = false,
-    diagnosticsFirst = false,
+    turnOrder = false,
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return []
@@ -2849,12 +2854,17 @@ async function listOpenGenerationRequests(
     statuses,
     includeDiagnostics,
   })
+  // Turn order is the order the Drain claims in (B-1146): diagnostics hold turn
+  // 0, then one request per waiting reader per round. It walks the waiting-turn
+  // index, so it reads about `limit` rows however long the queue is.
+  const queueWide = turnOrder && whereParts[0] === "gr.status = 'open'" && !geneSymbol
   return queryGenerationRequests(env, {
     whereParts,
     params,
-    orderBy: diagnosticsFirst
-      ? "CASE WHEN gr.request_origin = 'diagnostic_matrix' THEN 0 ELSE 1 END ASC, gr.created_at ASC, gr.id ASC"
-      : "gr.created_at ASC, gr.id ASC",
+    from: queueWide
+      ? "icono_generation_requests gr INDEXED BY idx_icono_generation_requests_waiting_turn"
+      : undefined,
+    orderBy: queueWide ? "gr.queue_turn ASC, gr.id ASC" : "gr.created_at ASC, gr.id ASC",
     limit: cleanedLimit,
   })
 }
@@ -2887,7 +2897,14 @@ async function listGenerationRequestHistory(
 
 async function queryGenerationRequests(
   env,
-  { whereParts, params, orderBy, limit, portraitBaseUrl = "" },
+  {
+    whereParts,
+    params,
+    orderBy,
+    limit,
+    portraitBaseUrl = "",
+    from = "icono_generation_requests gr",
+  },
 ) {
   const resp = await env.ICONOPLASM_DB.prepare(
     // D1 cost fence: every caller supplies indexed equality predicates. Keep
@@ -2908,7 +2925,7 @@ async function queryGenerationRequests(
        COALESCE(pa.emulsion_id, '') AS fulfilled_asset_emulsion_id,
        pa.width AS fulfilled_asset_width,
        pa.height AS fulfilled_asset_height
-     FROM icono_generation_requests gr
+     FROM ${from}
      LEFT JOIN icono_gene_catalog gc
        ON gc.gene_symbol = gr.gene_symbol
      LEFT JOIN icono_admin_vision_rollup avr
@@ -2946,46 +2963,36 @@ async function countGenerationRequestInboxStates(env, requesterUserId) {
   }
 }
 
+// The Drain asks how many requests wait once a minute, and only ever acts on a
+// batch of them, so the count stops at GENERATION_QUEUE_COUNT_CAP. An uncapped
+// COUNT read every waiting row: at 1,750 waiting requests the minute poll alone
+// would have spent Cloudflare's 5M daily reads (B-1146).
+const GENERATION_QUEUE_COUNT_CAP = 100
+
 async function countOpenGenerationRequests(env, filters = {}) {
   if (!env.ICONOPLASM_DB) return 0
   const { whereParts, params } = openGenerationRequestFilters(filters)
   const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS count
-     FROM icono_generation_requests gr
-     WHERE ${whereParts.join(" AND ")}`,
+    `SELECT COUNT(*) AS count FROM (
+       SELECT 1
+       FROM icono_generation_requests gr
+       WHERE ${whereParts.join(" AND ")}
+       LIMIT ?
+     )`,
   )
-    .bind(...params)
+    .bind(...params, GENERATION_QUEUE_COUNT_CAP)
     .first()
   return Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0)
 }
 
-async function summarizeOpenGenerationRequests(env, filters = {}) {
-  if (!env.ICONOPLASM_DB) {
-    return {
-      count: 0,
-      diagnostic_count: 0,
-      oldest_created_at: "",
-      newest_created_at: "",
-    }
-  }
-  const { whereParts, params } = openGenerationRequestFilters(filters)
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       COUNT(*) AS count,
-       SUM(CASE WHEN gr.request_origin = 'diagnostic_matrix' THEN 1 ELSE 0 END) AS diagnostic_count,
-       MIN(gr.created_at) AS oldest_created_at,
-       MAX(gr.created_at) AS newest_created_at
-     FROM icono_generation_requests gr
-     WHERE ${whereParts.join(" AND ")}`,
-  )
-    .bind(...params)
-    .first()
-  return {
-    count: Math.max(0, Number.parseInt(String(row?.count || "0"), 10) || 0),
-    diagnostic_count: Math.max(0, Number.parseInt(String(row?.diagnostic_count || "0"), 10) || 0),
-    oldest_created_at: String(row?.oldest_created_at || "").trim(),
-    newest_created_at: String(row?.newest_created_at || "").trim(),
-  }
+// Production serves every requester, so the eligible queue is the open queue
+// and one count answers both.
+function countOpenAndEligibleGenerationRequests(env, openFilters, eligibleFilters) {
+  const open = countOpenGenerationRequests(env, openFilters)
+  return Promise.all([
+    open,
+    eligibleFilters === openFilters ? open : countOpenGenerationRequests(env, eligibleFilters),
+  ])
 }
 
 function generationRequestSelectionFilters(env, { geneSymbol = "" } = {}) {
@@ -3015,12 +3022,11 @@ export async function generationRequestLeaseClaim(
 ) {
   const { claimLimit, scanLimit } = generationClaimBounds(limit)
   const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env)
-  const [totalOpenCount, eligibleCount, eligibleRows] = await Promise.all([
-    countOpenGenerationRequests(env, openFilters),
-    countOpenGenerationRequests(env, eligibleFilters),
+  const [[totalOpenCount, eligibleCount], eligibleRows] = await Promise.all([
+    countOpenAndEligibleGenerationRequests(env, openFilters, eligibleFilters),
     listOpenGenerationRequests(env, {
       limit: scanLimit,
-      diagnosticsFirst: true,
+      turnOrder: true,
       ...eligibleFilters,
     }),
   ])
@@ -3341,10 +3347,29 @@ async function prepareGenerationRequest(
        source_snapshot_sha256,
        generation_request_contract_sha256,
        generation_config_sha256,
+       queue_turn,
        status,
        updated_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?,
-               'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+               'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               -- The fair turn (B-1146): just behind the queue's head for a reader
+               -- with nothing waiting, else after the reader's own last turn. An
+               -- order's rows insert one by one in a batch, so each sees the last.
+               CASE WHEN ? = 'diagnostic_matrix' THEN 0 ELSE 1 + MAX(
+                 COALESCE((
+                   SELECT queue_turn FROM icono_generation_requests
+                   INDEXED BY idx_icono_generation_requests_waiting_turn
+                   WHERE status = 'open' AND queue_turn > 0
+                   ORDER BY queue_turn, id
+                   LIMIT 1
+                 ), 0),
+                 COALESCE((
+                   SELECT MAX(queue_turn) FROM icono_generation_requests
+                   INDEXED BY idx_icono_generation_requests_reader_waiting_turn
+                   WHERE status = 'open' AND requester_user_id = ?
+                 ), 0)
+               ) END,
+               'open', CURRENT_TIMESTAMP)
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   ).bind(
@@ -3391,6 +3416,8 @@ async function prepareGenerationRequest(
     exactSource.source_snapshot_sha256,
     requestContractHash,
     generationConfigHash,
+    origin,
+    requesterNorm,
   )
   return {
     ok: true,
@@ -20542,10 +20569,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env, {
         geneSymbol: symbol,
       })
-      const [rows, totalOpen, eligible] = await Promise.all([
-        listOpenGenerationRequests(env, { limit, ...openFilters }),
-        summarizeOpenGenerationRequests(env, openFilters),
-        summarizeOpenGenerationRequests(env, eligibleFilters),
+      const [rows, [totalOpen, eligible]] = await Promise.all([
+        listOpenGenerationRequests(env, { limit, turnOrder: true, ...openFilters }),
+        countOpenAndEligibleGenerationRequests(env, openFilters, eligibleFilters),
       ])
       return done(
         "admin_requests_open",
@@ -20553,11 +20579,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: true,
             count: rows.length,
-            total_open_count: totalOpen.count,
-            eligible_count: eligible.count,
-            eligible_diagnostic_count: eligible.diagnostic_count,
-            oldest_eligible_created_at: eligible.oldest_created_at,
-            newest_eligible_created_at: eligible.newest_created_at,
+            total_open_count: totalOpen,
+            eligible_count: eligible,
+            count_cap: GENERATION_QUEUE_COUNT_CAP,
             delivery_mode: policy.mode,
             rows,
             lane_summary: summarizeGenerationRequestRows(rows),
