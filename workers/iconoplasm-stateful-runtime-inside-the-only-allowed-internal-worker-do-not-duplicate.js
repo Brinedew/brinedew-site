@@ -3449,7 +3449,13 @@ async function createGenerationRequest(env, options = {}) {
   return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
 }
 
-const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 20
+// B-1143: one order is one Worker run, so one D1 batch, one delivery and one
+// Discord message. Cloudflare's free plan allows 1,000 D1 calls per invocation;
+// a style costs 5 calls, and up to 9 when refused styles make the order prepare
+// twice, so 100 styles stay under it (workers/iconoplasm.request-order.test.js
+// orders 100 and counts the calls). The picker's requestSelectionLimit
+// (quartz/static/iconoplasm/app.js) is the same number.
+export const ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT = 100
 
 async function createGenerationRequestBatch(
   env,
@@ -3467,7 +3473,7 @@ async function createGenerationRequestBatch(
   if (rawIds.length > ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT) {
     return {
       ok: false,
-      error: `Choose no more than ${ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT} emulsions at once.`,
+      error: `Choose no more than ${ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT} styles at once.`,
     }
   }
   const batchId = sanitizeText(clientBatchId || "", 128) || ""
