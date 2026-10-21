@@ -872,6 +872,14 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
     apiHandler: "admin_publication.bunny_account",
   }),
+  // B-733: the daily digest in #iconoplasm: a finished day's data, and its post.
+  adminApiContract("admin_daily_digest_day", "/daily-digest/day", GET, "admin_daily_digest.day"),
+  adminApiContract(
+    "admin_daily_digest_post",
+    "/daily-digest/post",
+    POST,
+    "admin_daily_digest.post",
+  ),
   iconoplasmApiContract({
     // B-898: the GitHub Actions publisher uploads the one catalog object here.
     id: "admin_publication_catalog_object",
