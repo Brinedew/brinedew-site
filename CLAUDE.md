@@ -345,6 +345,7 @@ getComputedStyle(document.documentElement).getPropertyValue("--light").trim()
 - **templater-obsidian** - advanced templating
 - **tag-wrangler** - tag management tools
 - **obsidian-admonition** - callout blocks
+- **brinedew-pinterest-embeds** - a Pinterest pin link alone on its own line shows as the pin. Source in `obsidian/pinterest-embeds/` (copy both files into `content/.obsidian/plugins/brinedew-pinterest-embeds/`); the site does the same at build time with the `pinterest-embeds` Quartz plugin
 - Plus: editing-toolbar, table-editor, multi-column-markdown, etc.
 
 **Plugin configuration notes:**

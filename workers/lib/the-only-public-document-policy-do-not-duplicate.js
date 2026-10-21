@@ -56,5 +56,5 @@ export function publicContentSecurityPolicy({ geneguessrGame = false } = {}) {
       ? ["https://img.brinedew.bio", "https://iconoplasmportraits.b-cdn.net"]
       : []),
   ].join(" ")
-  return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://challenges.cloudflare.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
+  return `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob: https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ${scriptSrc}; ${connectSrc}; frame-src 'self' https://brinedew.bio https://www.youtube.com https://www.youtube-nocookie.com https://assets.pinterest.com https://challenges.cloudflare.com; worker-src 'self' blob:; form-action 'self'; upgrade-insecure-requests`
 }
