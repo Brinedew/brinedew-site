@@ -246,19 +246,21 @@ test("6: withdrawing the chosen line falls back to a text with Tags; restore bri
 test("7: the gene object is rebuilt only when what readers see changes", async (t) => {
   const h = await harness(t)
   const first = await h.save("Hidden one.")
-  await h.save("Hidden two.")
+  // The panel refreshes the gene page only when the answer says readers' view changed.
+  assert.equal((await h.save("Hidden two.")).body.public_text_changed, false)
   assert.deepEqual(h.published, [])
   const line = first.body.manifestation_id
-  await h.call("POST", `/manifestations/${line}/page-visibility`, {
+  const shown = await h.call("POST", `/manifestations/${line}/page-visibility`, {
     visible: true,
     command_id: "cmd_visible_00000000000000000000001",
   })
+  assert.equal(shown.body.public_text_changed, true)
   assert.deepEqual(h.published, ["MFNG"])
   assert.equal((await readGeneText(h.db, "MFNG")).readers_see, true)
-  await h.save("Shown three.")
+  assert.equal((await h.save("Shown three.")).body.public_text_changed, true)
   assert.deepEqual(h.published, ["MFNG", "MFNG"])
   // A prose-only save changes nothing readers see.
-  await h.save("Draft four.", { tags: null })
+  assert.equal((await h.save("Draft four.", { tags: null })).body.public_text_changed, false)
   assert.deepEqual(h.published, ["MFNG", "MFNG"])
   assert.equal(
     (
