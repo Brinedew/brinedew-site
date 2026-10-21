@@ -6,10 +6,11 @@ process — everything runs inside the one stateful Cloudflare Worker
 `geneguessr-api`. The public edge Worker forwards `brinedew.bio/api/*` and
 GeneGuessr `/api/*` and `/admin*` to it through a service binding.
 
-Two features live here:
+Three features post here (section 3 is supporter tiers, which only reads roles):
 
 1. **Daily GeneGuessr recap** → posted to `#geneguessr`
 2. **New gene-page comments** → mirrored to `#iconoplasm`
+3. **Daily Iconoplasm digest** (section 4) → posted to `#iconoplasm`
 
 ---
 
@@ -202,6 +203,31 @@ Cost: ~1 Discord API call per 5 minutes per active user, so 100 active users mak
 
 The frontend's `formatTierLabel()` in `sidebar-shell.js` already renders tiers other than "registered"; it will display "Supporter" for users with that tier.
 
+## 4. Daily Iconoplasm digest → #iconoplasm
+
+B-733. Once a day, one post shows what the community did on Iconoplasm the day
+before: one long vertical picture plus a text of gene links. What it shows, how
+it adapts to the size of the day, and the 25 mistakes behind its design are in
+`docs/ICONOPLASM_DAILY_DIGEST.md`.
+
+It runs in GitHub Actions, not a Worker cron, because all five cron slots are
+taken:
+
+1. `.github/workflows/post-iconoplasm-daily-digest.yml` runs at 02:17 UTC.
+2. `scripts/post-iconoplasm-daily-digest.mjs` reads the finished UTC day from
+   `GET /api/iconoplasm/admin/daily-digest/day?day=` (`ICONOPLASM_ADMIN_TOKEN`),
+   looks up names and blots on the free CDN, draws the strip in Chrome from
+   `scripts/iconoplasm-daily-digest/template.html` and converts it to WebP.
+3. It sends the WebP and text to `POST /api/iconoplasm/admin/daily-digest/post`.
+   The Worker posts with `DISCORD_BOT_TOKEN` to `DISCORD_ICONOPLASM_CHANNEL_ID`
+   (no mentions, nonce `digest-<day>`) and writes the KV marker
+   `iconoplasm_digest_posted:<day>` (kept 31 days). A second run for the same
+   day posts nothing.
+
+Posting is on only while the repository variable `ICONOPLASM_DIGEST_LIVE` is
+`true`; otherwise every run is a dry run that keeps the picture and text as
+a run artifact. To redo a day by hand, run the workflow with `day` set.
+
 ---
 
 ## Cost and limits
@@ -236,4 +262,9 @@ The configured stateful Worker uses Cloudflare's five cron slots:
   and 1–2 subrequests (Bunny image GET if present + Discord POST). 0 D1 writes.
   Text-only mode drops the Bunny GET.
 
-Neither feature adds D1 writes.
+- **Daily Iconoplasm digest:** per day, one admin read of the finished day
+  (priced at 60,000 D1 rows read; measured 303 on 2026-10-19's nightly copy),
+  one KV read and write, one Discord POST, and CDN reads of each shown gene
+  from the runner. 0 D1 writes.
+
+None of these features adds D1 writes.

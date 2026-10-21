@@ -1,0 +1,83 @@
+name: Post Iconoplasm daily digest
+
+# B-733: once a day, one post in #iconoplasm showing what the community did on
+# the site the day before (docs/ICONOPLASM_DAILY_DIGEST.md). The script reads
+# the finished UTC day from the site, draws the strip in the runner's Chrome
+# and sends it back; the site's route posts it and marks the day posted in KV,
+# so a late or doubled schedule run posts nothing. GitHub Actions rather than a
+# Worker cron, because all five of the Worker's cron slots are taken.
+#
+# Posting is switched on by the repository variable ICONOPLASM_DIGEST_LIVE
+# ("true"). Until then every run is a dry run that keeps the picture and text
+# as a run artifact.
+on:
+  schedule:
+    # 02:17 UTC: after the night's catalogue publish has drawn yesterday's
+    # new blots (a winner whose blot isn't drawn yet shows its portrait).
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "UTC day to post, YYYY-MM-DD (empty: yesterday)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Draw the strip and keep it as an artifact; post nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iconoplasm-daily-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${ICONOPLASM_ADMIN_TOKEN:-}" ]; then
+            echo "Missing ICONOPLASM_ADMIN_TOKEN repository secret." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+      - name: Draw and post the digest
+        env:
+          DAY: ${{ inputs.day }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || vars.ICONOPLASM_DIGEST_LIVE != 'true' }}
+        run: |
+          args=(--out artifacts/daily-digest)
+          if [ -n "${DAY:-}" ]; then args+=(--day "$DAY"); fi
+          if [ "${DRY_RUN:-}" = "true" ]; then args+=(--dry-run); fi
+          node scripts/post-iconoplasm-daily-digest.mjs "${args[@]}"
+
+      - name: Keep the picture and text
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconoplasm-daily-digest
+          path: artifacts/daily-digest/iconoplasm-*
+          if-no-files-found: ignore
+          retention-days: 14
