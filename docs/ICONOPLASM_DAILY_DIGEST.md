@@ -140,8 +140,10 @@ list. 16–20 are the ones the owner left for the agent to find.
   site's fonts and the CC0 ambientCG Paper001 texture), drawn by
   `scripts/post-iconoplasm-daily-digest.mjs`. Run it with `--dry-run --day YYYY-MM-DD` to see
   a day without posting.
-- **The schedule:** `.github/workflows/post-iconoplasm-daily-digest.yml`, 02:17 UTC. Posting
-  is on while the repository variable `ICONOPLASM_DIGEST_LIVE` is `true`.
+- **The schedule:** `.github/workflows/post-iconoplasm-daily-digest.yml`, 02:17 UTC.
+- **The switch:** "Iconoplasm daily digest" on the admin panel's Discord tab (`/admin#discord`,
+  `workers/discord-integration-switches.js`). While it is off, the post route refuses and the
+  job draws nothing.
 
 Ordering when a section is capped: canonical portrait updates by the new winner's score, lore
 and comments newest first, candidates by most new portraits. The design mock and its load test

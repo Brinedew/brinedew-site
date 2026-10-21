@@ -7,9 +7,9 @@ name: Post Iconoplasm daily digest
 # so a late or doubled schedule run posts nothing. GitHub Actions rather than a
 # Worker cron, because all five of the Worker's cron slots are taken.
 #
-# Posting is switched on by the repository variable ICONOPLASM_DIGEST_LIVE
-# ("true"). Until then every run is a dry run that keeps the picture and text
-# as a run artifact.
+# The "Iconoplasm daily digest" switch in the admin panel (/admin#discord)
+# decides whether it posts; while it is off a run draws nothing. A manual run
+# with dry_run draws the strip and keeps it as a run artifact either way.
 on:
   schedule:
     # 02:17 UTC: after the night's catalogue publish has drawn yesterday's
@@ -66,7 +66,7 @@ jobs:
       - name: Draw and post the digest
         env:
           DAY: ${{ inputs.day }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || vars.ICONOPLASM_DIGEST_LIVE != 'true' }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
         run: |
           args=(--out artifacts/daily-digest)
           if [ -n "${DAY:-}" ]; then args+=(--day "$DAY"); fi

@@ -12,6 +12,20 @@ Three features post here (section 3 is supporter tiers, which only reads roles):
 2. **New gene-page comments** → mirrored to `#iconoplasm`
 3. **Daily Iconoplasm digest** (section 4) → posted to `#iconoplasm`
 
+The bot also sends caretakers direct messages about their gene and posts new
+blog posts to `#feed`.
+
+**Switches.** Each of these has an on/off switch on the Iconoplasm admin
+panel's Discord tab (`/admin#discord`): the digest, gene comments, caretaker
+messages, the GeneGuessr recap and the blog feed. One KV key
+(`discord:integration-switches:v1`) holds them, owned by
+`workers/discord-integration-switches.js`, and each poster reads it just before
+it posts. A switch nobody has touched is on. If the key can't be read, the
+poster treats its switch as off. While a switch is off, caretaker messages and
+blog posts wait and go out once it is back on, and the recap's catch-up posts
+up to three missed days. The digest and comments from that time are never
+posted.
+
 ---
 
 ## 1. Daily GeneGuessr recap
@@ -224,9 +238,10 @@ taken:
    `iconoplasm_digest_posted:<day>` (kept 31 days). A second run for the same
    day posts nothing.
 
-Posting is on only while the repository variable `ICONOPLASM_DIGEST_LIVE` is
-`true`; otherwise every run is a dry run that keeps the picture and text as
-a run artifact. To redo a day by hand, run the workflow with `day` set.
+The "Iconoplasm daily digest" switch (see Switches above) decides whether it
+posts. A manual run with `dry_run` keeps the picture and text as a run
+artifact and posts nothing. To redo a day by hand, run the workflow with `day`
+set.
 
 ---
 

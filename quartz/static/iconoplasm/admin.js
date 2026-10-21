@@ -128,6 +128,7 @@
       extension: document.getElementById("panel-extension"),
       archive: document.getElementById("panel-archive"),
       styles: document.getElementById("panel-styles"),
+      discord: document.getElementById("panel-discord"),
       activity: document.getElementById("panel-activity"),
     },
     costRefresh: document.getElementById("cost-refresh"),
@@ -377,6 +378,10 @@
       if (window.IconoplasmCaretakerAdmin) {
         window.IconoplasmCaretakerAdmin.mount()
       }
+      return
+    }
+    if (tab === "discord") {
+      if (window.IconoplasmDiscordSwitches) window.IconoplasmDiscordSwitches.mount()
       return
     }
     if (tab === "costs") {

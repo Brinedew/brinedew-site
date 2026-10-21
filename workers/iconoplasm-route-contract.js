@@ -763,6 +763,12 @@ export const ICONOPLASM_ROUTE_CONTRACTS = Object.freeze([
     auth: "administrator",
   }),
   iconoplasmApiContract({
+    id: "admin_discord_switches",
+    match: exact("/api/iconoplasm/admin/discord-switches"),
+    methods: GET_POST,
+    auth: "administrator",
+  }),
+  iconoplasmApiContract({
     id: "image_edit_providers",
     match: exact("/api/iconoplasm/image-edit/providers"),
     methods: GET_POST,

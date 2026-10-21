@@ -10,6 +10,7 @@
  */
 
 import { getDailyGuessAggregates, getWinnersCount } from "./lib/guess-aggregates.js"
+import { discordSwitchIsOn } from "./discord-integration-switches.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
 import {
@@ -459,6 +460,10 @@ export async function handlePostDailyRecap(env, options = {}) {
   if (!isValidDay(day)) {
     return { ok: false, error: "invalid_day", day }
   }
+  // The admin panel's "GeneGuessr daily recap" switch (discord-integration-switches.js).
+  if (!(await discordSwitchIsOn(env, "geneguessr_recap"))) {
+    return { ok: true, skipped: "switched_off", day }
+  }
 
   const summary = await buildDailySummaryData(env, day)
   if (!summary.ok) {
@@ -542,6 +547,9 @@ export async function handlePostDailyRecap(env, options = {}) {
  * @returns {{ ok: boolean, results: Array }}
  */
 export async function handlePostCatchupRecaps(env, maxDays = 3) {
+  if (!(await discordSwitchIsOn(env, "geneguessr_recap"))) {
+    return { ok: true, skipped: "switched_off", results: [] }
+  }
   const results = []
   const today = new Date()
   for (let offset = 1; offset <= maxDays; offset++) {

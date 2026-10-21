@@ -24,6 +24,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <button class="tab-btn" id="admin-tab-extension" role="tab" aria-selected="false" aria-controls="panel-extension" tabindex="-1" data-tab="extension">Recognition</button>
       <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
       <button class="tab-btn" id="admin-tab-styles" role="tab" aria-selected="false" aria-controls="panel-styles" tabindex="-1" data-tab="styles">Visions</button>
+      <button class="tab-btn" id="admin-tab-discord" role="tab" aria-selected="false" aria-controls="panel-discord" tabindex="-1" data-tab="discord">Discord</button>
       <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Log</button>
     </nav>
 
@@ -782,6 +783,13 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       </div>
     </div>
 
+    <!-- Discord: one switch per thing the bot posts (workers/discord-integration-switches.js) -->
+    <div class="panel" id="panel-discord" role="tabpanel" aria-labelledby="admin-tab-discord" hidden>
+      <h2>Discord</h2>
+      <ul class="discord-switches" data-discord-switches aria-live="polite"></ul>
+      <p class="small" data-discord-switches-status role="status"></p>
+    </div>
+
     <!-- ── log (activity) ── -->
     <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="admin-tab-activity" hidden>
       <h2>Activity log</h2>
@@ -812,6 +820,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
   <script src="/static/iconoplasm/caretaker-admin-detail.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin-cooldown.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/caretaker-admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
+  <script src="/static/iconoplasm/discord-switches-admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
   <script src="/static/iconoplasm/admin.js?v=__ICONOPLASM_ADMIN_ASSET_VERSION__" defer></script>
 </body>
 </html>

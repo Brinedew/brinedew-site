@@ -2,6 +2,7 @@ import Parser from "rss-parser"
 import { Readability } from "@mozilla/readability"
 import { parseHTML } from "linkedom"
 import { htmlToText } from "html-to-text"
+import { discordSwitchIsOn } from "./discord-integration-switches.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const FEED_POSTED_PREFIX = "feed_v34:"
@@ -724,6 +725,9 @@ async function filterUnposted(env, sourceId, items) {
 }
 
 export async function handlePostDailyFeed(env) {
+  // The admin panel's "Blog feed" switch (discord-integration-switches.js). Posts
+  // that appear while it is off are left unseen and go out once it is back on.
+  if (!(await discordSwitchIsOn(env, "blog_feed"))) return { ok: true, skipped: "switched_off" }
   const allNew = []
   const bySource = new Map()
 

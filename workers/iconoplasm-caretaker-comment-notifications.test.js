@@ -446,8 +446,36 @@ test("a positive preferred canonical loss enqueues and delivers one deduplicated
     return new Response(JSON.stringify({ id: "supervote-message" }), { status: 200 })
   }
   try {
+    // The admin panel's "Caretaker messages" switch off: the DM waits in its outbox.
+    const stored = new Map([
+      ["discord:integration-switches:v1", JSON.stringify({ switches: { caretaker_dms: false } })],
+    ])
+    const KV = {
+      get: async (key, options) => {
+        const raw = stored.get(key) ?? null
+        return raw && options?.type === "json" ? JSON.parse(raw) : raw
+      },
+    }
+    const held = await deliverPendingCaretakerSupervoteNotifications({
+      ...env,
+      KV,
+      DISCORD_BOT_TOKEN: "test-token",
+    })
+    assert.deepEqual(held, { ok: true, delivered: 0, skipped: "switched_off" })
+    assert.equal(messages.length, 0)
+    assert.equal(
+      primary.raw
+        .prepare("SELECT discord_status FROM icono_caretaker_supervote_notifications")
+        .get().discord_status,
+      "pending",
+    )
+    stored.set(
+      "discord:integration-switches:v1",
+      JSON.stringify({ switches: { caretaker_dms: true } }),
+    )
     const delivered = await deliverPendingCaretakerSupervoteNotifications({
       ...env,
+      KV,
       DISCORD_BOT_TOKEN: "test-token",
     })
     assert.equal(delivered.delivered, 1)

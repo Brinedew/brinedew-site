@@ -83,6 +83,7 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_diagnostic_matrix: owner(SMALL_WRITE),
   admin_image_edit_prompts: critical(OWN_ACTION),
   admin_caretaker_switch_cooldown: critical(OWN_ACTION),
+  admin_discord_switches: critical(OWN_ACTION),
   admin_me: critical("the sign-in check behind every admin page"),
   admin_ingest: perItem("items", BATCH_PRICES.portrait),
   admin_overview: owner(CATALOGUE_READ),

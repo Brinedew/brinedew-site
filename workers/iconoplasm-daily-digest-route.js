@@ -3,7 +3,9 @@
 // finished UTC day here, draws the picture, and sends it back to be posted.
 // This route is the only poster of the digest: it holds the bot token, and a KV
 // marker per day makes a second run of the job (GitHub fires schedules late and
-// twice) post nothing.
+// twice) post nothing. The admin panel's "Iconoplasm daily digest" switch
+// (discord-integration-switches.js) decides whether it posts at all.
+import { discordSwitchIsOn } from "./discord-integration-switches.js"
 import { isDigestDay, readDailyDigest } from "./iconoplasm/daily-digest.js"
 
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
@@ -44,11 +46,15 @@ export function createIconoplasmDailyDigestHandlers(services) {
         json({ error: "day must be a finished UTC day, YYYY-MM-DD" }, 400, NO_STORE),
       )
     }
-    const [digest, posted] = await Promise.all([
+    const [digest, posted, switchedOn] = await Promise.all([
       readDailyDigest({ iconoplasmDb: env.ICONOPLASM_DB, accountDb: env.DB, day: wanted }),
       postedMarker(env, wanted),
+      discordSwitchIsOn(env, "iconoplasm_digest"),
     ])
-    return done("admin_daily_digest_day", json({ ok: true, posted, ...digest }, 200, NO_STORE))
+    return done(
+      "admin_daily_digest_day",
+      json({ ok: true, posted, switched_on: switchedOn, ...digest }, 200, NO_STORE),
+    )
   }
 
   async function post({ request, env, done }) {
@@ -84,6 +90,12 @@ export function createIconoplasmDailyDigestHandlers(services) {
       String.fromCharCode(...bytes.slice(8, 12)) !== "WEBP"
     ) {
       return refuse("image must be a WebP of at most 10 MB")
+    }
+    if (!(await discordSwitchIsOn(env, "iconoplasm_digest"))) {
+      return done(
+        "admin_daily_digest_post_off",
+        json({ ok: true, switched_off: true }, 200, NO_STORE),
+      )
     }
     const already = await postedMarker(env, wanted)
     if (already) {
