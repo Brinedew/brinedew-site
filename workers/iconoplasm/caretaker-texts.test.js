@@ -16,8 +16,6 @@ import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 // 4. someone who never cared for the gene reads its panel, or a past caretaker
 //    writes to it;
 // 5. a cross-site form or a non-JSON body writes;
-// 6. withdrawing the chosen line leaves the gene on a withdrawn text, falls back
-//    to a text without Tags, or restore brings back versions withdrawn earlier;
 // 7. the gene object is rebuilt on every hidden autosave, or not rebuilt when what
 //    readers see changes;
 // 8. the panel loses the chosen text or the factory's text beyond History's
@@ -174,73 +172,6 @@ test("4, 5: strangers see no panel, past caretakers cannot write, and cross-site
   )
   assert.equal(notJson.status, 415)
   assert.equal(h.versions().length, 0)
-})
-
-test("6: withdrawing the chosen line falls back to a text with Tags; restore brings back only that withdrawal", async (t) => {
-  const h = await harness(t)
-  // An earlier caretaker's line, as the backfill left it.
-  h.db.raw
-    .prepare(
-      `INSERT INTO icono_caretaker_text_versions
-         (version_id, gene_symbol, line_id, version, account_id, caretaker_assignment_id,
-          text, text_sha256, tags, fields_json, created_at)
-       VALUES ('revision_earlier_tagged', 'MFNG', 'manifestation_earlier', 1, ?,
-               'assignment_old_0002', 'Earlier caretaker text.', ?, 'old tag', '{}',
-               '2026-09-01T00:00:00.000Z')`,
-    )
-    .run(OTHER, "0".repeat(64))
-  const one = await h.save("Mine, one.")
-  await h.save("Mine, two.")
-  const line = one.body.manifestation_id
-  // Version 1 withdrawn on its own earlier; restore must not bring it back.
-  h.db.raw
-    .prepare(
-      `UPDATE icono_caretaker_text_versions SET withdrawn_at = '2026-10-01T00:00:00.000Z' WHERE version_id = ?`,
-    )
-    .run(one.body.manifestation_revision_id)
-  assert.equal(await h.chosen(), "Mine, two.")
-  assert.equal(
-    (
-      await h.call("DELETE", `/manifestations/${line}`, {
-        command_id: "cmd_withdraw_0000000000000000000001",
-      })
-    ).status,
-    200,
-  )
-  assert.equal(await h.chosen(), "Earlier caretaker text.")
-  assert.equal(
-    (
-      await h.call("DELETE", "/manifestations/factory", {
-        command_id: "cmd_withdraw_0000000000000000000002",
-      })
-    ).status,
-    409,
-  )
-  assert.equal(
-    (
-      await h.call("POST", `/manifestations/${line}/restore`, {
-        command_id: "cmd_restore_00000000000000000000001",
-      })
-    ).status,
-    200,
-  )
-  assert.equal(await h.chosen(), "Mine, two.")
-  const mine = h.versions().filter((row) => row.line_id === line)
-  assert.deepEqual(
-    mine.map((row) => [row.version, Boolean(row.withdrawn_at)]),
-    [
-      [1, true],
-      [2, false],
-    ],
-  )
-  // With every caretaker text withdrawn, the gene goes back to the factory's.
-  await h.call("DELETE", `/manifestations/${line}`, {
-    command_id: "cmd_withdraw_0000000000000000000003",
-  })
-  await h.call("DELETE", "/manifestations/manifestation_earlier", {
-    command_id: "cmd_withdraw_0000000000000000000004",
-  })
-  assert.equal(await h.chosen(), "The factory's MFNG.")
 })
 
 test("7: the gene object is rebuilt only when what readers see changes", async (t) => {

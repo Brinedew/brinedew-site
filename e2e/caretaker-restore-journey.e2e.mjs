@@ -230,10 +230,11 @@ test("after a bad handover, the previous caretaker's text is one row away and co
     }
     await page.screenshot({ path: path.join(OUT, "caretaker-handover-2-after.png") })
     await page.click('[data-icono-caretaker-tab="settings"]')
+    // History is kept, as in Google Docs or Wikipedia: no caretaker deletes a version.
     assert.equal(
-      (await page.$('[data-icono-caretaker-withdraw="manifestation_ada"]')) !== null,
-      true,
-      "the current caretaker can withdraw the predecessor's lineage",
+      await page.$('[data-icono-caretaker-tabpanel="settings"] [data-icono-caretaker-withdraw]'),
+      null,
+      "the current caretaker cannot delete the predecessor's versions",
     )
     await context.close()
   } finally {

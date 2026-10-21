@@ -2,7 +2,7 @@ import { revisionById } from "./caretaker-manifestations-model.js?v=de638e47ba18
 import {
   historyMarkup,
   historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=2d3f41205f4df342"
+} from "./caretaker-manifestations-view.js?v=82cf4a563214740e"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -175,37 +175,6 @@ export function createCaretakerManifestationEventWiring({
         setStatus(state, "Unsaved draft removed from this device.", "success")
         return
       }
-      const manifestationId = target.getAttribute("data-icono-caretaker-withdraw")
-      if (manifestationId) {
-        const manifestation = state.dossier.manifestations.find(function (item) {
-          return item.manifestation_id === manifestationId
-        })
-        const fallback = String(
-          manifestation?.withdrawal_preview?.fallback_label || "the next eligible version",
-        )
-        if (
-          !confirmAction(
-            `Delete this manifestation lineage (${manifestation?.revisions?.length || 0} versions)? It will be withdrawn immediately and new images will be drawn from ${fallback}. It will be removed from public view on the site, though it will not be removed from backups.`,
-          )
-        )
-          return
-        void mutate(
-          state,
-          `/manifestations/${encodeURIComponent(manifestationId)}`,
-          {
-            expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-            expected_manifestation_version: Number(manifestation?.row_version || 0),
-            expected_head_version: state.dossier.head.head_version,
-            expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
-          },
-          {
-            method: "DELETE",
-            success: "The manifestation was withdrawn.",
-            refreshPublic: true,
-          },
-        ).catch(function () {})
-        return
-      }
       if (target.hasAttribute("data-icono-caretaker-accept")) {
         const terms = state.dossier.assignment?.terms
         const termsAccepted = state.host.querySelector(
@@ -236,27 +205,6 @@ export function createCaretakerManifestationEventWiring({
             expected_assignment_version: Number(state.dossier.assignment.assignment_version || 0),
           },
           { success: `Caretaker invitation for ${state.symbol} declined.` },
-        ).catch(function () {})
-        return
-      }
-      const restoreManifestationId = target.getAttribute("data-icono-caretaker-restore")
-      if (restoreManifestationId) {
-        const manifestation = state.dossier.manifestations.find(function (item) {
-          return item.manifestation_id === restoreManifestationId
-        })
-        void mutate(
-          state,
-          `/manifestations/${encodeURIComponent(restoreManifestationId)}/restore`,
-          {
-            expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
-            expected_manifestation_version: Number(manifestation?.row_version || 0),
-            expected_head_version: state.dossier.head.head_version,
-            expected_canonical_revision_id: state.dossier.head.canonical_revision_id || null,
-          },
-          {
-            success: "The manifestation was restored and made canonical.",
-            refreshPublic: true,
-          },
         ).catch(function () {})
         return
       }
