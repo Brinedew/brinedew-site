@@ -137,7 +137,7 @@ export const ERASURE_STEPS = Object.freeze(
       setBinds: [A],
       where: "requester_user_id = ?",
       whereBinds: [U],
-      weight: 8,
+      weight: 9,
       covers: [
         "icono_generation_requests.requester_user_id",
         "icono_generation_requests.requester_username",
