@@ -194,7 +194,8 @@ allowance writes about 2,000 rows, 2% of the free 100,000.
 
 Publishing an image edit imports the edit's inherited upvotes and the
 publisher's own vote in one import. The edit inherits 90% of its source's
-upvotes, at most 25 (`IMAGE_EDIT_INHERITED_UPVOTE_LIMIT`), however many the
+net score (upvotes minus downvotes, never below zero; supervotes are not
+copied), at most 25 (`IMAGE_EDIT_INHERITED_UPVOTE_LIMIT`), however many the
 source holds, so one click spends at most 26 of the publisher's allowance and
 writes about 134 rows.
 
