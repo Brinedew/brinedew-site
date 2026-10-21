@@ -22,7 +22,10 @@ DROP TRIGGER IF EXISTS icono_portrait_asset_caretaker_eligibility_update;
 DROP TRIGGER IF EXISTS icono_portrait_asset_caretaker_eligibility_delete;
 DROP TRIGGER IF EXISTS icono_projection_epoch_guard_insert;
 DROP TRIGGER IF EXISTS icono_projection_epoch_guard_update;
-DROP TABLE IF EXISTS icono_caretaker_candidate_eligibility_events;
+-- The projection holds a foreign key to the events, so it goes first: with
+-- foreign keys on, dropping a referenced table deletes its rows first, and
+-- the projection rows still point at them (production refused it, 2026-10-21).
 DROP TABLE IF EXISTS icono_caretaker_candidate_eligibility_projection;
+DROP TABLE IF EXISTS icono_caretaker_candidate_eligibility_events;
 DROP TABLE IF EXISTS icono_manifestation_canonical_projection;
 DROP TABLE IF EXISTS icono_manifestation_publication_wakes;
