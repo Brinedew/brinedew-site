@@ -649,6 +649,7 @@ export function createRequestInbox({
       }) +
       "</a>" +
       (suspended ? '<small class="icono-film-status">Caretaking suspended</small>' : "") +
+      supervoteHintMarkup(item, symbol) +
       (unread
         ? '<a class="icono-request-inbox__caretaker-comments" href="' +
           escapeHtml(
@@ -663,6 +664,25 @@ export function createRequestInbox({
           "</a>"
         : "") +
       "</div>"
+    )
+  }
+
+  // Owner, 2026-10-21: caretakers didn't know they hold a supervote. Until it
+  // is on one of their gene's candidates, the Caretaking block carries it as
+  // an inbox-style row: its seal (the one a vote button wears once it holds
+  // it), what it is, and how to give it. The row leaves when it is used.
+  function supervoteHintMarkup(item, symbol) {
+    if (item.assignment_status !== "active" || item.supervote_active === true) return ""
+    return (
+      '<a class="icono-request-inbox__item icono-request-inbox__caretaker-supervote" href="' +
+      escapeHtml("/gene/" + encodeURIComponent(symbol) + "#candidates") +
+      '" data-icono-caretaker-assignment data-icono-caretaker-supervote-hint>' +
+      '<span class="icono-request-inbox__caretaker-seal" aria-hidden="true"></span>' +
+      '<span class="icono-request-inbox__copy">' +
+      "<strong>Super vote</strong>" +
+      "<small>Long-press a vote on " +
+      escapeHtml(symbol) +
+      "</small></span></a>"
     )
   }
 
