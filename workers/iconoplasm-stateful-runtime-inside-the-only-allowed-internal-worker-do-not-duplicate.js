@@ -148,6 +148,12 @@ import {
   writeCaretakerSwitchCooldown,
 } from "./iconoplasm/caretaker/caretaker-switch-cooldown.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
+import {
+  DISCORD_SWITCHES,
+  discordSwitchIsOn,
+  readDiscordSwitches,
+  writeDiscordSwitches,
+} from "./discord-integration-switches.js"
 import { eraseBrinedewAccountOnRequest } from "./iconoplasm/account-erasure/erase-account-data.js"
 import { commentMirrorContent } from "./lib/iconoplasm-comment-discord-mirror.js"
 import {
@@ -18435,6 +18441,7 @@ export async function postIconoplasmGeneCommentToDiscord(
 // (one Bunny read of an immutable object), then post. A gene without a published
 // blot, or a failed read, degrades to a text-only post that still links the gene page.
 async function mirrorGeneCommentToDiscord(env, { symbol, username, body }) {
+  if (!(await discordSwitchIsOn(env, "iconoplasm_comments"))) return
   let imageBytes = null
   try {
     const blotSymbol = normalizeSymbol(symbol)
@@ -20122,6 +20129,39 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return done(
           saved.ok ? "admin_caretaker_switch_cooldown" : "admin_caretaker_switch_cooldown_400",
           json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+        )
+      }
+    }
+
+    // The admin panel's Discord tab, owned by workers/discord-integration-switches.js.
+    if (path === "/api/iconoplasm/admin/discord-switches") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_discord_switches_403", json({ error: "Unauthorized" }, 403))
+      if (request.method === "GET" || request.method === "HEAD") {
+        return done(
+          "admin_discord_switches",
+          json({ items: DISCORD_SWITCHES, ...(await readDiscordSwitches(env)) }, 200, {
+            "Cache-Control": "no-store",
+          }),
+        )
+      }
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_discord_switches_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const sessionUser = await iconoplasmSessionUser(request, env)
+        const saved = await writeDiscordSwitches(env, {
+          changes: p?.switches,
+          updatedBy: sessionUser?.user_id || "admin-token",
+        })
+        return done(
+          saved.ok ? "admin_discord_switches" : "admin_discord_switches_400",
+          json(saved.ok ? { items: DISCORD_SWITCHES, ...saved } : saved, saved.ok ? 200 : 400, {
+            "Cache-Control": "no-store",
+          }),
         )
       }
     }

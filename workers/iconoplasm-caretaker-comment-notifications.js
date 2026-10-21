@@ -1,6 +1,10 @@
+import { discordSwitchIsOn } from "./discord-integration-switches.js"
+
 const DELIVERY_STATUSES = Object.freeze(["pending", "retry"])
 // One selector plus two/three D1 queries per successful message. Each delivery
 // also uses two Discord requests. The scheduler gives these separate invocations.
+// While the admin panel's "Caretaker messages" switch is off, messages wait in
+// their outbox and go out once it is back on.
 export const CARETAKER_COMMENT_DELIVERY_LIMIT = 20
 export const CARETAKER_SUPERVOTE_DELIVERY_LIMIT = 16
 export const CARETAKER_GENE_REQUEST_DELIVERY_LIMIT = 16
@@ -219,6 +223,9 @@ async function discordIdOfAccount(accounts, accountId) {
 }
 
 export async function deliverPendingCaretakerCommentNotifications(env, { limit = 20 } = {}) {
+  if (!(await discordSwitchIsOn(env, "caretaker_dms"))) {
+    return { ok: true, delivered: 0, skipped: "switched_off" }
+  }
   const db = env?.ICONOPLASM_DB
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
   if (!db?.prepare || !token) return { ok: false, delivered: 0, skipped: "unavailable" }
@@ -279,6 +286,9 @@ export async function deliverPendingCaretakerSupervoteNotifications(
   env,
   { limit = CARETAKER_SUPERVOTE_DELIVERY_LIMIT } = {},
 ) {
+  if (!(await discordSwitchIsOn(env, "caretaker_dms"))) {
+    return { ok: true, delivered: 0, skipped: "switched_off" }
+  }
   const db = env?.ICONOPLASM_DB
   const accounts = env?.DB
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
@@ -394,6 +404,9 @@ export async function deliverPendingCaretakerGeneRequestNotifications(
   env,
   { limit = CARETAKER_GENE_REQUEST_DELIVERY_LIMIT } = {},
 ) {
+  if (!(await discordSwitchIsOn(env, "caretaker_dms"))) {
+    return { ok: true, delivered: 0, skipped: "switched_off" }
+  }
   const db = env?.ICONOPLASM_DB
   const accounts = env?.DB
   const token = bounded(env?.DISCORD_BOT_TOKEN, 512)
