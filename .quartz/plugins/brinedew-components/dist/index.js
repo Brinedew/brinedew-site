@@ -2505,6 +2505,91 @@ var ImageCaptions = () => {
   };
 };
 
+// src/plugins/pinterestEmbeds.ts
+var PIN_LINK = /^https?:\/\/(?:(?:[a-z]{2,3}\.|www\.)?pinterest\.[a-z.]+\/pin\/[^\s]+|pin\.it\/[A-Za-z0-9]+\/?)$/i;
+var EMBED_ID = /assets\.pinterest\.com\/ext\/embed\.html\?id=(\d+)/;
+function isElement2(node) {
+  return !!node && node.type === "element";
+}
+function barePinLink(node) {
+  if (!isElement2(node) || node.tagName !== "a") return void 0;
+  const href = String(node.properties.href ?? "");
+  const text = node.children.map((child) => child.type === "text" ? child.value : "").join("");
+  return text.trim() === href && PIN_LINK.test(href) ? href : void 0;
+}
+function lonePinLinks(node) {
+  const lines = node.children.filter(
+    (child) => !(child.type === "text" && !child.value.trim()) && !(isElement2(child) && child.tagName === "br")
+  );
+  const urls = lines.map(barePinLink);
+  if (urls.length === 0 || urls.some((url) => !url)) return void 0;
+  return urls;
+}
+var frames = /* @__PURE__ */ new Map();
+function pinFrame(url) {
+  let frame = frames.get(url);
+  if (!frame) {
+    frame = (async () => {
+      try {
+        const response = await fetch(
+          `https://www.pinterest.com/oembed.json?url=${encodeURIComponent(url)}`,
+          { signal: AbortSignal.timeout(1e4) }
+        );
+        if (!response.ok) return void 0;
+        const body = await response.json();
+        const id = EMBED_ID.exec(body.html ?? "")?.[1];
+        if (!id) return void 0;
+        return { id, width: body.width ?? 450, height: body.height ?? 600 };
+      } catch {
+        return void 0;
+      }
+    })();
+    frames.set(url, frame);
+  }
+  return frame;
+}
+function iframeFor(frame) {
+  return {
+    type: "element",
+    tagName: "iframe",
+    properties: {
+      src: `https://assets.pinterest.com/ext/embed.html?id=${frame.id}`,
+      width: frame.width,
+      height: frame.height,
+      frameBorder: "0",
+      scrolling: "no",
+      loading: "lazy",
+      title: "Pinterest pin",
+      className: ["pinterest-embed"]
+    },
+    children: []
+  };
+}
+async function embedPins(parent) {
+  for (const node of parent.children) {
+    if (!isElement2(node)) continue;
+    const urls = node.tagName === "p" || node.tagName === "li" ? lonePinLinks(node) : void 0;
+    if (!urls) {
+      await embedPins(node);
+      continue;
+    }
+    const pinFrames = await Promise.all(urls.map(pinFrame));
+    node.children = node.children.map((child) => {
+      const index = urls.indexOf(barePinLink(child) ?? "");
+      const frame = index >= 0 ? pinFrames[index] : void 0;
+      return frame ? iframeFor(frame) : child;
+    });
+  }
+}
+var PinterestEmbeds = () => {
+  return {
+    name: "brinedew-pinterest-embeds",
+    htmlPlugins() {
+      return [() => async (tree) => embedPins(tree)];
+    }
+  };
+};
+
 // src/plugins/draftTagInjector.ts
 var rehypeDraftTag = () => {
   return (_tree, file) => {
@@ -2526,9 +2611,9 @@ var DraftTagInjector = () => ({
 });
 
 // src/plugins/essayNormalizer.ts
-var isElement2 = (node) => !!node && node.type === "element";
+var isElement3 = (node) => !!node && node.type === "element";
 var isWhitespaceText2 = (node) => !!node && node.type === "text" && !node.value.trim();
-var isBreak = (node) => isElement2(node) && node.tagName === "br";
+var isBreak = (node) => isElement3(node) && node.tagName === "br";
 var PHRASING_OK = /* @__PURE__ */ new Set([
   "a",
   "abbr",
@@ -2570,7 +2655,7 @@ function stripBreaks(children) {
     }
     const prev = next[next.length - 1];
     const following = children[i3 + 1];
-    if (isElement2(prev) || isElement2(following)) continue;
+    if (isElement3(prev) || isElement3(following)) continue;
     if (isWhitespaceText2(prev) || isWhitespaceText2(following)) continue;
     const prevAsUnknown = prev;
     if (prevAsUnknown && typeof prevAsUnknown === "object" && prevAsUnknown.type === "text") {
@@ -2608,7 +2693,7 @@ function normalizeStructure(tree) {
       if (node.children.some(isBreak)) {
         node.children = stripBreaks(node.children);
       }
-      if (isElement2(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
+      if (isElement3(node) && (node.tagName === "ul" || node.tagName === "ol" || node.tagName === "li" || node.tagName === "blockquote")) {
         node.children = node.children.filter((child) => !isWhitespaceText2(child));
       }
     }
@@ -2653,6 +2738,7 @@ export {
   HomepageCrawlFrontier_default as HomepageCrawlFrontier,
   IconoplasmPageSwitcher_default as IconoplasmPageSwitcher,
   ImageCaptions,
+  PinterestEmbeds,
   ProteinInfobox_default as ProteinInfobox,
   PublicationDate,
   TagSections_default as TagSections

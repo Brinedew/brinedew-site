@@ -1,0 +1,9 @@
+{
+  "id": "brinedew-pinterest-embeds",
+  "name": "Brinedew Pinterest Embeds",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Shows a Pinterest pin link that sits alone on its own line as the pin's embed, the same way brinedew.bio does.",
+  "author": "Brinedew",
+  "isDesktopOnly": false
+}

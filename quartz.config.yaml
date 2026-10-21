@@ -367,6 +367,12 @@ plugins:
     # After caption typography (41), before essay-normalizer.
     order: 42
   - source:
+      name: pinterest-embeds
+      repo: ./.quartz/local-plugins/pinterest-embeds
+    enabled: true
+    # A bare Pinterest pin link on its own line becomes the pin's embed.
+    order: 44
+  - source:
       name: essay-normalizer
       repo: ./.quartz/local-plugins/essay-normalizer
     enabled: true

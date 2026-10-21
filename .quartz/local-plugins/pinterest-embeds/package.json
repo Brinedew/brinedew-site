@@ -1,0 +1,20 @@
+{
+  "name": "@brinedew/pinterest-embeds",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./components": "./dist/index.js"
+  },
+  "quartz": {
+    "category": "transformer",
+    "components": {
+      "PinterestEmbeds": {
+        "displayName": "Pinterest Embeds",
+        "defaultPosition": "afterBody",
+        "defaultPriority": 20
+      }
+    }
+  }
+}
