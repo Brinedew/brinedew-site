@@ -1176,6 +1176,46 @@
     text-decoration: underline;
   }
 
+  /* The unused supervote, as an inbox row in a frame of its own: the seal a
+     vote button wears once it holds it (caretaker-supervote.css), then what it
+     is and how to give it. */
+  .icono-request-inbox__caretaker-supervote {
+    margin: 0 0 0.75rem;
+    padding: 0.45rem 0.6rem 0.45rem 0.45rem;
+    border: 1px solid var(--ui-border);
+    background: color-mix(in srgb, var(--light) 94%, #993b34 6%);
+  }
+
+  /* The row exists to say how to give the supervote, so its line wraps. */
+  .icono-request-inbox__caretaker-supervote small {
+    white-space: normal;
+  }
+
+  :root[saved-theme="dark"] .icono-request-inbox__caretaker-supervote {
+    --seal: #d0645a;
+  }
+
+  .icono-request-inbox__caretaker-seal {
+    display: block;
+    width: 44px;
+    aspect-ratio: 1;
+    background: var(--seal, #993b34);
+    mask: url("/static/iconoplasm/caretaker-seal-positive.png") center / contain no-repeat;
+    transform: rotate(-13deg);
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .icono-request-inbox__caretaker-supervote:hover .icono-request-inbox__caretaker-seal,
+  .icono-request-inbox__caretaker-supervote:focus-visible .icono-request-inbox__caretaker-seal {
+    transform: rotate(-4deg) scale(1.08);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icono-request-inbox__caretaker-seal {
+      transition: none;
+    }
+  }
+
   .icono-request-inbox__queue-mark {
     width: 8px;
     height: 28px;
