@@ -376,6 +376,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var geneContent = detail.host && detail.host.closest("#icono-gene-content")
           if (!geneContent) return
           syncViewerCaretakerToolbarIdentity(geneContent, viewerIsCaretaker)
+          // The toolbar's claim slot was drawn for the role this viewer had; after
+          // "Stop being caretaker" (or any role change here) it is drawn again, so
+          // the button to become caretaker comes back without a reload.
+          var previousRole = viewerCaretakerRoleByHost.get(detail.host)
+          viewerCaretakerRoleByHost.set(detail.host, viewerIsCaretaker)
+          if (previousRole !== undefined && previousRole !== viewerIsCaretaker) {
+            geneContent
+              .querySelector("[data-icono-caretaker-claim-action]")
+              ?.removeAttribute("data-icono-caretaker-claim-signature")
+            hydrateCaretakerClaimAction(geneContent, { symbol: detail.symbol })
+          }
           candidateSourceLinks.mount(geneContent, {
             dossier: detail.dossier,
             openVersion: function (revisionId) {
@@ -400,6 +411,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return caretakerPanelPromise
   }
 
+  // The sidebar's caretaker film links to the gene with ?caretaker=open. The
+  // request is used once and taken out of the address bar, so a reload or a
+  // copied link doesn't reopen the panel, and it opens the panel only for the
+  // gene's current caretaker: someone who just stopped needs the page and its
+  // become-caretaker button, not a panel for a role they gave up.
+  function takeCaretakerOpenRequest(symbol) {
+    var url = new URL(window.location.href)
+    if (url.searchParams.get("caretaker") !== "open") return false
+    url.searchParams.delete("caretaker")
+    history.replaceState(history.state, "", url.pathname + url.search + url.hash)
+    var role = iconoSidebarState.caretaker
+    return Boolean(role && normalizedSymbol(role.symbol) === symbol)
+  }
+  // Whether the viewer looked after the gene in each caretaker panel's last dossier.
+  var viewerCaretakerRoleByHost = new WeakMap()
+
   function hydrateCaretakerManifestationIsland(container, genePayload) {
     var host = container && container.querySelector("[data-icono-caretaker-island]")
     if (!host) return
@@ -419,7 +446,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var accountId = String(currentUser.account_id || currentUser.id || currentUser.user_id || "")
     var signature = accountId + ":" + symbol
     if (host.getAttribute("data-icono-caretaker-signature") === signature) {
-      if (new URL(window.location.href).searchParams.get("caretaker") === "open") {
+      if (takeCaretakerOpenRequest(symbol)) {
         void loadCaretakerPanel().then(function (panel) {
           panel.open(host)
         })
@@ -434,7 +461,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           currentUser: currentUser,
           authResolved: hasResolvedAuthState,
         })
-        if (new URL(window.location.href).searchParams.get("caretaker") === "open") panel.open(host)
+        // The panel reports the viewer's role (onDossierChanged) in a microtask
+        // it doesn't await; read the role after it.
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 0)
+        })
+        if (takeCaretakerOpenRequest(symbol)) panel.open(host)
       })
       .catch(function () {
         host.removeAttribute("data-icono-caretaker-signature")
