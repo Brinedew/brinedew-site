@@ -205,9 +205,20 @@ test("the caretaker's own toolbar badge opens the caretaker panel", async (t) =>
         // here the bands must be dense in the mask and the ink must be an opaque colour.
         assert.ok(ladder.maxDensity > 0.8, `sidebar: ladder bands paint (${ladder.maxDensity})`)
         assert.match(ladder.ink, /^rgb\(\d+, \d+, \d+\)$/, "sidebar: lane ink is opaque")
-        const card = await page.textContent(".icono-request-inbox__caretaker-item")
-        assert.doesNotMatch(card, /10×/, "sidebar: no supervote chip on the print")
-        assert.doesNotMatch(card, /long-press|Your gene/i, "sidebar: instruction sentence")
+        const print = await page.textContent("[data-icono-caretaker-assignment] .icono-film")
+        assert.doesNotMatch(
+          print,
+          /10×|long-press|Your gene/i,
+          "sidebar: nothing written on the print",
+        )
+        // Owner, 2026-10-21: an unused supervote shows as its own row under the print,
+        // which tells the caretaker how to give it.
+        const hint = await page.textContent("[data-icono-caretaker-supervote-hint]")
+        assert.match(
+          hint,
+          /Super vote\s*Long-press a vote on TP53/,
+          "sidebar: unused supervote row",
+        )
       }
       const badge = await page.waitForSelector("button[data-icono-caretaker-open]", {
         timeout: 30_000,

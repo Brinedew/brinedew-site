@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=8aa9e9accf7dd374"
+import { createRequestInbox } from "./request-inbox.js?v=97fc3cdee85de001"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=ee0566e5a591e0c4"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
