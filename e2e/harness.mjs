@@ -138,6 +138,20 @@ export async function routeProduction(
 
 // Runs in the page: every visible button inside `root`, with its box, font,
 // rendered line count and computed colours.
+// A caretaker can show or hide a gene's lore at any moment, so a test that
+// expects no lore pins it hidden instead of trusting today's live object
+// (2026-10-21: TP53's caretaker turned its lore on and two tests went red).
+export async function fulfillWithoutLore(route) {
+  const response = await route.fetch()
+  const gene = await response.json()
+  gene.canonical_manifestation = {
+    ...gene.canonical_manifestation,
+    public_page_visible: false,
+    prose: null,
+  }
+  await route.fulfill({ response, json: gene })
+}
+
 export function measureButtons(rootSelector) {
   const root = document.querySelector(rootSelector)
   const box = (el) => {

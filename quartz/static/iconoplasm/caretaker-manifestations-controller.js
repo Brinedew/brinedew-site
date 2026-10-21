@@ -448,7 +448,8 @@ export function createCaretakerManifestationPanel({
       } catch (error) {
         reloadError = error
       }
-      if (refreshPublic) refreshPublicManifestation(state, result)
+      if (refreshPublic && result?.public_text_changed !== false)
+        refreshPublicManifestation(state, result)
       if (reloadError) {
         setStatus(
           state,

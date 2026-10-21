@@ -5984,13 +5984,20 @@ a.icono-clan-ae:hover {
 .icono-public-manifestation__body {
   max-width: 38em;
   margin: 0;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--dark);
   font:
     1.1875rem/1.55 "Crimson Pro",
     Georgia,
     serif;
+}
+
+.icono-public-manifestation__para {
+  display: block;
+}
+
+.icono-public-manifestation__para + .icono-public-manifestation__para {
+  margin-top: 0.7em;
 }
 
 /* ───────── B-1095: the candidate strip ─────────
