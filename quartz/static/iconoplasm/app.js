@@ -7970,6 +7970,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .filter(function (option) {
             return option && !selectedRequestVisionIds.has(option.vision_id)
           })
+        if (options.length <= room) return options
         // More favorites than one order holds: right after an order, continue
         // with the ones it left out instead of sending the same ones again.
         var queued = new Set(
