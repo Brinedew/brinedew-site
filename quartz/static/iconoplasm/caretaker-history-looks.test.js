@@ -84,10 +84,10 @@ function ctcf() {
     }),
     look("v31", 7.5, TEXT + " It never lets go.", {
       archetype: ["bookshelf arranger", "library architect"],
-      background: ["ancient library", "bookshelves with metal handles"],
+      background: ["bookshelves with metal handles"],
       action: ["pulling on bookshelves"],
-      // The same word under another category is another tag.
-      accessories: ["library architect"],
+      // A tag that only moved category is no change.
+      setting: ["ancient library"],
     }),
   ])
   return {
@@ -153,8 +153,8 @@ test("History lists one row per look, newest first, with the Original at the bot
 
 test("each row counts the tags it added and removed against the look below it", () => {
   const view = history(ctcf())
-  // v31 against v27: +2 (metal handles, accessories: library architect), −0.
-  assert.equal(view.rows[0].text.includes("+2"), true, view.rows[0].text)
+  // v31 against v27: +1 (metal handles), −0; the tag that moved category is no change.
+  assert.equal(view.rows[0].text.includes("+1"), true, view.rows[0].text)
   assert.equal(view.rows[0].text.includes("−0"), true, view.rows[0].text)
   assert.equal(view.rows[0].text.includes("Text edited"), true, view.rows[0].text)
   // v27 against v12: +2 −0, tags only.
@@ -179,7 +179,7 @@ test("each row shows the first four portraits drawn from it and how many more", 
 
 test("selecting a look shows its tag changes as chips and every portrait, openable in the viewer", () => {
   const view = history(ctcf(), { selectedRevisionId: "v31" })
-  assert.deepEqual(view.preview.added, ["bookshelves with metal handles", "library architect"])
+  assert.deepEqual(view.preview.added, ["bookshelves with metal handles"])
   assert.deepEqual(view.preview.removed, [])
   assert.equal(view.preview.text.includes("changes since version 2"), true, view.preview.text)
   assert.equal(view.preview.text.includes("It never lets go."), true, "the text diff shows")
