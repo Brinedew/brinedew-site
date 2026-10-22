@@ -226,7 +226,7 @@ If the question is about what production knows, query remote D1.
 
 ### do not turn indexed joins into scans
 
-`icono_gene_catalog`, `icono_gene_essence`, and `icono_gene_discoveries` already store canonical uppercase `gene_symbol` keys.
+`icono_gene_catalog` and `icono_gene_essence` already store canonical uppercase `gene_symbol` keys.
 
 That means joins should look like this:
 
