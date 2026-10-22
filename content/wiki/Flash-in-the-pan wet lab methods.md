@@ -171,3 +171,167 @@ Several other prominent wet lab benchwork techniques have followed this exact **
 | **Interactomics**        | Co-IP / Y2H                   | **BioID** (<br><br>```<br>BirA*BirA*<br>```<br><br>) | Slow kinetics (24 h); spatial blur; toxicity          | **TurboID** (10 min) / **APEX2** (1 min)                                    |
 | **Histology / Clearing** | Physical microtome sectioning | **Active CLARITY** (Electrophoretic rigs)            | Tissue melting; bubble damage; complex pumps          | **Passive clearing cocktails** (CUBIC, Ce3D)                                |
 | **3D Cell Models**       | 2D monolayer culture          | **Static Matrigel domes** + L-WRN media              | Batch variability; dirty animal media; static hypoxia | **Synthetic hydrogels** + **Engineered Wnt surrogates** + **Organ-on-chip** |
+
+  
+Expanding across five completely different domains of wet-lab benchwork reveals the same pattern: an explosion of enthusiasm during the mid-2010s, followed by obsolescence driven by automation, gentler chemistry, single-cell sensitivity, or direct digital readouts.
+
+---
+
+### 1. Chemical Biology & Pharmacology
+
+#### **The Method: Western Blot-Coupled Cellular Thermal Shift Assay (CETSA)**
+
+- **2006 (Unknown):** Proving that a drug engaged its target inside an intact living cell required synthesizing chemically tagged drug analogs for immobilized affinity beads or radioligand displacement assays. Label-free, in-cell thermal shift assays did not exist; CETSA was invented in 2013 by Martinez Molina et al. (Science).
+    
+- **2016 (Trending):** The hottest label-free assay in drug discovery. The bench protocol was in every pharmacology lab: treat cells with an untagged small molecule, aliquot into PCR strips, heat across a 40°C–70°C gradient in a thermal cycler, centrifuge down the insoluble precipitated proteins, and run **10-to-12-lane Western blots** to measure the thermal stabilization (
+    
+    ```
+    ΔTmΔTm​
+    ```
+    
+    ) of the target protein.
+    
+- **2026 (Obsolete):** Western-blot CETSA became a tedious bottleneck. Running dozens of antibody-dependent gels to acquire a single melting curve was semi-quantitative, low-throughput, and blind to off-target proteome interactions. It was superseded by:
+    
+    - **Thermal Proteome Profiling (TPP-MS):** Coupling thermal shifts directly to multiplexed isobaric tandem mass tagging (TMT), profiling thermal shifts across the entire proteome in a single run.
+        
+    - **nanoBRET:** High-throughput bioluminescent resonance energy transfer that measures live-cell, real-time target engagement and
+        
+        ```
+        KdKd​
+        ```
+        
+        in homogeneous 384-well plates without heating, cell lysis, or running gels.
+        
+
+---
+
+### 2. Single-Cell Immunophenotyping & Cytometry
+
+#### **The Method: Mass Cytometry (CyTOF) Bench Staining Panels**
+
+- **2006 (Unknown):** Polychromatic flow cytometry was hitting a strict physics wall at 8–10 fluorescent colors due to fluorophore emission spectral overlap. Inductively Coupled Plasma Mass Spectrometry (ICP-MS) adapted for single cells was still in proof-of-concept development and uncommercialized (Bandura et al., 2009).
+    
+- **2016 (Trending):** CyTOF was considered the future of immune profiling. Wet-lab benches were lined with expensive cocktails of 40+ antibodies conjugated to rare heavy-metal lanthanide isotopes (e.g.,
+    
+    ```
+    141Pr141Pr
+    ```
+    
+    through
+    
+    ```
+    176Yb176Yb
+    ```
+    
+    ). Because metal isotopes produce discrete mass peaks with zero optical spillover, it allowed unprecedented 40-parameter single-cell immunophenotyping without compensation matrices.
+    
+- **2026 (Obsolete):** Abandoned in favor of less destructive, faster alternatives. CyTOF is fundamentally a "flamethrower"—cells are incinerated in a 7,000 K argon plasma torch, destroying the sample permanently. It is painstakingly slow (
+    
+    ```
+    ∼300–500 cells/second∼300–500 cells/second
+    ```
+    
+    ), suffers from catastrophic sample loss (
+    
+    ```
+    >50% of cells lost>50% of cells lost
+    ```
+    
+    during nebulization), and uses expensive, toxic reagents. It was eclipsed by:
+    
+    - **Full-Spectrum Spectral Flow Cytometry (e.g., Cytek Aurora):** Measuring 40–50 fluorescent parameters on intact, recoverable cells at 20,000 cells/second with ordinary cheap fluorophores.
+        
+    - **CITE-seq:** Profiling over 100 surface proteins simultaneously with the whole single-cell transcriptome using simple DNA-barcoded antibodies.
+        
+
+---
+
+### 3. Microbial Ecology & Metagenomics
+
+#### **The Method: Short-Read 16S V4 Amplicon Bench Prep (Earth Microbiome Project / Kozich Protocol)**
+
+- **2006 (Unknown):** Profiling microbial communities relied on Terminal Restriction Fragment Length Polymorphism (T-RFLP), denaturing gradient gel electrophoresis (DGGE), or low-throughput cloning of 16S rRNA genes into plasmids for Sanger sequencing. Benchtop high-throughput Illumina dual-index library generation didn't exist until the Kozich et al. protocol was published in 2013.
+    
+- **2016 (Trending):** The universal microbiome protocol. Thousands of labs followed the exact same bench workflow: PCR-amplify the
+    
+    ```
+    ∼250 bp∼250 bp
+    ```
+    
+    hypervariable V4 region of the 16S rRNA gene using dual-indexed barcoded primers, perform magnetic bead normalization, pool 96–384 samples in one tube, and load a benchtop Illumina MiSeq.
+    
+- **2026 (Obsolete):** Widely treated as an obsolete legacy shortcut. The 16S V4 amplicon provides coarse taxonomic resolution (often failing past the genus level), cannot differentiate live from dead microbes, is skewed by variable 16S operon copy numbers, and yields zero information about functional metabolic pathways. It has been displaced by:
+    
+    - **Ultra-Low-Cost Shallow Shotgun Metagenomics:** Direct sequencing of total DNA that gives species/strain-level resolution and functional gene catalogs for roughly the same price as amplicon sequencing.
+        
+    - **Full-Length 16S-ITS-23S Long-Read Sequencing (Nanopore/PacBio):** Sequencing the entire
+        
+        ```
+        ∼4.5 kb∼4.5 kb
+        ```
+        
+        ribosomal operon in single passes, resolving bacteria down to specific strains.
+        
+
+---
+
+### 4. Structural Biology & Cryo-EM Specimen Preparation
+
+#### **The Method: Filter-Paper Blot-and-Plunge Freezing (Vitrobot Mark IV)**
+
+- **2006 (Unknown):** The "resolution revolution" had not occurred; transmission electron microscopy of macromolecules was mostly limited to low-resolution negative staining, while atomic structures required X-ray crystallography. Plunging grids into liquid ethane was largely done with homemade mechanical guillotines.
+    
+- **2016 (Trending):** Automated filter-paper plunge freezing was the central, agonizing bottleneck of structural biology. Benches housed automated plungers (most notoriously the FEI/Thermo Fisher Vitrobot Mark IV). Structural biologists obsessed over physical parameters: blotting time (
+    
+    ```
+    3.5 s3.5 s
+    ```
+    
+    vs.
+    
+    ```
+    4.0 s4.0 s
+    ```
+    
+    ), blot force (
+    
+    ```
+    −2−2
+    ```
+    
+    to
+    
+    ```
+    +3+3
+    ```
+    
+    ), and drain time, burning through packs of Whatman #1 filter paper trying to achieve reproducible vitreous ice thickness.
+    
+- **2026 (Obsolete):** Replaced by automated, blot-free technologies. Compressing samples against physical filter paper is inherently violent: blotting paper strips away sample, forces proteins to collide with the denaturing air-water interface within milliseconds, and causes severe preferred-orientation artifacts. Modern cryo-EM facilities rely on **piezoelectric blotless dispensers (e.g., Chameleon / VitroJet)**, which spray picoliter droplets onto sub-nanometer nanowire grids and plunge-freeze them in sub-millisecond timescales before molecules can migrate to the surface or unfold.
+    
+
+---
+
+### 5. Synthetic Biology & Metabolic Engineering
+
+#### **The Method: Cyclic Multiplex Automated Genome Engineering (MAGE) Bench Electroporations**
+
+- **2006 (Unknown):** Bacterial genome engineering was performed one locus at a time using slow homologous recombination or transposons. Multiplex recombineering with single-stranded synthetic DNA arrays wasn't conceptualized until George Church’s lab published MAGE in 2009 (Nature).
+    
+- **2016 (Trending):** The peak brute-force directed evolution method. To optimize metabolic pathways or alter ribosomal binding sites (RBS), scientists set up dedicated benches with heat blocks, chillers, and electroporators. They ran E. coli containing the inducible
+    
+    ```
+    λλ
+    ```
+    
+    -Red beta recombinase through 20 to 50 continuous, manual cycles of heat-shock, ice-chilling, washing, mixing with 96 degenerate 90-mer synthetic oligos, and electroporating every few hours.
+    
+- **2026 (Obsolete):** Abandoned due to sheer labor inefficiency and genomic noise. Cyclic manual MAGE caused severe off-target mutational accumulation, variable transformation efficiencies, and required grueling days of manual benchwork. It was superseded by:
+    
+    - **Multiplex CRISPR-Guided Base & Prime Editing Screens (e.g., CREATE platforms):** Achieving precise, trackable nucleotide changes at single-base resolution without double-strand breaks or endless transformation cycles.
+        
+    - **Fully Automated Benchtop Biofoundries:** Closed, microfluidic walk-away instruments that automate design, transformation, and selection overnight without manual intervention.
+        
+
+---
