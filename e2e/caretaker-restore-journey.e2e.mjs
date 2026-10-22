@@ -147,7 +147,7 @@ function fakeAuthority({
   return { handle, state, revisions }
 }
 
-// B-860 and B-874: the nightmare handover. Ada cared for TP53 for weeks; Bob
+// B-860, B-874 and B-1160: the nightmare handover. Ada cared for TP53 for weeks; Bob
 // took over and in ten minutes of autosaves replaced her text. Bob (or the next
 // caretaker) must be able to see where Ada's work ends, bring it back in one
 // move, and still manage Ada's lineage, which he did not write.
@@ -186,23 +186,19 @@ test("after a bad handover, the previous caretaker's text is one row away and co
     await page.waitForSelector(".icono-caretaker-dialog[open]", { timeout: 30_000 })
     await page.click('[data-icono-caretaker-tab="history"]')
 
-    // Two rows, one per caretaker's run; Ada's last version heads hers.
-    const sessions = await page.$$eval("[data-icono-caretaker-session]", (items) =>
+    // B-1160: one row per look, newest first; Ada's last look sits right under Bob's.
+    const looks = await page.$$eval("[data-icono-caretaker-version]", (items) =>
       items.map((item) => ({
-        head: item
-          .querySelector("[data-icono-caretaker-version]")
-          .getAttribute("data-icono-caretaker-version"),
-        text: item.querySelector(".icono-caretaker-timeline__item").textContent,
-        toggle: item.querySelector("[data-icono-caretaker-session-toggle]")?.textContent || "",
+        id: item.getAttribute("data-icono-caretaker-version"),
+        text: item.textContent,
       })),
     )
     assert.deepEqual(
-      sessions.map((session) => session.head),
-      ["bob_3", "ada_2"],
-      "one row per caretaker run",
+      looks.map((look) => look.id).slice(0, 5),
+      ["bob_3", "bob_2", "bob_1", "ada_2", "ada_1"],
+      "one row per look",
     )
-    assert.equal(sessions[0].toggle.trim(), "3 saves")
-    assert.equal(sessions[1].text.includes("Ada"), true, sessions[1].text)
+    assert.equal(looks[3].text.includes("Ada"), true, looks[3].text)
     await page.screenshot({ path: path.join(OUT, "caretaker-handover-1-history.png") })
 
     // One move: select Ada's last version, edit from it, let autosave run.

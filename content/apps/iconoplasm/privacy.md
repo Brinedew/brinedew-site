@@ -1,7 +1,7 @@
 ---
 title: "Privacy Policy"
 description: "How Iconoplasm handles your data"
-date: 2026-10-04
+date: 2026-10-22
 dateLabel: "Last updated"
 draft: false
 schemaType: WebPage
@@ -37,7 +37,7 @@ If you sign in on the Iconoplasm website, we store your Discord user ID, usernam
 
 If you accept a gene caretaker invitation, we store the assignment, the exact terms version you accepted, manifestation versions you write, and canonical-selection history. We use a variety of physical and technical measures, policies, and procedures to help protect your information from unauthorized access, use, or disclosure.
 
-Every save creates an immutable version. Withdrawing a manifestation will remove it from public view on the site, though it will not remove it from backups. If your account is erased while history must remain, provider identity is removed and retained authorship uses a stable anonymous label.
+Your edits save as you type into one working copy. A version is kept whenever portraits are ordered from it, at the end of each day you edit, when you edit from an older version, and when another caretaker takes over; between those points the working copy is overwritten. Withdrawing a manifestation will remove it from public view on the site, though it will not remove it from backups. If your account is erased while history must remain, provider identity is removed and retained authorship uses a stable anonymous label.
 
 An unsaved caretaker draft is kept in that tab's session storage so a refresh, conflict, or temporary suspension does not destroy your text, while two open tabs cannot erase or overwrite each other's drafts. The draft is not sent to the server until you save it. Saving clears that tab's draft; closing the browser session, using the interface's remove control, or clearing site data also removes it.
 

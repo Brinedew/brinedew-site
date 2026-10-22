@@ -123,8 +123,19 @@ async function revisionView(row, viewerAccountId) {
           body_available: true,
         }
       : null,
+    // B-1160: History shows which tags each look added and removed.
+    fields: hasTags ? parsedFields(row.fields_json) : null,
     generation_provenance: null,
     created_at: row.created_at,
+  }
+}
+
+function parsedFields(fieldsJson) {
+  try {
+    const fields = JSON.parse(fieldsJson || "{}")
+    return fields && typeof fields === "object" && !Array.isArray(fields) ? fields : {}
+  } catch (_error) {
+    return {}
   }
 }
 
@@ -468,17 +479,40 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
   // withdrawal starts a line of its own.
   const latest = await first(
     db,
-    `SELECT line_id, withdrawn_at FROM icono_caretaker_text_versions
+    `SELECT version_id, line_id, tags, created_at, withdrawn_at FROM icono_caretaker_text_versions
       WHERE gene_symbol = ? AND caretaker_assignment_id = ?
       ORDER BY created_at DESC, version DESC LIMIT 1`,
     gene.canonical_symbol,
     assignment.caretaker_assignment_id,
   )
+  const textSha256 = await sha256Hex(prose.bytes)
+  const at = new Date().toISOString()
+  // B-1160: the panel saves at every pause into the role's working copy, the
+  // newest version, overwritten in place. History keeps a version only where it
+  // matters, so a save starts a new one when the working copy is sealed (see
+  // overwriteWorkingCopy).
+  if (latest && !latest.withdrawn_at && workingCopyOpen(latest, body, withTags, at)) {
+    const kept = await overwriteWorkingCopy(db, {
+      gene,
+      versionId: latest.version_id,
+      text: prose.prose,
+      textSha256,
+      tags,
+      fieldsJson,
+      withTags,
+    })
+    if (kept)
+      return {
+        ok: true,
+        manifestation_revision_id: latest.version_id,
+        manifestation_id: latest.line_id,
+        gene,
+      }
+  }
   const lineId = latest && !latest.withdrawn_at ? latest.line_id : newLineId()
   // B-1106: a new line starts from what readers see now, so a gene page that
   // shows its text keeps showing it after a new caretaker's first save.
   const firstReadersSee = (await readGeneText(db, gene.canonical_symbol))?.readers_see ? 1 : 0
-  const at = new Date().toISOString()
   const statements = [
     // Numbered within the line in the statement itself; UNIQUE (line_id, version)
     // makes two racing saves end with one winner. A new version keeps the line's
@@ -500,7 +534,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
         accountId,
         assignment.caretaker_assignment_id,
         prose.prose,
-        await sha256Hex(prose.bytes),
+        textSha256,
         tags,
         fieldsJson,
         lineId,
@@ -521,6 +555,72 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     )
   await runWrite(db, statements)
   return { ok: true, manifestation_revision_id: versionId, manifestation_id: lineId, gene }
+}
+
+// B-1160: is the role's newest version still its working copy? It stays open
+// through a day of editing, in the caretaker's own time zone (the panel sends its
+// UTC offset; without one, UTC). "Edit from here" on another version starts a new
+// one, so the look being replaced stays in History. A save without Tags never
+// overwrites a version with Tags: that version may be what new images are drawn
+// from. The order check is overwriteWorkingCopy's, inside its UPDATE.
+function workingCopyOpen(latest, body, withTags, at) {
+  const basedOn = String(body?.based_on_revision_id || "")
+  if (basedOn && basedOn !== latest.version_id) return false
+  if (!withTags && latest.tags != null) return false
+  const offset = Number(body?.utc_offset_minutes)
+  const minutes = Number.isInteger(offset) && Math.abs(offset) <= 14 * 60 ? offset : 0
+  const day = (iso) => new Date(Date.parse(iso) + minutes * 60_000).toISOString().slice(0, 10)
+  return Boolean(latest.created_at) && day(latest.created_at) === day(at)
+}
+
+// Overwrites the working copy unless a portrait was ordered from it: an order, a
+// fulfilled receipt or an in-site generation job freezes it, so "Made from
+// version N" keeps naming the exact words. The check is in the UPDATE itself, so
+// an order that lands between our read and this write still wins. Returns false
+// when the copy was frozen, and the caller saves a new version instead.
+async function overwriteWorkingCopy(
+  db,
+  { gene, versionId, text, textSha256, tags, fieldsJson, withTags },
+) {
+  const statements = [
+    db
+      .prepare(
+        `UPDATE icono_caretaker_text_versions
+            SET text = ?, text_sha256 = ?, tags = ?, fields_json = ?
+          WHERE version_id = ? AND withdrawn_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM icono_generation_requests
+                             WHERE source_manifestation_revision_id = ?
+                               AND generation_provenance_status = 'bound')
+            AND NOT EXISTS (SELECT 1 FROM icono_portrait_generation_provenance
+                             WHERE source_manifestation_revision_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM icono_candidate_generation_jobs
+                             WHERE gene_symbol = ? AND source_manifestation_revision_id = ?)`,
+      )
+      .bind(
+        text,
+        textSha256,
+        tags,
+        fieldsJson,
+        versionId,
+        versionId,
+        versionId,
+        gene.canonical_symbol,
+        versionId,
+      ),
+  ]
+  // B-874: a save with Tags is what new images are drawn from. The pointer moves
+  // only if the overwrite happened.
+  if (withTags)
+    statements.push(
+      db
+        .prepare(
+          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE gene_symbol = ? AND changes() > 0`,
+        )
+        .bind(versionId, gene.canonical_symbol),
+    )
+  const [result] = await db.batch(statements)
+  return Number(result?.meta?.changes || 0) === 1
 }
 
 async function runWrite(db, statements) {
