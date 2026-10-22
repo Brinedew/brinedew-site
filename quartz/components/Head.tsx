@@ -10,6 +10,7 @@ import { googleFontHref, googleFontSubsetHref } from "../util/theme"
 import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
 import { unescapeHTML } from "../util/escape"
 import { getPublicUrlForSlug, isNoIndexFile } from "../util/crawlability"
+import { iconoplasmModulePreloads } from "../util/iconoplasmModuleGraph"
 import { buildAiSearchJsonLd, serializeJsonLd } from "../util/aiSearchMetadata"
 import iconoplasmFontContract from "../../shared/iconoplasm-card/font-contract.json"
 import { ICONOPLASM_HOME_TITLE, iconoplasmPageTitle } from "../static/iconoplasm/page-title.js"
@@ -44,8 +45,12 @@ const siteNetworkFontFaces = `
 // preloaded from <head>; the reveal contract (body hidden until the faces are
 // ready, capped at revealTimeoutMs) is unchanged, so first paint still never
 // swaps fonts under the reader.
+// B-1161: only faces a page draws before the reader scrolls hold the reveal.
+// Crimson Pro italic (50 KB) appears on no gene page, yet a phone's first visit
+// waited for it alongside the app; it is an ordinary swap face, fetched when a
+// page first sets italic text.
 const iconoplasmFontFaces = [
-  ...iconoplasmFontContract.shellFonts,
+  ...iconoplasmFontContract.shellFonts.filter((font) => font.style !== "italic"),
   ...iconoplasmFontContract.fonts.map((font) => ({ ...font, style: "normal" })),
 ].map((font) => ({
   family: font.family,
@@ -53,6 +58,18 @@ const iconoplasmFontFaces = [
   style: font.style,
   url: font.url,
 }))
+const iconoplasmLazyFontFaces = iconoplasmFontContract.shellFonts
+  .filter((font) => font.style === "italic")
+  .map(
+    (font) => `@font-face {
+  font-family: "${font.family}";
+  src: url("${font.url}") format("woff2");
+  font-weight: ${font.weight};
+  font-style: ${font.style};
+  font-display: swap;
+}`,
+  )
+  .join("\n")
 
 function renderIconoplasmFontBootstrap(): string {
   return `(() => {
@@ -405,6 +422,7 @@ export default (() => {
               />
             ))}
             <style>{`html.icono-fonts-loading body, html.icono-route-pending body { visibility: hidden !important; }`}</style>
+            <style>{iconoplasmLazyFontFaces}</style>
             <script dangerouslySetInnerHTML={{ __html: iconoplasmFontBootstrap }} />
           </>
         ) : (
@@ -718,6 +736,13 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                       __html: `document.querySelectorAll('link[data-icono-async-style]').forEach(function(l){function a(){l.media='all';l.removeAttribute('data-icono-async-style')}if(l.sheet){a()}else{l.addEventListener('load',a,{once:true})}})`,
                     }}
                   />
+                  <link
+                    rel="modulepreload"
+                    href={joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}
+                  />
+                  {iconoplasmModulePreloads().map((module) => (
+                    <link rel="modulepreload" href={joinSegments(root, "static", module)} />
+                  ))}
                   <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='${joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
                   <script>{`var ss=document.createElement('script');ss.type='module';ss.setAttribute('data-shoelace','/static/iconoplasm/vendor/shoelace/cdn');ss.src='${joinSegments(root, "static", `iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js?v=${CACHE_BUST}`)}';document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(ss)})`}</script>
                 </>

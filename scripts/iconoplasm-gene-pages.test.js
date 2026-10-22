@@ -10,6 +10,7 @@ import {
   writeIconoplasmGenePages,
   writeIconoplasmStubPages,
 } from "./prepare-iconoplasm-edge-assets.mjs"
+import { createIconoplasmPublicationReader } from "../quartz/static/iconoplasm/publication-reader.js"
 
 // B-809: every published gene gets a static document whose raw HTML names that
 // gene, so crawlers and unfurlers never see the shell's canonical "/".
@@ -69,6 +70,71 @@ test("gene documents carry their own title, canonical, description, image and li
       "https://raw.githubusercontent.com/Brinedew/iconoplasm-blots/main/blot/T/TP53.webp",
     ),
   )
+})
+
+// B-1161: the stub starts the gene's published object before the app exists,
+// and the app's own reader takes that answer instead of asking again. The real
+// boot script runs against a stand-in browser, then the real reader reads.
+test("a gene's address starts the published gene object the app's reader takes", async () => {
+  const sha = "b".repeat(64)
+  const stable = {
+    stable_object_version: 3,
+    symbol: "TP53",
+    portrait: { status: "published", asset_sha256: sha },
+    portrait_candidates: [],
+  }
+  const requests = []
+  const browserFetch = (url, options) => {
+    requests.push({ url, options })
+    if (url === "/") return new Promise(() => {})
+    return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(stable)) })
+  }
+  const window = {}
+  const document = {
+    documentElement: { classList: { add() {}, remove() {} }, setAttribute() {} },
+    cookie: "",
+    title: "",
+  }
+  const boot = iconoplasmGenePageHtml({ symbol: "TP53", fullName: "tumor protein p53" })
+    .match(/<script>\(function\(\)[\s\S]*?<\/script>/)[0]
+    .replace(/<\/?script>/g, "")
+  new Function("window", "document", "location", "localStorage", "fetch", boot)(
+    window,
+    document,
+    { pathname: "/gene/tp53" },
+    { getItem: () => null },
+    browserFetch,
+  )
+  assert.deepEqual(
+    requests.map((request) => request.url),
+    ["https://img.brinedew.bio/genes/v3/TP53.json", "/"],
+  )
+  // The reader's own request: credentials omitted, revalidated (STABLE_FETCH).
+  assert.equal(requests[0].options.credentials, "omit")
+  assert.equal(requests[0].options.cache, "no-cache")
+
+  const readerRequests = []
+  const reader = createIconoplasmPublicationReader({
+    fetchImpl: (url) => {
+      readerRequests.push(url)
+      return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(stable)) })
+    },
+  })
+  const previousWindow = globalThis.window
+  globalThis.window = window
+  try {
+    const first = await reader.gene("TP53")
+    assert.equal(first.symbol, "TP53")
+    assert.equal(
+      first.portrait.medium_url,
+      `https://img.brinedew.bio/portraits/v1/bb/${sha}/medium.webp`,
+    )
+    assert.deepEqual(readerRequests, [], "the first read took the stub's answer")
+    await reader.gene("TP53")
+    assert.deepEqual(readerRequests, ["https://img.brinedew.bio/genes/v3/TP53.json"])
+  } finally {
+    globalThis.window = previousWindow
+  }
 })
 
 test("gene names are escaped in HTML and JSON-LD", () => {
