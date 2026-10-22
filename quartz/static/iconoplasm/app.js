@@ -12029,6 +12029,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // first gene page waiting two extra network rounds.
   var diagramStudio = null
   var diagramStudioPromise = null
+  var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
       diagramStudioPromise = import("./diagram-studio.js?v=73ac60196c6b84f5").then(
@@ -12059,6 +12060,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
+    diagramStudioRenders += 1
     if (diagramStudio) diagramStudio.unmountDiagramStudio()
     clearActiveHomeRenderState()
     destroyHomeMasonry()
@@ -12110,9 +12112,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       iconoSidebarState.page = "studio"
       renderIconoplasmSidebar()
       scrollWindowInstantly(0, 0)
+      var studioRender = diagramStudioRenders
       loadDiagramStudio()
         .then(function (studio) {
-          if (getRoute().page === "studio") studio.renderDiagramStudio(root)
+          // Startup renders twice (init, then Quartz's nav event); only the
+          // latest render may draw, or the Studio and its tour mount twice.
+          if (studioRender === diagramStudioRenders) studio.renderDiagramStudio(root)
         })
         .catch(function (error) {
           console.error("[Iconoplasm] failed to load Diagram Studio:", error)
