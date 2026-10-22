@@ -8,6 +8,16 @@ import { sha256Hex } from "./lib/iconoplasm-sha256.js"
 import { withGeneTexts } from "./test-helpers/account-erasure-fixture.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
+// B-1156: each gene's factory prose is on Bunny Storage. buildEnv stores the
+// seeded gene's prose here, and every provider fetch below serves it first.
+const BUNNY_STORAGE = "https://storage.bunnycdn.com/test-zone/"
+const factoryProse = new Map()
+function factoryProseResponse(url) {
+  if (!String(url).startsWith(BUNNY_STORAGE)) return null
+  const bytes = factoryProse.get(String(url).slice(BUNNY_STORAGE.length))
+  return bytes ? new Response(bytes, { status: 200 }) : new Response(null, { status: 404 })
+}
+
 const SOURCE_SHA = "a".repeat(64)
 const EDITED_BYTES = new TextEncoder().encode("edited-webp-bytes")
 
@@ -364,6 +374,10 @@ function buildEnv(db = new FakeDb()) {
       const context = db.geneContext || defaultGeneContext()
       const symbol = String(context.gene_symbol || "A1BG").toUpperCase()
       const text = String(context.manifestation || "A manifestation body.")
+      factoryProse.set(
+        `texts/v1/${symbol}/${await sha256Hex(text)}.txt`,
+        new TextEncoder().encode(text),
+      )
       texts
         .prepare(
           `INSERT INTO icono_gene_texts
@@ -381,6 +395,9 @@ function buildEnv(db = new FakeDb()) {
         )
     }),
     ICONOPLASM_PORTRAITS: buildPortraitStorage(),
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
     KV: {
       async get() {
         return null
@@ -471,6 +488,8 @@ test("last-used model is remembered without reordering the providers list, but o
   let kreaCalls = 0
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    const prose = factoryProseResponse(url)
+    if (prose) return prose
     if (url === "https://api.krea.ai/assets") {
       return new Response(
         JSON.stringify({
@@ -673,6 +692,8 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
   const fetchUrls = []
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    const prose = factoryProseResponse(url)
+    if (prose) return prose
     fetchUrls.push(url)
     if (url === "https://api.krea.ai/assets") {
       assetUploadCalls += 1
@@ -834,6 +855,8 @@ test("re-editing the same portrait with the same Krea API key skips the /assets 
   let pollIndex = 0
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    const prose = factoryProseResponse(url)
+    if (prose) return prose
     if (url === "https://api.krea.ai/assets") {
       assetUploadCalls += 1
       return new Response(
@@ -984,6 +1007,8 @@ async function openAiDefaultModel(env) {
 function fakeOpenAiFetch(fetchCalls, env) {
   return async (input, init = {}) => {
     const url = String(input)
+    const prose = factoryProseResponse(url)
+    if (prose) return prose
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/edits") {
       return new Response(JSON.stringify({ data: [{ b64_json: base64(EDITED_BYTES) }] }), {
@@ -1300,6 +1325,8 @@ function recordingProviderFetch(env, recorded) {
     })
   return async (input, init = {}) => {
     const url = String(input)
+    const prose = factoryProseResponse(url)
+    if (prose) return prose
     const method = String(init.method || "GET").toUpperCase()
     const create = (response) => {
       recorded.push({ url, method, headers: init.headers || {}, body: init.body })

@@ -14,7 +14,8 @@
 // Roles (claim, accept, leave, the admin's changes) live in caretaker-roles.js.
 import { normalizeManifestationProse } from "../lib/iconoplasm-manifestation-prose.js"
 import { normalizeManifestationTags } from "../lib/iconoplasm-manifestation-tags.js"
-import { publicGeneText, readGeneText } from "../lib/iconoplasm-gene-text.js"
+import { readFactoryProse } from "../lib/iconoplasm-factory-prose.js"
+import { readGeneText, readPublicGeneText } from "../lib/iconoplasm-gene-text.js"
 import { sha256Hex } from "../lib/iconoplasm-sha256.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
 import {
@@ -184,7 +185,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
   const [factory, lineRows, pageRows, count, current] = await Promise.all([
     first(
       db,
-      `SELECT text_id, version, text, tags, fields_json, readers_see, updated_at
+      `SELECT text_id, version, text_sha256, tags, fields_json, readers_see, updated_at
          FROM icono_gene_texts WHERE gene_symbol = ?`,
       symbol,
     ),
@@ -247,6 +248,10 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
   const revisions = await Promise.all(shown.map((row) => revisionView(row, viewerId)))
   const pinned = await Promise.all(pinnedRows.map((row) => revisionView(row, viewerId)))
   if (factory) {
+    // B-1156: the factory's prose is on Bunny; a missing one fails the panel
+    // rather than showing an empty Original.
+    const factoryProse = await readFactoryProse(env, symbol, factory.text_sha256)
+    if (factoryProse === null) throw new Error(`Factory prose is missing for ${symbol}`)
     pinned.push(
       await revisionView(
         {
@@ -254,7 +259,7 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
           line_id: FACTORY_LINE_ID,
           version: factory.version,
           account_id: null,
-          text: factory.text,
+          text: factoryProse,
           tags: factory.tags,
           fields_json: factory.fields_json,
           withdrawn_at: null,
@@ -567,7 +572,7 @@ export function registerCaretakerTextRoutes(app, { caretakerSession, publishGene
   // is rebuilt only when what readers see changes, not on every autosave of a
   // hidden text. A failed rebuild tells the panel the public view is behind.
   async function publicText(env, symbol) {
-    return publicGeneText(await readGeneText(rolesDb(env), symbol))
+    return readPublicGeneText(env, rolesDb(env), symbol)
   }
   async function write(c, run) {
     try {
