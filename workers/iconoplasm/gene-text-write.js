@@ -93,7 +93,8 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
     }
   }
   // B-1156: the prose goes to Bunny first, so a row never names a text that
-  // isn't stored. The row still carries it until readers move to Bunny.
+  // isn't stored. Nothing reads the row's copy any more; the column goes with
+  // the migration that drops it (its CHECK refuses an empty text until then).
   if (current?.text_sha256 !== textSha256) {
     try {
       await writeFactoryProse(env, symbol, input.prose.prose)
@@ -108,11 +109,13 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
   const result = await db
     .prepare(
       `INSERT INTO icono_gene_texts
-         (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         (gene_symbol, gene_id, text_id, version, text, text_sha256, text_characters, tags,
+          fields_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT (gene_symbol) DO UPDATE SET
          text_id = excluded.text_id, version = excluded.version, text = excluded.text,
-         text_sha256 = excluded.text_sha256, tags = excluded.tags,
+         text_sha256 = excluded.text_sha256, text_characters = excluded.text_characters,
+         tags = excluded.tags,
          fields_json = excluded.fields_json, updated_at = CURRENT_TIMESTAMP
        WHERE icono_gene_texts.version = ?`,
     )
@@ -123,6 +126,9 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
       version,
       input.prose.prose,
       textSha256,
+      // Characters as SQLite counts them (code points): the caretaker admin
+      // shows the Original's length beside a version that was cut.
+      [...input.prose.prose].length,
       input.tags,
       input.fieldsJson,
       version - 1,
@@ -148,31 +154,24 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
 
 export const GENE_TEXT_PAGE_SIZE = 200
 
-// B-1065: the workstation reads the site's texts back in pages ordered by gene
-// symbol (`next_after` is opaque to it). `chosen: "factory"` lists every gene's
-// factory text (the workstation's first run fills prompts.db from it);
-// `chosen: "caretaker"` lists only the genes whose caretaker choice replaces it,
-// with the chosen version's text, so the workstation draws those portraits from
-// what the caretaker picked.
-export async function listGeneTexts(env, { chosen = "factory", after = null } = {}) {
+// B-1065: the workstation reads back, in pages ordered by gene symbol
+// (`next_after` is opaque to it), the genes whose caretaker choice replaces the
+// factory's text, with the chosen version's text, so it draws those portraits
+// from what the caretaker picked. The factory's own texts come from the
+// workstation, which holds them in prompts.db.
+export async function listGeneTexts(env, { after = null } = {}) {
   const db = env?.ICONOPLASM_DB
   if (!db) throw new GeneTextError("TEXT_DB_MISSING", "ICONOPLASM_DB is not bound", 503)
-  const sql =
-    chosen === "caretaker"
-      ? `SELECT g.gene_id, g.gene_symbol AS symbol, v.version_id, v.version,
-                v.text, v.text_sha256, v.tags, v.fields_json, v.created_at AS updated_at
-           FROM icono_gene_texts g
-           JOIN icono_caretaker_text_versions v
-             ON v.version_id = g.chosen_caretaker_version_id AND v.withdrawn_at IS NULL
-          WHERE g.chosen_caretaker_version_id IS NOT NULL AND g.gene_symbol > ?
-          ORDER BY g.gene_symbol LIMIT ?`
-      : `SELECT g.gene_id, g.gene_symbol AS symbol, g.text_id, g.version,
-                g.text, g.text_sha256, g.tags, g.fields_json, g.updated_at
-           FROM icono_gene_texts g
-          WHERE g.gene_symbol > ?
-          ORDER BY g.gene_symbol LIMIT ?`
   const { results = [] } = await db
-    .prepare(sql)
+    .prepare(
+      `SELECT g.gene_id, g.gene_symbol AS symbol, v.version_id, v.version,
+              v.text, v.text_sha256, v.tags, v.fields_json, v.created_at AS updated_at
+         FROM icono_gene_texts g
+         JOIN icono_caretaker_text_versions v
+           ON v.version_id = g.chosen_caretaker_version_id AND v.withdrawn_at IS NULL
+        WHERE g.chosen_caretaker_version_id IS NOT NULL AND g.gene_symbol > ?
+        ORDER BY g.gene_symbol LIMIT ?`,
+    )
     .bind(after || "", GENE_TEXT_PAGE_SIZE + 1)
     .all()
   const page = results.slice(0, GENE_TEXT_PAGE_SIZE).map((row) => ({
@@ -183,7 +182,7 @@ export async function listGeneTexts(env, { chosen = "factory", after = null } = 
   }))
   return {
     ok: true,
-    chosen,
+    chosen: "caretaker",
     texts: page,
     next_after: results.length > GENE_TEXT_PAGE_SIZE ? page.at(-1).symbol : null,
   }

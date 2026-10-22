@@ -94,7 +94,7 @@ import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generati
 import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { noteRequestRoute } from "./lib/the-only-request-record.js"
-import { publicGeneText, readGeneText } from "./lib/iconoplasm-gene-text.js"
+import { readPublicGeneText } from "./lib/iconoplasm-gene-text.js"
 import {
   CARETAKER_SUPERVOTES_SQL,
   caretakerSupervoteOfGeneSql,
@@ -16444,9 +16444,10 @@ const GENE_OBJECT_ESSENCE_COLUMNS = [
   "family_feature",
 ]
 
-// B-1065: the gene's text from the plain table, one D1 read and no Bunny.
+// B-1065: the gene's text from the plain table, one D1 read; a factory prose
+// readers see is read from Bunny (B-1156).
 async function readPublicManifestationFact(env, symbol) {
-  return publicGeneText(await readGeneText(env.ICONOPLASM_DB, symbol))
+  return readPublicGeneText(env, env.ICONOPLASM_DB, symbol)
 }
 
 function geneObjectPortraitContent(row) {

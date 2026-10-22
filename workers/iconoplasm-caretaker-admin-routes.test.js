@@ -62,8 +62,9 @@ function setup(t, { supervote = false } = {}) {
   `)
   db.database
     .prepare(
-      `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
-       VALUES ('A8101', 'gene_admin_8101', 'text_admin_8101', 1, 'Factory words.', ?)`,
+      `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256,
+          text_characters)
+       VALUES ('A8101', 'gene_admin_8101', 'text_admin_8101', 1, 'Factory words.', ?, 14)`,
     )
     .run("0".repeat(64))
   db.database

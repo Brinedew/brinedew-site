@@ -16,7 +16,8 @@ import { catalogueGeneId } from "./gene-text-write.js"
 //    16 KiB, numbers in the fields) lands in the table;
 // 5. a caller without the factory's token writes;
 // 6. the workstation's read-back skips a gene at a page edge, hands it a
-//    withdrawn caretaker version, or scans every text to find the few chosen.
+//    withdrawn caretaker version, or scans every text to find the few chosen;
+// 7. a row names a prose that isn't on Bunny.
 const TOKEN = "factory-token-0000000000000000000000002"
 
 function harness(t) {
@@ -86,7 +87,12 @@ test("a known gene keeps its gene ID, and the same text again writes nothing", a
   assert.equal(first.body.version, 2)
   assert.equal(first.body.changed, true)
   const [saved] = h.rows("SELECT * FROM icono_gene_texts")
-  assert.equal(saved.text, "A guardian of the genome.\nIt stands watch.")
+  // The prose is on Bunny under the row's hash (B-1156).
+  assert.equal(
+    new TextDecoder().decode(h.bunny.objects.get(`texts/v1/TP53/${saved.text_sha256}.txt`)),
+    "A guardian of the genome.\nIt stands watch.",
+  )
+  assert.equal(saved.text_characters, 42)
   assert.equal(saved.tags, "guardian, watchful")
   assert.deepEqual(JSON.parse(saved.fields_json), FIELDS)
   assert.equal(saved.text_id, first.body.text_id)
@@ -110,7 +116,7 @@ test("the prose is on Bunny before its row, and a refused upload writes no row",
   assert.equal(saved.status, 200, JSON.stringify(saved.body))
   const [row] = h.rows("SELECT text, text_sha256 FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
   const stored = h.bunny.objects.get(`texts/v1/MFNG/${row.text_sha256}.txt`)
-  assert.equal(new TextDecoder().decode(stored), row.text)
+  assert.equal(new TextDecoder().decode(stored), "A fringe modifier.")
 
   h.bunny.refuse = 401
   const refused = await h.save("LFNG", { text: "A lunatic fringe.", tags: "fringe" })
@@ -164,7 +170,7 @@ test("texts and Tags the old path refused are refused, and nothing is written", 
   assert.equal(h.rows("SELECT * FROM icono_gene_texts").length, 0)
 })
 
-test("the workstation reads every text back in pages, and the caretaker choices alone", async (t) => {
+test("the workstation reads the caretaker choices back in pages, and nothing else", async (t) => {
   const h = harness(t)
   assert.equal((await h.list({}, { token: "wrong" })).status, 401)
   const wee1 = await h.save("WEE1", {
@@ -196,14 +202,9 @@ test("the workstation reads every text back in pages, and the caretaker choices 
   choose.run("ver_wee1", "WEE1")
   choose.run("ver_tp53", "TP53")
 
-  const factory = await h.list({})
-  assert.equal(factory.status, 200)
-  assert.equal(factory.body.next_after, null)
-  assert.deepEqual(factory.body.texts.map((r) => r.symbol).sort(), ["MFNG", "TP53", "WEE1"])
-  const factoryWee1 = factory.body.texts.find((r) => r.symbol === "WEE1")
-  assert.equal(factoryWee1.text, "A gatekeeper at G2.")
-  assert.equal(factoryWee1.text_id, wee1.body.text_id)
-  assert.deepEqual(factoryWee1.fields, FIELDS)
+  // The factory's own texts are the workstation's; only caretaker choices come back.
+  assert.equal((await h.list({ chosen: "factory" })).status, 400)
+  assert.ok(wee1.body.text_id && tp53.body.text_id)
 
   const caretaker = await h.list({ chosen: "caretaker" })
   assert.equal(caretaker.status, 200)
@@ -223,16 +224,15 @@ test("the workstation reads every text back in pages, and the caretaker choices 
   assert.match(plan, /icono_gene_texts_caretaker_chosen/, plan)
 
   const text = h.db.raw.prepare(
-    `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
-     VALUES (?, ?, ?, 1, 'A filler gene.', ?)`,
+    `INSERT INTO icono_gene_texts
+       (gene_symbol, gene_id, text_id, version, text, text_sha256, chosen_caretaker_version_id)
+     VALUES (?, ?, ?, 1, 'A filler gene.', ?, ?)`,
   )
-  for (let i = 0; i < 200; i++)
-    text.run(
-      `FILL${i}`,
-      `gene_filler_${String(i).padStart(3, "0")}`,
-      `text_filler_${i}`,
-      "c".repeat(64),
-    )
+  for (let i = 0; i < 200; i++) {
+    const symbol = `FILL${String(i).padStart(3, "0")}`
+    insert.run(`ver_${symbol}`, symbol, `line_${symbol}`, "A filler.", "c".repeat(64), "f", null)
+    text.run(symbol, `gene_filler_${i}`, `text_filler_${i}`, "c".repeat(64), `ver_${symbol}`)
+  }
   const seen = []
   let after = null
   for (let pages = 0; pages < 5; pages++) {
@@ -244,6 +244,6 @@ test("the workstation reads every text back in pages, and the caretaker choices 
     if (!after) break
   }
   assert.equal(after, null)
-  assert.equal(seen.length, 203)
-  assert.equal(new Set(seen).size, 203)
+  assert.equal(seen.length, 201)
+  assert.equal(new Set(seen).size, 201)
 })

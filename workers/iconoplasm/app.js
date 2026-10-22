@@ -523,7 +523,7 @@ export function createIconoplasmApp({
     zValidator(
       "query",
       z.object({
-        chosen: z.optional(z.enum(["factory", "caretaker"])),
+        chosen: z.optional(z.enum(["caretaker"])),
         after: z.optional(z.string().check(z.maxLength(128))),
       }),
     ),

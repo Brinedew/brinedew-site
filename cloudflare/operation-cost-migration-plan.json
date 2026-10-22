@@ -14,5 +14,20 @@
     "kv_deletes": 0,
     "kv_lists": 0
   },
-  "migrations": {}
+  "migrations": {
+    "iconoplasm/0140_gene_text_characters.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 22000,
+        "rows_written": 22000,
+        "requests": 1
+      },
+      "guards": [
+        {
+          "sql": "SELECT COUNT(*) AS texts FROM icono_gene_texts",
+          "max": 22000
+        }
+      ]
+    }
+  }
 }
