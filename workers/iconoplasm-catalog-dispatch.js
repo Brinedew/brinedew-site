@@ -22,8 +22,6 @@ export const PUBLICATION_AFFECTING_ACTIONS = Object.freeze([
   "auto_promote",
   "vote_auto_promote",
   "reject",
-  "legacy_mark",
-  "restore_keep",
   "remove_candidate",
   "rollback",
   "unpublish",
