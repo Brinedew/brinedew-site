@@ -12032,7 +12032,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=73ac60196c6b84f5").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=4893a9a309a70414").then(
         function (module) {
           diagramStudio = module
           return module
