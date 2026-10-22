@@ -57,17 +57,6 @@ class FakeSearchStatement {
     ) {
       return this.db.getPublishedPortraitFingerprint()
     }
-    if (this.sql.includes("FROM icono_gene_discoveries") && this.sql.includes("LIMIT 1")) {
-      const [userId, geneSymbol] = this.args
-      return this.db.getDiscovery(userId, geneSymbol)
-    }
-    if (
-      this.sql.includes("MIN(first_discovered_at) AS first_non_admin_discovered_at") &&
-      this.sql.includes("FROM icono_gene_discoveries")
-    ) {
-      const [geneSymbol, adminUserId = ""] = this.args
-      return this.db.getSharedDiscoveryRollup(geneSymbol, adminUserId)
-    }
     throw new Error(`Unexpected SQL in fake search DB first(): ${this.sql}`)
   }
 
@@ -92,15 +81,6 @@ class FakeSearchStatement {
       return { results: this.db.listPublishedPortraitRefs() }
     }
     if (
-      this.sql.includes("SELECT d.gene_symbol") &&
-      this.sql.includes("FROM icono_gene_discoveries d")
-    ) {
-      const [userId] = this.args
-      return {
-        results: this.db.listDiscoverySymbols(userId),
-      }
-    }
-    if (
       this.sql.includes("SELECT gene_symbol") &&
       this.sql.includes("FROM icono_shared_gene_discoveries")
     ) {
@@ -108,27 +88,10 @@ class FakeSearchStatement {
         results: this.db.listSharedDiscoverySymbols(),
       }
     }
-    if (
-      this.sql.includes("FROM icono_gene_discoveries") &&
-      !this.sql.includes("FROM icono_gene_discoveries d")
-    ) {
-      const [userId] = this.args
-      return {
-        results: [...this.db.rows.values()].filter((row) => row.user_id === String(userId)),
-      }
-    }
     throw new Error(`Unexpected SQL in fake search DB all(): ${this.sql}`)
   }
 
   async run() {
-    if (this.sql.includes("INSERT INTO icono_gene_discoveries")) {
-      this.db.insertDiscovery(this.args)
-      return { success: true, meta: { changes: 1 } }
-    }
-    if (this.sql.includes("UPDATE icono_gene_discoveries")) {
-      this.db.updateDiscovery(this.args)
-      return { success: true, meta: { changes: 1 } }
-    }
     if (this.sql.includes("INSERT INTO icono_shared_gene_discoveries")) {
       this.db.upsertSharedDiscovery(this.args)
       return { success: true, meta: { changes: 1 } }
@@ -352,36 +315,6 @@ class FakeSearchDb {
         )
       })
       .map((row) => ({ gene_symbol: row.gene_symbol }))
-  }
-
-  getSharedDiscoveryRollup(geneSymbol, adminUserId = "") {
-    const symbol = String(geneSymbol || "")
-      .trim()
-      .toUpperCase()
-    const admin = String(adminUserId || "")
-    const rows = Array.from(this.rows.values()).filter(
-      (row) => row.gene_symbol === symbol && (!admin || row.user_id !== admin),
-    )
-    if (!rows.length) return null
-    rows.sort((left, right) => {
-      return String(left.first_discovered_at || "").localeCompare(
-        String(right.first_discovered_at || ""),
-      )
-    })
-    return {
-      gene_symbol: symbol,
-      first_non_admin_discovered_at: rows[0].first_discovered_at,
-      latest_non_admin_encountered_at: rows.reduce((latest, row) => {
-        return String(row.last_encountered_at || "").localeCompare(String(latest || "")) > 0
-          ? row.last_encountered_at
-          : latest
-      }, ""),
-      non_admin_discoverer_count: rows.length,
-      non_admin_encounter_count: rows.reduce(
-        (sum, row) => sum + (Number(row.encounter_count || 0) || 0),
-        0,
-      ),
-    }
   }
 
   upsertSharedDiscovery(args) {

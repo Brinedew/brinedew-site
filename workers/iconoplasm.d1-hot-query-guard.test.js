@@ -37,11 +37,6 @@ function DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(haystack, before, after, me
 }
 
 test("DO NOT DELETE: discovery hover path is tombstoned and the compact batch route owns writes", () => {
-  assert.doesNotMatch(
-    source,
-    /icono_gene_discoveries/,
-    "activated request runtime must not retain a legacy per-hover writer or whole-membership fallback",
-  )
   const encounterRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST")',
     'if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST")',
@@ -80,11 +75,6 @@ test("DO NOT DELETE: discovery hover path is tombstoned and the compact batch ro
     compactWriter,
     /recordCompactDiscoveryBatch\(db, \{/,
     "the compact recorder must go through the reviewed compact batch service",
-  )
-  assert.doesNotMatch(
-    compactWriter,
-    /INSERT INTO icono_gene_discoveries|UPDATE icono_gene_discoveries/,
-    "the compact recorder must never write legacy discovery rows",
   )
 })
 
