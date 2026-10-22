@@ -50,6 +50,7 @@ import { rowFromGeneObject } from "../scripts/publish-iconoplasm-catalog.mjs"
 import { writeIconoplasmGenePages } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
 import { publishIconoplasmGeneStableObject } from "../workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "../workers/iconoplasm/gene-text-write.js"
+import { fakeBunnyStorage } from "../workers/test-helpers/fake-bunny-storage.js"
 import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
@@ -193,11 +194,12 @@ function buildCatalogObject(stable) {
 // The Worker's per-gene publisher, with the object store replaced by a capture.
 // B-1065: each gene's factory text is saved first, through the real write into
 // the main database. Readers aren't allowed to see it, so the canary must stay
-// off every public object.
-async function publishStableObjects(db) {
+// off every public object. Its prose goes to an in-memory Bunny zone (B-1156).
+async function publishStableObjects(db, t) {
+  const bunny = fakeBunnyStorage(t)
   for (const gene of GENES)
     await writeFactoryGeneText(
-      { ICONOPLASM_DB: db },
+      { ICONOPLASM_DB: db, ...bunny.env },
       { symbol: gene.symbol, text: sampleProse(gene.symbol), tags: "canary, tags" },
     )
   const objects = new Map()
@@ -229,10 +231,10 @@ const ogTitle = (html) => html.match(/property="og:title" content="([^"]*)"/)?.[
 const htmlUnescape = (value) =>
   String(value).replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&")
 
-test("catalog row, stable object and static document name every gene the same way", async () => {
+test("catalog row, stable object and static document name every gene the same way", async (t) => {
   const db = seedDatabase()
   // Card first, then the list: a gene is listed only once its card exists (B-1055).
-  const stable = await publishStableObjects(db)
+  const stable = await publishStableObjects(db, t)
   const catalog = buildCatalogObject(stable)
   const docs = await staticDocuments(catalog.genes)
   const report = []
@@ -414,7 +416,7 @@ test("the tab title never changes while the gene card loads (real browser)", asy
     mkdirSync(OUT, { recursive: true })
     const db = seedDatabase()
     // Card first, then the list: a gene is listed only once its card exists (B-1055).
-    const stable = await publishStableObjects(db)
+    const stable = await publishStableObjects(db, t)
     const catalog = buildCatalogObject(stable)
     const object = stable.get(`genes/v3/${gene.symbol}.json`)
     const expected = iconoplasmGenePageTitle(gene.symbol, object.full_name)

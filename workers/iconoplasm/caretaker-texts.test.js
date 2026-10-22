@@ -5,6 +5,7 @@ import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
 import { withdrawCaretakerTextStatements } from "./caretaker-texts.js"
 import { writeFactoryGeneText } from "./gene-text-write.js"
+import { fakeBunnyStorage } from "../test-helpers/fake-bunny-storage.js"
 import { readGeneText } from "../lib/iconoplasm-gene-text.js"
 
 // B-1065: the caretaker panel's text routes, through the real Hono app into the
@@ -60,7 +61,11 @@ async function harness(t, { accounts = null } = {}) {
   }
   t.after(() => db.database.close())
   const published = []
-  const env = { ICONOPLASM_DB: db, ...(accounts ? { DB: accounts } : {}) }
+  const env = {
+    ICONOPLASM_DB: db,
+    ...(accounts ? { DB: accounts } : {}),
+    ...fakeBunnyStorage(t).env,
+  }
   const app = createIconoplasmApp({
     isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),

@@ -8,6 +8,7 @@
 // workstation never needs to know one. Saving the same text and Tags again
 // changes nothing, so a retry after a lost answer costs one read.
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
+import { writeFactoryProse } from "../lib/iconoplasm-factory-prose.js"
 import { geneSymbol } from "../lib/iconoplasm-gene-text.js"
 import { normalizeManifestationProse } from "../lib/iconoplasm-manifestation-prose.js"
 import { normalizeManifestationTags } from "../lib/iconoplasm-manifestation-tags.js"
@@ -89,6 +90,15 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
       version: Number(current.version),
       text_sha256: textSha256,
       changed: false,
+    }
+  }
+  // B-1156: the prose goes to Bunny first, so a row never names a text that
+  // isn't stored. The row still carries it until readers move to Bunny.
+  if (current?.text_sha256 !== textSha256) {
+    try {
+      await writeFactoryProse(env, symbol, input.prose.prose)
+    } catch (error) {
+      throw new GeneTextError("TEXT_STORAGE_FAILED", String(error?.message || error), 503)
     }
   }
   const textId = `text_${crypto.randomUUID().replaceAll("-", "")}`

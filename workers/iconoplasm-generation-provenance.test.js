@@ -17,6 +17,7 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 import { canonicalManifestationFieldsJson } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
 import { normalizeManifestationTags } from "./lib/iconoplasm-manifestation-tags.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
+import { fakeBunnyStorage } from "./test-helpers/fake-bunny-storage.js"
 
 test("generation source fingerprint matches the frozen Website/workstation vector", async () => {
   const source = {
@@ -75,7 +76,7 @@ test("generation source fingerprint matches the frozen Website/workstation vecto
 function harness(t) {
   const db = iconoplasmDatabase()
   t.after(() => db.database.close())
-  const env = { ICONOPLASM_DB: db }
+  const env = { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env }
   const run = (sql, ...args) => db.database.prepare(sql).run(...args)
   return { db, env, run }
 }
