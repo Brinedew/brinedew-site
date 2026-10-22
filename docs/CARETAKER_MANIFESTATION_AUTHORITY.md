@@ -5,8 +5,8 @@ manifestation, or a second command authority in code or UI. This page holds the 
 caretaker feels.
 
 Each gene's text lives in two plain tables in the main Iconoplasm D1, behind
-`workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the factory text and Tags the
-workstation writes (`PUT /api/iconoplasm/admin/texts`), and which caretaker version the gene uses.
+`workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the hash of the factory text and the Tags
+the workstation writes (`PUT /api/iconoplasm/admin/genes/<SYMBOL>/text`), and which caretaker version the gene uses.
 `icono_caretaker_text_versions` holds every version a caretaker saved. The factory's prose
 lives on Bunny Storage under its hash (`texts/v1/<SYMBOL>/<sha256>.txt`,
 `workers/lib/iconoplasm-factory-prose.js`, private to the Worker), written before its row; the row

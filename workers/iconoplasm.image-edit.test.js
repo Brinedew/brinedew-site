@@ -381,14 +381,13 @@ function buildEnv(db = new FakeDb()) {
       texts
         .prepare(
           `INSERT INTO icono_gene_texts
-             (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json)
-           VALUES (?, ?, ?, 1, ?, ?, ?, ?)`,
+             (gene_symbol, gene_id, text_id, version, text_sha256, tags, fields_json)
+           VALUES (?, ?, ?, 1, ?, ?, ?)`,
         )
         .run(
           symbol,
           `gene_${symbol.toLowerCase()}_0001`,
           `revision_${symbol.toLowerCase()}_0001`,
-          text,
           await sha256Hex(text),
           String(context.manifestation_tags || "") || null,
           context.manifestation_tags ? "{}" : null,
