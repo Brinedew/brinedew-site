@@ -101,20 +101,6 @@ class FakeDb {
         non_admin_encounter_count INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT
       );
-      CREATE TABLE icono_gene_discoveries (
-        user_id TEXT NOT NULL,
-        gene_symbol TEXT NOT NULL,
-        first_discovered_at TEXT NOT NULL,
-        last_encountered_at TEXT NOT NULL,
-        encounter_count INTEGER NOT NULL DEFAULT 1,
-        first_source TEXT,
-        last_source TEXT,
-        first_trigger TEXT,
-        last_trigger TEXT,
-        first_dwell_ms INTEGER,
-        last_dwell_ms INTEGER,
-        PRIMARY KEY (user_id, gene_symbol)
-      );
     `)
     this.rows = [
       this.row("user-123", "INS", "2026-01-03T00:00:00Z", 2),
@@ -475,11 +461,6 @@ test("account gallery window returns strict rich cards from one stable object pe
   ]) {
     assert.match(serverTiming, new RegExp(`${stage};dur=`))
   }
-  assert.equal(
-    db.calls.some((call) => call.sql.includes("FROM icono_gene_discoveries")),
-    false,
-    "the personal window must read compact state, never legacy discovery rows",
-  )
 })
 
 test("account gallery newest window orders by first discovery, not repeat encounters", async () => {
