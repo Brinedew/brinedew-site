@@ -663,9 +663,9 @@ test("a caretaker's role ends at once, their supervote stops counting, and their
   const db = world.iconoplasm.database
   db.prepare(
     `INSERT INTO icono_gene_texts
-       (gene_symbol, gene_id, text_id, version, text, text_sha256, readers_see,
+       (gene_symbol, gene_id, text_id, version, text_sha256, readers_see,
         chosen_caretaker_version_id)
-     VALUES ('TP53', 'gene_tp53_0001', 'text_tp53_0001', 1, 'Factory words.', ?, 1,
+     VALUES ('TP53', 'gene_tp53_0001', 'text_tp53_0001', 1, ?, 1,
              'version_caretaker_0001')`,
   ).run("0".repeat(64))
   db.prepare(

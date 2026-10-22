@@ -173,12 +173,16 @@ export function iconoplasmDatabase() {
 }
 
 // A test whose main database is a hand-routed fake still reads gene texts from
-// the real tables of main migration 0125: every statement that names
-// icono_gene_texts goes to them, and `seed(database)` fills them once, on the
+// the real tables of main migration 0125 as 0140 and 0141 left them:
+// every statement that names icono_gene_texts goes to them, and `seed(database)` fills them once, on the
 // first such read (so a test can set up its gene after building the env).
 export function withGeneTexts(db, seed) {
   const database = new DatabaseSync(":memory:")
-  applyMigrations(database, "migrations-iconoplasm/", ["0125_plain_caretaking.sql"])
+  applyMigrations(database, "migrations-iconoplasm/", [
+    "0125_plain_caretaking.sql",
+    "0140_gene_text_characters.sql",
+    "0141_drop_factory_prose_column.sql",
+  ])
   const texts = new SqliteD1(database)
   let seeded = null
   const ready = () => (seeded ??= Promise.resolve(seed(database)))

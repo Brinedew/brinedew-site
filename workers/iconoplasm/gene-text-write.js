@@ -93,8 +93,7 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
     }
   }
   // B-1156: the prose goes to Bunny first, so a row never names a text that
-  // isn't stored. Nothing reads the row's copy any more; the column goes with
-  // the migration that drops it (its CHECK refuses an empty text until then).
+  // isn't stored. The row keeps its hash, its length and the Tags.
   if (current?.text_sha256 !== textSha256) {
     try {
       await writeFactoryProse(env, symbol, input.prose.prose)
@@ -109,11 +108,11 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
   const result = await db
     .prepare(
       `INSERT INTO icono_gene_texts
-         (gene_symbol, gene_id, text_id, version, text, text_sha256, text_characters, tags,
-          fields_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         (gene_symbol, gene_id, text_id, version, text_sha256, text_characters, tags, fields_json,
+          updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT (gene_symbol) DO UPDATE SET
-         text_id = excluded.text_id, version = excluded.version, text = excluded.text,
+         text_id = excluded.text_id, version = excluded.version,
          text_sha256 = excluded.text_sha256, text_characters = excluded.text_characters,
          tags = excluded.tags,
          fields_json = excluded.fields_json, updated_at = CURRENT_TIMESTAMP
@@ -124,7 +123,6 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
       geneId,
       textId,
       version,
-      input.prose.prose,
       textSha256,
       // Characters as SQLite counts them (code points): the caretaker admin
       // shows the Original's length beside a version that was cut.

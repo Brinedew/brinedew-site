@@ -69,8 +69,8 @@ function harness(t) {
     accounts.close()
   })
   const text = db.database.prepare(
-    `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
-     VALUES (?, ?, ?, 1, 'Factory words.', ?)`,
+    `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text_sha256)
+     VALUES (?, ?, ?, 1, ?)`,
   )
   for (const symbol of ["MFNG", "WEE1", "TP53", "SOX11"])
     text.run(symbol, `gene_${symbol.toLowerCase()}`, `text_${symbol.toLowerCase()}`, "0".repeat(64))

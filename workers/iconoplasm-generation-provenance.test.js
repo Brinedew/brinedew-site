@@ -137,9 +137,8 @@ test("a request queued under the old authority validates against its backfilled 
   // The backfill keeps the old revision ID as the text ID and the canonical bytes.
   h.run(
     `INSERT INTO icono_gene_texts
-       (gene_symbol, gene_id, text_id, version, text, text_sha256, tags, fields_json)
-     VALUES ('TP53', 'gene_tp53', 'revision_old_0001', 3, ?, ?, ?, ?)`,
-    prose,
+       (gene_symbol, gene_id, text_id, version, text_sha256, tags, fields_json)
+     VALUES ('TP53', 'gene_tp53', 'revision_old_0001', 3, ?, ?, ?)`,
     bodySha,
     old.tags_text,
     old.fields_canonical_json,

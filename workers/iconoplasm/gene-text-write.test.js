@@ -67,14 +67,14 @@ test("a known gene keeps its gene ID, and the same text again writes nothing", a
   // An imported gene's ID is not the derived one; its stored text carries it.
   h.db.raw
     .prepare(
-      `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
-       VALUES ('TP53', 'gene_imported_tp53', 'text_imported', 1, 'Old words.', ?)`,
+      `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text_sha256)
+       VALUES ('TP53', 'gene_imported_tp53', 'text_imported', 1, ?)`,
     )
     .run("0".repeat(64))
 
   const refused = await h.save("TP53", { text: "A guardian." }, { token: "wrong" })
   assert.equal(refused.status, 401)
-  assert.equal(h.rows("SELECT text FROM icono_gene_texts")[0].text, "Old words.")
+  assert.equal(h.rows("SELECT text_id FROM icono_gene_texts")[0].text_id, "text_imported")
 
   const first = await h.save("tp53", {
     text: "A guardian of the genome.\r\nIt stands watch.",
@@ -114,7 +114,7 @@ test("the prose is on Bunny before its row, and a refused upload writes no row",
   const h = harness(t)
   const saved = await h.save("MFNG", { text: "A fringe modifier.", tags: "fringe" })
   assert.equal(saved.status, 200, JSON.stringify(saved.body))
-  const [row] = h.rows("SELECT text, text_sha256 FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
+  const [row] = h.rows("SELECT text_sha256 FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
   const stored = h.bunny.objects.get(`texts/v1/MFNG/${row.text_sha256}.txt`)
   assert.equal(new TextDecoder().decode(stored), "A fringe modifier.")
 
@@ -141,7 +141,11 @@ test("a new text keeps the readers-see flag and a caretaker's choice", async (t)
   assert.notEqual(second.body.text_id, first.body.text_id)
   assert.equal(second.body.registered, undefined)
   const [saved] = h.rows("SELECT * FROM icono_gene_texts")
-  assert.equal(saved.text, "A stricter gatekeeper at G2.")
+  assert.equal(
+    new TextDecoder().decode(h.bunny.objects.get(`texts/v1/WEE1/${saved.text_sha256}.txt`)),
+    "A stricter gatekeeper at G2.",
+  )
+  assert.equal("text" in saved, false)
   assert.equal(saved.gene_id, first.body.gene_id)
   assert.equal(saved.readers_see, 1)
   assert.equal(saved.chosen_caretaker_version_id, "revision_ct")
@@ -225,8 +229,8 @@ test("the workstation reads the caretaker choices back in pages, and nothing els
 
   const text = h.db.raw.prepare(
     `INSERT INTO icono_gene_texts
-       (gene_symbol, gene_id, text_id, version, text, text_sha256, chosen_caretaker_version_id)
-     VALUES (?, ?, ?, 1, 'A filler gene.', ?, ?)`,
+       (gene_symbol, gene_id, text_id, version, text_sha256, chosen_caretaker_version_id)
+     VALUES (?, ?, ?, 1, ?, ?)`,
   )
   for (let i = 0; i < 200; i++) {
     const symbol = `FILL${String(i).padStart(3, "0")}`

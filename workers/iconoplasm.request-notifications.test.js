@@ -545,8 +545,8 @@ function fulfillmentEnv(db) {
     ICONOPLASM_DB: withGeneTexts(db, (texts) =>
       texts
         .prepare(
-          `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text, text_sha256)
-           VALUES ('INS', ?, ?, ?, 'INS keeps the pantry keys.', ?)`,
+          `INSERT INTO icono_gene_texts (gene_symbol, gene_id, text_id, version, text_sha256)
+           VALUES ('INS', ?, ?, ?, ?)`,
         )
         .run(
           FULFILLMENT_SOURCE.source_gene_id,

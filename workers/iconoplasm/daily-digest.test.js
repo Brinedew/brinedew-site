@@ -84,8 +84,8 @@ async function seed(icono, accounts) {
     ${version("v3", "LARP1", "l1", 3, acct("1"), "The final words.\n\nMore.", 1, "2026-10-19 12:02:00")},
     ${version("h1", "SOX11", "l2", 1, acct("2"), "hidden", 0, "2026-10-19 13:00:00")},
     ${version("w1", "GENEA", "l3", 1, acct("2"), "withdrawn", 1, "2026-10-19 13:00:00", "2026-10-19 14:00:00")}`)
-  await run(`INSERT INTO icono_gene_texts(gene_symbol,gene_id,text_id,version,text,text_sha256,chosen_caretaker_version_id) VALUES
-    ('LARP1','g1','t1',1,'x','${sha("a")}','v3'), ('SOX11','g2','t2',1,'x','${sha("a")}','h1'), ('GENEA','g3','t3',1,'x','${sha("a")}','w1')`)
+  await run(`INSERT INTO icono_gene_texts(gene_symbol,gene_id,text_id,version,text_sha256,chosen_caretaker_version_id) VALUES
+    ('LARP1','g1','t1',1,'${sha("a")}','v3'), ('SOX11','g2','t2',1,'${sha("a")}','h1'), ('GENEA','g3','t3',1,'${sha("a")}','w1')`)
   for (const [c, name] of [
     ["1", "loweren"],
     ["2", "sox"],
