@@ -3650,16 +3650,29 @@ function ensureTourStylesheet() {
   window.document.head.append(link)
 }
 
+// One tour at a time. A studio mounted twice in quick succession (the app's
+// first render and the next one) used to start two first-run tours, one per mount's
+// timer, stacked on top of each other (B-1161).
+let tourTimer = 0
+let tourOpen = false
+
 async function startTour({ force = false } = {}) {
-  if (!mountedRoot || (!force && (tourSeen() || isPhone()))) return
+  if (tourOpen || !mountedRoot || (!force && (tourSeen() || isPhone()))) return
   const steps = TOUR_STEPS.map(([selector, title, description, side]) => ({
     element: mountedRoot.querySelector(selector),
     popover: { title, description, side, align: "start" },
   })).filter(({ element }) => element && element.getClientRects().length > 0)
   if (!steps.length) return
+  tourOpen = true
   closePopover({ restoreFocus: false })
   ensureTourStylesheet()
-  const { driver } = await import(TOUR_RUNTIME_URL)
+  let driver
+  try {
+    ;({ driver } = await import(TOUR_RUNTIME_URL))
+  } catch (error) {
+    tourOpen = false
+    throw error
+  }
   const tour = driver({
     steps,
     showProgress: true,
@@ -3681,6 +3694,7 @@ async function startTour({ force = false } = {}) {
     onDestroyStarted: () => {
       markTourSeen()
       tour.destroy()
+      tourOpen = false
     },
   })
   tour.drive()
@@ -3752,7 +3766,8 @@ export function renderDiagramStudio(root) {
       renderChrome()
       scheduleViewUpdate()
       studioRoot?.setAttribute("data-ready", "true")
-      if (!tourSeen()) window.setTimeout(() => void startTour(), 700)
+      window.clearTimeout(tourTimer)
+      if (!tourSeen()) tourTimer = window.setTimeout(() => void startTour(), 700)
       return instance
     })
     .catch((error) => {
@@ -3762,6 +3777,7 @@ export function renderDiagramStudio(root) {
 }
 
 export function unmountDiagramStudio() {
+  window.clearTimeout(tourTimer)
   if (!mountedRoot) return
   mountedRoot.removeEventListener("click", handleStudioClick)
   mountedRoot.removeEventListener("submit", handleStudioSubmit)
