@@ -167,9 +167,14 @@ request came from) and `country`.
 - **During a burst:** Workers Logs (dashboard → Workers → the internal stateful
   Worker → Logs), filtered on `service = iconoplasm`, shows the lines within
   seconds; kept 3 days, 200,000 events a day on the free plan.
-- **Afterwards:** the same row is in Workers Analytics Engine, dataset
-  `iconoplasm_requests` (about three months), through the SQL API with the
-  laptop's `CLOUDFLARE_API_TOKEN`:
+- **Afterwards:** once the binding is back, the same row goes to Workers
+  Analytics Engine, dataset `iconoplasm_requests` (about three months). The
+  account has never switched Analytics Engine on, and Cloudflare refuses a
+  Worker upload that binds it (error 10089, 2026-10-21), so the binding is out
+  of the toml until the owner enables it once under dashboard → Workers →
+  Analytics Engine (free). Then restore the `[[analytics_engine_datasets]]`
+  block (binding `ICONOPLASM_REQUESTS`, dataset `iconoplasm_requests`) and
+  query it through the SQL API with the laptop's `CLOUDFLARE_API_TOKEN`:
 
 ```sql
 -- blob1 route, blob2 method, blob3 actor_kind, blob4 channel, blob5 country,
