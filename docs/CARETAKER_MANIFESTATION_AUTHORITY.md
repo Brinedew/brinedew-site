@@ -7,10 +7,11 @@ caretaker feels.
 Each gene's text lives in two plain tables in the main Iconoplasm D1, behind
 `workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the factory text and Tags the
 workstation writes (`PUT /api/iconoplasm/admin/texts`), and which caretaker version the gene uses.
-`icono_caretaker_text_versions` holds every version a caretaker saved. The factory's prose is
-also stored on Bunny Storage under its hash (`texts/v1/<SYMBOL>/<sha256>.txt`,
-`workers/lib/iconoplasm-factory-prose.js`, private to the Worker), written before its row; B-1156
-moves its readers there and then drops the prose from D1, where it was 72 MiB of the 500 MB. The gene's text is the
+`icono_caretaker_text_versions` holds every version a caretaker saved. The factory's prose
+lives on Bunny Storage under its hash (`texts/v1/<SYMBOL>/<sha256>.txt`,
+`workers/lib/iconoplasm-factory-prose.js`, private to the Worker), written before its row; the row
+keeps the hash, the length in characters (the caretaker admin shows it beside a version) and the
+Tags (B-1156: the prose was 72 MiB of the 500 MB D1). The gene's text is the
 chosen caretaker version unless it was withdrawn, and the factory text otherwise
 (`readGeneText`); the workstation reads it back through `GET /api/iconoplasm/admin/texts`.
 Claiming a gene, offers and tenure still run on the older caretaker commands until B-1065's B2b

@@ -6,7 +6,7 @@ import { createIconoplasmApp } from "./app.js"
 import { withdrawCaretakerTextStatements } from "./caretaker-texts.js"
 import { writeFactoryGeneText } from "./gene-text-write.js"
 import { fakeBunnyStorage } from "../test-helpers/fake-bunny-storage.js"
-import { readGeneText } from "../lib/iconoplasm-gene-text.js"
+import { readGeneText, withProse } from "../lib/iconoplasm-gene-text.js"
 
 // B-1065: the caretaker panel's text routes, through the real Hono app into the
 // real main schema (every migration). Failure modes written before the code:
@@ -128,7 +128,7 @@ async function harness(t, { accounts = null } = {}) {
            FROM icono_caretaker_text_versions ORDER BY created_at, version_id`,
       )
       .all()
-  const chosen = async () => (await readGeneText(db, "MFNG")).text
+  const chosen = async () => (await withProse(env, await readGeneText(db, "MFNG"))).text
   return { db, env, call, save, versions, chosen, published }
 }
 
