@@ -139,8 +139,8 @@ export async function digestPage(day, lookUp = lookUpGene) {
     candidates: day.candidates.map((c) => ({
       symbol: c.symbol,
       // "thumb" is a 256x256 square; the strip's 3:4 frames would cut a quarter
-          // off each side of it. "medium" is the whole 3:4 portrait.
-          portraits: c.shas.map((sha) => portraitUrl(sha, "medium")),
+      // off each side of it. "medium" is the whole 3:4 portrait.
+      portraits: c.shas.map((sha) => portraitUrl(sha, "medium")),
     })),
   }
 }
