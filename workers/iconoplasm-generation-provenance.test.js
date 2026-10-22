@@ -17,6 +17,7 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 import { canonicalManifestationFieldsJson } from "./iconoplasm/caretaker/manifestation-tags-payload.js"
 import { normalizeManifestationTags } from "./lib/iconoplasm-manifestation-tags.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
+import { writeFactoryProse } from "./lib/iconoplasm-factory-prose.js"
 import { fakeBunnyStorage } from "./test-helpers/fake-bunny-storage.js"
 
 test("generation source fingerprint matches the frozen Website/workstation vector", async () => {
@@ -143,6 +144,8 @@ test("a request queued under the old authority validates against its backfilled 
     old.tags_text,
     old.fields_canonical_json,
   )
+  // B-1156's backfill put each existing factory prose on Bunny under its hash.
+  await writeFactoryProse(h.env, "TP53", prose)
   const queued = {
     generation_provenance_status: "bound",
     source_gene_id: "gene_tp53",

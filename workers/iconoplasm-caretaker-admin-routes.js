@@ -128,7 +128,7 @@ export async function readCaretakerAdminRegistry(env, raw = {}) {
     `SELECT a.caretaker_assignment_id, t.gene_id, a.gene_symbol, a.account_id, a.status,
             a.assignment_version, a.terms_version_id, a.relinquish_policy,
             a.created_at, a.started_at, a.suspended_at, a.ended_at, a.updated_at,
-            length(t.text) AS original_characters,
+            t.text_characters AS original_characters,
             (SELECT count(*) FROM icono_caretaker_text_versions v
               WHERE v.gene_symbol = a.gene_symbol
                 AND v.caretaker_assignment_id = a.caretaker_assignment_id) AS version_count,

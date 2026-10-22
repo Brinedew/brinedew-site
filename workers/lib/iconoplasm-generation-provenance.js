@@ -6,7 +6,7 @@
 // The wire format is the one the old manifestation authority produced, so
 // requests made before the switch still validate: their revision ID is the
 // text's ID, and the backfill kept the text and Tags byte for byte.
-import { readGeneText, readGeneTextVersion } from "./iconoplasm-gene-text.js"
+import { readGeneText, readGeneTextVersion, withProse } from "./iconoplasm-gene-text.js"
 import { sha256Hex } from "./iconoplasm-sha256.js"
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/
@@ -324,7 +324,11 @@ export async function validateExactGenerationSource(env, rawProvenance) {
 
 export async function readExactGenerationSource(env, rawProvenance) {
   const provenance = requireExactGenerationProvenance(rawProvenance)
-  const { geneText, tags } = await exactGeneText(env, provenance)
+  const { geneText: stored, tags } = await exactGeneText(env, provenance)
+  // B-1156: a factory text's prose comes from Bunny, checked against the same hash.
+  const geneText = await withProse(env, stored).catch((error) => {
+    throw sourceError("GENERATION_SOURCE_PROSE_UNAVAILABLE", String(error?.message || error), 503)
+  })
   return Object.freeze({
     ...provenance,
     prose: geneText.text,
