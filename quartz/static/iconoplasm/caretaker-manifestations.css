@@ -453,21 +453,6 @@
   border-color: oklch(54% 0.12 150);
 }
 
-.icono-caretaker-derivative {
-  width: max-content;
-  max-width: 100%;
-  margin: 0.4rem 0;
-  padding: 0.22rem 0.4rem;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-sm);
-  color: var(--darkgray);
-  font: 0.7rem/1.25 var(--icono-action-font);
-}
-
-.icono-caretaker-derivative[data-state="accepted"] {
-  border-color: color-mix(in srgb, oklch(54% 0.12 150) 55%, var(--ui-border));
-}
-
 .icono-caretaker-provenance {
   margin: 0.45rem 0;
   color: var(--darkgray);
@@ -628,8 +613,7 @@
   min-height: 0;
 }
 
-.icono-caretaker-timeline,
-.icono-caretaker-session__versions {
+.icono-caretaker-timeline {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -680,47 +664,83 @@
   font-size: 0.72rem;
 }
 
-/* B-874: one row per caretaker's session of saves; the single saves fold under it. */
-.icono-caretaker-session__toggle {
-  display: inline-flex;
+.icono-caretaker-timeline__delta {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* B-1160: the first portraits drawn from a look, then how many more. */
+.icono-caretaker-timeline__portraits {
+  display: flex;
   align-items: center;
-  gap: 0.3rem;
-  margin: 0 0 0.25rem 0.7rem;
-  padding: 0.1rem 0.3rem;
-  border: 0;
-  border-radius: var(--icono-radius-md);
-  background: transparent;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.icono-caretaker-timeline__portraits img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: var(--icono-radius-sm);
+}
+
+.icono-caretaker-timeline__more {
+  margin-inline-start: 0.15rem;
   color: var(--darkgray);
-  font: 0.7rem / 1.3 var(--icono-action-font);
-  cursor: pointer;
+  font-size: 0.72rem;
 }
 
-.icono-caretaker-session__toggle::before {
-  content: "";
-  width: 0.35rem;
-  height: 0.35rem;
-  border: solid currentColor;
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(-45deg);
-  transition: transform 120ms ease;
+/* The tags a look added and removed, in the Tags editor's chip shape. */
+.icono-caretaker-tag-changes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.75rem;
 }
 
-.icono-caretaker-session__toggle[aria-expanded="true"]::before {
-  transform: rotate(45deg);
-}
-
-.icono-caretaker-session__toggle:hover {
+.icono-caretaker-tag-chip {
+  padding: 0.25rem 0.4rem;
+  border-radius: 3px;
   color: var(--dark);
-  background: color-mix(in srgb, var(--dark) 6%, transparent);
+  font: 0.8rem/1.4 var(--icono-action-font);
+  text-decoration: none;
 }
 
-.icono-caretaker-session__versions {
-  margin-inline-start: 0.7rem;
-  border-inline-start: 1px solid var(--lightgray);
+ins.icono-caretaker-tag-chip {
+  background: color-mix(in srgb, oklch(62% 0.13 150) 22%, transparent);
 }
 
-.icono-caretaker-session__versions[hidden] {
-  display: none;
+del.icono-caretaker-tag-chip {
+  background: color-mix(in srgb, var(--icono-reject) 18%, transparent);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.icono-caretaker-preview__portraits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.icono-caretaker-preview__portraits button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.icono-caretaker-preview__portraits img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--icono-radius-sm);
+}
+
+.icono-caretaker-preview__portraits button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .icono-caretaker-delta-add {

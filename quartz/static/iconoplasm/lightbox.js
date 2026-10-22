@@ -144,6 +144,9 @@ export function installIconoplasmLightbox(documentRef) {
           paddingFn: function () {
             return { top: 28, bottom: 28, left: 28, right: 28 }
           },
+          // B-1160: a modal dialog (the caretaker's History) sits in the top
+          // layer, above anything on <body>, so the viewer opens inside it.
+          appendToEl: trigger.closest("dialog[open]") || targetDocument.body,
         })
         adoptViewer(pswp)
         pswp.init()

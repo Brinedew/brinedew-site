@@ -45,7 +45,7 @@ import { installCandidateStrips } from "./candidate-strip.js?v=06cec6e8e7de16ba"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
-} from "./lightbox.js?v=6811676792cc67ba"
+} from "./lightbox.js?v=500608cd9d314449"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
@@ -305,7 +305,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=5b49fb84f4900e0a", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=91feb5192143a3ce", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -321,9 +321,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=198536cbad42677c"),
+      import("./caretaker-manifestations.js?v=8c0f2b44ed01edb5"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=3ec5a3b5ce8bf036"),
+      import("./caretaker-candidate-sources.js?v=f1ebf69257dc5ec8"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({

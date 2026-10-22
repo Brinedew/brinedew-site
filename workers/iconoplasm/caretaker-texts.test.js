@@ -30,6 +30,11 @@ import { readGeneText, withProse } from "../lib/iconoplasm-gene-text.js"
 //    a removed account by its old name;
 // 12. (B-1106) a new caretaker cannot show the gene's original text, or their
 //    first save hides a text readers could see.
+// 13. (B-1160) a pause in typing stores a new version instead of updating the
+//    working copy; a save overwrites words a portrait was ordered or drawn from;
+//    the first save on a new day (in the caretaker's time zone) overwrites
+//    yesterday's look; "Edit from here" overwrites the look it replaces; or one
+//    caretaker's save touches another's working copy.
 
 const ORIGIN = "https://iconoplasm.test"
 const CARETAKER = "account_caretaker_0001"
@@ -111,25 +116,42 @@ async function harness(t, { accounts = null } = {}) {
   }
   const save = (
     prose,
-    { tags = "a tag", commandId = `cmd_${String(++commands).padStart(32, "0")}`, as } = {},
+    {
+      tags = "a tag",
+      commandId = `cmd_${String(++commands).padStart(32, "0")}`,
+      as,
+      extra = {},
+    } = {},
   ) =>
     tags
       ? call(
           "POST",
           "/saves",
-          { prose, tags_text: tags, fields_json: { mood: ["warm"] }, command_id: commandId },
+          {
+            prose,
+            tags_text: tags,
+            fields_json: { mood: ["warm"] },
+            command_id: commandId,
+            ...extra,
+          },
           { as },
         )
-      : call("POST", "/revisions", { prose, command_id: commandId }, { as })
+      : call("POST", "/revisions", { prose, command_id: commandId, ...extra }, { as })
   const versions = () =>
     db.raw
       .prepare(
         `SELECT version_id, line_id, version, text, tags, readers_see, withdrawn_at
-           FROM icono_caretaker_text_versions ORDER BY created_at, version_id`,
+           FROM icono_caretaker_text_versions ORDER BY created_at, line_id, version`,
       )
       .all()
   const chosen = async () => (await withProse(env, await readGeneText(db, "MFNG"))).text
-  return { db, env, call, save, versions, chosen, published }
+  // Moves every saved version a day back, so the next save starts a new day.
+  const nextDay = () =>
+    db.raw.exec(
+      `UPDATE icono_caretaker_text_versions
+          SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '-1 day')`,
+    )
+  return { db, env, call, save, versions, chosen, published, nextDay }
 }
 
 test("1, 2, 3: saves number within one line, a retry saves once, and only a save with Tags is drawn from", async (t) => {
@@ -230,7 +252,10 @@ test("12: the switch shows the original text; a new caretaker's first save keeps
 test("8: the panel keeps the chosen and factory texts beyond History's first page, and Tags stay per gene", async (t) => {
   const h = await harness(t)
   const chosenSave = await h.save("The chosen one.")
-  for (let index = 0; index < 22; index += 1) await h.save(`Draft ${index}.`, { tags: null })
+  for (let index = 0; index < 22; index += 1) {
+    h.nextDay()
+    await h.save(`Draft ${index}.`, { tags: null })
+  }
   const page = await h.call("GET", "")
   assert.equal(page.status, 200)
   const dossier = page.body
@@ -242,6 +267,12 @@ test("8: the panel keeps the chosen and factory texts beyond History's first pag
   assert.equal(dossier.manifestations[1].revisions.length, 20)
   const pinned = dossier.pinned_revisions.map((revision) => revision.body)
   assert.ok(pinned.includes("The chosen one."))
+  // B-1160: History compares each look's tags with the one below it.
+  const chosenView = dossier.pinned_revisions.find(
+    (revision) => revision.body === "The chosen one.",
+  )
+  assert.deepEqual(chosenView.fields, { mood: ["warm"] })
+  assert.equal(dossier.manifestations[1].revisions[0].fields, null, "a draft without Tags has none")
   assert.ok(pinned.includes("The factory's MFNG."))
   assert.equal(dossier.manifestations[1].author_label, "You")
   assert.equal(dossier.viewer.can_edit, true)
@@ -414,4 +445,95 @@ test("11: History names each caretaker by a pseudonym of their own, and a remove
   )
   assert.equal(again.author_label, labels.line_revision_other_0001)
   assert.notEqual(labels.line_revision_other_0001, "Caretaker " + "0".repeat(8))
+})
+
+test("13: a day of editing is one working copy; an order, a new day or Edit from here keeps the look", async (t) => {
+  const h = await harness(t)
+  const first = await h.save("Morning words.", { tags: "one" })
+  const typed = await h.save("Morning words, typed on.", { tags: "one, two" })
+  assert.equal(typed.body.manifestation_revision_id, first.body.manifestation_revision_id)
+  assert.deepEqual(
+    h.versions().map((row) => [row.version, row.text, row.tags]),
+    [[1, "Morning words, typed on.", "one, two"]],
+    "the pause overwrote the working copy",
+  )
+  assert.equal(await h.chosen(), "Morning words, typed on.")
+
+  // A portrait drawn from version 1 freezes it: the next save is version 2.
+  candidate(h.db, "MFNG", hex("a"), first.body.manifestation_revision_id)
+  const after = await h.save("After the portraits.", { tags: "one, two, three" })
+  assert.notEqual(after.body.manifestation_revision_id, first.body.manifestation_revision_id)
+  await h.save("After the portraits, again.", { tags: "one, two, three" })
+  assert.deepEqual(
+    h.versions().map((row) => [row.version, row.text]),
+    [
+      [1, "Morning words, typed on."],
+      [2, "After the portraits, again."],
+    ],
+  )
+
+  // The first save on a new day keeps yesterday's look.
+  h.nextDay()
+  const today = await h.save("A new day.", { tags: "four" })
+  assert.notEqual(today.body.manifestation_revision_id, after.body.manifestation_revision_id)
+  assert.equal(h.versions().length, 3)
+
+  // "Edit from here" on version 1 starts a new look and leaves today's alone.
+  const restored = await h.save("Morning words, typed on.", {
+    tags: "one, two",
+    extra: { based_on_revision_id: first.body.manifestation_revision_id },
+  })
+  assert.equal(h.versions().length, 4)
+  assert.equal(h.versions()[2].text, "A new day.")
+  assert.equal(await h.chosen(), "Morning words, typed on.")
+  await h.save("Morning words, edited again.", {
+    tags: "one, two",
+    extra: { based_on_revision_id: restored.body.manifestation_revision_id },
+  })
+  assert.equal(h.versions().length, 4, "editing the restored look keeps overwriting it")
+
+  // Another caretaker's save never touches this caretaker's working copy.
+  h.db.raw
+    .prepare(
+      `UPDATE icono_caretaker_assignments SET status = 'ended', ended_at = ?, end_reason = 'test' WHERE account_id = ?`,
+    )
+    .run(NOW, CARETAKER)
+  h.db.raw
+    .prepare(
+      `UPDATE icono_caretaker_assignments SET status = 'active', ended_at = NULL, end_reason = NULL
+        WHERE account_id = ?`,
+    )
+    .run(OTHER)
+  const handover = await h.save("The next caretaker's words.", { tags: "five", as: OTHER })
+  assert.equal(handover.status, 200, JSON.stringify(handover.body))
+  assert.equal(h.versions().length, 5)
+  assert.equal(h.versions()[3].text, "Morning words, edited again.")
+})
+
+test("13: the caretaker's own day counts, not UTC's", async (t) => {
+  const h = await harness(t)
+  // Saved at 23:30 UTC on the 10th, which is 06:30 on the 11th in Bangkok (+7).
+  await h.save("Late words.", { extra: { utc_offset_minutes: 420 } })
+  h.db.raw.exec(`UPDATE icono_caretaker_text_versions SET created_at = '2026-10-10T23:30:00.000Z'`)
+  const realNow = Date.now
+  t.after(() => {
+    Date.now = realNow
+  })
+  const RealDate = Date
+  // 01:00 UTC on the 11th: a new day in UTC, the same morning in Bangkok.
+  globalThis.Date = class extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : ["2026-10-11T01:00:00.000Z"]))
+    }
+    static now() {
+      return new RealDate("2026-10-11T01:00:00.000Z").getTime()
+    }
+  }
+  t.after(() => {
+    globalThis.Date = RealDate
+  })
+  await h.save("Late words, the next morning.", { extra: { utc_offset_minutes: 420 } })
+  assert.equal(h.versions().length, 1, "same day in Bangkok")
+  await h.save("A UTC reader's day.", { extra: { utc_offset_minutes: 0 } })
+  assert.equal(h.versions().length, 2, "a new day in UTC")
 })

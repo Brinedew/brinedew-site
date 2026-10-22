@@ -1,3 +1,3 @@
-import { installIconoplasmLightbox } from "./lightbox.js?v=6811676792cc67ba"
+import { installIconoplasmLightbox } from "./lightbox.js?v=500608cd9d314449"
 
 installIconoplasmLightbox(document)

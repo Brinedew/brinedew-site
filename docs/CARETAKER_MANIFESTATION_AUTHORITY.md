@@ -7,7 +7,7 @@ caretaker feels.
 Each gene's text lives in two plain tables in the main Iconoplasm D1, behind
 `workers/iconoplasm/caretaker-texts.js`. `icono_gene_texts` holds the hash of the factory text and the Tags
 the workstation writes (`PUT /api/iconoplasm/admin/genes/<SYMBOL>/text`), and which caretaker version the gene uses.
-`icono_caretaker_text_versions` holds every version a caretaker saved. The factory's prose
+`icono_caretaker_text_versions` holds every look a caretaker kept (one working copy a day, sealed by the moments below). The factory's prose
 lives on Bunny Storage under its hash (`texts/v1/<SYMBOL>/<sha256>.txt`,
 `workers/lib/iconoplasm-factory-prose.js`, private to the Worker), written before its row; the row
 keeps the hash, the length in characters (the caretaker admin shows it beside a version) and the
@@ -32,10 +32,23 @@ moves them into the main database.
   gene-page comment queues a Discord DM to the active caretaker; a Discord failure never rolls
   the comment back, and nobody is told of their own comment.
 
-## History is append-only; a save with Tags becomes the gene's text
+## History keeps one version per look; a save with Tags becomes the gene's text
 
-- A caretaker's saves form a line, numbered 1, 2, 3 and so on; nothing edits an old version.
-  Writing after a withdrawal starts a new line.
+- The editor saves at every pause into one working copy per caretaker per gene, overwritten in
+  place (B-1160). The copy is sealed, and the next save starts a new version, when portraits are
+  ordered from it (an order, a receipt or an in-site job names it), on the first save of a new day
+  in the caretaker's own time zone (the panel sends `utc_offset_minutes`), on "Edit from here"
+  from another version (`based_on_revision_id`), and when another caretaker takes over (each role
+  has its own line). A save without Tags never overwrites a version with Tags. The order check is
+  inside the overwrite's own UPDATE, so an order that lands mid-save still wins and "Made from
+  version N" always names the exact words. Caretakers curate chip by chip (144 of 160 follow-up
+  saves on 2026-10-20 changed only Tags), so a version per pause was noise: CTCF had 31, three of
+  which made portraits. Migration 0142 folded the old versions the same way.
+- Versions of a line are numbered 1, 2, 3 and so on. Writing after a withdrawal starts a new line.
+- History shows one row per version: when, who, how many tags it added and removed against the
+  row below, whether the text changed, and the portraits drawn from it. Selecting a row shows
+  the tag changes as chips, the text diff, every portrait (opened in the gene page's viewer) and
+  "Edit from here". The Original sits at the bottom.
 - A save with Tags becomes the version new images are drawn from. A prose-only save is kept in
   History but changes nothing else.
 - Withdrawing a line hides all its versions. The gene falls back to the newest tagged version
@@ -57,7 +70,7 @@ moves them into the main database.
   ID, so a retried autosave returns the version it already saved instead of saving twice.
 - Two saves racing on one line both read the next number; the database's unique (line, version)
   key lets one in and answers the other `409 TEXT_VERSION_CONFLICT`. The panel keeps the text and
-  the retry saves it as the next version, so the later save wins and both stay in History.
+  the retry saves it again, so the later save wins.
 - A user command takes its actor from the authenticated session; an actor ID in a body is ignored.
   A cross-site or non-JSON mutation is refused before parsing, and a body is at most 96 KiB. Only
   the gene's active caretaker may write; a past caretaker and a stranger get `404`, and a

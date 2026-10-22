@@ -1,8 +1,5 @@
 import { revisionById } from "./caretaker-manifestations-model.js?v=de638e47ba183354"
-import {
-  historyMarkup,
-  historyPreviewMarkup,
-} from "./caretaker-manifestations-view.js?v=82cf4a563214740e"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=23ba541443dc55be"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,
@@ -95,38 +92,6 @@ export function createCaretakerManifestationEventWiring({
         })
         return
       }
-      // B-874: open or close one caretaker's session of saves. Closing the session
-      // that holds the selection moves the selection to its header row.
-      const sessionId = target.getAttribute("data-icono-caretaker-session-toggle")
-      if (sessionId) {
-        const expanded = (state.expandedSessions ||= new Set())
-        const session = target.closest("[data-icono-caretaker-session]")
-        if (target.getAttribute("aria-expanded") === "true") {
-          expanded.delete(sessionId)
-          const hidden = session?.querySelector(
-            "[data-icono-caretaker-session-versions] [aria-current]",
-          )
-          if (hidden) {
-            state.selectedRevisionId = session
-              .querySelector("[data-icono-caretaker-version]")
-              .getAttribute("data-icono-caretaker-version")
-          }
-        } else expanded.add(sessionId)
-        const history = state.host.querySelector("[data-icono-caretaker-history]")
-        if (history) {
-          history.outerHTML = historyMarkup(
-            state.dossier,
-            state.selectedRevisionId ||
-              state.host
-                .querySelector("[data-icono-caretaker-version][aria-current]")
-                ?.getAttribute("data-icono-caretaker-version") ||
-              "",
-            escapeHtml,
-            expanded,
-          )
-        }
-        return
-      }
       const versionId = target.getAttribute("data-icono-caretaker-version")
       if (versionId) {
         state.selectedRevisionId = versionId
@@ -137,12 +102,7 @@ export function createCaretakerManifestationEventWiring({
         })
         const preview = state.host.querySelector("[data-icono-caretaker-preview]")
         if (preview) {
-          preview.outerHTML = historyPreviewMarkup(
-            state.dossier,
-            versionId,
-            escapeHtml,
-            state.expandedSessions,
-          )
+          preview.outerHTML = historyPreviewMarkup(state.dossier, versionId, escapeHtml)
         }
         return
       }
