@@ -100,13 +100,6 @@ database_id = "43f485e3-a933-4345-b2f4-7c5ec1aaee6f"
 binding = "KV"
 id = "7d59f063885e415ab3df5301393a114d"
 
-# B-1147: one data point per request (actor hash, route, D1 rows), written by
-# workers/lib/the-only-request-record.js. Free plan: 100,000 writes a day, the
-# same as the Worker request allowance, kept about three months.
-[[analytics_engine_datasets]]
-binding = "ICONOPLASM_REQUESTS"
-dataset = "iconoplasm_requests"
-
 # Anonymous public-route abuse control. These counters are local to each
 # Cloudflare location and eventually consistent; they are not billing ledgers.
 # They live on the route-owning Worker so every dynamic request is limited once.
