@@ -1,8 +1,7 @@
 import { readSharedDiscoveryOrdinalSummaries } from "./discovery-compact-state.js"
 
 // Read models for compact discovery state. These are pure derivations from the
-// durable bitmap/chronology/shared arrays plus the ordinal dictionary; no
-// legacy `icono_gene_discoveries` membership scan is involved.
+// durable bitmap/chronology/shared arrays plus the ordinal dictionary.
 
 export function isoFromEpochSeconds(value) {
   const seconds = Number(value)

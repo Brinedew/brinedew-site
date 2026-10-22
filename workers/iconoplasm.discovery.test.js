@@ -87,20 +87,6 @@ class D1Like {
         live_created_at TEXT,
         current_asset_sha256 TEXT
       );
-      CREATE TABLE icono_gene_discoveries (
-        user_id TEXT NOT NULL,
-        gene_symbol TEXT NOT NULL,
-        first_discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        last_encountered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        encounter_count INTEGER NOT NULL DEFAULT 1,
-        first_source TEXT,
-        last_source TEXT,
-        first_trigger TEXT,
-        last_trigger TEXT,
-        first_dwell_ms INTEGER,
-        last_dwell_ms INTEGER,
-        PRIMARY KEY (user_id, gene_symbol)
-      );
     `)
   }
   prepare(sql) {
