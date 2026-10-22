@@ -203,12 +203,14 @@ function dateTime(revision) {
   }).format(time)
 }
 
-// Keyed by category and tag, so the same word under two categories counts twice.
+// Keyed by the tag alone: a tag that only moved category (old saves use older
+// category names, generated/tag-categories.js) is the same look, and TP53's
+// first look showed six tags as both added and removed.
 function tagKeys(revision) {
   const keys = new Map()
   for (const [category, tags] of Object.entries(revision?.fields || {})) {
     if (!Array.isArray(tags)) continue
-    for (const tag of tags) keys.set(category + "\t" + String(tag), { category, tag: String(tag) })
+    for (const tag of tags) keys.set(String(tag), { category, tag: String(tag) })
   }
   return keys
 }
