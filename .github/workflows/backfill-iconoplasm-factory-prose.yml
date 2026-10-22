@@ -1,0 +1,42 @@
+name: Backfill Iconoplasm factory prose to Bunny
+
+# B-1156, one time: copies every factory text from D1 onto Bunny Storage
+# (scripts/backfill-iconoplasm-factory-prose.mjs). Delete with the script once
+# the prose column is gone from icono_gene_texts.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iconoplasm-factory-prose-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ICONOPLASM_ADMIN_TOKEN: ${{ secrets.ICONOPLASM_ADMIN_TOKEN }}
+      ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: ${{ secrets.ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js (22.x)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Copy factory prose to Bunny
+        run: node scripts/backfill-iconoplasm-factory-prose.mjs
+
+      - name: Upload backfill receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: iconoplasm-factory-prose-${{ github.run_id }}
+          path: artifacts/iconoplasm-factory-prose
+          if-no-files-found: warn
+          retention-days: 30

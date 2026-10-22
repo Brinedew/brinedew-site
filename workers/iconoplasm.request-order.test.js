@@ -23,6 +23,7 @@ import {
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
+import { fakeBunnyStorage } from "./test-helpers/fake-bunny-storage.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID,
@@ -95,7 +96,7 @@ test("a queue read during a six-style order sees none of it or all of it", async
   const { db, raw, seen } = watchedDatabase()
   t.after(() => raw.close())
   await writeFactoryGeneText(
-    { ICONOPLASM_DB: db },
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
     { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
   )
   seen.length = 0
@@ -135,7 +136,7 @@ test("a refused style leaves an order whose size is the rows that exist", async 
   const { db, raw } = watchedDatabase()
   t.after(() => raw.close())
   await writeFactoryGeneText(
-    { ICONOPLASM_DB: db },
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
     { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
   )
 
@@ -163,7 +164,7 @@ test("an order at the batch limit fits in one Worker run", async (t) => {
   const { db, raw, seen } = watchedDatabase()
   t.after(() => raw.close())
   await writeFactoryGeneText(
-    { ICONOPLASM_DB: db },
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
     { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
   )
   const styles = Array.from(
@@ -213,7 +214,7 @@ test("an order drawn in two Drain sessions is one receipt, and a cancelled style
   const { db, raw } = watchedDatabase()
   t.after(() => raw.close())
   await writeFactoryGeneText(
-    { ICONOPLASM_DB: db },
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
     { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
   )
   const placed = await order(
@@ -339,7 +340,7 @@ test("a one-style order is drawn before the rest of a big order queued ahead of 
   const { db, raw } = watchedDatabase()
   t.after(() => raw.close())
   await writeFactoryGeneText(
-    { ICONOPLASM_DB: db },
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
     { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
   )
   const styles = (from, count) =>

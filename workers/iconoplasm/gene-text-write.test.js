@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
+import { fakeBunnyStorage } from "../test-helpers/fake-bunny-storage.js"
 import { createIconoplasmApp } from "./app.js"
 import { catalogueGeneId } from "./gene-text-write.js"
 
@@ -22,7 +23,8 @@ function harness(t) {
   const db = iconoplasmDatabase()
   db.raw = db.database
   t.after(() => db.database.close())
-  const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN }
+  const bunny = fakeBunnyStorage(t)
+  const env = { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: TOKEN, ...bunny.env }
   const app = createIconoplasmApp({
     isAdmin: async () => true,
     legacy: async () => new Response("legacy", { status: 299 }),
@@ -54,7 +56,7 @@ function harness(t) {
     return { status: response.status, body: await response.json().catch(() => null) }
   }
   const rows = (sql, ...args) => db.raw.prepare(sql).all(...args)
-  return { db, save, list, rows }
+  return { db, save, list, rows, bunny }
 }
 
 const FIELDS = { protein_class: "kinase", locations: ["nucleus"], note: "café" }
@@ -100,6 +102,21 @@ test("a known gene keeps its gene ID, and the same text again writes nothing", a
   assert.equal(retry.body.version, 2)
   assert.equal(retry.body.text_id, first.body.text_id)
   assert.equal(h.rows("SELECT updated_at FROM icono_gene_texts")[0].updated_at, saved.updated_at)
+})
+
+test("the prose is on Bunny before its row, and a refused upload writes no row", async (t) => {
+  const h = harness(t)
+  const saved = await h.save("MFNG", { text: "A fringe modifier.", tags: "fringe" })
+  assert.equal(saved.status, 200, JSON.stringify(saved.body))
+  const [row] = h.rows("SELECT text, text_sha256 FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
+  const stored = h.bunny.objects.get(`texts/v1/MFNG/${row.text_sha256}.txt`)
+  assert.equal(new TextDecoder().decode(stored), row.text)
+
+  h.bunny.refuse = 401
+  const refused = await h.save("LFNG", { text: "A lunatic fringe.", tags: "fringe" })
+  assert.equal(refused.status, 503)
+  assert.equal(refused.body.code, "TEXT_STORAGE_FAILED")
+  assert.equal(h.rows("SELECT 1 FROM icono_gene_texts WHERE gene_symbol = 'LFNG'").length, 0)
 })
 
 test("a new text keeps the readers-see flag and a caretaker's choice", async (t) => {
