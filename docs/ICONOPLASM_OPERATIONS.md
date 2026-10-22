@@ -103,11 +103,12 @@ WHERE lower(trim(ge.sex)) = 'male' AND trim(COALESCE(gc.full_name, '')) <> '';
 
 The signed-in shelf reads compact V2 discovery state
 (`icono_discovery_user_state_v2` and its chronology,
-`workers/iconoplasm/discovery-compact-*.js`). Retained legacy
-`icono_gene_discoveries` rows are read only by the per-user compact import
-(`workers/iconoplasm/discovery-compact-migrate.js`). The query below diagnoses
-one user's legacy rows. It must not overwrite compact state or serve as a
-fallback when the compact reader is unavailable.
+`workers/iconoplasm/discovery-compact-*.js`). The legacy
+`icono_gene_discoveries` table is a fully imported copy: on the 2026-10-20
+nightly copy every one of its 38 accounts had at least as many compact members
+as legacy genes. No reader uses it; only account erasure deletes from it. The
+query below diagnoses one user's legacy rows. It must not overwrite compact
+state or serve as a fallback when the compact reader is unavailable.
 
 Shape to remember:
 
