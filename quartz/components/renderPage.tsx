@@ -73,7 +73,41 @@ export function pageResources(
   })
 
   const contentIndexPath = joinSegments(baseDir, "static/contentIndex.json")
-  const contentIndexScript = `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`
+  // B-1161: the search index is about 580 KB. Fetched as soon as the page
+  // parsed, it shared a phone's bandwidth with the stylesheets, the app and the
+  // portrait, and on an Iconoplasm gene page it took about a third of a first
+  // visit's bytes. It now starts once the page has loaded and no download has
+  // finished for 2 s (the Iconoplasm app asks for the gene and its portrait
+  // after the load event), or at once when the reader reaches for search.
+  const contentIndexScript = `const fetchData = new Promise(function (resolve) {
+  var started = false
+  function go() {
+    if (started) return
+    started = true
+    resolve(fetch("${contentIndexPath}").then(function (data) { return data.json() }))
+  }
+  function quiet() {
+    var last = performance.now()
+    var observer = window.PerformanceObserver
+      ? new PerformanceObserver(function () { last = performance.now() })
+      : null
+    try { if (observer) observer.observe({ type: "resource" }) } catch (error) {}
+    ;(function check() {
+      if (started) return observer && observer.disconnect()
+      if (performance.now() - last < 2000) return setTimeout(check, 500)
+      if (observer) observer.disconnect()
+      go()
+    })()
+  }
+  if (document.readyState === "complete") quiet()
+  else window.addEventListener("load", quiet, { once: true })
+  document.addEventListener("pointerdown", function (event) {
+    if (event.target && event.target.closest && event.target.closest(".search")) go()
+  }, true)
+  document.addEventListener("keydown", function (event) {
+    if ((event.ctrlKey || event.metaKey) && (event.key === "k" || event.key === "K")) go()
+  }, true)
+})`
 
   const resources: StaticResources = {
     css: [

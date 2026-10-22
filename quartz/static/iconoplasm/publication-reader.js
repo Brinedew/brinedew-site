@@ -177,12 +177,34 @@ export function createIconoplasmPublicationReader(options = {}) {
     )
   }
 
+  // B-1161: a gene's own address starts this same request from the stub page
+  // (scripts/prepare-iconoplasm-edge-assets.mjs, SHELL_STUB_BOOT), seconds
+  // before the app has downloaded. The first read of that gene takes the
+  // answer once; any miss or failure falls through to the ordinary read.
+  async function prefetchedGene(key) {
+    const boot = typeof window === "undefined" ? null : window.__iconoplasmGenePrefetch
+    if (!boot || boot.key !== key) return null
+    window.__iconoplasmGenePrefetch = null
+    try {
+      const text = await boot.text
+      if (!text || new TextEncoder().encode(text).byteLength > STABLE_GENE_OBJECT_LIMIT) return null
+      const value = JSON.parse(text)
+      return validStableGene(value, key) ? value : null
+    } catch (_error) {
+      return null
+    }
+  }
+
   // fromOrigin: the reader who just changed this gene. Bunny's edge keeps the
   // object up to 60 s after a rewrite, so that one reader reads the canonical
   // origin's copy (one Worker request) and sees the change at once.
   async function gene(symbol, { fromOrigin = false } = {}) {
     const key = normalizedSymbol(symbol)
     if (!key) return null
+    if (!fromOrigin) {
+      const early = await prefetchedGene(key)
+      if (early) return withImmutableMedia(early)
+    }
     const cdnPath = `${STABLE_GENE_PATH_PREFIX}${key}.json`
     const originPath = `${STABLE_GENE_ORIGIN_PREFIX}${key}.json`
     const unavailable = "The published gene object is unavailable"

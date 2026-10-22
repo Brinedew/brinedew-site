@@ -248,8 +248,12 @@ function escapeHtml(value) {
 // writes its own title into the shell it hands over to. The app keeps a title
 // that is already this gene's (isIconoplasmGenePageTitle) and sets the loaded
 // gene's name once, so the tab shows one title from first paint on.
+// B-1161: on a gene's address the stub also starts the gene's published object,
+// the request the app's publication reader would make (same URL, cache mode
+// and credentials) only after its 600 KB of scripts and styles had arrived.
+// document.open() keeps the window, so the reader finds it there and takes it.
 const SHELL_STUB_BOOT = `<style>html{background:oklch(96% 0.015 75)}html[data-theme="dark"]{background:oklch(16% 0.01 45)}html.icono-stub-boot body{visibility:hidden}</style>
-<script>(function(){var d=document.documentElement;d.classList.add("icono-stub-boot");try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")d.setAttribute("data-theme","dark")}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){var n=document.title,a=html.indexOf("<title>"),b=html.indexOf("</title>");if(a>-1&&b>a)html=html.slice(0,a+7)+n.replace(/&/g,"&amp;").replace(/</g,"&lt;")+html.slice(b);document.open();document.write(html);document.close()}).catch(function(){d.classList.remove("icono-stub-boot")})})()</script>`
+<script>(function(){var d=document.documentElement;d.classList.add("icono-stub-boot");try{var m=("; "+document.cookie).split("; brinedew_theme=")[1];var t=m?decodeURIComponent(m.split(";")[0]):localStorage.getItem("theme");if(t==="dark")d.setAttribute("data-theme","dark")}catch(e){}try{var g=location.pathname.split("/"),k=g.length===3&&g[1]==="gene"?decodeURIComponent(g[2]).trim().toUpperCase():"";if(/^[A-Z0-9][A-Z0-9._-]{0,63}$/.test(k))window.__iconoplasmGenePrefetch={key:k,text:fetch("${PUBLICATION_CDN}/genes/v3/"+encodeURIComponent(k)+".json",{credentials:"omit",cache:"no-cache"}).then(function(r){return r.ok?r.text():null}).catch(function(){return null})}}catch(e){}fetch("/",{credentials:"same-origin"}).then(function(r){if(!r.ok)throw new Error(String(r.status));return r.text()}).then(function(html){var n=document.title,a=html.indexOf("<title>"),b=html.indexOf("</title>");if(a>-1&&b>a)html=html.slice(0,a+7)+n.replace(/&/g,"&amp;").replace(/</g,"&lt;")+html.slice(b);document.open();document.write(html);document.close()}).catch(function(){d.classList.remove("icono-stub-boot")})})()</script>`
 
 export function iconoplasmGenePageHtml({ symbol, fullName }) {
   const name = String(fullName || "").trim()
