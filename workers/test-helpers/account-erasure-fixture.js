@@ -438,9 +438,6 @@ function seedDiscovery(iconoplasm, user, genes) {
       payload_sha256: sha("e"),
     })
   }
-  for (const gene of genes) {
-    insert(iconoplasm, "icono_gene_discoveries", { user_id: user, gene_symbol: gene })
-  }
 }
 
 /**
