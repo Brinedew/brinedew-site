@@ -14,14 +14,5 @@
     "kv_deletes": 0,
     "kv_lists": 0
   },
-  "migrations": {
-    "iconoplasm/0136_drop_retired_projection_ledgers.sql": {
-      "online": true,
-      "prediction": {
-        "rows_read": 1000,
-        "rows_written": 100,
-        "requests": 1
-      }
-    }
-  }
+  "migrations": {}
 }
