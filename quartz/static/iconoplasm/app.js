@@ -52,12 +52,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import {
-  registerDiagramWebMcp,
-  renderDiagramStudio,
-  unmountDiagramStudio,
-} from "./diagram-studio.js?v=4a74f2bf190cebab"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=70e368f9de347316"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=2033cc31cb7f0de1"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -4923,6 +4918,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         window.scrollBy(0, delta)
       }
     }
+    // B-1161: the card's height animates for a reader's tap, not for its first
+    // placement. Animated, a phone's first gene page drew the card at its
+    // default height and grew it over 260 ms, pushing the toolbar and the tabs
+    // off the screen (layout shift 0.2, twice: skeleton, then the gene).
+    var settling = !shouldPreserveTop
+    if (settling) card.style.transition = "none"
     syncMobileLabelDossierContent(card)
     var resolved = !!expanded
     card.setAttribute("data-icono-mobile-expanded", resolved ? "true" : "false")
@@ -4941,6 +4942,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     window.setTimeout(function () {
       syncMobileLabelViewportGeometry(card)
       restoreCardTop()
+      if (settling) card.style.removeProperty("transition")
     }, 720)
   }
 
@@ -9823,6 +9825,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</div>" +
         '<div class="icono-candidate-secondary-actions" data-icono-candidate-actions-island="' +
         esc(assetSha) +
+        '" data-icono-candidate-actions-signature="' +
+        candidateActionsSignature() +
         '">' +
         '<button type="button" class="icono-candidate-icon-btn icono-candidate-more" popovertarget="' +
         esc(menuId) +
@@ -10239,13 +10243,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     } catch (_notFoundHeadError) {}
   }
 
+  // The menu changes with sign-in (Edit candidate portrait) and with admin (Remove),
+  // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
+  // answered after the first draw kept the guest menu (owner, 2026-10-19). The
+  // gallery stamps it as it draws (B-1161): unstamped, every gene page drew the
+  // whole gallery a second time, off screen, to copy menus it already had.
+  function candidateActionsSignature() {
+    return (
+      (currentUser ? "signed-in" : "guest") + ":" + (currentUserIsIconoAdmin ? "admin" : "public")
+    )
+  }
+
   function hydrateServerCandidateActionIslands(container, genePayload) {
     if (!container || !genePayload) return
-    // The menu changes with sign-in (Edit candidate portrait) and with admin (Remove),
-    // so both go in the signature. Keyed on admin alone, a caretaker whose sign-in
-    // answered after the first draw kept the guest menu (owner, 2026-10-19).
-    var signature =
-      (currentUser ? "signed-in" : "guest") + ":" + (currentUserIsIconoAdmin ? "admin" : "public")
+    var signature = candidateActionsSignature()
     var targets = Array.prototype.slice.call(
       container.querySelectorAll("[data-icono-candidate-actions-island]"),
     )
@@ -12013,6 +12024,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
+  // B-1161: Diagram Studio and its editor are about 270 KB of the app's 950 KB
+  // of modules, and only /studio uses them. Loaded up front they kept a phone's
+  // first gene page waiting two extra network rounds.
+  var diagramStudio = null
+  var diagramStudioPromise = null
+  function loadDiagramStudio() {
+    if (!diagramStudioPromise) {
+      diagramStudioPromise = import("./diagram-studio.js?v=73ac60196c6b84f5").then(
+        function (module) {
+          diagramStudio = module
+          return module
+        },
+        function (error) {
+          diagramStudioPromise = null
+          throw error
+        },
+      )
+    }
+    return diagramStudioPromise
+  }
+
   function render() {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
@@ -12027,7 +12059,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     document.body.classList.toggle("icono-studio-route", route.page === "studio")
     var homeRestoreState = route.page === "home" ? readHomeRestoreState() : null
-    unmountDiagramStudio()
+    if (diagramStudio) diagramStudio.unmountDiagramStudio()
     clearActiveHomeRenderState()
     destroyHomeMasonry()
     lastRenderedPath = window.location.pathname + window.location.search
@@ -12078,7 +12110,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       iconoSidebarState.page = "studio"
       renderIconoplasmSidebar()
       scrollWindowInstantly(0, 0)
-      renderDiagramStudio(root)
+      loadDiagramStudio()
+        .then(function (studio) {
+          if (getRoute().page === "studio") studio.renderDiagramStudio(root)
+        })
+        .catch(function (error) {
+          console.error("[Iconoplasm] failed to load Diagram Studio:", error)
+        })
     } else {
       scrollWindowInstantly(0, 0)
       render404(root)
@@ -12201,13 +12239,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       currentUserIsIconoAdmin = false
     }
     render()
-    void registerDiagramWebMcp({
-      openStudio: function () {
-        if (getRoute().page !== "studio") navigateTo("/studio")
-      },
-    }).catch(function (error) {
-      console.warn("[Iconoplasm] WebMCP tool registration failed:", error)
-    })
+    // The studio's WebMCP tools matter only to a browser that has WebMCP.
+    if (document.modelContext && typeof document.modelContext.registerTool === "function") {
+      loadDiagramStudio()
+        .then(function (studio) {
+          return studio.registerDiagramWebMcp({
+            openStudio: function () {
+              if (getRoute().page !== "studio") navigateTo("/studio")
+            },
+          })
+        })
+        .catch(function (error) {
+          console.warn("[Iconoplasm] WebMCP tool registration failed:", error)
+        })
+    }
   }
 
   // Quartz uses SPA navigation, so the root might already be in the DOM
