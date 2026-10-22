@@ -327,10 +327,10 @@ test("public document responses carry no analytics consent bootstrap for any cou
   assert.doesNotMatch(german.headers.get("Cache-Control") || "", /no-transform/)
 })
 
-test("public edge proxies apex iconoplasm admin me to the only allowed stateful worker", async () => {
+test("public edge proxies apex iconoplasm admin routes to the only allowed stateful worker", async () => {
   const calls = []
   const response = await worker.fetch(
-    new Request("https://brinedew.bio/api/iconoplasm/admin/me", { method: "GET" }),
+    new Request("https://brinedew.bio/api/iconoplasm/admin/overview", { method: "GET" }),
     {
       THE_ONLY_ALLOWED_STATEFUL_WORKER_DO_NOT_DUPLICATE: {
         async fetch(request) {
@@ -349,7 +349,7 @@ test("public edge proxies apex iconoplasm admin me to the only allowed stateful 
   assert.equal(payload?.authenticated, false)
   assert.equal(payload?.is_admin, false)
   assert.equal(calls.length, 1)
-  assert.equal(calls[0]?.url, "https://brinedew.bio/api/iconoplasm/admin/me")
+  assert.equal(calls[0]?.url, "https://brinedew.bio/api/iconoplasm/admin/overview")
   assert.equal(calls[0]?.method, "GET")
 })
 

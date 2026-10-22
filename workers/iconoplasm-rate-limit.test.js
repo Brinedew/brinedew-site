@@ -35,7 +35,7 @@ test("route policy is method-aware and leaves private and unrelated traffic alon
     resolveIconoplasmRateLimitPolicy(request("/api/public/v1/genes/batch", { method: "GET" })),
     null,
   )
-  assert.equal(resolveIconoplasmRateLimitPolicy(request("/api/iconoplasm/admin/me")), null)
+  assert.equal(resolveIconoplasmRateLimitPolicy(request("/api/iconoplasm/admin/overview")), null)
   assert.equal(
     resolveIconoplasmRateLimitPolicy(new Request("https://brinedew.bio/api/public/v1/metadata")),
     null,

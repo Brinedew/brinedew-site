@@ -81,8 +81,6 @@ import {
   imageEditInheritedUpvotes,
   VOTE_DAILY_BUDGET_EXHAUSTED,
   VOTE_PERSON_DAILY_LIMIT,
-  VOTE_IMPORT_MAX_GENES,
-  VOTE_IMPORT_MAX_ITEMS,
 } from "./iconoplasm/votes/vote-guards.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
@@ -106,15 +104,6 @@ const VOTE_TABLES = [
   "icono_vote_person_day",
 ]
 const sha = (char) => char.repeat(64)
-// One asset's vote totals as readers see them (the summary the gene objects are built from).
-const summaryOf = (db, symbol, asset) => {
-  const row = db.rows(
-    "SELECT score, vote_count FROM icono_vote_asset_summary WHERE gene_symbol = ? AND asset_sha256 = ?",
-    symbol,
-    asset,
-  )[0]
-  return row ? { score: row.score, vote_count: row.vote_count } : null
-}
 const ADMIN_TOKEN = "test-admin-token-000000000000000000001"
 
 class SqliteD1 {
@@ -856,8 +845,6 @@ test("7: an upload that keeps the winner leaves a publication-affecting event, a
     "edit_candidate",
     "generate_candidate",
     "unstale",
-    "restore_keep",
-    "legacy_mark",
     "reject",
     "remove_candidate",
     "publish",
@@ -1162,13 +1149,6 @@ test("12: past a person's daily vote allowance their vote, import or supervote w
   assert.equal(supervotePayload.code, VOTE_DAILY_BUDGET_EXHAUSTED)
   assert.match(supervotePayload.error, LIMIT_SENTENCE)
   assert.equal(budgetedRows(db2), before2, "the refused routes wrote nothing")
-  const admin = await callApi(
-    db2,
-    "/api/iconoplasm/admin/votes/set",
-    { symbol: "BRCA1", asset_sha256: sha("b"), user_id: "curator", vote_value: 1 },
-    { env: { admin: true } },
-  )
-  assert.equal(admin.status, 200, JSON.stringify(admin.payload))
 })
 
 // --- 14 -----------------------------------------------------------------
@@ -1201,168 +1181,6 @@ test("14: only eligible candidates count toward the election bound", async () =>
   seedPublished(db, "SOX2", hexAsset(1))
   const { projection } = await electAndProjectGeneWinner(db, "SOX2", { actor: "vote_authority" })
   assert.equal(projection.code, "CANDIDATE_SET_EXCEEDS_BOUND")
-})
-
-// --- 15 -----------------------------------------------------------------
-
-test("15: a vote import elects every gene it names, so re-running it repairs a stale winner", async () => {
-  const db = new SqliteD1()
-  seedAsset(db, "KRAS", sha("a"))
-  seedAsset(db, "KRAS", sha("b"))
-  seedPublished(db, "KRAS", sha("b"))
-  // The vote committed but its election never ran (a failed request).
-  await vote(db, "KRAS", sha("a"), "u1", 1)
-  assert.equal(current(db, "KRAS"), sha("b"))
-  const result = await callApi(
-    db,
-    "/api/iconoplasm/admin/votes/import",
-    { items: [{ symbol: "KRAS", asset_sha256: sha("a"), user_id: "u1", vote_value: 1 }] },
-    { env: { admin: true } },
-  )
-  assert.equal(result.status, 200, JSON.stringify(result.payload))
-  assert.equal(result.payload.upserted, 1)
-  assert.equal(result.payload.elected, 1)
-  assert.equal(result.payload.auto_promoted, 1)
-  assert.equal(current(db, "KRAS"), sha("a"))
-  assert.deepEqual(
-    summaryOf(db, "KRAS", sha("a")),
-    { score: 1, vote_count: 1 },
-    "the identical re-import counted the vote once",
-  )
-})
-
-// --- 16 -----------------------------------------------------------------
-
-test("16: restarting the read-model bootstrap keeps the vote summaries elections read", async (t) => {
-  t.mock.method(console, "warn", () => {})
-  const db = new SqliteD1()
-  for (const symbol of ["AAA1", "ZZZ9"]) {
-    db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)", symbol, symbol)
-    seedAsset(db, symbol, sha("a"))
-    seedPublished(db, symbol, sha("a"))
-    for (const user of ["u1", "u2"]) await vote(db, symbol, sha("a"), user, 1)
-  }
-  const mark = db.mark()
-  const result = await callApi(
-    db,
-    "/api/iconoplasm/admin/read-models/bootstrap",
-    { reset: true, steps: 1, symbol_batch: 1 },
-    { env: { admin: true } },
-  )
-  assert.equal(result.status, 200, JSON.stringify(result.payload))
-  assert.equal(
-    db
-      .since(mark)
-      .some(({ sql }) => /DELETE\s+FROM\s+icono_vote_asset_summary\s*$/i.test(sql.trim())),
-    false,
-    "no statement empties the summary table",
-  )
-  for (const symbol of ["AAA1", "ZZZ9"])
-    assert.deepEqual(summary(db, symbol, sha("a")), recount(db, symbol, sha("a")), symbol)
-})
-
-// --- 18 -----------------------------------------------------------------
-
-function seedPromotableGene(db, symbol) {
-  seedAsset(db, symbol, sha("a"), { createdAt: "2026-01-02 00:00:00" })
-  seedAsset(db, symbol, sha("b"), { createdAt: "2026-01-01 00:00:00" })
-  seedPublished(db, symbol, sha("a"))
-}
-
-// `count` upvotes for asset b spread over `genes` genes, each from its own
-// voter: every gene's winner moves to b, the most an election can cost.
-function importItems(genes, count) {
-  return Array.from({ length: count }, (_, index) => ({
-    symbol: `GENE${(index % genes) + 1}`,
-    asset_sha256: sha("b"),
-    user_id: `voter-${index}`,
-    vote_value: 1,
-  }))
-}
-
-const importRoute = (db, items) =>
-  callApi(db, "/api/iconoplasm/admin/votes/import", { items }, { env: { admin: true } })
-
-test("18: an import past the free plan's D1 query limit is refused up front; the largest one allowed stays under 40 queries", async (t) => {
-  const db = new SqliteD1()
-  for (let gene = 1; gene <= VOTE_IMPORT_MAX_GENES + 1; gene += 1)
-    seedPromotableGene(db, `GENE${gene}`)
-  const before = budgetedRows(db)
-
-  db.calls = 0
-  const tooManyGenes = await importRoute(
-    db,
-    importItems(VOTE_IMPORT_MAX_GENES + 1, VOTE_IMPORT_MAX_GENES + 1),
-  )
-  assert.equal(tooManyGenes.status, 400)
-  assert.match(
-    tooManyGenes.payload.error,
-    new RegExp(`at most ${VOTE_IMPORT_MAX_GENES} genes and ${VOTE_IMPORT_MAX_ITEMS} votes`),
-  )
-  const tooManyVotes = await importRoute(db, importItems(1, VOTE_IMPORT_MAX_ITEMS + 1))
-  assert.equal(tooManyVotes.status, 400)
-  assert.match(tooManyVotes.payload.error, new RegExp(`${VOTE_IMPORT_MAX_ITEMS} votes`))
-  assert.equal(db.calls, 0, "refused before a single D1 call")
-  assert.equal(budgetedRows(db), before, "refused before anything was written")
-
-  // The largest import the limits allow: every vote count and every gene at
-  // its bound, every election moving its winner.
-  const largest = await importRoute(db, importItems(VOTE_IMPORT_MAX_GENES, VOTE_IMPORT_MAX_ITEMS))
-  assert.equal(largest.status, 200, JSON.stringify(largest.payload))
-  assert.equal(largest.payload.upserted, VOTE_IMPORT_MAX_ITEMS)
-  assert.equal(largest.payload.elected, VOTE_IMPORT_MAX_GENES)
-  assert.equal(largest.payload.elections_failed, 0)
-  assert.equal(largest.payload.auto_promoted, VOTE_IMPORT_MAX_GENES)
-  // Two D1 calls per chunk of votes (a read batch, a write batch) and two per
-  // gene (the election read, the projection); the Worker makes no others.
-  const expected =
-    2 * Math.ceil(VOTE_IMPORT_MAX_ITEMS / GENE_VOTE_IMPORT_CHUNK) + 2 * VOTE_IMPORT_MAX_GENES
-  t.diagnostic(
-    `largest import: ${db.calls} D1 calls for ${VOTE_IMPORT_MAX_ITEMS} votes over ${VOTE_IMPORT_MAX_GENES} genes`,
-  )
-  assert.equal(db.calls, expected)
-  assert.ok(db.calls <= 40, `${db.calls} D1 calls`)
-})
-
-// --- 19 -----------------------------------------------------------------
-
-test("19: an import whose election fails answers non-2xx with the failed symbols, and re-running it repairs them", async () => {
-  const db = new SqliteD1()
-  seedPromotableGene(db, "TP53")
-  seedPromotableGene(db, "KRAS")
-  const items = ["TP53", "KRAS"].map((symbol) => ({
-    symbol,
-    asset_sha256: sha("b"),
-    user_id: "u1",
-    vote_value: 1,
-  }))
-  // KRAS's election read fails; the vote writes and TP53's election do not.
-  db.failOn = {
-    test: (sql, args) => /icono_caretaker_assignments/.test(sql) && args[0] === "KRAS",
-  }
-  const failed = await importRoute(db, items)
-  assert.equal(failed.status, 502, JSON.stringify(failed.payload))
-  assert.equal(failed.payload.ok, false)
-  assert.equal(failed.payload.code, "VOTE_IMPORT_ELECTION_FAILED")
-  assert.deepEqual(failed.payload.failed_symbols, ["KRAS"])
-  assert.match(failed.payload.error, /KRAS/)
-  assert.match(failed.payload.error, /run the import again/i)
-  assert.equal(failed.payload.upserted, 2, "the votes themselves committed")
-  assert.equal(current(db, "TP53"), sha("b"), "the other gene was elected")
-  assert.equal(current(db, "KRAS"), sha("a"), "the failed gene was not")
-
-  db.failOn = null
-  const retry = await importRoute(db, items)
-  assert.equal(retry.status, 200, JSON.stringify(retry.payload))
-  assert.equal(retry.payload.elections_failed, 0)
-  assert.equal(retry.payload.elected, 2)
-  assert.equal(current(db, "KRAS"), sha("b"), "re-running the same import repaired it")
-  for (const symbol of ["TP53", "KRAS"])
-    assert.deepEqual(
-      summaryOf(db, symbol, sha("b")),
-      { score: 1, vote_count: 1 },
-      `the identical re-import counted ${symbol}'s vote once`,
-    )
 })
 
 // --- 20 -----------------------------------------------------------------

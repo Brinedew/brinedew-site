@@ -204,23 +204,9 @@ is the same shape over the caretaker projection tables: compare-and-set on the
 assignment and supervote versions, a receipt per command id, weight exactly 10
 (+ or -), eligible candidates only. Admin paths that change a gene's candidates
 (reject, unstale, reconcile, remove, clear-override) elect through the same
-function after advancing the gene's vote version. A vote import elects every
-gene it names, so re-running one repairs a gene whose election failed. An
+function after advancing the gene's vote version. A gene whose election
+failed is elected again by its next vote. An
 election reads about 2 rows per eligible candidate, a snapshot about 9.
-
-The administrator's import route (`/api/iconoplasm/admin/votes/import`) is one
-Worker invocation. What counts toward the free plan's per-invocation limit is
-the number of calls to D1, and a `db.batch()` is one call however many
-statements it carries (measured, B-914; `vote-guards.js` records the
-measurement and the 1,000-call limit it found). An import makes two D1 calls
-per chunk of 50 votes and two per gene it names, so the route takes at most 12
-genes and 200 votes per request (32 calls at the bounds, `VOTE_IMPORT_MAX_GENES`
-and `VOTE_IMPORT_MAX_ITEMS` in `vote-guards.js`, kept inside the 50 calls the
-D1 limits page lists) and refuses a larger one with a 400 that names the
-limits, before writing anything. When any named gene's election fails it answers 502 with the
-`failed_symbols` (the votes are committed); running the same import again
-elects every named gene afresh. Callers split their imports by the same
-bounds.
 
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.

@@ -113,26 +113,8 @@ export function imageEditInheritedUpvotes({ upvotes, downvotes }) {
 //     services such as D1.
 // An import makes two calls per chunk of GENE_VOTE_IMPORT_CHUNK votes (a read
 // batch, a write batch) and two per gene it names (the election read and the
-// projection), so at most 2 x ceil(votes / 50) + 2 x genes. At the two bounds
-// below that is 2 x 4 + 2 x 12 = 32 calls, measured in
-// workers/iconoplasm.d1-votes.test.js. The bounds keep the 50-call figure
-// anyway: the measurement ran in a preview, the D1 page still says 50, and
-// callers already split their imports. No other limit was measured for them,
-// so raising them needs its own measurement of CPU time and rows written per
-// request. A request past either bound is refused up front, before anything
-// is written; callers split their imports by these numbers.
-export const VOTE_IMPORT_MAX_ITEMS = 200
-export const VOTE_IMPORT_MAX_GENES = 12
-
-// The refusal text for an import of `items` votes across `genes` distinct
-// genes, or null when the import fits.
-export function voteImportBoundsError({ items = 0, genes = 0 } = {}) {
-  if (items <= VOTE_IMPORT_MAX_ITEMS && genes <= VOTE_IMPORT_MAX_GENES) return null
-  return (
-    `A vote import takes at most ${VOTE_IMPORT_MAX_GENES} genes and ${VOTE_IMPORT_MAX_ITEMS} votes ` +
-    `per request; this one has ${items} votes across ${genes} genes. Split it into smaller requests.`
-  )
-}
+// projection). Its callers (an image edit's inherited upvotes, a generated
+// candidate's first upvote) import one gene, so it stays far under that limit.
 
 // The first statement of every admitted vote write batch. It adds `units` to the
 // person's row for today (day = D1's UTC date) while the total stays within the

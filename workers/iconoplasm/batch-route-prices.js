@@ -35,8 +35,6 @@ const SWEEP = Object.freeze({ rows_written: 20_000, rows_read: 100_000 })
 // indexes and an essence row with its indexes.
 const CATALOG_ROW = Object.freeze({ rows_written: 14, rows_read: 20 })
 const ESSENCE_ROW = Object.freeze({ rows_written: 5, rows_read: 10 })
-// A vote and its summary rows (9 written after #592).
-const VOTE = Object.freeze({ rows_written: 10, rows_read: 20 })
 
 const critical = (reason) => Object.freeze({ criticality: "critical", reason })
 const owner = (price) => Object.freeze({ criticality: "sheddable", price })
@@ -49,7 +47,6 @@ const OWN_ACTION = "the owner's own action on one gene, role or setting"
 export const BATCH_ROUTE_PRICES = Object.freeze({
   // The Drain's view of readers' open requests and its plan for them.
   admin_requests_open: batch(SMALL_READ),
-  admin_requests_drain_plan: batch(SMALL_READ),
   admin_requests_history: owner(SMALL_READ),
   admin_gene_request_diagnostics: owner(SMALL_READ),
   // Each call moves one lease of a reader's request; the request is a person's.
@@ -69,10 +66,6 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   // and its unindexed steps scan about 80,000 rows (docs/ICONOPLASM_OPERATIONS.md).
   // A heavy account takes many passes; the person waits days, not seconds.
   admin_account_erase: batch({ rows_written: 5_000, rows_read: 80_000 }),
-  admin_votes_import: perItem("items", VOTE),
-  admin_votes_set: critical(OWN_ACTION),
-  admin_votes_snapshot: owner(SMALL_READ),
-  admin_votes_snapshots: owner(SMALL_READ),
   admin_votes_vision_stats: owner(CATALOGUE_READ),
   admin_votes_vision_previews: owner(SMALL_READ),
   admin_votes_vision_detail: owner(SMALL_READ),
@@ -84,13 +77,11 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_image_edit_prompts: critical(OWN_ACTION),
   admin_caretaker_switch_cooldown: critical(OWN_ACTION),
   admin_discord_switches: critical(OWN_ACTION),
-  admin_me: critical("the sign-in check behind every admin page"),
   admin_ingest: perItem("items", BATCH_PRICES.portrait),
   admin_overview: owner(CATALOGUE_READ),
   admin_coverage: owner(CATALOGUE_READ),
   admin_public_stats_audit: owner(CATALOGUE_READ),
   admin_canon_audit: owner(CATALOGUE_READ),
-  admin_read_models_bootstrap: batch(SWEEP),
   admin_read_models_sync: perItem("symbols", BATCH_PRICES.gene_object),
   admin_read_models_shared_discoveries: batch(SMALL_WRITE),
   admin_assets: owner(SMALL_READ),
@@ -120,8 +111,6 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_gallery_mutation_unstale_batch: perItem("symbols", BATCH_PRICES.gene_object),
   admin_gallery_mutation_purge_legacy: batch(SWEEP),
   admin_gallery_mutation_remove_candidate: critical(OWN_ACTION),
-  admin_gallery_mutation_restore_mis_rejected_candidates: batch(SWEEP),
-  admin_gallery_mutation_canon_repair: batch(SWEEP),
   admin_gene_detail: owner(SMALL_READ),
   admin_local_removals_pending: batch(SMALL_READ),
   admin_local_removals_ack: batch(SMALL_WRITE),

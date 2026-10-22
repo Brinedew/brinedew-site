@@ -3,19 +3,12 @@ import { IconoplasmVisionEmulsionCodeBoundError } from "./iconoplasm/vision-emul
 const NO_STORE = Object.freeze({ "Cache-Control": "no-store" })
 const REQUIRED_FUNCTIONS = Object.freeze([
   "coerceBoolean",
-  "ensureBootstrapInitialized",
-  "fetchBootstrapState",
   "isAdmin",
   "json",
-  "normalizeBootstrapSteps",
   "normalizeSymbol",
-  "normalizeSymbolBatch",
-  "normalizeVisionBatch",
-  "runBootstrapStep",
   "sanitizeText",
   "syncReadModels",
   "validVisionId",
-  "writeBootstrapState",
 ])
 
 function assertReadModelServices(services) {
@@ -24,7 +17,7 @@ function assertReadModelServices(services) {
       throw new TypeError(`Iconoplasm admin read-model service is missing: ${name}`)
     }
   }
-  for (const name of ["bootstrapCompleteStatus", "symbolRequestMax", "visionRequestMax"]) {
+  for (const name of ["symbolRequestMax", "visionRequestMax"]) {
     if (services?.[name] === undefined || services?.[name] === null) {
       throw new TypeError(`Iconoplasm admin read-model configuration is missing: ${name}`)
     }
@@ -34,23 +27,15 @@ function assertReadModelServices(services) {
 export function createIconoplasmAdminReadModelHandlers(services) {
   assertReadModelServices(services)
   const {
-    bootstrapCompleteStatus,
     coerceBoolean,
-    ensureBootstrapInitialized,
-    fetchBootstrapState,
     isAdmin,
     json,
-    normalizeBootstrapSteps,
     normalizeSymbol,
-    normalizeSymbolBatch,
-    normalizeVisionBatch,
-    runBootstrapStep,
     sanitizeText,
     symbolRequestMax,
     syncReadModels,
     validVisionId,
     visionRequestMax,
-    writeBootstrapState,
   } = services
 
   async function sync({ request, env, done }) {
@@ -164,70 +149,7 @@ export function createIconoplasmAdminReadModelHandlers(services) {
     )
   }
 
-  async function bootstrap({ request, env, done }) {
-    if (!(await isAdmin(request, env)))
-      return done("admin_read_models_bootstrap_403", json({ error: "Unauthorized" }, 403))
-    if (!env.ICONOPLASM_DB)
-      return done(
-        "admin_read_models_bootstrap_500",
-        json({ error: "ICONOPLASM_DB binding missing" }, 500),
-      )
-    if (request.method === "GET" || request.method === "HEAD") {
-      return done(
-        "admin_read_models_bootstrap_get",
-        json({ ok: true, state: await fetchBootstrapState(env) }, 200, NO_STORE),
-      )
-    }
-    let payload
-    try {
-      payload = await request.json()
-    } catch {
-      return done("admin_read_models_bootstrap_400", json({ error: "Invalid JSON" }, 400))
-    }
-    const reset = coerceBoolean(payload?.reset ?? payload?.restart, false)
-    const steps = normalizeBootstrapSteps(payload?.steps)
-    const symbolBatch = normalizeSymbolBatch(payload?.symbol_batch ?? payload?.symbolBatch)
-    const visionBatch = normalizeVisionBatch(payload?.vision_batch ?? payload?.visionBatch)
-    let latest = null
-    let processedSymbols = 0
-    let processedVisions = 0
-    try {
-      for (let index = 0; index < steps; index += 1) {
-        latest = await runBootstrapStep(env, {
-          reset: reset && index === 0,
-          symbolBatch,
-          visionBatch,
-        })
-        processedSymbols += Number(latest?.processed?.symbols || 0)
-        processedVisions += Number(latest?.processed?.visions || 0)
-        if (!latest?.advanced || latest?.state?.status === bootstrapCompleteStatus) break
-      }
-    } catch (error) {
-      const state = await ensureBootstrapInitialized(env)
-      await writeBootstrapState(env, {
-        ...state,
-        last_error: String(error?.message || error || "bootstrap failed").slice(0, 2000),
-      })
-      throw error
-    }
-    return done(
-      "admin_read_models_bootstrap_post",
-      json(
-        {
-          ok: true,
-          steps,
-          processed_symbols: processedSymbols,
-          processed_visions: processedVisions,
-          state: latest?.state || (await fetchBootstrapState(env)),
-        },
-        200,
-        NO_STORE,
-      ),
-    )
-  }
-
   return Object.freeze({
-    "admin_read_models.bootstrap": bootstrap,
     "admin_read_models.sync": sync,
   })
 }

@@ -12,24 +12,13 @@ function json(data, status = 200, headers = {}) {
 
 function readModelServices(overrides = {}) {
   return {
-    bootstrapCompleteStatus: "complete",
     coerceBoolean: (value, fallback = false) => (value == null ? fallback : Boolean(value)),
-    ensureBootstrapInitialized: async () => ({ status: "pending" }),
-    fetchBootstrapState: async () => ({ status: "pending" }),
     isAdmin: async () => true,
     json,
-    normalizeBootstrapSteps: () => 1,
     normalizeSymbol: (value) =>
       String(value || "")
         .trim()
         .toUpperCase(),
-    normalizeSymbolBatch: () => 10,
-    normalizeVisionBatch: () => 10,
-    runBootstrapStep: async () => ({
-      advanced: false,
-      processed: { symbols: 0, visions: 0 },
-      state: { status: "complete" },
-    }),
     sanitizeText: (value, limit) => String(value || "").slice(0, limit),
     symbolRequestMax: 100,
     syncReadModels: async () => ({ symbols: 0, visions: 0 }),
@@ -38,7 +27,6 @@ function readModelServices(overrides = {}) {
       return normalized.startsWith("vision-") ? normalized : ""
     },
     visionRequestMax: 100,
-    writeBootstrapState: async () => {},
     ...overrides,
   }
 }
@@ -68,10 +56,7 @@ test("read-model handler factory rejects incomplete composition roots", () => {
 test("read-model handler registry is immutable and domain-complete", () => {
   const handlers = createIconoplasmAdminReadModelHandlers(readModelServices())
   assert.equal(Object.isFrozen(handlers), true)
-  assert.deepEqual(Object.keys(handlers).sort(), [
-    "admin_read_models.bootstrap",
-    "admin_read_models.sync",
-  ])
+  assert.deepEqual(Object.keys(handlers).sort(), ["admin_read_models.sync"])
 })
 
 test("scoped read-model sync remains D1-only and normalizes targets", async () => {
@@ -185,21 +170,4 @@ test("vision-only sync keeps its explicit scope", async () => {
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].symbols, [])
   assert.deepEqual(calls[0].visionIds, ["vision-one"])
-})
-
-test("bootstrap implements the HEAD method admitted by its route contract", async () => {
-  let stateReads = 0
-  const handlers = createIconoplasmAdminReadModelHandlers(
-    readModelServices({
-      fetchBootstrapState: async () => {
-        stateReads += 1
-        return { status: "complete" }
-      },
-    }),
-  )
-  const response = await responseFrom(handlers["admin_read_models.bootstrap"], { method: "HEAD" })
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(stateReads, 1)
 })

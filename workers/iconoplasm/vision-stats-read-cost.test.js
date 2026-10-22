@@ -30,8 +30,8 @@ import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 //    cost more than a page.
 // 7. The blocklist list rides along with every page flip and costs its full
 //    table each time. It must be sent for a fresh view only, never per flip.
-// 8. A rollup that is still being built answers with a scan over every portrait
-//    asset (59,346 on 2 Oct 2026). It must refuse and read a bounded few rows.
+// 8. An empty rollup answers with a scan over every portrait asset (59,346 on
+//    2 Oct 2026). It must answer an empty page.
 // 9. Preview hydration for the visible page reads only those visions' assets,
 //    and a preview call without ids answers empty instead of grouping every
 //    portrait asset (the scorecard's old bootstrap fallback was the only
@@ -191,9 +191,6 @@ test(
       const kv = memoryKv()
       const sha = (n) => n.toString(16).padStart(64, "0")
       await db.batch([
-        db.prepare(
-          "INSERT OR REPLACE INTO icono_admin_read_model_bootstrap(bootstrap_key,status) VALUES('default','complete')",
-        ),
         rollupSeed(db, ROLLUP_POPULATION, 100),
         db.prepare(
           "INSERT INTO icono_admin_vision_rollup(vision_id,image_count,upvotes,downvotes,score,live_count) VALUES('anima-v1-1',3,5,1,4,2)",
@@ -218,11 +215,11 @@ test(
       ])
       const total = ROLLUP_POPULATION + 1
 
-      // A page is its rows, one look-ahead row, the bootstrap row, one boundary
-      // row for each of the cursor's four range queries (D1 counts the first
-      // entry past an empty range), and, for a fresh view only, the blocklist
-      // (D1 counts its sorted rows twice). Two rows of slack.
-      const flipBound = (limit) => limit + 1 + 1 + 4 + 2
+      // A page is its rows, one look-ahead row, one boundary row for each of
+      // the cursor's four range queries (D1 counts the first entry past an
+      // empty range), and, for a fresh view only, the blocklist (D1 counts its
+      // sorted rows twice). Two rows of slack.
+      const flipBound = (limit) => limit + 1 + 4 + 2
       const freshBound = (limit) => flipBound(limit) + 2 * BLACKLIST_ROWS
 
       // Failure mode 1: callers that still send the old whole-rollup request,
@@ -442,26 +439,7 @@ test(
       assert.equal(oldHeader.status, 403, brief(oldHeader.payload))
       assert.equal(oldHeader.cost.rows_read, 0)
 
-      // Failure mode 8: a rollup that is still being built is refused, not scanned from assets.
-      await db
-        .prepare(
-          "UPDATE icono_admin_read_model_bootstrap SET status='running' WHERE bootstrap_key='default'",
-        )
-        .run()
-      for (const params of [{}, { from: "end" }, { after: goodCursor }]) {
-        const rebuilding = await adminRequest(db, kv, statsUrl(params), { method: "GET" })
-        t.diagnostic(JSON.stringify({ case: "bootstrap-running", params, ...rebuilding.cost }))
-        assert.equal(rebuilding.status, 503, brief(rebuilding.payload))
-        assert.match(String(rebuilding.payload.error || ""), /still being built/)
-        assert.ok(rebuilding.cost.rows_read <= 2, JSON.stringify(rebuilding.cost))
-      }
-      await db
-        .prepare(
-          "UPDATE icono_admin_read_model_bootstrap SET status='complete' WHERE bootstrap_key='default'",
-        )
-        .run()
-
-      // A built but empty rollup is an empty page, not a fallback scan.
+      // Failure mode 8: an empty rollup is an empty page, not a fallback scan.
       await db.prepare("DELETE FROM icono_admin_vision_rollup").run()
       const empty = await adminRequest(db, kv, statsUrl({ limit: "12" }), { method: "GET" })
       t.diagnostic(JSON.stringify({ case: "empty-rollup", ...empty.cost }))
@@ -488,9 +466,6 @@ test(
       // groups and at their edges.
       const population = 42
       await db.batch([
-        db.prepare(
-          "INSERT OR REPLACE INTO icono_admin_read_model_bootstrap(bootstrap_key,status) VALUES('default','complete')",
-        ),
         db.prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<${population})
            INSERT INTO icono_admin_vision_rollup(vision_id,image_count,upvotes,downvotes,score,live_count)

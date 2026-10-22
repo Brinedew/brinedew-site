@@ -5,6 +5,8 @@ import test from "node:test"
 
 import {
   ICONOPLASM_API_SCHEMA_VERSION,
+  ICONOPLASM_ROUTE_CALLER_KINDS,
+  ICONOPLASM_ROUTE_CALLERS,
   ICONOPLASM_ROUTE_CONTRACTS,
   matchIconoplasmRouteContract,
 } from "./iconoplasm-route-contract.js"
@@ -112,6 +114,25 @@ test("Iconoplasm route contracts are complete, unique, immutable, and executable
       assert.equal(match?.route.id, route.id, `${key} must resolve to ${route.id}`)
       assert.equal(match?.methodAllowed, true)
     }
+  }
+})
+
+test("every route names who calls it, and every caller entry names a route", () => {
+  const ids = new Set(ICONOPLASM_ROUTE_CONTRACTS.map((route) => route.id))
+  for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
+    assert.ok(route.callers.length > 0, `${route.id} needs an ICONOPLASM_ROUTE_CALLERS entry`)
+    for (const caller of route.callers) {
+      assert.ok(
+        ICONOPLASM_ROUTE_CALLER_KINDS.includes(caller),
+        `${route.id}: unknown caller ${caller}`,
+      )
+    }
+    if (route.callers.includes("none-known")) {
+      assert.deepEqual(route.callers, ["none-known"], `${route.id}: none-known stands alone`)
+    }
+  }
+  for (const id of Object.keys(ICONOPLASM_ROUTE_CALLERS)) {
+    assert.ok(ids.has(id), `ICONOPLASM_ROUTE_CALLERS names ${id}, which is not a route`)
   }
 })
 

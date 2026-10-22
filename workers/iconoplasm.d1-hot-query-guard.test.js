@@ -203,7 +203,7 @@ test("DO NOT DELETE: public vote hot paths keep raw asset-key predicates", () =>
   )
   const snapshotRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/votes/snapshot" && request.method === "POST")',
-    'if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST")',
+    'if (path === "/api/iconoplasm/admin/votes/vision-stats" && request.method === "GET")',
   )
   assert.match(snapshotRoute, /iconoVoteSnapshots\(env, \{/)
   assert.doesNotMatch(snapshotRoute, /ICONOPLASM_DB\.prepare/)

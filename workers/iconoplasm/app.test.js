@@ -447,14 +447,14 @@ test("legacy admin routes are let in by their price, read the body once, and nev
   assert.ok(Number(twenty.headers.get("Retry-After")) > 0)
   assert.equal(near.legacyCalls.length, 1, "the refused ingest never reached its handler")
 
-  // The owner's own vote and a reader's page run at 99%.
+  // The owner's own publish and a reader's page run at 99%.
   const full = harness({ usage: async () => ({ rows_read: 0, rows_written: 99_000 }) })
-  const vote = await full.app.request(
-    "/api/iconoplasm/admin/votes/set",
+  const publish = await full.app.request(
+    "/api/iconoplasm/admin/publish",
     { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: "{}" },
     full.env,
   )
-  assert.equal(vote.status, 299)
+  assert.equal(publish.status, 299)
   assert.equal((await full.app.request("/api/iconoplasm/genes/TP53", {}, full.env)).status, 299)
 
   // An anonymous caller reaches its handler (which turns it away) unpriced, its body untouched.
@@ -475,7 +475,7 @@ test("legacy admin routes are let in by their price, read the body once, and nev
     "nothing admitted",
   )
 
-  // A meter that can't be read stops the batch route, not the owner's vote.
+  // A meter that can't be read stops the batch route, not the owner's own action.
   const blind = harness({
     usage: async () => {
       throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
@@ -484,10 +484,10 @@ test("legacy admin routes are let in by their price, read the body once, and nev
   const blindIngest = await ingest(blind, 1)
   assert.equal(blindIngest.status, 503)
   assert.equal((await blindIngest.json()).code, "D1_METER_UNAVAILABLE")
-  const blindVote = await blind.app.request(
-    "/api/iconoplasm/admin/votes/set",
+  const blindPublish = await blind.app.request(
+    "/api/iconoplasm/admin/publish",
     { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: "{}" },
     blind.env,
   )
-  assert.equal(blindVote.status, 299)
+  assert.equal(blindPublish.status, 299)
 })
