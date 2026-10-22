@@ -42,8 +42,8 @@ Investigate production data with `node scripts/d1-local.mjs <database> "<sql>" [
   - canonical symbol list, the HGNC approved name (`full_name`, the one public name of a gene), colors, aliases
 - `icono_gene_essence`
   - synced NiceGUI/runtime traits like `sex`, `weight_kg`, `age_years`, `manifestation`, plus the UniProt protein name in `full_name`, which names no gene in public
-- `icono_gene_discoveries`
-  - retained legacy per-user discovery rows (the shelf reads compact V2 state)
+- `icono_discovery_user_state_v2`
+  - each signed-in person's discoveries: membership bitmap, `member_count`, shelf
 - `icono_publish_state`
   - each gene's elected winner and its `admin_override` pin; the stable gene object, not this row, is the public image authority
 - `icono_portrait_assets`
@@ -103,41 +103,17 @@ WHERE lower(trim(ge.sex)) = 'male' AND trim(COALESCE(gc.full_name, '')) <> '';
 
 The signed-in shelf reads compact V2 discovery state
 (`icono_discovery_user_state_v2` and its chronology,
-`workers/iconoplasm/discovery-compact-*.js`). The legacy
-`icono_gene_discoveries` table is a fully imported copy: on the 2026-10-20
-nightly copy every one of its 38 accounts had at least as many compact members
-as legacy genes. No reader uses it; only account erasure deletes from it. The
-query below diagnoses one user's legacy rows. It must not overwrite compact
-state or serve as a fallback when the compact reader is unavailable.
-
-Shape to remember:
-
-```sql
-SELECT
-  d.user_id,
-  d.gene_symbol,
-  COALESCE(NULLIF(TRIM(gc.full_name), ''), d.gene_symbol) AS full_name,
-  d.first_discovered_at,
-  d.last_encountered_at,
-  d.encounter_count
-FROM icono_gene_discoveries d
-LEFT JOIN icono_gene_catalog gc
-  ON gc.gene_symbol = d.gene_symbol
-WHERE d.user_id = ?
-ORDER BY d.first_discovered_at ASC, d.gene_symbol ASC;
-```
-
-Why this shape matters:
-
-- these runtime tables already store canonical uppercase `gene_symbol` keys
-- joining on the raw key lets SQLite use the indexes
-- wrapping both sides in `upper(...)` looks safe but can turn a fast shelf query into a scan and temp sort
+`workers/iconoplasm/discovery-compact-*.js`). Each account's state row holds
+its membership bitmap and `member_count`; the chronology chunks hold the
+discovery events in order. Join on the raw uppercase `gene_symbol` keys:
+wrapping both sides in `upper(...)` looks safe but can turn a fast shelf query
+into a scan and a temp sort.
 
 ## shelf contract
 
 Two rules matter here:
 
-1. Signed-in personal shelf mode uses `/api/iconoplasm/discoveries/me` and the deployed discovery authority. Retained `icono_gene_discoveries` rows are not a second writer after compact-state migration.
+1. Signed-in personal shelf mode uses `/api/iconoplasm/discoveries/me` and the compact discovery state.
 2. Signed-in users should never have a real zero-state shelf. The starter trio (`INS`, `RHO`, `PRL`) is part of the contract.
 
 So if an authenticated user appears to have zero discoveries, do not assume the UI is allowed to show that. Check whether the worker failed to seed or return the starter rows.

@@ -392,19 +392,6 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_discovery_shared_delivery_receipts_v2.user_id"],
     },
     {
-      // The first-generation table, read only by the one-time compact migration. Still full of
-      // personal rows (5,541 on 3 Oct 2026).
-      id: "discovery_legacy_rows",
-      database: "iconoplasm",
-      table: "icono_gene_discoveries",
-      action: "delete",
-      key: "rowid",
-      where: "user_id = ?",
-      whereBinds: [U],
-      weight: 6,
-      covers: ["icono_gene_discoveries.user_id"],
-    },
-    {
       // The migration's resume cursor is the last migrated user's id. Once the migration is
       // complete the cursor is inert and safe to blank.
       id: "discovery_migration_cursor",
