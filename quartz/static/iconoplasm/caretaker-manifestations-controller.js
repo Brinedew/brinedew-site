@@ -3,7 +3,7 @@ import {
   mountCaretakerTagEditor,
   readTagFields,
 } from "./caretaker-tag-editor.js?v=2a125dbb7104eb8e"
-import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=9e8579c6cad43b75"
+import { createCaretakerManifestationEventWiring } from "./caretaker-manifestations-events.js?v=830f24bd04ec1c45"
 import {
   MAX_PROSE_CODE_POINTS,
   allRevisions,
@@ -20,7 +20,7 @@ import { openDialog } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import {
   renderCaretakerManifestationPanel,
   suggestionReviewMarkup,
-} from "./caretaker-manifestations-view.js?v=82cf4a563214740e"
+} from "./caretaker-manifestations-view.js?v=23ba541443dc55be"
 
 export function createCaretakerManifestationPanel({
   fetchJSON,
@@ -122,7 +122,6 @@ export function createCaretakerManifestationPanel({
     const wasOpen = existingDialog?.open === true
     const markup = renderCaretakerManifestationPanel(state.dossier, escapeHtml, {
       selectedRevisionId: state.selectedRevisionId,
-      expandedSessions: state.expandedSessions,
     })
     if (existingForm) {
       const next = state.host.ownerDocument.createElement("div")
@@ -605,6 +604,8 @@ export function createCaretakerManifestationPanel({
         expected_assignment_version: Number(state.dossier.assignment?.assignment_version || 0),
         expected_manifestation_version: Number(own?.row_version || 0),
         based_on_revision_id: state.basedOnRevisionId || null,
+        // B-1160: the working copy holds a day of editing in the caretaker's time zone.
+        utc_offset_minutes: -new Date().getTimezoneOffset(),
       }
       if (snapshot.tags.trim()) {
         // B-859 step 3: prose, Tags and "draw new images from this" in one command.
