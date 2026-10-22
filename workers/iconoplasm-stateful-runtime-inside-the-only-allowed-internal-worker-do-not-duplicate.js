@@ -1089,6 +1089,11 @@ const KV_SCANNER_CATALOG_PREFIX = "iconoplasm:scanner-catalog:"
 // The D1 rows icono_publish_state and icono_portrait_assets stay the authoring
 // source; what readers see is whatever those two objects hold, and every
 // surface reads the same object per gene.
+// The public API catalogue release (publishCatalogArtifact, run under Node by
+// the GitHub catalog job, B-1090) writes the catalog, scanner, portrait-refs,
+// fingerprint and hydrated-artifact keys below; Worker requests only read them.
+// The reachability report counts that job as an entry point, so these are live
+// even though no Worker request writes them.
 const KV_PUBLISHED_PORTRAIT_REFS_PREFIX = "iconoplasm:published-portrait-refs:"
 const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-fingerprint:"
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
@@ -1723,6 +1728,11 @@ function catalogBaseHash(rawHash) {
   )
 }
 
+// Portrait reference snapshot: the published portrait per gene, frozen into the
+// catalogue at release time. Prepared and committed only by
+// publishCatalogArtifact (the GitHub catalog job, B-1090); readers of the
+// catalogue manifest see it, while gene pages and the extension read current
+// portraits from genes/v3/<SYMBOL>.json.
 function portraitSnapshotVersion(rawFingerprint) {
   return `${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}-${portraitFingerprintVersion(rawFingerprint) || "none"}`
 }
@@ -18904,6 +18914,17 @@ function withPortraitCdnUrls(env, gene) {
 // B-1090: run by scripts/release-iconoplasm-catalog.mjs in the GitHub catalog
 // job, never in a Worker request. It rebuilds the whole 19k-gene artifact,
 // which a free-plan request's 10 ms of CPU can't finish.
+//
+// When: scripts/publish-iconoplasm-catalog.mjs calls it only when a gene's
+// symbol, name or UniProt changed, or when the live release is a day old and
+// its gene count is behind. A portrait or vote change does not release, so a
+// release that is weeks old is normal, not frozen.
+// Who reads what it writes (all in KV): the extension's scanner and its
+// catalogue manifest (/api/public/v1/catalog/manifest), the public resolve,
+// search and dump routes. The portrait refs folded in here are a snapshot as
+// of the release; the extension and gene pages fetch current portraits from
+// genes/v3/<SYMBOL>.json instead, so a stale snapshot never shows a reader an
+// old portrait.
 export async function publishCatalogArtifact(env) {
   if (!env.KV) throw new Error("KV binding missing")
   const genes = await loadCatalogRowsForPublish(env)

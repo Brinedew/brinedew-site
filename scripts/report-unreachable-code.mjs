@@ -20,7 +20,25 @@ const esbuildPath = args.includes("--esbuild")
   : path.join(ROOT, "node_modules", "esbuild", "lib", "main.js")
 const esbuild = (await import(pathToFileURL(esbuildPath).href)).default
 
-// Real entry points only. Tests, fixtures and one-off scripts are not roots.
+// Real entry points only: the two Workers, plus every script a GitHub workflow
+// runs, read from .github/workflows so the list can't drift. Worker code that
+// runs only under Node in CI (the catalogue release, B-1090, calls the Worker's
+// publishCatalogArtifact from scripts/release-iconoplasm-catalog.mjs) is live.
+// On 2026-10-22 a Workers-only list reported that release path as dead.
+// Tests, fixtures and hand-run scripts are not roots.
+const WORKFLOW_SCRIPTS = [
+  ...new Set(
+    readdirSync(".github/workflows")
+      .filter((name) => /\.ya?ml$/.test(name))
+      .flatMap((name) =>
+        [
+          ...readFileSync(path.join(".github/workflows", name), "utf8").matchAll(
+            /node\s+(?:\.\/)?(scripts\/[\w.-]+\.m?js)/g,
+          ),
+        ].map((match) => match[1]),
+      ),
+  ),
+].filter((file) => statSync(file, { throwIfNoEntry: false })?.isFile())
 const ENTRIES = [
   {
     name: "stateful-worker",
@@ -32,6 +50,7 @@ const ENTRIES = [
     file: "workers/the-only-allowed-public-edge-worker-that-must-not-touch-state.js",
     platform: "neutral",
   },
+  ...WORKFLOW_SCRIPTS.map((file) => ({ name: file, file, platform: "node" })),
 ]
 const SCOPE = ["workers"]
 
