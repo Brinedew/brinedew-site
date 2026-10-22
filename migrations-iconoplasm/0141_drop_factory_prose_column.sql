@@ -1,0 +1,14 @@
+-- B-1156: the factory's prose moved to Bunny Storage (texts/v1/<SYMBOL>/<sha256>.txt,
+-- workers/lib/iconoplasm-factory-prose.js), and nothing reads this column any
+-- more. It held 72 MiB of the database's 500 MB.
+--
+-- Measured on the 2026-10-20 nightly copy: the drop rewrites the 20,155 rows
+-- (about 20,000 rows written; no index covers the column) and frees 66.9 MiB of
+-- used pages, in 0.6 s. Before it runs, every factory text's prose was verified
+-- on Bunny by the backfill, and the workstation's prompts.db holds the same texts.
+--
+-- Online, with one window: the Worker installed before this release still names
+-- the column when the workstation saves a factory text, so such a save fails with
+-- a 500 for the minute or two before the new Worker is live, and the workstation's
+-- five-minute text sync sends it again. Readers never touch the column.
+ALTER TABLE icono_gene_texts DROP COLUMN text;
