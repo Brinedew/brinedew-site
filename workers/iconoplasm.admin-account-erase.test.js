@@ -427,13 +427,6 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
   assert.equal(
     rows(
       world.iconoplasm,
-      "SELECT 1 FROM icono_user_emulsion_option_rollup WHERE emulsion_id LIKE 'ALICE%'",
-    ).length,
-    0,
-  )
-  assert.equal(
-    rows(
-      world.iconoplasm,
       "SELECT 1 FROM icono_user_emulsion_favorites WHERE emulsion_family_id LIKE 'ALICE%'",
     ).length,
     0,

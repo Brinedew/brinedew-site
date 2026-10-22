@@ -757,15 +757,8 @@ export async function seedWorld() {
       emulsion_family_id: family,
     })
   }
-  for (const emulsion of ["ALICETESTNAME-1", "BOBTESTNAME-1"]) {
-    insert(iconoplasm, "icono_user_emulsion_option_rollup", {
-      emulsion_id: emulsion,
-      image_count: 1,
-      live_count: 1,
-    })
-  }
 
-  // Discoveries, compact and legacy, with the migration cursor parked on the erased person.
+  // Discoveries, with the migration cursor parked on the erased person.
   seedDiscovery(iconoplasm, ERASED_USER, ["TP53", "SOX11", "EZH2"])
   seedDiscovery(iconoplasm, OTHER_USER, ["TP53"])
   run(

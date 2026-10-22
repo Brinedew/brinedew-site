@@ -289,18 +289,6 @@ export const ERASURE_STEPS = Object.freeze(
       covers: ["icono_user_emulsion_favorites.emulsion_family_id"],
     },
     {
-      id: "rollup_of_erased_emulsions",
-      database: "iconoplasm",
-      table: "icono_user_emulsion_option_rollup",
-      action: "delete",
-      key: ["emulsion_id"],
-      where: "emulsion_id IN (SELECT value FROM json_each(?))",
-      whereBinds: [(context) => JSON.stringify(context.emulsionIds)],
-      weight: 3,
-      needsEmulsionIds: true,
-      covers: ["icono_user_emulsion_option_rollup.emulsion_id"],
-    },
-    {
       // The person's vote allowance counters (B-1065): their reader votes by user id, their
       // caretaker supervotes by account id.
       id: "vote_allowance",
@@ -642,6 +630,5 @@ export const EXEMPT_COLUMNS = Object.freeze({
   "icono_publication_alias_policy.updated_by": "administrator only",
   "icono_publish_state.updated_by":
     "'vote_authority', 'caretaker_assignment' or an administrator, never a voter",
-  "icono_sync_finalization_jobs.actor_id": "'workstation_sync' or an administrator",
   "icono_generation_execution_leases.lease_owner_id": "a workstation executor uuid, never a person",
 })
