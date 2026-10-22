@@ -453,15 +453,6 @@ const DECLARED_ROUTES = Object.freeze([
     gatewayHandler: "iconoplasm_api",
     rateLimit: null,
   }),
-  contract({
-    id: "admin_requests_drain_plan",
-    match: exact("/api/iconoplasm/admin/requests/drain-plan"),
-    methods: GET,
-    auth: "administrator",
-    cache: "no-store",
-    gatewayHandler: "iconoplasm_api",
-    rateLimit: null,
-  }),
   iconoplasmApiContract({
     apiHandler: "manifestation_generation_executor",
     id: "authority_generation_lease_claim",
@@ -642,30 +633,6 @@ const DECLARED_ROUTES = Object.freeze([
     auth: "first-party-or-extension",
   }),
   iconoplasmApiContract({
-    id: "admin_votes_import",
-    match: exact("/api/iconoplasm/admin/votes/import"),
-    methods: POST,
-    auth: "administrator",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_set",
-    match: exact("/api/iconoplasm/admin/votes/set"),
-    methods: POST,
-    auth: "administrator",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_snapshot",
-    match: exact("/api/iconoplasm/admin/votes/snapshot"),
-    methods: POST,
-    auth: "administrator",
-  }),
-  iconoplasmApiContract({
-    id: "admin_votes_snapshots",
-    match: exact("/api/iconoplasm/admin/votes/snapshots"),
-    methods: POST,
-    auth: "administrator",
-  }),
-  iconoplasmApiContract({
     id: "admin_votes_vision_stats",
     match: exact("/api/iconoplasm/admin/votes/vision-stats"),
     methods: GET,
@@ -827,18 +794,11 @@ const DECLARED_ROUTES = Object.freeze([
     methods: GET,
     auth: "public",
   }),
-  adminApiContract("admin_me", "/me", GET),
   adminApiContract("admin_ingest", "/ingest", POST),
   adminApiContract("admin_overview", "/overview", GET),
   adminApiContract("admin_coverage", "/coverage", GET),
   adminApiContract("admin_public_stats_audit", "/public-stats/audit", GET),
   adminApiContract("admin_canon_audit", "/canon-audit", GET),
-  adminApiContract(
-    "admin_read_models_bootstrap",
-    "/read-models/bootstrap",
-    GET_POST,
-    "admin_read_models.bootstrap",
-  ),
   adminApiContract("admin_read_models_sync", "/read-models/sync", POST, "admin_read_models.sync"),
   adminApiContract(
     "admin_read_models_shared_discoveries",
@@ -916,8 +876,6 @@ const DECLARED_ROUTES = Object.freeze([
     "unstale-batch",
     "purge-legacy",
     "remove-candidate",
-    "restore-mis-rejected-candidates",
-    "canon/repair",
   ].map((action) =>
     adminApiContract(
       `admin_gallery_mutation_${action.replaceAll("/", "_").replaceAll("-", "_")}`,

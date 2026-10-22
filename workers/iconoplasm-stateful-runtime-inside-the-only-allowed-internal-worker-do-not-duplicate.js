@@ -117,7 +117,6 @@ import {
   capImageEditInheritedUpvotes,
   imageEditInheritedUpvotes,
   readGeneVoteVersion,
-  voteImportBoundsError,
 } from "./iconoplasm/votes/vote-guards.js"
 export { putPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
 import { ICONOPLASM_ADMIN_HTML } from "./iconoplasm-admin-html.js"
@@ -1177,20 +1176,11 @@ const hydratedCatalogArtifactCache = {
   value: null,
 }
 const ADMIN_DASHBOARD_SUMMARY_KEY = "default"
-const ADMIN_READ_MODEL_BOOTSTRAP_KEY = "default"
-const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS = "symbols"
-const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_VISIONS = "visions"
-const ADMIN_READ_MODEL_BOOTSTRAP_PHASE_DONE = "done"
-const ADMIN_READ_MODEL_BOOTSTRAP_STATUS_RUNNING = "running"
-const ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE = "complete"
 const ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT = 200
 const ADMIN_READ_MODEL_SYMBOL_BATCH_MAX = 1000
 const ADMIN_READ_MODEL_VISION_BATCH_DEFAULT = 150
-const ADMIN_READ_MODEL_VISION_BATCH_MAX = 1000
 const ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX = 1000
 const ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX = 1000
-const ADMIN_READ_MODEL_STEP_DEFAULT = 1
-const ADMIN_READ_MODEL_STEP_MAX = 25
 // Bump only alongside a migration that rebuilds every request-option row from
 // canonical portrait/publish truth. Serving a row built by older semantics is
 // worse than omitting it: the picker is part of the request contract and must
@@ -13965,17 +13955,12 @@ async function setIconoplasmVote(
   return { ...vote, snapshot: entry?.snapshot || null }
 }
 
-// Many votes at once (the administrator's import route, an image edit's
-// inherited upvotes, a generated candidate's first upvote). Every gene the
-// request names is elected, also when its votes did not change, so re-running
-// an import repairs a gene whose election failed or was refused the first
-// time; `failed_symbols` lists the genes whose election failed. The route
-// bounds the genes and votes of one request (voteImportBoundsError); the
-// reader callers import one gene. `republish` also rewrites, after the
-// response, the stable object of every gene whose votes or winner changed;
-// callers enable it only for one gene. `chargeTo` is the reader whose action
-// brought the votes, whose allowance they spend; the administrator's import
-// route charges nobody.
+// Many votes at once on one gene (an image edit's inherited upvotes, a
+// generated candidate's first upvote). Every gene named is elected, also when
+// its votes did not change; `failed_symbols` lists the genes whose election
+// failed. `republish` also rewrites, after the response, the stable object of
+// every gene whose votes or winner changed. `chargeTo` is the reader whose
+// action brought the votes, whose allowance they spend.
 async function importIconoplasmVotes(
   env,
   ctx,
@@ -14183,41 +14168,6 @@ function validAdminRollupVisionId(raw) {
   return sanitizeVoteVisionId(raw || "") || ""
 }
 
-async function listAdminReadModelSymbolsAfter(env, rawAfterSymbol = "", limit = 0) {
-  if (!env.ICONOPLASM_DB) return []
-  const afterSymbol = normalizeSymbol(rawAfterSymbol) || ""
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(
-      ADMIN_READ_MODEL_SYMBOL_BATCH_MAX,
-      Number.parseInt(String(limit || ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT), 10) ||
-        ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT,
-    ),
-  )
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-     FROM (
-       SELECT gene_symbol FROM icono_gene_catalog
-       UNION
-       SELECT gene_symbol FROM icono_portrait_assets
-       UNION
-       SELECT gene_symbol FROM icono_publish_state
-     ) symbols
-     WHERE (? = '' OR gene_symbol > ?)
-     ORDER BY gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(afterSymbol, afterSymbol, cleanedLimit)
-    .all()
-  return Array.from(
-    new Set(
-      (Array.isArray(resp?.results) ? resp.results : [])
-        .map((row) => normalizeSymbol(row?.gene_symbol || ""))
-        .filter(Boolean),
-    ),
-  )
-}
-
 async function collectVisionIdsForSymbols(env, rawSymbols) {
   if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return []
   const symbols = Array.from(
@@ -14237,37 +14187,6 @@ async function collectVisionIdsForSymbols(env, rawSymbols) {
        AND lower(COALESCE(pa.vision_id, '')) NOT LIKE 'artist-random-%'`,
   )
     .bind(JSON.stringify(symbols))
-    .all()
-  return Array.from(
-    new Set(
-      (Array.isArray(resp?.results) ? resp.results : [])
-        .map((row) => validAdminRollupVisionId(row?.vision_id || ""))
-        .filter(Boolean),
-    ),
-  )
-}
-
-async function listAdminReadModelVisionIdsAfter(env, rawAfterVisionId = "", limit = 0) {
-  if (!env.ICONOPLASM_DB) return []
-  const afterVisionId = validAdminRollupVisionId(rawAfterVisionId) || ""
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(
-      ADMIN_READ_MODEL_VISION_BATCH_MAX,
-      Number.parseInt(String(limit || ADMIN_READ_MODEL_VISION_BATCH_DEFAULT), 10) ||
-        ADMIN_READ_MODEL_VISION_BATCH_DEFAULT,
-    ),
-  )
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT DISTINCT vision_id
-     FROM icono_portrait_assets
-     WHERE COALESCE(vision_id, '') <> ''
-       AND lower(COALESCE(vision_id, '')) NOT LIKE 'artist-random-%'
-       AND (? = '' OR vision_id > ?)
-     ORDER BY vision_id ASC
-     LIMIT ?`,
-  )
-    .bind(afterVisionId, afterVisionId, cleanedLimit)
     .all()
   return Array.from(
     new Set(
@@ -15051,297 +14970,6 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
     if (result.drained < 128) break
   }
   return { ok: true, drained, applied, duplicates }
-}
-
-function normalizeAdminReadModelBootstrapSteps(raw) {
-  return Math.max(
-    1,
-    Math.min(
-      ADMIN_READ_MODEL_STEP_MAX,
-      Number.parseInt(String(raw || ADMIN_READ_MODEL_STEP_DEFAULT), 10) ||
-        ADMIN_READ_MODEL_STEP_DEFAULT,
-    ),
-  )
-}
-
-function normalizeAdminReadModelSymbolBatch(raw) {
-  return Math.max(
-    1,
-    Math.min(
-      ADMIN_READ_MODEL_SYMBOL_BATCH_MAX,
-      Number.parseInt(String(raw || ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT), 10) ||
-        ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT,
-    ),
-  )
-}
-
-function normalizeAdminReadModelVisionBatch(raw) {
-  return Math.max(
-    1,
-    Math.min(
-      ADMIN_READ_MODEL_VISION_BATCH_MAX,
-      Number.parseInt(String(raw || ADMIN_READ_MODEL_VISION_BATCH_DEFAULT), 10) ||
-        ADMIN_READ_MODEL_VISION_BATCH_DEFAULT,
-    ),
-  )
-}
-
-function mapAdminReadModelBootstrapRow(row) {
-  const phase =
-    row?.phase === ADMIN_READ_MODEL_BOOTSTRAP_PHASE_VISIONS ||
-    row?.phase === ADMIN_READ_MODEL_BOOTSTRAP_PHASE_DONE
-      ? row.phase
-      : ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS
-  const status =
-    row?.status === ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
-      ? ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE
-      : ADMIN_READ_MODEL_BOOTSTRAP_STATUS_RUNNING
-  return {
-    bootstrap_key: String(row?.bootstrap_key || ADMIN_READ_MODEL_BOOTSTRAP_KEY),
-    status,
-    phase,
-    last_symbol: normalizeSymbol(row?.last_symbol || "") || "",
-    last_vision_id: validAdminRollupVisionId(row?.last_vision_id || "") || "",
-    processed_symbols: Number(row?.processed_symbols || 0),
-    total_symbols: Number(row?.total_symbols || 0),
-    processed_visions: Number(row?.processed_visions || 0),
-    total_visions: Number(row?.total_visions || 0),
-    last_error: sanitizeText(row?.last_error || "", 2000) || "",
-    started_at: sanitizeText(row?.started_at || "", 64) || "",
-    updated_at: sanitizeText(row?.updated_at || "", 64) || "",
-    completed_at: sanitizeText(row?.completed_at || "", 64) || "",
-  }
-}
-
-async function fetchAdminReadModelBootstrapState(env) {
-  if (!env.ICONOPLASM_DB) return null
-  const row = await env.ICONOPLASM_DB.prepare(
-    `SELECT *
-     FROM icono_admin_read_model_bootstrap
-     WHERE bootstrap_key = ?
-     LIMIT 1`,
-  )
-    .bind(ADMIN_READ_MODEL_BOOTSTRAP_KEY)
-    .first()
-  return row ? mapAdminReadModelBootstrapRow(row) : null
-}
-
-async function writeAdminReadModelBootstrapState(env, state) {
-  if (!env.ICONOPLASM_DB) return null
-  const row = mapAdminReadModelBootstrapRow(state || {})
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_admin_read_model_bootstrap (
-       bootstrap_key,
-       status,
-       phase,
-       last_symbol,
-       last_vision_id,
-       processed_symbols,
-       total_symbols,
-       processed_visions,
-       total_visions,
-       last_error,
-       started_at,
-       updated_at,
-       completed_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(bootstrap_key) DO UPDATE SET
-       status = excluded.status,
-       phase = excluded.phase,
-       last_symbol = excluded.last_symbol,
-       last_vision_id = excluded.last_vision_id,
-       processed_symbols = excluded.processed_symbols,
-       total_symbols = excluded.total_symbols,
-       processed_visions = excluded.processed_visions,
-       total_visions = excluded.total_visions,
-       last_error = excluded.last_error,
-       started_at = excluded.started_at,
-       updated_at = CURRENT_TIMESTAMP,
-       completed_at = excluded.completed_at`,
-  )
-    .bind(
-      ADMIN_READ_MODEL_BOOTSTRAP_KEY,
-      row.status,
-      row.phase,
-      row.last_symbol,
-      row.last_vision_id,
-      row.processed_symbols,
-      row.total_symbols,
-      row.processed_visions,
-      row.total_visions,
-      row.last_error,
-      row.started_at || null,
-      row.completed_at || null,
-    )
-    .run()
-  return fetchAdminReadModelBootstrapState(env)
-}
-
-async function resetAdminReadModelBootstrap(env) {
-  if (!env.ICONOPLASM_DB) return null
-  const [symbolCountRow, visionCountRow] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(*) AS count
-       FROM (
-         SELECT gene_symbol FROM icono_gene_catalog
-         UNION
-         SELECT gene_symbol FROM icono_portrait_assets
-         UNION
-         SELECT gene_symbol FROM icono_publish_state
-       ) symbols`,
-    ).first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT COUNT(*) AS count
-       FROM (
-         SELECT DISTINCT vision_id
-         FROM icono_portrait_assets
-         WHERE COALESCE(vision_id, '') <> ''
-           AND lower(COALESCE(vision_id, '')) NOT LIKE 'artist-random-%'
-       ) visions`,
-    ).first(),
-  ])
-
-  // icono_vote_asset_summary is not an admin read model: it is the vote
-  // counts every election reads. The bootstrap's symbol phase rebuilds it gene
-  // by gene from the vote ledger in place (rebuildVoteAssetSummaryForSymbols
-  // upserts and drops only orphan rows), so it is never emptied here.
-  await Promise.all([
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_gene_rollup`).run(),
-    env.ICONOPLASM_DB.prepare(`DELETE FROM icono_admin_vision_rollup`).run(),
-  ])
-  adminReadModelState.ready = false
-
-  return writeAdminReadModelBootstrapState(env, {
-    bootstrap_key: ADMIN_READ_MODEL_BOOTSTRAP_KEY,
-    status: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_RUNNING,
-    phase: ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS,
-    last_symbol: "",
-    last_vision_id: "",
-    processed_symbols: 0,
-    total_symbols: Number(symbolCountRow?.count || 0),
-    processed_visions: 0,
-    total_visions: Number(visionCountRow?.count || 0),
-    last_error: "",
-    started_at: new Date().toISOString(),
-    completed_at: "",
-  })
-}
-
-async function ensureAdminReadModelBootstrapInitialized(env) {
-  const existing = await fetchAdminReadModelBootstrapState(env)
-  if (existing) return existing
-  return resetAdminReadModelBootstrap(env)
-}
-
-async function runAdminReadModelBootstrapStep(
-  env,
-  {
-    reset = false,
-    symbolBatch = ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT,
-    visionBatch = ADMIN_READ_MODEL_VISION_BATCH_DEFAULT,
-  } = {},
-) {
-  if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
-  let state = reset
-    ? await resetAdminReadModelBootstrap(env)
-    : await ensureAdminReadModelBootstrapInitialized(env)
-  const cleanedSymbolBatch = normalizeAdminReadModelSymbolBatch(symbolBatch)
-  const cleanedVisionBatch = normalizeAdminReadModelVisionBatch(visionBatch)
-
-  if (state.status === ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE) {
-    adminReadModelState.ready = true
-    return {
-      ok: true,
-      advanced: false,
-      state,
-      processed: { symbols: 0, visions: 0 },
-    }
-  }
-
-  if (state.phase === ADMIN_READ_MODEL_BOOTSTRAP_PHASE_SYMBOLS) {
-    const symbols = await listAdminReadModelSymbolsAfter(env, state.last_symbol, cleanedSymbolBatch)
-    if (symbols.length === 0) {
-      state = await writeAdminReadModelBootstrapState(env, {
-        ...state,
-        phase: ADMIN_READ_MODEL_BOOTSTRAP_PHASE_VISIONS,
-        last_symbol: "",
-        last_error: "",
-      })
-      return {
-        ok: true,
-        advanced: true,
-        state,
-        processed: { symbols: 0, visions: 0 },
-      }
-    }
-
-    await rebuildVoteAssetSummaryForSymbols(env, symbols)
-    await rebuildGeneRollupForSymbols(env, symbols)
-    const touchedVisionIds = await collectVisionIdsForSymbols(env, symbols)
-    await rebuildVisionRollupsBatch(env, touchedVisionIds)
-    await assertAdminCountSummary(env)
-
-    state = await writeAdminReadModelBootstrapState(env, {
-      ...state,
-      last_symbol: symbols[symbols.length - 1] || state.last_symbol,
-      processed_symbols: Math.min(state.total_symbols, state.processed_symbols + symbols.length),
-      last_error: "",
-    })
-    return {
-      ok: true,
-      advanced: true,
-      state,
-      processed: { symbols: symbols.length, visions: touchedVisionIds.length },
-    }
-  }
-
-  if (state.phase === ADMIN_READ_MODEL_BOOTSTRAP_PHASE_VISIONS) {
-    const visionIds = await listAdminReadModelVisionIdsAfter(
-      env,
-      state.last_vision_id,
-      cleanedVisionBatch,
-    )
-    if (visionIds.length === 0) {
-      await assertAdminCountSummary(env)
-      state = await writeAdminReadModelBootstrapState(env, {
-        ...state,
-        status: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
-        phase: ADMIN_READ_MODEL_BOOTSTRAP_PHASE_DONE,
-        last_error: "",
-        completed_at: new Date().toISOString(),
-      })
-      adminReadModelState.ready = true
-      return {
-        ok: true,
-        advanced: true,
-        state,
-        processed: { symbols: 0, visions: 0 },
-      }
-    }
-
-    await rebuildVisionRollupsBatch(env, visionIds)
-    await assertAdminCountSummary(env)
-    state = await writeAdminReadModelBootstrapState(env, {
-      ...state,
-      last_vision_id: visionIds[visionIds.length - 1] || state.last_vision_id,
-      processed_visions: Math.min(state.total_visions, state.processed_visions + visionIds.length),
-      last_error: "",
-    })
-    return {
-      ok: true,
-      advanced: true,
-      state,
-      processed: { symbols: 0, visions: visionIds.length },
-    }
-  }
-
-  adminReadModelState.ready = true
-  return {
-    ok: true,
-    advanced: false,
-    state,
-    processed: { symbols: 0, visions: 0 },
-  }
 }
 
 async function ensureAdminReadModelsReady(env) {
@@ -16338,16 +15966,11 @@ async function fetchAdminVisionStatsDirect(env, { visionIds = [] } = {}) {
 }
 
 // The admin Styles scorecard: one keyset page of the vision rollup, read through
-// an index (see iconoplasm/admin-vision-scorecard.js). The blocklist is read for
-// a fresh view only, not on every page flip. While the rollup is still being
-// built the scorecard refuses; grouping every portrait asset instead would read
-// the whole asset table (59,346 rows on 2 Oct 2026) on each open.
+// an index (see iconoplasm/admin-vision-scorecard.js), never by grouping every
+// portrait asset (59,346 rows on 2 Oct 2026). The blocklist is read for a
+// fresh view only, not on every page flip.
 async function fetchAdminVisionScorecard(env, query) {
   if (!env.ICONOPLASM_DB) return { rows: [], nextCursor: null, prevCursor: null, blacklisted: null }
-
-  const bootstrapState = await fetchAdminReadModelBootstrapState(env)
-  if (bootstrapState && bootstrapState.status !== ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE)
-    return { building: true }
 
   const [page, blacklistResp] = await Promise.all([
     readAdminVisionScorecardPage(env.ICONOPLASM_DB, query),
@@ -19205,23 +18828,15 @@ const ICONOPLASM_DECLARED_API_HANDLER_REGISTRY = Object.freeze({
     syncAdminReadModels,
   }),
   ...createIconoplasmAdminReadModelHandlers({
-    bootstrapCompleteStatus: ADMIN_READ_MODEL_BOOTSTRAP_STATUS_COMPLETE,
     coerceBoolean,
-    ensureBootstrapInitialized: ensureAdminReadModelBootstrapInitialized,
-    fetchBootstrapState: fetchAdminReadModelBootstrapState,
     isAdmin: isIconoplasmAdmin,
     json,
-    normalizeBootstrapSteps: normalizeAdminReadModelBootstrapSteps,
     normalizeSymbol,
-    normalizeSymbolBatch: normalizeAdminReadModelSymbolBatch,
-    normalizeVisionBatch: normalizeAdminReadModelVisionBatch,
-    runBootstrapStep: runAdminReadModelBootstrapStep,
     sanitizeText,
     symbolRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_SYMBOL_MAX,
     syncReadModels: syncAdminReadModels,
     validVisionId: validAdminRollupVisionId,
     visionRequestMax: ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX,
-    writeBootstrapState: writeAdminReadModelBootstrapState,
   }),
   ...createIconoplasmCaretakerAdminHandlers({
     isAdmin: isIconoplasmAdmin,
@@ -19938,30 +19553,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/me" && request.method === "GET") {
-      const sessionUser = await iconoplasmSessionUser(request, env)
-      const authenticated = !!sessionUser?.user_id
-      const admin = authenticated ? await isIconoplasmAdmin(request, env) : false
-      return done(
-        "admin_me",
-        json(
-          {
-            ok: true,
-            authenticated,
-            is_admin: admin,
-            user: authenticated
-              ? {
-                  id: sessionUser.user_id,
-                  username: sessionUser.username || null,
-                }
-              : null,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
     if (
       path === "/api/iconoplasm/admin/factory-recipe" &&
       (request.method === "GET" || request.method === "HEAD")
@@ -20644,27 +20235,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           },
           200,
           { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/requests/drain-plan" && request.method === "GET") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_requests_drain_plan_403", json({ error: "Unauthorized" }, 403))
-      return done(
-        "admin_requests_drain_plan_retired",
-        json(
-          {
-            ok: false,
-            error: {
-              code: "EXACT_GENERATION_LEASE_REQUIRED",
-              message:
-                "The mutable drain plan is retired. Claim one exact generation lease before execution.",
-            },
-            claim_endpoint: "/api/iconoplasm/authority/generation-leases/claim",
-          },
-          409,
-          { "Cache-Control": "private, no-store" },
         ),
       )
     }
@@ -22625,300 +22195,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
     }
 
-    if (path === "/api/iconoplasm/admin/votes/import" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_import_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_votes_import_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_votes_import_400", json({ error: "Invalid JSON" }, 400))
-      }
-      const items = Array.isArray(p?.items) ? p.items : []
-      if (!items.length)
-        return done("admin_votes_import_400", json({ error: "No items provided" }, 400))
-
-      let invalid = 0
-      const valid = []
-      for (const raw of items) {
-        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
-        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
-        const candidateRef = normalizeCandidateRef(
-          raw?.candidate_ref ||
-            (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
-          symbol,
-          assetSha,
-        )
-        const visionId = normalizeVisionId(raw?.vision_id || "")
-        const userId = normalizeUserId(raw?.user_id || raw?.user || "local")
-        const voteValue = normalizeVoteValue(raw?.vote_value)
-        if (isRandomArtistMetavisionId(visionId)) {
-          invalid += 1
-          continue
-        }
-        if (!candidateRef || !symbol || !assetSha || !userId || voteValue === null) {
-          invalid += 1
-          continue
-        }
-        valid.push({
-          symbol,
-          asset_sha256: assetSha,
-          vision_id: visionId,
-          candidate_image_id: optionalInt(raw?.candidate_image_id ?? raw?.emulsion_id),
-          user_id: userId,
-          vote_value: voteValue,
-        })
-      }
-      // The bounds keep one import to 32 D1 calls (a batch is one call), inside
-      // the 50 the D1 limits page lists for the free plan; vote-guards.js
-      // records the measured limit. A request past the bounds is refused
-      // before anything is written.
-      const boundsError = voteImportBoundsError({
-        items: items.length,
-        genes: new Set(valid.map((item) => item.symbol)).size,
-      })
-      if (boundsError) return done("admin_votes_import_400", json({ error: boundsError }, 400))
-      const imported = await importIconoplasmVotes(env, ctx, valid, {
-        reason: "vote_import_auto_promote",
-        republish: false,
-      })
-      const summary = {
-        total: items.length,
-        upserted: imported.upserted,
-        deleted: imported.deleted,
-        invalid: invalid + imported.invalid,
-        auto_promoted: imported.promoted,
-        elected: imported.elected,
-        elections_failed: imported.elections_failed,
-      }
-      // The votes are committed either way. A gene whose election failed is
-      // not settled, so the import is not done: the caller runs the same import
-      // again, which elects every named gene afresh.
-      if (imported.failed_symbols.length)
-        return done(
-          "admin_votes_import_502",
-          json(
-            {
-              ok: false,
-              code: "VOTE_IMPORT_ELECTION_FAILED",
-              error: `The votes were written but the election failed for ${imported.failed_symbols.join(", ")}; run the import again to settle ${imported.failed_symbols.length === 1 ? "it" : "them"}.`,
-              failed_symbols: imported.failed_symbols,
-              ...summary,
-            },
-            502,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      return done(
-        "admin_votes_import",
-        json({ ok: true, ...summary }, 200, { "Cache-Control": "no-store" }),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/votes/set" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_set_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_votes_set_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_votes_set_400", json({ error: "Invalid JSON" }, 400))
-      }
-
-      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
-      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
-      const candidateImageId = optionalInt(p?.candidate_image_id ?? p?.emulsion_id)
-      const candidateRef = normalizeCandidateRef(
-        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
-        symbol,
-        assetSha,
-      )
-      const assetCandidateRef = voteAssetIdentity(symbol, assetSha)
-      const visionId = normalizeVisionId(p?.vision_id || "")
-      const userId = normalizeUserId(p?.user_id || p?.user || "local")
-      const requested = normalizeVoteValue(p?.vote_value)
-      if (!candidateRef)
-        return done(
-          "admin_votes_set_400",
-          json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400),
-        )
-      if (!symbol)
-        return done("admin_votes_set_400", json({ error: "Missing or invalid symbol" }, 400))
-      if (!assetSha)
-        return done("admin_votes_set_400", json({ error: "Missing or invalid asset_sha256" }, 400))
-      if (requested === null)
-        return done("admin_votes_set_400", json({ error: "vote_value must be -1, 0, or 1" }, 400))
-      if (isRandomArtistMetavisionId(visionId)) {
-        return done(
-          "admin_votes_set_400",
-          json({ error: "Metavision IDs are not valid for vote writes" }, 400),
-        )
-      }
-      if (isGuestUserId(userId)) {
-        return done(
-          "admin_votes_set_401",
-          json({ ok: false, code: "AUTH_REQUIRED", error: "Please log-in first to vote." }, 401, {
-            "Cache-Control": "no-store",
-          }),
-        )
-      }
-
-      const vote = await setIconoplasmVote(env, ctx, {
-        symbol,
-        assetSha256: assetSha,
-        visionId,
-        candidateImageId,
-        userId,
-        voteValue: requested,
-        reason: "admin_vote_auto_promote",
-        admit: false,
-      })
-      if (!vote.ok) {
-        return done(
-          `admin_votes_set_${vote.status}`,
-          json({ ok: false, code: vote.code, error: vote.error }, vote.status, {
-            "Cache-Control": "no-store",
-          }),
-        )
-      }
-      return done(
-        "admin_votes_set",
-        json(
-          {
-            ok: true,
-            candidate_ref: assetCandidateRef,
-            symbol,
-            asset_sha256: assetSha,
-            candidate_image_id: vote.candidate_image_id,
-            user_id: userId,
-            snapshot: vote.snapshot,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/votes/snapshot" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_snapshot_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_votes_snapshot_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_votes_snapshot_400", json({ error: "Invalid JSON" }, 400))
-      }
-      const symbol = normalizeSymbol(p?.symbol || p?.gene_symbol || "")
-      const assetSha = normalizeSha256(p?.asset_sha256 || p?.sha256 || "")
-      const candidateRef = normalizeCandidateRef(
-        p?.candidate_ref || (p?.candidate_image_id ? `c:${String(p.candidate_image_id)}` : ""),
-        symbol,
-        assetSha,
-      )
-      const visionId = sanitizeVoteVisionId(p?.vision_id || "")
-      const userId = normalizeUserId(p?.user_id || p?.user || "local")
-      if (!candidateRef)
-        return done(
-          "admin_votes_snapshot_400",
-          json({ error: "Missing vote identity (candidate_ref or symbol+asset_sha256)" }, 400),
-        )
-      if (!symbol)
-        return done("admin_votes_snapshot_400", json({ error: "Missing or invalid symbol" }, 400))
-      if (!assetSha)
-        return done(
-          "admin_votes_snapshot_400",
-          json({ error: "Missing or invalid asset_sha256" }, 400),
-        )
-
-      const [entry] = await iconoVoteSnapshots(env, {
-        userId,
-        items: [{ symbol, asset_sha256: assetSha, vision_id: visionId }],
-      })
-      return done(
-        "admin_votes_snapshot",
-        json(
-          {
-            ok: true,
-            candidate_ref: candidateRef,
-            symbol,
-            asset_sha256: assetSha,
-            user_id: userId,
-            snapshot: entry.snapshot,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/votes/snapshots" && request.method === "POST") {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_votes_snapshots_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_votes_snapshots_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      let p
-      try {
-        p = await request.json()
-      } catch {
-        return done("admin_votes_snapshots_400", json({ error: "Invalid JSON" }, 400))
-      }
-      const items = Array.isArray(p?.items) ? p.items : []
-      if (!items.length)
-        return done("admin_votes_snapshots_400", json({ error: "No items provided" }, 400))
-      if (items.length > 5000)
-        return done("admin_votes_snapshots_400", json({ error: "Too many items (max 5000)" }, 400))
-      const userId = normalizeUserId(p?.user_id || p?.user || "local")
-
-      const deduped = []
-      const seen = new Set()
-      for (const raw of items) {
-        const symbol = normalizeSymbol(raw?.symbol || raw?.gene_symbol || "")
-        const assetSha = normalizeSha256(raw?.asset_sha256 || raw?.sha256 || "")
-        const candidateRef = normalizeCandidateRef(
-          raw?.candidate_ref ||
-            (raw?.candidate_image_id ? `c:${String(raw.candidate_image_id)}` : ""),
-          symbol,
-          assetSha,
-        )
-        const visionId = sanitizeVoteVisionId(raw?.vision_id || "")
-        if (!candidateRef || !symbol || !assetSha) continue
-        const key = `${candidateRef}|${visionId}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        deduped.push({ symbol, asset_sha256: assetSha, vision_id: visionId })
-      }
-
-      // The Website Ops sync asks for thousands of snapshots at once: three
-      // set-based statements answer the whole list (iconoVoteSnapshots).
-      const snapshots = await iconoVoteSnapshots(env, { items: deduped, userId })
-
-      return done(
-        "admin_votes_snapshots",
-        json(
-          {
-            ok: true,
-            user_id: userId,
-            count: snapshots.length,
-            snapshots,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
     if (path === "/api/iconoplasm/admin/votes/vision-stats" && request.method === "GET") {
       if (!(await isIconoplasmAdmin(request, env)))
         return done("admin_votes_vision_stats_403", json({ error: "Unauthorized" }, 403))
@@ -22931,19 +22207,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (query.error)
         return done("admin_votes_vision_stats_400", json({ error: query.error }, 400))
       const scorecard = await fetchAdminVisionScorecard(env, query)
-      if (scorecard.building) {
-        return done(
-          "admin_votes_vision_stats_503",
-          json(
-            {
-              error:
-                "The vision rollup is still being built; the scorecard opens when it finishes.",
-            },
-            503,
-            { "Cache-Control": "no-store", "Retry-After": "60" },
-          ),
-        )
-      }
       return done(
         "admin_votes_vision_stats",
         json(
@@ -23339,170 +22602,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
-      )
-    }
-
-    // One-shot recovery endpoint. The Website Ops reconcile rejects every asset
-    // not in the workstation-supplied keep set; on 2026-06-04 a sync sent an
-    // under-inclusive keep set and mass-rejected ~11k valid candidates (reason
-    // 'react_ops_sync'), making them vanish from gene pages. This un-rejects ONLY
-    // assets flipped by react_ops_sync on/after `since_day`, scoped via the
-    // publish-event log so older legitimate rejections are untouched. Restores to
-    // 'draft' + autopick-eligible (same as the existing restore_keep path).
-    if (
-      path === "/api/iconoplasm/admin/restore-mis-rejected-candidates" &&
-      request.method === "POST"
-    ) {
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_restore_mis_rejected_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "admin_restore_mis_rejected_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        p = {}
-      }
-      const sinceDay = sanitizeText(p?.since_day || "2026-06-04", 10) || "2026-06-04"
-      const rejectReason =
-        sanitizeText(p?.reject_reason || "react_ops_sync", 64) || "react_ops_sync"
-      const dryRun = coerceBoolean(p?.dry_run ?? p?.dryRun, false)
-      // restore_all un-hides EVERY soft-hidden candidate, with no event-reason or
-      // date scope. This is safe because manual moderation removals are HARD
-      // deletes (the asset row is gone from icono_portrait_assets — verified: 30
-      // remove_candidate events, 0 still-present rows). So every remaining
-      // soft-hidden asset (status='rejected' / is_stale / is_legacy) was hidden by
-      // the broken keep-set sync, never by a human quality/moderation decision.
-      const restoreAll = coerceBoolean(p?.restore_all ?? p?.restoreAll, false)
-      const symbols = Array.isArray(p?.symbols)
-        ? Array.from(new Set(p.symbols.map((s) => normalizeSymbol(s)).filter(Boolean)))
-        : []
-      const hasSymbols = symbols.length > 0 ? 1 : 0
-      const symbolsJson = JSON.stringify(symbols)
-      // Undo both reject and legacy_mark (is_stale/is_legacy) flips. Two SQL
-      // variants: `pa.`-aliased for SELECT/INSERT...SELECT, bare-column for UPDATE.
-      const eventScopePa = restoreAll
-        ? ""
-        : `AND EXISTS (
-          SELECT 1 FROM icono_publish_events e
-          WHERE e.gene_symbol = pa.gene_symbol
-            AND e.to_asset_sha256 = pa.asset_sha256
-            AND e.action IN ('reject', 'legacy_mark')
-            AND e.reason = ?
-            AND substr(e.created_at, 1, 10) >= ?
-        )`
-      const eventScopeBare = restoreAll
-        ? ""
-        : `AND EXISTS (
-          SELECT 1 FROM icono_publish_events e
-          WHERE e.gene_symbol = icono_portrait_assets.gene_symbol
-            AND e.to_asset_sha256 = icono_portrait_assets.asset_sha256
-            AND e.action IN ('reject', 'legacy_mark')
-            AND e.reason = ?
-            AND substr(e.created_at, 1, 10) >= ?
-        )`
-      const whereSql = `
-        (lower(COALESCE(pa.status,'')) = 'rejected'
-          OR COALESCE(pa.is_stale, 0) = 1
-          OR COALESCE(pa.is_legacy, 0) = 1)
-        AND (? = 0 OR pa.gene_symbol IN (SELECT value FROM json_each(?)))
-        ${eventScopePa}`
-      const whereSqlBare = `
-        (lower(COALESCE(status,'')) = 'rejected'
-          OR COALESCE(is_stale, 0) = 1
-          OR COALESCE(is_legacy, 0) = 1)
-        AND (? = 0 OR gene_symbol IN (SELECT value FROM json_each(?)))
-        ${eventScopeBare}`
-      const scopeBinds = restoreAll
-        ? [hasSymbols, symbolsJson]
-        : [hasSymbols, symbolsJson, rejectReason, sinceDay]
-      const matchRow = await env.ICONOPLASM_DB.prepare(
-        `SELECT COUNT(*) AS n FROM icono_portrait_assets pa WHERE ${whereSql}`,
-      )
-        .bind(...scopeBinds)
-        .first()
-      const matched = Number(matchRow?.n || 0) || 0
-      if (dryRun || matched === 0) {
-        return done(
-          "admin_restore_mis_rejected",
-          json(
-            {
-              ok: true,
-              dry_run: dryRun,
-              restore_all: restoreAll,
-              matched,
-              restored: 0,
-              since_day: restoreAll ? null : sinceDay,
-              symbols,
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      await env.ICONOPLASM_DB.batch([
-        env.ICONOPLASM_DB.prepare(
-          `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason, created_at)
-           SELECT pa.gene_symbol, pa.asset_sha256, pa.asset_sha256, 'restore_keep', 'agent_restore', 'undo_react_ops_sync_mass_reject', CURRENT_TIMESTAMP
-           FROM icono_portrait_assets pa WHERE ${whereSql}`,
-        ).bind(...scopeBinds),
-        env.ICONOPLASM_DB.prepare(
-          `UPDATE icono_portrait_assets
-             SET status = CASE WHEN lower(COALESCE(status,'')) = 'rejected' THEN 'draft' ELSE status END,
-                 autopick_eligible = 1, is_stale = 0, is_legacy = 0
-           WHERE ${whereSqlBare}`,
-        ).bind(...scopeBinds),
-      ])
-      const remainingRow = await env.ICONOPLASM_DB.prepare(
-        `SELECT COUNT(*) AS n FROM icono_portrait_assets pa WHERE ${whereSql}`,
-      )
-        .bind(...scopeBinds)
-        .first()
-      const remaining = Number(remainingRow?.n || 0) || 0
-      return done(
-        "admin_restore_mis_rejected",
-        json(
-          {
-            ok: true,
-            dry_run: false,
-            restore_all: restoreAll,
-            matched,
-            restored: matched - remaining,
-            remaining,
-            since_day: restoreAll ? null : sinceDay,
-            symbols,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/admin/canon/repair" && request.method === "POST") {
-      // Admin-triggered "heal canon now" — the same canonical re-resolution the
-      // nightly maintenance cron runs (repairCanonInvariants), exposed as a real
-      // path so operators don't have to wait ~17h for the cron or hand-edit D1.
-      // It only re-pins admin_override=0 genes whose current canonical differs
-      // from the computed vote-leader (or is missing). Idempotent and audited.
-      if (!(await isIconoplasmAdmin(request, env)))
-        return done("admin_canon_repair_403", json({ error: "Unauthorized" }, 403))
-      if (!env.ICONOPLASM_DB)
-        return done("admin_canon_repair_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
-      let p = {}
-      try {
-        p = await request.json()
-      } catch {
-        p = {}
-      }
-      const limit = Math.max(1, Math.min(1000, Number.parseInt(String(p?.limit ?? 250), 10) || 250))
-      const reason = sanitizeText(p?.reason || "admin_canon_repair", 64) || "admin_canon_repair"
-      const result = await repairCanonInvariants(env, { limit, actorId: "admin", reason })
-      return done(
-        "admin_canon_repair",
-        json({ ...result, limit, reason }, 200, { "Cache-Control": "no-store" }),
       )
     }
 

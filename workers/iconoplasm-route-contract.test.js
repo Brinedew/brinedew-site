@@ -122,7 +122,10 @@ test("every route names who calls it, and every caller entry names a route", () 
   for (const route of ICONOPLASM_ROUTE_CONTRACTS) {
     assert.ok(route.callers.length > 0, `${route.id} needs an ICONOPLASM_ROUTE_CALLERS entry`)
     for (const caller of route.callers) {
-      assert.ok(ICONOPLASM_ROUTE_CALLER_KINDS.includes(caller), `${route.id}: unknown caller ${caller}`)
+      assert.ok(
+        ICONOPLASM_ROUTE_CALLER_KINDS.includes(caller),
+        `${route.id}: unknown caller ${caller}`,
+      )
     }
     if (route.callers.includes("none-known")) {
       assert.deepEqual(route.callers, ["none-known"], `${route.id}: none-known stands alone`)
