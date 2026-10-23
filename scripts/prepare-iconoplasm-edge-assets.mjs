@@ -714,9 +714,14 @@ export async function prepareIconoplasmEdgeAssets({
   await rm(resolvedOutput, { recursive: true, force: true })
   await mkdir(resolvedOutput, { recursive: true })
 
+  // B-1165: GeneGuessr's files serve geneguessr.brinedew.bio only; on this host
+  // they would spend 24 of Cloudflare's 20,000 files on nothing.
+  const geneGuessrStatic = path.join(resolvedSource, "static", "geneguessr")
   await cp(path.join(resolvedSource, "static"), path.join(resolvedOutput, "static"), {
     recursive: true,
     force: true,
+    filter: (source) =>
+      source !== geneGuessrStatic && !source.startsWith(geneGuessrStatic + path.sep),
   })
 
   const rootEntries = await readdir(resolvedSource, { withFileTypes: true })
