@@ -12,7 +12,58 @@ on:
   workflow_dispatch:
 
 jobs:
+  # A squash merge lands the exact tree its pull request's run tested whenever
+  # main did not move in between: GitHub tests the PR's merge with main
+  # (refs/pull/N/merge) and squashes the same two commits. Running the suite
+  # again on that tree only repeats a verdict we have. On 2026-10-23 it was 10
+  # of the 24 minutes from opening #733 to the change being live, because the
+  # production deploy waits for main's run. The PR run records its tree as an
+  # artifact named after it; a push whose tree matches a successful same-repo
+  # PR run passes at once. Anything else (main moved, a fork PR, an API error,
+  # a manual run) runs the full job below.
+  tested-tree:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      reuse: ${{ steps.find.outputs.reuse }}
+    steps:
+      - name: Look for a passing pull request run of this exact tree
+        id: find
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          reuse=false
+          tree="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.tree.sha || true)"
+          if [ -n "$tree" ]; then
+            ids="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=tested-tree-$tree&per_page=20" \
+              --jq '.artifacts[] | select(.expired | not) | .workflow_run.id' || true)"
+            for id in $ids; do
+              # The artifact is uploaded by the run's last step, so the run may
+              # still be finishing its post steps for a few seconds.
+              for attempt in $(seq 1 12); do
+                run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id" \
+                  --jq '[.event, .path, .head_repository.full_name, .status, (.conclusion // "")] | join(" ")' || true)"
+                case "$run" in
+                  "pull_request .github/workflows/ci.yaml $GITHUB_REPOSITORY completed success") reuse=true; break ;;
+                  "pull_request .github/workflows/ci.yaml $GITHUB_REPOSITORY completed"*) break ;;
+                  "pull_request .github/workflows/ci.yaml $GITHUB_REPOSITORY "*) sleep 10 ;;
+                  *) break ;;
+                esac
+              done
+              if [ "$reuse" = true ]; then echo "Tree $tree passed in run $id"; break; fi
+            done
+          fi
+          echo "reuse=$reuse" >> "$GITHUB_OUTPUT"
+          echo "Reusing a pull request run's verdict for tree ${tree:-unknown}: $reuse"
+
   build-and-test:
+    needs: tested-tree
+    if: ${{ !cancelled() && needs.tested-tree.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
     # A clean run takes 11-16 minutes. Without a limit GitHub waits 6 hours: on
     # 2026-10-09 a hung browser E2E held main's test run, and every production
@@ -182,3 +233,23 @@ jobs:
           path: ${{ runner.temp }}/repository-tests.log
           if-no-files-found: error
           retention-days: 3
+
+      # Last on purpose: only a run whose every step passed records its tree,
+      # which the tested-tree job above reads after the squash merge. HEAD is
+      # GitHub's merge of the PR with main, the tree the merge will land.
+      - name: Record the tree this pull request run tested
+        id: tree
+        if: ${{ success() && github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/tested-tree"
+          echo "tree=$(cat "$RUNNER_TEMP/tested-tree")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the tested tree
+        if: ${{ success() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: tested-tree-${{ steps.tree.outputs.tree }}
+          path: ${{ runner.temp }}/tested-tree
+          if-no-files-found: error
+          retention-days: 7
