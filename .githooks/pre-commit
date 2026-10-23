@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# D:\Coding\Website is the owner's live Obsidian vault. Obsidian Git commits and
+# pushes it every 10 minutes, so whatever branch it sits on is where the owner's
+# notes go. Twice an agent switched it to a PR branch (2026-10-21, 2026-10-22);
+# both times the notes landed in that PR and stopped reaching the site, the
+# second time for over 12 hours. So the main checkout commits only on main.
+# Worktrees (where all branch work belongs) are not affected.
+git_dir="$(git rev-parse --absolute-git-dir 2>/dev/null)" || exit 0
+common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+[ "$(cd "$git_dir" && pwd -P)" = "$common_dir" ] || exit 0
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+[ "$branch" = "main" ] && exit 0
+echo "Refusing to commit: the vault checkout is on '${branch:-a detached HEAD}', not main." >&2
+echo "Notes committed here would never reach the site. Switch it back with 'git switch main';" >&2
+echo "do branch work in a worktree under D:\Coding\_worktrees instead." >&2
+exit 1
