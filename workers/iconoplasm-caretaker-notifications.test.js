@@ -13,7 +13,10 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 // 2. a suspended role disappears, so the caretaker loses their gene's link;
 // 3. marking comments read goes backwards, past the newest visible comment, or
 //    works on another person's role;
-// 4. a hidden comment counts as unread.
+// 4. a hidden comment counts as unread;
+// 5. the faces beside the unread count (B-1137) repeat a person, show someone
+//    whose comments are read or hidden, come out oldest first, or send the
+//    signed-in page through /api/avatar instead of Discord's own address.
 const ACCOUNT = "account_notification_0001"
 const OTHER = "account_notification_0002"
 const ROLE = "assignment_notification_0001"
@@ -111,5 +114,44 @@ test("3, 4: the read mark only moves forward, stops at the newest visible commen
   await assert.rejects(
     markCaretakerCommentsRead(db, { accountId: OTHER, assignmentId: ROLE, throughCommentId: 4 }),
     (error) => error?.code === "CARETAKER_ASSIGNMENT_NOT_FOUND",
+  )
+})
+
+test("5: one face per person behind the unread comments, newest first, at Discord's address", async (t) => {
+  const db = setup(t)
+  role(db, "active")
+  const say = (user, avatar, status = "visible") =>
+    db.database
+      .prepare(
+        `INSERT INTO icono_gene_comments (gene_symbol, user_id, username, avatar_url, body, status)
+         VALUES ('TP53', ?, ?, ?, 'A comment.', ?)`,
+      )
+      .run(user, user, avatar, status)
+  const discord = (n) => `https://cdn.discordapp.com/embed/avatars/${n}.png`
+  const proxied = (n) => `/api/avatar?src=${encodeURIComponent(discord(n))}`
+  say("ada", proxied(1))
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 1,
+  })
+  say("bea", proxied(2))
+  say("cy", "")
+  say("bea", proxied(2))
+  say("dot", proxied(4), "hidden")
+  const { caretaker } = await readCaretakerCoordination(db, { accountId: ACCOUNT })
+  assert.equal(caretaker.unread_comment_count, 3)
+  assert.deepEqual(caretaker.comment_faces, [
+    { name: "bea", avatar_url: discord(2) },
+    { name: "cy", avatar_url: null },
+  ])
+  await markCaretakerCommentsRead(db, {
+    accountId: ACCOUNT,
+    assignmentId: ROLE,
+    throughCommentId: 99,
+  })
+  assert.deepEqual(
+    (await readCaretakerCoordination(db, { accountId: ACCOUNT })).caretaker.comment_faces,
+    [],
   )
 })
