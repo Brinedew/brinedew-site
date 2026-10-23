@@ -16,7 +16,7 @@ Steps 1 to 4 happen in your browser, on pages that you already read. Steps 5 to 
 
 ## 1. Install the extension
 
-![[iconoplasm-start-install.webp|The install card on iconoplasm.brinedew.bio, opened in Chrome]]
+![[iconoplasm-start-install.webp|The install card on iconoplasm.brinedew.bio, opened in Chrome|416]]
 
 1. Pick your browser.
 2. On Chrome or Brave, click **Download extension file** and follow the five steps under the button.
@@ -53,7 +53,7 @@ The essay [[posts/Mnemonic-portraits-for-19023-human-genes|Mnemonic portraits fo
 
 The extension can also highlight gene names inside PDFs, figures included. It replaces the browser's PDF reader with a viewer that is based on pdf.js and that can highlight. This is off until you turn it on.
 
-![[iconoplasm-start-pdf-switch.webp|The Appearance tab in the extension's settings]]
+![[iconoplasm-start-pdf-switch.webp|The Appearance tab in the extension's settings|380]]
 
 1. Click the Iconoplasm icon in your browser's toolbar. On the **Appearance** tab, set **PDF highlighting** to **On**.
 
@@ -73,7 +73,7 @@ Now open a paper. This one is Sanchez-Vega et al., [Oncogenic Signaling Pathways
 
 Some gene symbols are also everyday words or abbreviations. The extension ignores 112 of them by default, and you can add more.
 
-![[iconoplasm-start-blocklist.webp|The Blocklist tab in the extension's settings]]
+![[iconoplasm-start-blocklist.webp|The Blocklist tab in the extension's settings|362]]
 
 1. Open the **Blocklist** tab.
 2. Type the symbol, here **DDT**. On the Homeobox page DDT names plant genes, while the human gene with that symbol is D-dopachrome tautomerase.
@@ -88,13 +88,14 @@ The front page of [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio) is 
 1. The counter shows how many of the 19,381 genes you have found.
 2. To see discoveries of others, tick **Show discoveries made by others**.
 3. You get four starter genes that you probably already know: INS, RHO, PRL and CD4. Click a card to open its gene page.
-4. Click **Discord Login**. From then on, each gene that you rest your cursor on for about a second, on any web page, joins your Archive. The genes that you hovered before you logged in join it too. Hovers inside the PDF reader don't count yet.
+
+To build your own collection, click **Discord Login** in the top-right corner. From then on, each gene that you rest your cursor on for about a second, on any web page, joins your Archive. The genes that you hovered before you logged in join it too. Hovers inside the PDF reader don't count yet.
 
 ## 6. Open a gene page
 
 Clicking on a gene image transfers you to the gene's page. There you will find the gene card, as well as an interface for image generation, editing, transfer and voting.
 
-![[iconoplasm-start-gene-page.webp|The gene page for HOXA5]]
+![[iconoplasm-start-gene-page.webp|HOXA5's gene page]]
 
 1. Click the star to keep this portrait's style (its emulsion) in your favorites. In the free queue, **Add all favorites** puts every favorite in your batch at once.
 2. Click the printer to download a print copy: the portrait with the gene's name and symbol printed on it.
@@ -106,11 +107,11 @@ Clicking on a gene image transfers you to the gene's page. There you will find t
 
 The gene card is an accession sheet. Each handwritten note on it is a fact about the gene, written as a feature of the character. A portrait that fits its card shows all of them.
 
-![[iconoplasm-start-accession-sheet.webp|The gene card for HOXA5]]
+![[iconoplasm-start-accession-sheet.webp|HOXA5's gene card]]
 
 | | On the card | Where it comes from | In the portrait |
 |---|---|---|---|
-| 1 | Swatch #727A58, Parrot Green | Hue from the letter H, saturation from HPA tau 0.61, lightness from gnomAD LOEUF 0.996 | Her skin, and her pill on every page |
+| 1 | Swatch `#727A58`, Parrot Green | Hue from the letter H, saturation from HPA tau 0.61, lightness from gnomAD LOEUF 0.996 | Her skin, and her pill on every page |
 | 2 | SOLUBLE circled, *female* | Female = soluble protein, male = transmembrane protein | A woman |
 | 3 | 1989, *31 y.o.* | Character age = the year when the gene was first noted, counted back from 2020 | A young adult |
 | 4 | 29 ~~kDa~~ *kg* | Character weight = protein mass: 29 kDa becomes 29 kg | A slight build |
