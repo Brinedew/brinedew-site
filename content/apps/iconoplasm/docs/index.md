@@ -5,6 +5,10 @@ date: 2026-10-23
 draft: false
 ---
 
+# Docs
+
+Everything about using Iconoplasm: how to get a portrait made for a gene, how voting and caretaking work, and what changed in each release.
+
 ## Start here
 
 - [[apps/iconoplasm/docs/Tutorial|Tutorial]]: queue a free character portrait for a gene and vote on candidates; add your own image API key to generate instantly and edit portraits.

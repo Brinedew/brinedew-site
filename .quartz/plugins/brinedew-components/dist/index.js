@@ -821,10 +821,13 @@ IconoplasmPageSwitcher.css = `
    sits first in the header row. The nav's own box steps aside (display: contents)
    so its parts join the sidebar's flex row and can be ordered there. */
 @media (max-width: 800px) {
-  .sidebar.left:has(> .icono-page-switcher) {
+  /* #quartz-body: Quartz's own phone rule (padding-top: 2rem, gap: 0) is scoped
+     under that id and would outrank a class-only selector. No top padding, so the
+     tabs sit at the very top, where app.js draws them on the app's own pages. */
+  #quartz-body .sidebar.left:has(> .icono-page-switcher) {
     flex-wrap: wrap;
     row-gap: 0.5rem;
-    padding-top: 0.5rem;
+    padding-top: 0;
     padding-bottom: 0.75rem;
   }
 
@@ -852,10 +855,13 @@ IconoplasmPageSwitcher.css = `
     border-bottom: 1px solid var(--ui-border, var(--lightgray));
   }
 
+  /* Same box as app.js's row on the app pages (line height included), so the
+     tabs don't jump when you switch between Studio and Docs. */
   .icono-page-switcher .icono-page-tab {
     flex: 1;
     text-align: center;
     padding: 0.6rem 0.4rem;
+    line-height: 1.85rem;
     border-radius: 0;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
@@ -868,6 +874,8 @@ IconoplasmPageSwitcher.css = `
   .icono-page-switcher .icono-page-tab.is-active,
   .icono-page-switcher .icono-page-tab[aria-current="page"] {
     background: transparent;
+    color: var(--accent);
+    font-weight: 600;
     border-bottom-color: var(--accent);
   }
 
