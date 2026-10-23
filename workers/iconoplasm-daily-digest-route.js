@@ -114,6 +114,10 @@ export function createIconoplasmDailyDigestHandlers(services) {
       JSON.stringify({
         content,
         allowed_mentions: { parse: [] },
+        // SUPPRESS_EMBEDS: the gene links are for clicking, and each would
+        // otherwise unfurl into a page card under the picture. The attached
+        // image is not an embed and still shows.
+        flags: 4,
         // Discord drops a second message with the same nonce for a few
         // minutes, which covers two runs racing past the KV marker.
         nonce: `digest-${wanted}`,
