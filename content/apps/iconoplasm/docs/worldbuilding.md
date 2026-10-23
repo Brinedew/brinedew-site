@@ -1,15 +1,15 @@
 ---
-title: "Write your gene's story"
+title: "Worldbuilding"
 description: "Make up an Iconoplasm story that makes sense in the context of your research interest."
 docsSection: Caretakers
 docsOrder: 2
-docsLabel: "Write your gene's story"
+docsLabel: "Worldbuilding"
 date: 2026-03-07
 updated: 2026-10-23
 draft: false
 ---
 
-# Write your gene's story
+# Worldbuilding
 
 ## Is there any kind of narrative or worldbuilding that these characters inhabit?
 

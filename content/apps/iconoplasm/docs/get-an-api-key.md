@@ -1,15 +1,15 @@
 ---
-title: "Get an image API key"
+title: "Get an API key"
 description: "With your own key you get a portrait in 1-2 minutes, and you can edit portraits."
-docsSection: Your own image key
+docsSection: Bring your own key
 docsOrder: 1
-docsLabel: "Get a key"
+docsLabel: "Get an API key"
 date: 2026-06-14
 updated: 2026-10-23
 draft: false
 ---
 
-# Get an image API key
+# Get an API key
 
 Portraits from the free queue are drawn in turn. With your own key you get a portrait in 1-2 minutes, and you can edit portraits.
 
