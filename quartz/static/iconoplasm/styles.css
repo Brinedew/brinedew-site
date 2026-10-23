@@ -1180,19 +1180,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   letter-spacing: 0;
 }
 
-.icono-gene-request-count {
-  min-width: 1.4em;
-  margin-left: 0.45em;
-  padding: 0.12rem 0.38rem;
-  border-radius: 999px;
-  background: var(--dark);
-  color: var(--light);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  text-align: center;
-}
-
 .icono-gene-request-list {
   display: grid;
   margin: 0;

@@ -10,12 +10,13 @@
 //  - on a gene someone else looks after (`request`): "Request swap", or, for a
 //    person who looks after no gene, a request to become its caretaker; "Cancel
 //    request" while one is pending; the button on a timer after a rejection;
-//  - on your own gene (`incoming`): "Requests" with their count, opening the
-//    list where each is accepted or rejected.
+//  - on your own gene (`incoming`): no button. The sidebar's Requests row under
+//    the caretaker film (request-inbox.js) links here with #gene-requests, and
+//    the page opens the list where each is accepted or rejected.
 // The words are the Handbook's and the switch dialog's. Where those have none,
 // each control keeps the words of the product whose pattern it copies:
 // Facebook groups' "Cancel request", LinkedIn's "Add a note" with its character
-// count, Discord's count of pending requests.
+// count.
 import {
   closeDialog,
   createDialogElement,
@@ -95,10 +96,25 @@ export function createGeneRequestControls({
     return sync
   }
 
+  // The sidebar's Requests row and the new-request Discord message link to the
+  // gene page with this hash; the page opens the list when it arrives.
+  const REQUESTS_HASH = "#gene-requests"
+
+  function takeRequestsHash() {
+    if (window.location.hash !== REQUESTS_HASH) return false
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + window.location.search,
+    )
+    return true
+  }
+
   function render(context) {
     const { target, payload } = context
     if (payload?.request) return renderRequester(context, payload.request)
     if (payload?.incoming?.requests?.length) return renderHolder(context, payload.incoming)
+    takeRequestsHash()
     target.replaceChildren()
   }
 
@@ -292,13 +308,7 @@ export function createGeneRequestControls({
     const dialogId = "icono-gene-requests-dialog-" + symbol
     const listTitle = "Requests for " + symbol
     let items = incoming.requests.slice()
-    const countText = () => String(items.length) + (incoming.more ? "+" : "")
-    target.innerHTML =
-      '<button type="button" class="icono-button icono-canonical-new-candidate-btn icono-caretaker-claim-btn" data-icono-gene-requests-open aria-haspopup="dialog" aria-controls="' +
-      esc(dialogId) +
-      '"><span>Requests</span><span class="icono-gene-request-count" data-icono-gene-request-count>' +
-      esc(countText()) +
-      "</span></button>"
+    target.replaceChildren()
     const dialog = mountDialog(context, {
       id: dialogId,
       title: listTitle,
@@ -346,12 +356,12 @@ export function createGeneRequestControls({
       post(symbol, "/requests/" + encodeURIComponent(item.request_id) + "/reject", {})
         .then(() => {
           items = items.filter((candidate) => candidate !== item)
+          context.requestsChanged()
           if (!items.length && !incoming.more) {
             closeDialog(dialog)
             context.rehydrate()
             return
           }
-          target.querySelector("[data-icono-gene-request-count]").textContent = countText()
           showList()
         })
         .catch((error) => {
@@ -420,11 +430,10 @@ export function createGeneRequestControls({
       })
     }
 
-    target.querySelector("[data-icono-gene-requests-open]").addEventListener("click", () => {
-      closeMenu(target)
+    if (takeRequestsHash()) {
       showList()
       openDialog(dialog)
-    })
+    }
   }
 
   return { render }

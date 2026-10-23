@@ -615,6 +615,7 @@ export function createRequestInbox({
     var symbol = String(item.canonical_symbol || "Gene")
     var href = String(item.href || "/gene/" + encodeURIComponent(symbol)) + "?caretaker=open"
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
+    var requests = Math.max(0, Number(item.pending_request_count || 0) || 0)
     // B-996: the caretaker film is the caretaker's gene as an autoradiograph. Molecular weight and portrait
     // come from the published gene detail the page already reads, once per symbol;
     // until it arrives the film prints with the ladder alone.
@@ -651,17 +652,24 @@ export function createRequestInbox({
       (suspended ? '<small class="icono-film-status">Caretaking suspended</small>' : "") +
       supervoteHintMarkup(item, symbol) +
       (unread
-        ? '<a class="icono-request-inbox__caretaker-comments" href="' +
-          escapeHtml(
+        ? caretakerNewsRowMarkup(
+            "Comments",
+            unread,
+            item.comment_faces,
             item.comments_href || "/gene/" + encodeURIComponent(symbol) + "#gene-comments",
-          ) +
-          '" data-icono-caretaker-comments data-icono-caretaker-assignment-id="' +
-          escapeHtml(assignmentId) +
-          '"><strong>' +
-          escapeHtml(String(unread)) +
-          "</strong> new " +
-          (unread === 1 ? "comment" : "comments") +
-          "</a>"
+            ' data-icono-caretaker-comments data-icono-caretaker-assignment-id="' +
+              escapeHtml(assignmentId) +
+              '"',
+          )
+        : "") +
+      (requests
+        ? caretakerNewsRowMarkup(
+            "Requests",
+            requests,
+            item.request_faces,
+            item.requests_href || "/gene/" + encodeURIComponent(symbol) + "#gene-requests",
+            " data-icono-caretaker-requests",
+          )
         : "") +
       "</div>"
     )
@@ -683,6 +691,40 @@ export function createRequestInbox({
       "<small>Long-press a vote on " +
       escapeHtml(symbol) +
       "</small></span></a>"
+    )
+  }
+
+  // B-1137: what waits on the caretaker's gene sits under its film as one pair
+  // of rows, new comments and requests to take the gene, each the Inbox tab's
+  // label and count with the faces behind it (GitHub's facepile). A row opens
+  // the gene page where the comments are read or the requests decided.
+  function caretakerNewsRowMarkup(label, count, faces, href, attributes) {
+    var faceMarkup = ""
+    var shown = Array.isArray(faces) ? faces.slice(0, 3) : []
+    for (var i = 0; i < shown.length; i++) {
+      var face = shown[i] || {}
+      faceMarkup += face.avatar_url
+        ? '<img class="icono-request-inbox__face" src="' +
+          escapeHtml(face.avatar_url) +
+          '" alt="" title="' +
+          escapeHtml(face.name || "") +
+          '" width="22" height="22" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+        : '<span class="icono-request-inbox__face icono-request-inbox__face--blank"></span>'
+    }
+    return (
+      '<a class="icono-request-inbox__item icono-request-inbox__caretaker-row" href="' +
+      escapeHtml(href) +
+      '"' +
+      attributes +
+      '><span class="icono-request-inbox__caretaker-label">' +
+      escapeHtml(label) +
+      '<span class="icono-request-inbox__count icono-request-inbox__count--new">' +
+      escapeHtml(String(count)) +
+      "</span></span>" +
+      (faceMarkup
+        ? '<span class="icono-request-inbox__faces" aria-hidden="true">' + faceMarkup + "</span>"
+        : "") +
+      "</a>"
     )
   }
 
@@ -864,6 +906,21 @@ export function createRequestInbox({
           void markCaretakerCommentsRead(assignmentId).catch(function () {})
         })
       })(commentLinks[readIndex])
+    }
+    // The gene page opens the requests list when it arrives at #gene-requests,
+    // so a click from that same page opens it too.
+    var requestLinks = stack.querySelectorAll("[data-icono-caretaker-requests]")
+    for (var requestIndex = 0; requestIndex < requestLinks.length; requestIndex++) {
+      ;(function (link) {
+        if (link._iconoCaretakerRequestsWired) return
+        link._iconoCaretakerRequestsWired = true
+        link.addEventListener("click", function (event) {
+          event.preventDefault()
+          var href = link.getAttribute("href") || "/"
+          if (typeof navigate === "function") navigate(href, link)
+          else window.location.assign(href)
+        })
+      })(requestLinks[requestIndex])
     }
   }
 
