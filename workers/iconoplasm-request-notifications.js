@@ -746,5 +746,15 @@ export async function deliverPendingRequestFulfillmentNotifications(
       result.unknown += 1
     }
   }
+  // A scoped call tells its caller whether another of these orders is ready
+  // now, so the completion route can ask the workstation to call again.
+  if (ids.length) {
+    const next = await readReadyDeliveryLeaders(env.ICONOPLASM_DB, {
+      requestIds: ids,
+      allRequesters,
+      limit: 1,
+    })
+    result.more_ready = next.length > 0
+  }
   return result
 }

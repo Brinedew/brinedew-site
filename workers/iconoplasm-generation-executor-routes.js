@@ -135,21 +135,38 @@ async function completeGenerationLeaseBatch({
     pending_request_ids: requestIds,
     error: text(error?.message || error || "unknown error"),
   }))
-  const deliveryComplete =
+  // One receipt covers a whole order, and an order can span publications. The
+  // receipt this publication completed also closes the order's requests that
+  // earlier publications left waiting for it.
+  const published = new Set(requestIds)
+  const siblings = (delivery?.delivered_request_ids || []).filter((id) => !published.has(id))
+  for (let offset = 0; offset < siblings.length; offset += 50) {
+    const closed = await reconcileDeliveredFulfillments(env, {
+      requestIds: siblings.slice(offset, offset + 50),
+    }).catch(() => ({ finalized: 0 }))
+    settlement.finalized = Number(settlement.finalized || 0) + Number(closed?.finalized || 0)
+  }
+  // The portraits are on their cards once fulfillGenerationRequests answers;
+  // the receipt is the website's job, not the publication's. Ask the
+  // workstation to call again only while this call sent a receipt cleanly and
+  // another order in this publication is ready to send now. A receipt that
+  // waits for the rest of its order, or for a Discord retry, goes out from the
+  // quarter-hour fulfillment cron (runScheduledIconoplasmFulfillment). Failing
+  // the publication for it turned the Drain red on every order larger than one
+  // session (2026-10-23: a 10-portrait SOX11 order) and fixed nothing.
+  const continueInline =
     delivery?.ok === true &&
-    settlement?.ok === true &&
-    Array.isArray(settlement?.pending_request_ids) &&
-    settlement.pending_request_ids.length === 0 &&
+    delivery?.more_ready === true &&
+    Number(delivery?.delivered || 0) > 0 &&
     Number(delivery?.failed || 0) === 0 &&
     Number(delivery?.unknown || 0) === 0 &&
     Number(delivery?.suppressed || 0) === 0
-  if (!deliveryComplete) {
+  if (continueInline) {
     return json({
       ...result,
       ok: false,
       code: "DISCORD_DELIVERY_PENDING",
-      error:
-        "Image publication succeeded, but at least one requester has not received the required Discord DM yet.",
+      error: "Image publication succeeded; another requester's Discord receipt is ready to send.",
       notification_delivery: delivery,
       notification_settlement: settlement,
     })
