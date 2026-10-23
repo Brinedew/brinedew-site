@@ -381,6 +381,7 @@ if (!extensionOnly) {
     "collection-feed.js",
     "iconoplasm-collection-route-state.js",
     "guest-discovery-store.js",
+    "home-play-strip.js",
     "vote-login-dialog.js",
     "candidate-delete-dialog.js",
     "generated/anima-emulsion-slot-contract.js",

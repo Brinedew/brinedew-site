@@ -4253,6 +4253,220 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: balance;
 }
 
+/* B-1173: a first-time visitor finds genes right here (home-play-strip.js).
+   The essay lines need a reading measure, so the column widens from one tile
+   to 38rem while the strip is in it. */
+.icono-home-auxiliary--play {
+  width: min(100%, 38rem);
+}
+
+.icono-play-card.icono-guest-login-card {
+  justify-items: stretch;
+}
+
+.icono-play-card .icono-guest-login-card-title {
+  max-width: none;
+}
+
+.icono-play-quote {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* One reading size: the quote reads at the card's own note size. */
+.icono-play-quote p {
+  margin: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  line-height: 1.75;
+  color: var(--dark);
+  text-wrap: pretty;
+}
+
+.icono-play-quote strong {
+  font-weight: 600;
+}
+
+.icono-play-source {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--darkgray);
+}
+
+.icono-play-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+/* The add-on's default pill (CANVAS_SHAPE_CONTRACTS.pill in
+   iconoplasm-extension/highlight-runtime.js): the gene's colour at 72%, 0.1em
+   around the word, a thin dark ring, and the ink that its contrast rule picks.
+   Painted, so the line keeps its layout. */
+.icono-play-pill {
+  margin: 0 -0.1em;
+  padding: 0.1em;
+  border-radius: 0.28em;
+  background: color-mix(in srgb, var(--icono-play-gene) 72%, transparent);
+  box-shadow: 0 0 0 0.045em rgba(22, 18, 16, 0.58);
+  text-decoration: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+.icono-play-pill[data-ink="light"],
+.icono-play-pill[data-ink="light"]:hover {
+  color: rgb(249, 247, 242);
+}
+
+.icono-play-pill[data-ink="dark"],
+.icono-play-pill[data-ink="dark"]:hover {
+  color: rgb(24, 22, 20);
+}
+
+/* On the dark theme the ring is light: the add-on's dark ring lets the
+   near-black genes (MYC, MDM2, BCL2, TP53) vanish into a dark card. The ink
+   is light too. The add-on picks its ink for the solid gene colour, but the
+   fill is 72% opaque, and over this card it comes out darker: dark ink on BAX
+   and BBC3 measured APCA Lc 30 and 32, light ink Lc 73 and 71 (2026-10-24). */
+html[saved-theme="dark"] .icono-play-pill {
+  box-shadow: 0 0 0 0.045em rgba(249, 247, 242, 0.55);
+}
+
+html[saved-theme="dark"] .icono-play-pill[data-ink] {
+  color: rgb(249, 247, 242);
+}
+
+.icono-play-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.2em;
+}
+
+.icono-play-slots {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.icono-play-slot {
+  position: relative;
+  display: block;
+  aspect-ratio: 7 / 9;
+  perspective: 600px;
+}
+
+.icono-play-slot-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 560ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.icono-play-slot.is-found .icono-play-slot-inner {
+  transform: rotateY(180deg);
+}
+
+.icono-play-slot-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-md);
+  background: var(--lightgray);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.icono-play-slot-back {
+  border: 0;
+}
+
+.icono-play-slot-face .icono-card-reverse-face {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* The full-size card back's emblem has a 4.5rem floor, wider than a mini card. */
+.icono-play-slot-face .icono-card-reverse-face__mark {
+  width: 62%;
+}
+
+.icono-play-slot-front {
+  transform: rotateY(180deg);
+}
+
+.icono-play-slot-front img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0;
+}
+
+.icono-play-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+
+.icono-play-next[hidden] {
+  display: none;
+}
+
+.icono-play-next .icono-install-note b {
+  font-weight: 600;
+  color: var(--dark);
+}
+
+/* The raised card is the site's own image-only card, placed the way the
+   add-on places its card: it fades in over 60 ms. Three classes, to outrank
+   the tile's own 100% width in shared-card-label.css. */
+.icono-card.icono-card--image-tile.icono-play-raised {
+  position: absolute;
+  z-index: 50;
+  inline-size: min(290px, calc(100vw - 32px));
+  max-inline-size: none;
+  margin: 0;
+  opacity: 0;
+  transform: translateY(3px) scale(0.99);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 60ms linear,
+    transform 60ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  box-shadow:
+    0 0 0 1px rgba(74, 61, 49, 0.14),
+    0 8px 18px rgba(40, 32, 24, 0.1),
+    0 16px 34px rgba(40, 32, 24, 0.18);
+}
+
+.icono-card.icono-card--image-tile.icono-play-raised.is-up {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+@media (max-width: 640px) {
+  .icono-card.icono-card--image-tile.icono-play-raised {
+    inline-size: min(260px, calc(100vw - 32px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-play-slot-inner {
+    transition: none;
+  }
+}
+
 .icono-collection-summary-host[hidden],
 .icono-empty[hidden] {
   display: none !important;
