@@ -25,6 +25,7 @@ import {
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
 } from "./guest-discovery-store.js?v=df8a5536754a5b3d"
+import { HOME_PLAY_SYMBOLS, mountHomePlayStrip } from "./home-play-strip.js?v=ce8e6b9c4378bb30"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -2681,7 +2682,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       (showProgress
         ? '<div class="icono-collection-copy">' +
           esc(discoveredCount.toLocaleString()) +
-          (totalCount > 0 ? " genes found out of " + esc(totalCopy) : " genes found") +
+          (discoveredCount === 1 ? " gene found" : " genes found") +
+          (totalCount > 0 ? " out of " + esc(totalCopy) : "") +
           "</div>"
         : "") +
       '<label class="icono-collection-shared-toggle">' +
@@ -3350,36 +3352,30 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return browser && browser.family === "firefox" ? "firefox" : "chrome"
   }
 
+  // Phones install the add-on from Firefox Add-ons in Firefox for Android: the
+  // listing has been marked Android-compatible since Firefox 142
+  // (addons.mozilla.org API, checked 2026-10-24). Firefox itself gets the store
+  // steps; this card is for the other phone browsers.
   function buildMobileInstallExperience(browser, faqUrl) {
-    var family = String((browser && browser.family) || "unknown")
     var platform = String((browser && browser.platform) || "mobile")
+    var release = iconoInstallState.release || {}
+    var firefoxListingUrl =
+      String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
     var title = "Install Iconoplasm on mobile"
-    var note =
-      "Mobile add-ons are not published yet. Use desktop Firefox or Edge for one-click install today."
+    var note = "It's available on mobile Firefox."
     var steps = [
-      "Iconoplasm is available on desktop Firefox and Edge today.",
-      "Mobile browser installs are not supported yet.",
-      "Use a desktop browser for the current extension.",
+      "Open this page in Firefox for Android.",
+      {
+        text: "Tap this button to visit the Firefox Add-ons page:",
+        action: {
+          href: firefoxListingUrl,
+          label: "Get extension for Firefox",
+          subtle: false,
+        },
+      },
+      'On the Firefox Add-ons page, tap "Add to Firefox", then "Add".',
     ]
-    if (family === "firefox" && platform === "android") {
-      title = "Install Iconoplasm on Firefox Android"
-      note =
-        "Firefox Android is the right first mobile target, but this add-on is not published there yet."
-      steps = [
-        "We need to mark and test the AMO listing for Android compatibility.",
-        "Once it passes review, this card should link directly to the Android-ready Firefox Add-ons page.",
-        "For now, use desktop Firefox or Edge for one-click install.",
-      ]
-    } else if (family === "edge" && platform === "android") {
-      title = "Install Iconoplasm on Edge Android"
-      note =
-        "Edge Android has mobile extension support, but Iconoplasm is not verified or published there yet."
-      steps = [
-        "Confirm the public Edge Add-ons listing supports Android installs.",
-        "Run a real Android Edge install test before showing a live install button here.",
-        "For now, use desktop Edge for one-click install.",
-      ]
-    } else if (family === "safari" && platform === "ios") {
+    if (platform === "ios") {
       title = "Iconoplasm is not available for iPhone or iPad"
       note =
         "There is no Safari install path today, manual or automatic. Use desktop Firefox or Edge."
@@ -3565,7 +3561,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         actions: guestLoginActions,
       }
     }
-    if (browser && browser.isMobile) {
+    if (browser && browser.isMobile && browser.family !== "firefox") {
       return buildMobileInstallExperience(browser, faqUrl)
     }
     var panels = buildInstallBrowserPanels(browser, faqUrl)
@@ -3920,13 +3916,146 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!container || currentUser) return Promise.resolve(null)
     return loadGuestDiscoveryShelf().then(function (shelf) {
       if (currentUser || !shelf.count || !container.isConnected) return shelf
-      if (container.querySelector("[data-icono-guest-discovery-card]")) return shelf
+      // The strip counts its own finds; this card waits for the next visit.
+      if (container.querySelector("[data-icono-guest-discovery-card], [data-icono-home-play]")) {
+        return shelf
+      }
       var wrapper = document.createElement("div")
       wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
       container.insertBefore(wrapper.firstElementChild, container.firstChild)
       dropInstalledCardBesideGuestDiscoveries(container)
       return shelf
     })
+  }
+
+  // B-1173: one button follows the strip's first find. Firefox and desktop
+  // Edge go to their add-on store. Chrome, Brave and other phone browsers open
+  // the install steps under the strip, so nothing downloads until the reader
+  // presses the download button inside them. An iPhone has no install path,
+  // so it keeps the finds by logging in.
+  function homePlayAction() {
+    var browser = detectInstallBrowser()
+    var release = iconoInstallState.release || {}
+    var note =
+      "Want more cards? " +
+      (browser.isMobile ? "Tap gene names" : "Hover over gene names") +
+      " on other websites."
+    if (browser.family === "firefox") {
+      return {
+        kind: "link",
+        note: note,
+        label: "Get extension for Firefox",
+        href: release.firefoxListingUrl || ICONO_EXTENSION_FIREFOX_LISTING_URL,
+      }
+    }
+    if (browser.family === "edge" && !browser.isMobile) {
+      return {
+        kind: "link",
+        note: note,
+        label: "Get extension for Edge",
+        href: release.edgeListingUrl || ICONO_EXTENSION_EDGE_LISTING_URL,
+      }
+    }
+    if (browser.platform === "ios") {
+      return {
+        kind: "login",
+        note: "Log in to track your discoveries.",
+        label: "Log in with Discord",
+        href: voteLoginUrl(),
+      }
+    }
+    return {
+      kind: "open",
+      note: note,
+      label: browser.isMobile
+        ? "Install on mobile"
+        : browser.family === "brave"
+          ? "Install for Brave"
+          : browser.family === "chromium"
+            ? "Install for Chrome"
+            : "Install the extension",
+    }
+  }
+
+  // A signed-out reader who has found nothing yet, without the add-on, gets
+  // the essay strip in place of the install card (B-1173). Everyone else, or a
+  // catalogue that cannot draw all seven genes, gets the install card.
+  function appendHomePlayStripOrInstallCard(container, onCount) {
+    if (!container) return
+    if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
+    syncInstallStateFromDomMarker()
+    var firstVisit =
+      !currentUser &&
+      !hasSharedSessionPresenceHint() &&
+      !iconoInstallState.installed &&
+      !websiteGuestDiscoveries.listEntries().length
+    if (!firstVisit) {
+      appendHomeInstallCard(container)
+      return
+    }
+    // The catalogue is the one the starters already loaded: no request.
+    iconoplasmPublicationReader
+      .genes(HOME_PLAY_SYMBOLS.slice())
+      .then(function (records) {
+        var bySymbol = new Map()
+        records.forEach(function (record) {
+          bySymbol.set(normalizedSymbol(record.symbol), record)
+        })
+        var genes = HOME_PLAY_SYMBOLS.map(function (symbol) {
+          var record = bySymbol.get(symbol)
+          var portraitUrl = record ? publishedPortraitUrl(record, "medium") : ""
+          if (!record || !record.color || !rawPublishedPortraitUrl(record, "medium")) {
+            throw new Error("[Iconoplasm] the home strip has no portrait for " + symbol)
+          }
+          return {
+            symbol: symbol,
+            name: String(record.full_name || symbol),
+            color: record.color,
+            portraitUrl: portraitUrl,
+          }
+        })
+        if (!container.isConnected) return
+        if (currentUser || iconoInstallState.installed) {
+          appendHomeInstallCard(container)
+          return
+        }
+        container.classList.add("icono-home-auxiliary--play")
+        mountHomePlayStrip(container, {
+          genes: genes,
+          reverseFaceHtml: buildReverseCardFaceMarkup(),
+          action: homePlayAction(),
+          cardMarkup: function (gene) {
+            return (
+              '<article class="icono-card icono-card--image-tile icono-card--variant-image-only" style="--icono-card-accent:' +
+              esc(gene.color) +
+              ';">' +
+              buildImageOnlyGeneLinkMarkup(
+                gene.symbol,
+                gene.name,
+                gene.portraitUrl,
+                " data-icono-nav",
+              ) +
+              "</article>"
+            )
+          },
+          onCardMounted: syncImageOnlyLoadState,
+          onFind: function (symbol) {
+            // The same browser-local shelf as a gene page visit: no request.
+            websiteGuestDiscoveries.remember(symbol)
+            var count = websiteGuestDiscoveries.listEntries().length
+            onCount(count)
+            return count
+          },
+          onOpen: function () {
+            var steps = appendHomeInstallCard(container)
+            if (steps) steps.scrollIntoView({ block: "nearest", behavior: "smooth" })
+          },
+        })
+      })
+      .catch(function (error) {
+        console.warn(error)
+        if (container.isConnected) appendHomeInstallCard(container)
+      })
   }
 
   function buildDiscordInviteCardMarkup() {
@@ -4121,6 +4250,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!host) return
     host.innerHTML = ""
     host.hidden = true
+    host.classList.remove("icono-home-auxiliary--play")
+    removeHomePlayRaisedCards()
+  }
+
+  // A card that a strip symbol raised hangs from the body, so leaving the
+  // Archive has to take it down too.
+  function removeHomePlayRaisedCards() {
+    document.querySelectorAll(".icono-play-raised").forEach(function (card) {
+      card.remove()
+    })
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -9397,7 +9536,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (segment.startIndex === 0) {
           var auxiliary = document.getElementById("icono-home-auxiliary")
           auxiliary.hidden = false
-          appendHomeInstallCard(auxiliary)
+          if (useClassicGallery || galleryState.authenticated || galleryState.sharedDiscoveries) {
+            appendHomeInstallCard(auxiliary)
+          } else {
+            appendHomePlayStripOrInstallCard(auxiliary, function (count) {
+              if (disposed) return
+              galleryState.guestDiscoveryCount = count
+              syncCollectionChrome()
+            })
+          }
           appendDiscordActionCard(auxiliary)
           appendGuestDiscoveryCard(auxiliary).then(function (shelf) {
             if (disposed || !shelf) return
@@ -9509,6 +9656,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       clearTimeout(searchTimer)
       feedController.dispose()
       destroyHomeMasonry()
+      removeHomePlayRaisedCards()
       var nextLink = document.head.querySelector("link[data-icono-feed-next]")
       if (nextLink) nextLink.remove()
       document.removeEventListener("click", handleSearchOutsideClick)
@@ -11560,9 +11708,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderClanMemberTileMarkup(member) {
     var item = member || {}
     var symbol = String(item.symbol || "")
-    var safeSymbol = esc(symbol)
     var fullName = String(item.full_name || "").trim() || symbol
     var photo = candidatePortraitUrl(item, "medium") || candidatePortraitUrl(item, "thumb")
+    return (
+      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-clan-tile" role="listitem">' +
+      buildImageOnlyGeneLinkMarkup(
+        symbol,
+        fullName,
+        photo,
+        ' data-icono-nav title="' + esc(symbol) + '"',
+      ) +
+      "</article>"
+    )
+  }
+
+  // The blot-only card's link for a gene outside the Archive grid: a clan
+  // member, or the card that a symbol on the first-time visitor's strip raises.
+  function buildImageOnlyGeneLinkMarkup(symbol, fullName, photo, linkAttrs) {
+    var safeSymbol = esc(symbol)
     var media =
       '<div class="icono-image-only-media-stage">' +
       buildReverseCardFaceMarkup() +
@@ -11584,15 +11747,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       safeSymbol +
       "</div></div></div>"
     return (
-      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-clan-tile" role="listitem">' +
       '<a class="icono-image-only-link" href="/gene/' +
       encodeURIComponent(symbol) +
-      '" data-icono-nav title="' +
-      safeSymbol +
-      '">' +
+      '"' +
+      linkAttrs +
+      ">" +
       media +
       overlay +
-      "</a></article>"
+      "</a>"
     )
   }
 
