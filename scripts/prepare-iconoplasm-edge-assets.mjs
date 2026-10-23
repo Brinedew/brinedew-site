@@ -36,7 +36,8 @@ const iconoplasmCsp = [
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "img-src 'self' data: blob: https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net",
+  // B-1164: the docs' screenshots stay in the vault's Attachments and load from brinedew.bio.
+  "img-src 'self' data: blob: https://brinedew.bio https://cdn.discordapp.com https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://challenges.cloudflare.com https://static.cloudflareinsights.com",
@@ -77,6 +78,12 @@ ${serviceDiscoveryHeaders}
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /developers
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/docs
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+/docs/*
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /static/iconoplasm/*
@@ -138,7 +145,7 @@ function publicationSymbols(publishedGenes = []) {
   return [...symbols].sort((left, right) => left.localeCompare(right))
 }
 
-function iconoplasmSitemap(symbols) {
+function iconoplasmSitemap(symbols, docs = []) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://iconoplasm.brinedew.bio/</loc></url>
@@ -155,6 +162,7 @@ ${symbols
   <url><loc>https://iconoplasm.brinedew.bio/privacy</loc></url>
   <url><loc>https://iconoplasm.brinedew.bio/license</loc></url>
   <url><loc>https://iconoplasm.brinedew.bio/developers</loc></url>
+${docs.map((doc) => `  <url><loc>https://iconoplasm.brinedew.bio/${doc}</loc></url>`).join("\n")}
 </urlset>
 `
 }
@@ -170,6 +178,7 @@ Iconoplasm maps human-gene biology onto memorable character portraits. A gene's 
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
 - A gene's current blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 - [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
+- [Docs](https://iconoplasm.brinedew.bio/docs): tutorial, FAQ, caretaker's handbook, patch notes
 
 ## Blots in figures
 
@@ -194,10 +203,7 @@ export const ICONOPLASM_MOVED_PATHS = Object.freeze([
   ["/Iconoplasm.html", "/"],
   ["/apps/iconoplasm", "/"],
   ["/posts", `${MAIN_SITE_ORIGIN}/posts`],
-  [
-    "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
-    `${MAIN_SITE_ORIGIN}/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm`,
-  ],
+  ["/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm", "/docs/tutorial"],
 ])
 export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
   ["/apps/iconoplasm/", "/"],
@@ -515,6 +521,7 @@ export async function writeIconoplasmCompatibilityArtifacts({
   outputRoot = targetRoot,
   publishedGenes = null,
   symbols = null,
+  docs = [],
 } = {}) {
   const resolvedOutput = path.resolve(outputRoot)
   const publishedSymbols = symbols
@@ -533,7 +540,7 @@ export async function writeIconoplasmCompatibilityArtifacts({
   publishedSymbols.sort((left, right) => left.localeCompare(right))
   await writeFile(
     path.join(resolvedOutput, "sitemap.xml"),
-    iconoplasmSitemap(publishedSymbols),
+    iconoplasmSitemap(publishedSymbols, docs),
     "utf8",
   )
   await writeFile(path.join(resolvedOutput, "_redirects"), ICONOPLASM_REDIRECTS, "utf8")
@@ -581,10 +588,6 @@ async function inspectTree(directory, bundleRoot) {
 // at its real owner (the moved-path table above, exact paths before prefixes),
 // then refuse a build that still links to a local path nobody serves.
 const ICONOPLASM_LINK_REWRITES = Object.freeze([
-  ["../../apps/iconoplasm/privacy", "/privacy"],
-  ["../../apps/iconoplasm/license", "/license"],
-  ["../../apps/iconoplasm/developers", "/developers"],
-  ["../../apps/iconoplasm/caretaker-terms", "/caretaker-terms"],
   ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => [`href="${from}"`, `href="${to}"`]),
   ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => [`href="${from}`, `href="${to}`]),
 ])
@@ -602,8 +605,32 @@ const ICONOPLASM_SERVED_PREFIXES = Object.freeze([
   "/cdn-cgi/",
 ])
 
-export function standaloneIconoplasmHtml(html) {
+// B-1164: Quartz writes links relative to the page's main-site slug
+// (apps/iconoplasm/docs/faq). This host serves apps/iconoplasm/ at its root, so
+// each relative link is resolved against that slug: Iconoplasm pages and the
+// shared static files become paths here, and everything else (wiki notes,
+// posts, the vault's attachments) goes to brinedew.bio.
+const RELATIVE_URL = /\b(href|src)="(?![a-z][a-z0-9+.-]*:|\/|#)([^"]*)"/gi
+const SHARED_ROOT_FILE = /^\/[^/]+\.(?:css|js|ico)$/
+function hostUrl(relative, pageSlug) {
+  const resolved = new URL(relative, `${MAIN_SITE_ORIGIN}/${pageSlug}`)
+  const { pathname } = resolved
+  const suffix = `${resolved.search}${resolved.hash}`
+  if (pathname.startsWith("/apps/iconoplasm/")) {
+    const page = pathname.slice("/apps/iconoplasm/".length).replace(/(?:^|\/)(?:index)?$/, "")
+    return `/${page}${suffix}`
+  }
+  if (pathname.startsWith("/static/") || SHARED_ROOT_FILE.test(pathname))
+    return `${pathname}${suffix}`
+  return resolved.href
+}
+
+export function standaloneIconoplasmHtml(html, pageSlug = "") {
   let out = String(html)
+  if (pageSlug)
+    out = out.replace(RELATIVE_URL, (match, attribute, relative) =>
+      relative ? `${attribute}="${hostUrl(relative, pageSlug)}"` : match,
+    )
   for (const [from, to] of ICONOPLASM_LINK_REWRITES) out = out.replaceAll(from, to)
   return out
 }
@@ -621,6 +648,28 @@ export function unservedIconoplasmLinks(html, bundleFiles) {
     unserved.add(target)
   }
   return [...unserved].sort()
+}
+
+// B-1164: every page Quartz emits under content/apps/iconoplasm/docs/ is served
+// here at /docs/<page>, its folder page at /docs.
+async function iconoplasmDocPages(sourceRoot) {
+  let entries
+  try {
+    entries = await readdir(path.join(sourceRoot, "apps", "iconoplasm", "docs"), {
+      withFileTypes: true,
+    })
+  } catch (error) {
+    if (error.code === "ENOENT") return []
+    throw error
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
+    .map((entry) => (entry.name === "index.html" ? "docs" : `docs/${entry.name.slice(0, -5)}`))
+    .sort()
+}
+
+function sourceDocument(page) {
+  return page === "docs" ? "docs/index.html" : `${page}.html`
 }
 
 export async function prepareIconoplasmEdgeAssets({
@@ -665,17 +714,20 @@ export async function prepareIconoplasmEdgeAssets({
   )
   await writeFile(
     path.join(resolvedOutput, "index.html"),
-    standaloneIconoplasmHtml(sourceHome),
+    standaloneIconoplasmHtml(sourceHome, "apps/iconoplasm/index"),
     "utf8",
   )
-  for (const page of ["privacy", "license", "caretaker-terms", "developers"]) {
+  const docs = await iconoplasmDocPages(resolvedSource)
+  const pages = ["privacy", "license", "caretaker-terms", "developers", ...docs]
+  for (const page of pages) {
     const source = await readFile(
-      path.join(resolvedSource, "apps", "iconoplasm", `${page}.html`),
+      path.join(resolvedSource, "apps", "iconoplasm", sourceDocument(page)),
       "utf8",
     )
+    await mkdir(path.dirname(path.join(resolvedOutput, `${page}.html`)), { recursive: true })
     await writeFile(
       path.join(resolvedOutput, `${page}.html`),
-      standaloneIconoplasmHtml(source),
+      standaloneIconoplasmHtml(source, `apps/iconoplasm/${sourceDocument(page).slice(0, -5)}`),
       "utf8",
     )
   }
@@ -685,6 +737,7 @@ export async function prepareIconoplasmEdgeAssets({
   await writeIconoplasmCompatibilityArtifacts({
     outputRoot: resolvedOutput,
     publishedGenes,
+    docs,
   })
   await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publishedGenes })
   await writeIconoplasmGeneIndexPages({ outputRoot: resolvedOutput, publishedGenes })
@@ -701,7 +754,7 @@ export async function prepareIconoplasmEdgeAssets({
 
   const report = await inspectTree(resolvedOutput, resolvedOutput)
   const bundleFiles = report.files || []
-  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"]) {
+  for (const page of ["index", ...pages]) {
     const html = await readFile(path.join(resolvedOutput, `${page}.html`), "utf8")
     const unserved = unservedIconoplasmLinks(html, bundleFiles)
     if (unserved.length) {

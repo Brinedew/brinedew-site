@@ -1,11 +1,11 @@
 ---
+description: "Become a gene's caretaker: write its lore, set its visual tags, and give its supervote to a portrait."
+docsSection: Guides
+docsOrder: 1
+docsLabel: "Caretaker's handbook"
 title: Iconoplasm - Caretaker's Handbook
-tags:
-  - content/wiki
 date: 2026-08-29
 draft: false
-aliases:
-  -
 ---
 # Iconoplasm - Caretaker's Handbook
 

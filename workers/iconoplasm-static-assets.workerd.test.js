@@ -37,7 +37,16 @@ async function makeAssetFixture() {
       ),
   })
   const shell = `<!doctype html><script type="module" src="/static/iconoplasm/app.js"></script>`
-  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
+  await mkdir(path.join(sourceRoot, "apps", "iconoplasm", "docs"), { recursive: true })
+  for (const page of [
+    "index",
+    "privacy",
+    "license",
+    "caretaker-terms",
+    "developers",
+    "docs/index",
+    "docs/tutorial",
+  ])
     await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
   await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
   const summary = await prepareIconoplasmEdgeAssets({
@@ -585,15 +594,21 @@ test(
       ["/apps/iconoplasm/clans", "/clans"],
       ["/Iconoplasm", "/"],
       ["/Iconoplasm.html", "/"],
-      [
-        "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
-        "https://brinedew.bio/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm",
-      ],
+      ["/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm", "/docs/tutorial"],
       ["/wiki/cellular-senescence", "https://brinedew.bio/wiki/cellular-senescence"],
       ["/posts", "https://brinedew.bio/posts"],
       ["/posts/support-me", "https://brinedew.bio/posts/support-me"],
     ]
-    const served = ["/", "/privacy", "/license", "/caretaker-terms", "/developers", "/gene/TP53"]
+    const served = [
+      "/",
+      "/privacy",
+      "/license",
+      "/caretaker-terms",
+      "/developers",
+      "/docs",
+      "/docs/tutorial",
+      "/gene/TP53",
+    ]
     const receipt = { generated_at: new Date().toISOString(), dispatches: [] }
     try {
       for (const [topology, assets] of [

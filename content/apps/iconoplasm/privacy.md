@@ -1,4 +1,7 @@
 ---
+docsSection: Reference
+docsOrder: 3
+docsLabel: "Privacy policy"
 title: "Privacy Policy"
 description: "How Iconoplasm handles your data"
 date: 2026-10-22

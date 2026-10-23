@@ -1,8 +1,11 @@
 ---
+description: "Queue a free character portrait for a gene and vote on candidates. Your own image API key adds instant generation and editing."
+docsSection: Start here
+docsOrder: 1
+docsLabel: "Tutorial"
 title: "Tutorial: How to generate and edit portraits in Iconoplasm"
-tags:
-  - content/wiki
 date: 2026-06-14
+updated: 2026-10-23
 draft: false
 ---
 
@@ -10,29 +13,60 @@ draft: false
 
 This tutorial walks through the steps to request a new character portrait for a gene on Iconoplasm.
 
-It's written for people unfamiliar with how image generation services work. It will take around 10 minutes of your time.
+Steps 1 to 4 are free and take about 5 minutes. Step 5 is optional: it adds your own image generation key, for instant generation and editing.
 
-Prerequisites: 
- * An email account
- * Bank card with $5 on it
-## 1. Log in to brinedew.bio site with your Discord account
+## 1. Log in with your Discord account
 
 1. Go to [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio).
 2. In the right sidebar, click **Discord Login**.
 3. On the Discord authorize page, click **Authorize**.
 You are now redirected back as an authenticated user (your Discord nickname appears in the sidebar).
-## 2. Get an API key from a provider
-Iconoplasm redirects generation requests to a third party image generation service (API provider). Registering with the provider is free: the provider will only charge you around 1 to 10 cents per image when you actually start sending image generation requests. 
 
+Requests feed the free generation queue, which is open to members of the brinedew.bio Discord server. If the request dialog shows **Join Discord**, join the server first.
+
+## 2. Navigate to a gene page
+
+1. Go to [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio).
+2. Search for a gene by symbol or name, or browse the archive.
+3. Click a gene card, or go directly to `/gene/SYMBOL` (e.g. [iconoplasm.brinedew.bio/gene/INS](https://iconoplasm.brinedew.bio/gene/INS)).
+
+## 3. Queue a free candidate
+
+1. Under the current portrait, click **New candidate** button in the bottom right.
+2. The **Free queue** tab opens. Each card is a style, shown by four portraits drawn in it, with its style number and how many blots use it.
+   ![[iconoplasm-free-queue.webp|New candidate dialog, Free queue tab]]
+3. Click **Queue random** to let the queue pick a style. Or click one or more style cards first: they join **Your batch**, and the button becomes **Queue 1 candidate** or **Queue 3 candidates**.
+4. Click the star under a card to keep that style in **Favorites**. **Add all favorites** puts every favorite in your batch at once.
+5. Your request appears under **Waiting** in the **Inbox** in the right sidebar. When its portraits are drawn, it moves to **Ready**: click it to open the gene and see them among its candidates.
+
+## 4. Vote on candidates
+
+- Click the checkmark (**Approve portrait**) to upvote a candidate.
+- Click the X (**Reject portrait**) to downvote it.
+- The current portrait is the one with the highest approval score.
+
+## 5. Use your own image API key (optional)
+
+The free queue draws portraits in turn. With your own key you get a portrait in 1-2 minutes, and you can edit portraits.
+
+Iconoplasm redirects generation requests to a third party image generation service (API provider). Registering with the provider is free: the provider will only charge you around 1 to 10 cents per image when you actually start sending image generation requests.
+
+Prerequisites:
+ * An email account
+ * Bank card with $5 on it
+
+### 5.1 Get an API key from a provider
 In this section, we will walk through the steps needed to register with a provider and obtain a key you will need for image generation.
 You only need to register with **one** of supported providers: 
 * Gemini API
 * Krea API
 * Luma Uni API
 * OpenAI API
+* fal.ai API
+
 Your choice of provider might depend on your preferred payment model, discount offers, or aesthetic taste. There are no wrong choices. If you're unsure, visit brinedew.bio Discord server to ask for user opinions.
 Below are the registration instructions for each provider.
-### 2a. Gemini API
+#### Gemini API
 
 **Getting the key:**
 
@@ -58,7 +92,7 @@ Gemini API previously offered a Free tier for image generation, but the free tie
 
 ![[image-41.png|Gemini billing — set up billing to use image generation models]]
 
-### 2b. Krea API
+#### Krea API
 
 **Getting the key:**
 
@@ -90,7 +124,7 @@ Gemini API previously offered a Free tier for image generation, but the free tie
 
 When your balance runs out, new requests will get an error message.
 
-### 2c. Luma Uni API
+#### Luma Uni API
 
 **Getting the key:**
 
@@ -124,7 +158,7 @@ You must add a card and top up your balance before making requests to Luma API.
 3. Click **Add Funds** to top up your balance. Enter the amount you want to add and complete the payment.
 4. Your balance updates immediately on success. Each image generation deducts from this balance — estimated costs are shown in the Pricing table below.
 
-### 2d. OpenAI API
+#### OpenAI API
 
 **Getting the key:**
 
@@ -158,7 +192,7 @@ GPT Image 2.5 has no free tier. Without billing, Iconoplasm shows: **"Billing ha
 
 12. Click **Continue**. Your card is saved. You're billed monthly for actual usage.
 
-### 2e. fal.ai API
+#### fal.ai API
 1. Visit https://fal.ai/login and log in using one of the suggested gateways
 ![[image-44.png|fal.ai login page]]
 
@@ -185,7 +219,7 @@ GPT Image 2.5 has no free tier. Without billing, Iconoplasm shows: **"Billing ha
 5. Fill in your address details - can leave tax ID field unfilled.
 ![[image-51.png]]
 6. Stripe payment processing page will open, fill in your bank card details there. 
-## 3. Configure your API key in Iconoplasm
+### 5.2 Configure your API key in Iconoplasm
 
 Now that you have a key from one of the providers above, save it in Iconoplasm settings. The steps are the same regardless of which provider you chose.
 
@@ -195,7 +229,7 @@ Now that you have a key from one of the providers above, save it in Iconoplasm s
 4. Select a **Model** using the dropdown menu. There's no wrong choice, experiment and see which model matches your taste. High quality models are usually more expensive.
 5. Click **Save API**.
 
-## 4. Configure your emulsion
+### 5.3 Configure your emulsion
 
 The emulsion is a short text prompt (max 140 characters) that sets the visual style and atmosphere for every portrait you generate.
 
@@ -204,17 +238,12 @@ The emulsion is a short text prompt (max 140 characters) that sets the visual st
 3. Click **Save emulsion**.
 
 Your saved emulsion appears in the **Load version** dropdown. You can maintain multiple drafts.
-## 5. Navigate to a gene page
 
-1. Go to [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio).
-2. Search for a gene by symbol or name, or browse the archive.
-3. Click a gene card, or go directly to `/gene/SYMBOL` (e.g. [iconoplasm.brinedew.bio/gene/INS](https://iconoplasm.brinedew.bio/gene/INS)).
-
-## 6. Generate a new candidate portrait
+### 5.4 Generate a candidate with your key
 
 1. Under the current portrait, click **New candidate** button in the bottom right.
    ![[image-37.png|Current portrait with a new button candidate in the bottom right.]]
-2. You will see a menu for requesting a **new candidate**:
+2. In the dialog, click the **Image API** tab:
    ![[image-38.png|New candidate menu]] 
 3. The **Provider** selector should show your newly added provider (e.g. **OpenAI API · gpt-image-2**).
 4. Keep the "emulsion" field empty, or click it to select the emulsion you saved in the user settings.
@@ -225,28 +254,22 @@ Your saved emulsion appears in the **Load version** dropdown. You can maintain m
 
 If your provider requires billing that hasn't been set up yet, the dialog will show: **"Billing hard limit has been reached."**
 
-## 7. Edit an existing candidate portrait
+### 5.5 Edit an existing candidate portrait
 
 1. Click the **Edit portrait** pencil icon under the current portrait or under any candidate portrait.
 2. The edit dialog will open, showing what characteristics you can request to edit.
    ![[image-39.png|Edit portrait menu. Edit button is in the lower left corner.]]
-3. Set checkmarks in the fields you want to edit. E.g. if the character looks bright green, but the "Surface tone" is dark, tap the "Surface tone" checkmark. You can set multiple checkmarks at once.
-4. Click **Edit** to request an edited portrait.
-5. Wait 1-2 minutes for the new image to appear in the same dialog box. Drag the before/after slider to judge the results.
-6. Click **Publish** to add the new image to the gene's candidate list.
+3. Under **Editing API**, pick the provider whose key you saved.
+4. Set checkmarks in the fields you want to edit. E.g. if the character looks bright green, but the "Surface tone" is dark, tap the "Surface tone" checkmark. You can set multiple checkmarks at once.
+5. Click **Edit** to request an edited portrait.
+6. Wait 1-2 minutes for the new image to appear in the same dialog box. Drag the before/after slider to judge the results.
+7. Click **Publish** to add the new image to the gene's candidate list.
 
-## 8. Vote on candidates
-
-- Click the checkmark (**Approve portrait**) to upvote a candidate.
-- Click the X (**Reject portrait**) to downvote it.
-- The current portrait is the one with the highest approval score.
-
-
-## Model comparison
+### Model comparison
 
 ![[NB2.png|Image edited with the Nano-Banana 2 model for age and color]]
 
-## Pricing
+### Pricing
 
 Each provider sets its own rates. Iconoplasm's dropdown shows rough estimates — always check the official pricing page before generating at scale.
 
