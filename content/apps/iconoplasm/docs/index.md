@@ -13,7 +13,7 @@ Iconoplasm is a browser extension that gives character portraits to any human ge
 ## Start here
 
 - [[apps/iconoplasm/docs/Tutorial|Tutorial]]
-  - Free, and takes about 5 minutes.
+  - Request a new character portrait for a gene: free, and takes about 5 minutes.
 - [[apps/iconoplasm/docs/fix-a-bad-portrait|Fix a bad portrait]]
   - Edit it, vote on it, order new candidates, or copy it to a gene that it fits better.
 - [[apps/iconoplasm/docs/get-an-image-api-key|Use your own image key]]
