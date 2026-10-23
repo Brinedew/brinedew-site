@@ -4,7 +4,7 @@ Once a day, one post in `#iconoplasm` shows members what the community did on th
 before. It is one long vertical picture, read like a manhwa strip on a phone (and on a laptop),
 plus a short text of gene links, because a picture can't be clicked.
 
-The design took a whole day of rejected drafts on 2026-10-21 (Linear B-733). The 25 mistakes below are
+The design took a whole day of rejected drafts on 2026-10-21 (Linear B-733). The mistakes below are
 why it looks the way it does. Read them before changing it.
 
 ## Who it is for
@@ -70,7 +70,7 @@ At 100× the strip shows:
 - 20 of 600 comments, one line each;
 - 286 of 10,400 genes with new candidates.
 
-## The 25 mistakes
+## The mistakes
 
 Numbers 1–8 are reconstructed from the owner's corrections. 9–15 and 21–25 are the owner's own
 list. 16–20 are the ones the owner left for the agent to find.
@@ -129,6 +129,9 @@ list. 16–20 are the ones the owner left for the agent to find.
     laptop.
 25. **Not saying whether the render survives real loads.** Every render is tested on empty,
     quiet, normal, 10× and 100× days, and the numbers are reported with it.
+26. **Teal on a printed mark (2026-10-23).** The arrowhead between the old portrait and the new
+    blot was drawn teal. Teal means a handwritten Caveat note; printed marks such as arrows and
+    rules are ink.
 
 ## Where it lives
 
