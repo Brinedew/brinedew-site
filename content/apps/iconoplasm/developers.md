@@ -1,5 +1,5 @@
 ---
-docsSection: Guides
+docsSection: Reuse and rights
 docsOrder: 2
 docsLabel: "For developers"
 title: "For developers"

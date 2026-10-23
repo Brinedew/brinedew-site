@@ -4,8 +4,14 @@ import { classNames } from "../util/lang"
 // B-1164: the Iconoplasm docs. A note joins this list with three frontmatter
 // lines (docsSection, docsOrder, docsLabel), wherever it lives in the vault.
 // Notes under apps/iconoplasm/ are served on iconoplasm.brinedew.bio at the path
-// after that prefix; anything else (the essay post) stays on brinedew.bio.
-const DOCS_SECTIONS = ["Start here", "Guides", "Reference", "Background"]
+// after that prefix; anything else stays on brinedew.bio.
+const DOCS_SECTIONS = [
+  "Start here",
+  "Your own image key",
+  "Caretakers",
+  "Reuse and rights",
+  "Updates",
+]
 
 type DocsEntry = { slug: string; label: string; section: string; order: number }
 
