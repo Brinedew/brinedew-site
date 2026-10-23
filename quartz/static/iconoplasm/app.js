@@ -7155,6 +7155,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var requestSelectionLimit = 100
       // The order just queued, shown in the tray until the next pick.
       var justQueuedOptions = []
+      var randomClicks = Promise.resolve()
       var filteredOptions = []
       var requestView = ""
       var browse = body.querySelector("[data-icono-request-browse]")
@@ -8053,10 +8054,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           if (doneMosaic && showDone) {
             doneMosaic.innerHTML = requestBatchMosaicMarkup(justQueuedOptions, 6, true)
             doneMosaic.setAttribute("role", "img")
+            var doneNoun =
+              justQueuedOptions[0] && justQueuedOptions[0].random ? " random candidate" : " style"
             doneMosaic.setAttribute(
               "aria-label",
               justQueuedOptions.length +
-                " style" +
+                doneNoun +
                 (justQueuedOptions.length === 1 ? "" : "s") +
                 " queued",
             )
@@ -8531,77 +8534,91 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               requested_vision_id: null,
             }
         var button = event.submitter || queueSubmitButton
-        if (button) {
+        // B-1163: "Queue random" takes every click. A click while the last
+        // one is still on its way is queued too, instead of meeting a
+        // disabled button; the server folds them into one order.
+        if (button && isBatch) {
           button.disabled = true
-          button.textContent = isBatch ? "Queueing " + requestedVisionIds.length + "…" : "Queueing…"
+          button.textContent = "Queueing " + requestedVisionIds.length + "…"
         }
         setStatus("", "")
-        fetchJSON("/api/iconoplasm/requests", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-          },
-          body: JSON.stringify(payload),
-        })
-          .then(function (responsePayload) {
-            var failures = Array.isArray(responsePayload && responsePayload.failures)
-              ? responsePayload.failures
-              : []
-            var failedVisionIds = new Set(
-              failures.map(function (failure) {
-                return String((failure && failure.requested_vision_id) || "").trim()
-              }),
-            )
-            justQueuedOptions = requestedVisionIds
-              .filter(function (visionId) {
-                return !failedVisionIds.has(visionId)
-              })
-              .map(function (visionId) {
-                return requestOptionsByVisionId[visionId] || { vision_id: visionId }
-              })
-            selectedRequestVisionIds.clear()
-            failedVisionIds.forEach(function (visionId) {
-              if (visionId) selectedRequestVisionIds.add(visionId)
-            })
-            if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
-            updateQueueSelectionControls()
-            void renderResultsList()
-            delete geneRequestSummaryCache[symbol]
-            var queuedCount = Math.max(
-              0,
-              Number(responsePayload && responsePayload.queued_count) ||
-                (isBatch ? requestedVisionIds.length : 1),
-            )
-            if (failures.length) {
-              setStatus(
-                "Queued " +
-                  queuedCount +
-                  "; " +
-                  failures.length +
-                  " could not be queued and remain selected.",
-                "error",
+        var send = function () {
+          return fetchJSON("/api/iconoplasm/requests", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+            },
+            body: JSON.stringify(payload),
+          })
+            .then(function (responsePayload) {
+              var failures = Array.isArray(responsePayload && responsePayload.failures)
+                ? responsePayload.failures
+                : []
+              var failedVisionIds = new Set(
+                failures.map(function (failure) {
+                  return String((failure && failure.requested_vision_id) || "").trim()
+                }),
               )
-            } else if (!isBatch) {
-              setStatus("Queued 1 candidate.", "success")
-            }
-            void requestInbox.refresh()
-            return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
-              wireAuthenticatedRequestForm(state)
-              return state
-            })
-          })
-          .catch(function (error) {
-            setStatus(String((error && error.message) || "Could not queue request."), "error")
-          })
-          .finally(function () {
-            if (button) {
-              button.disabled = false
-              button.textContent = String(
-                button.getAttribute("data-default-label") || "Queue random",
+              justQueuedOptions = isBatch
+                ? requestedVisionIds
+                    .filter(function (visionId) {
+                      return !failedVisionIds.has(visionId)
+                    })
+                    .map(function (visionId) {
+                      return requestOptionsByVisionId[visionId] || { vision_id: visionId }
+                    })
+                : // Each random click adds a tile to the random order in view.
+                  justQueuedOptions
+                    .filter(function (option) {
+                      return option.random === true
+                    })
+                    .concat([{ vision_id: "", random: true }])
+              selectedRequestVisionIds.clear()
+              failedVisionIds.forEach(function (visionId) {
+                if (visionId) selectedRequestVisionIds.add(visionId)
+              })
+              if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
+              updateQueueSelectionControls()
+              void renderResultsList()
+              delete geneRequestSummaryCache[symbol]
+              var queuedCount = Math.max(
+                0,
+                Number(responsePayload && responsePayload.queued_count) ||
+                  (isBatch ? requestedVisionIds.length : 1),
               )
-            }
-          })
+              if (failures.length) {
+                setStatus(
+                  "Queued " +
+                    queuedCount +
+                    "; " +
+                    failures.length +
+                    " could not be queued and remain selected.",
+                  "error",
+                )
+              }
+              void requestInbox.refresh()
+              return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
+                wireAuthenticatedRequestForm(state)
+                return state
+              })
+            })
+            .catch(function (error) {
+              setStatus(String((error && error.message) || "Could not queue request."), "error")
+            })
+            .finally(function () {
+              if (button && isBatch) {
+                button.disabled = false
+                button.textContent = String(
+                  button.getAttribute("data-default-label") || "Queue random",
+                )
+              }
+            })
+        }
+        // Random clicks go out one after another, so each sees the order the
+        // one before it opened and joins it.
+        if (isBatch) void send()
+        else randomClicks = randomClicks.then(send)
       })
     }
 

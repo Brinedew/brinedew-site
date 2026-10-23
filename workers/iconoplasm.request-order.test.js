@@ -545,3 +545,118 @@ test(
     }
   },
 )
+
+// B-1163: clicking "Queue random" ten times is one order, one receipt.
+//
+// On 2026-10-22 the owner clicked it six times on ALMS1 in four seconds and got
+// six orders and six Discord messages. Ways it could go wrong, written before
+// the fix:
+// 1. each click places its own order (the incident);
+// 2. a click lands after part of the order was delivered, joins it, and the
+//    receipt waits for a count it was born without, so it never goes out;
+// 3. a click on another gene, or a style pick, joins the random order.
+test("random clicks on one gene join one order until any of it is delivered", async (t) => {
+  const { db, raw } = watchedDatabase()
+  t.after(() => raw.close())
+  const storage = fakeBunnyStorage(t).env
+  for (const symbol of ["CA3", "SOX11"])
+    await writeFactoryGeneText(
+      { ICONOPLASM_DB: db, ...storage },
+      { symbol, text: `${symbol} text.`, tags: "zinc" },
+    )
+  const reader = ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID
+  const click = (symbol = "CA3") =>
+    order(db, { symbol, request_kind: "new_candidate", request_mode: "random" }, reader)
+
+  for (let i = 0; i < 10; i++) assert.equal((await click()).status, 200)
+  const orders = () =>
+    raw
+      .prepare(
+        `SELECT gene_symbol AS symbol, request_mode AS mode, request_batch_id AS id, COUNT(*) AS n
+         FROM icono_generation_requests GROUP BY request_batch_id ORDER BY MIN(id)`,
+      )
+      .all()
+      .map((row) => ({ ...row }))
+  // 1. Ten clicks, one order.
+  let placed = orders()
+  assert.equal(placed.length, 1, JSON.stringify(placed))
+  assert.match(placed[0].id, /^random-/)
+  assert.equal(placed[0].n, 10)
+
+  // 3. Another gene and a style pick each place their own order.
+  assert.equal((await click("SOX11")).status, 200)
+  assert.equal(
+    (
+      await order(
+        db,
+        { symbol: "CA3", requested_vision_ids: ["anima-v1-1"], client_batch_id: "pick" },
+        reader,
+      )
+    ).status,
+    200,
+  )
+  placed = orders()
+  assert.deepEqual(
+    placed.map((row) => [row.symbol, row.mode, row.n]),
+    [
+      ["CA3", "random", 10],
+      ["SOX11", "random", 1],
+      ["CA3", "specific", 1],
+    ],
+  )
+  const randomOrder = placed[0].id
+
+  const ids = raw
+    .prepare("SELECT id FROM icono_generation_requests WHERE request_batch_id = ? ORDER BY id")
+    .all(randomOrder)
+    .map((row) => row.id)
+  const finish = (requestIds) => {
+    for (const id of requestIds)
+      raw
+        .prepare(
+          `UPDATE icono_generation_requests
+           SET status = 'delivery_pending', fulfillment_publication_id = 'pub',
+               fulfilled_asset_sha256 = ?, fulfilled_vision_id = requested_vision_id
+           WHERE id = ?`,
+        )
+        .run(String(id).padStart(64, "b"), id)
+  }
+
+  // 2. Once one request of the order is delivered, the next click starts a
+  // new order: the open order is still found, and the insert's own check
+  // turns the join away.
+  finish(ids.slice(0, 1))
+  assert.equal((await click()).status, 200)
+  const after = orders().filter((row) => row.symbol === "CA3" && row.mode === "random")
+  assert.equal(after.length, 2)
+  assert.equal(after[0].n, 10)
+  assert.equal(after[1].n, 1)
+
+  const sent = []
+  const originalFetch = globalThis.fetch
+  t.after(() => (globalThis.fetch = originalFetch))
+  globalThis.fetch = async (url, init) => {
+    const value = String(url)
+    if (value.startsWith("https://storage.bunnycdn.com/"))
+      return new Response(
+        new Uint8Array([82, 73, 70, 70, 8, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]),
+        { headers: { "Content-Type": "image/webp" } },
+      )
+    if (value === "https://discord.com/api/v10/users/@me/channels")
+      return Response.json({ id: "dm-channel" })
+    sent.push(JSON.parse(init.body.get("payload_json")))
+    return Response.json({ id: `message-${sent.length}` })
+  }
+  finish(ids.slice(1))
+  const delivered = await deliverPendingRequestFulfillmentNotifications({
+    ICONOPLASM_DB: db,
+    DISCORD_BOT_TOKEN: "test-only",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+  })
+  assert.equal(delivered.delivered, 1)
+  assert.equal(delivered.delivered_requests, 10)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].content, /Your 10 free queue candidate portraits for \*\*CA3\*\*/)
+})
