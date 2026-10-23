@@ -45,7 +45,7 @@ async function makeAssetFixture() {
     "caretaker-terms",
     "developers",
     "docs/index",
-    "docs/tutorial",
+    "docs/request-a-new-portrait",
   ])
     await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), shell)
   await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
@@ -594,7 +594,11 @@ test(
       ["/apps/iconoplasm/clans", "/clans"],
       ["/Iconoplasm", "/"],
       ["/Iconoplasm.html", "/"],
-      ["/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm", "/docs/tutorial"],
+      [
+        "/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm",
+        "/docs/request-a-new-portrait",
+      ],
+      ["/docs/tutorial", "/docs/request-a-new-portrait"],
       ["/wiki/cellular-senescence", "https://brinedew.bio/wiki/cellular-senescence"],
       ["/posts", "https://brinedew.bio/posts"],
       ["/posts/support-me", "https://brinedew.bio/posts/support-me"],
@@ -606,7 +610,7 @@ test(
       "/caretaker-terms",
       "/developers",
       "/docs",
-      "/docs/tutorial",
+      "/docs/request-a-new-portrait",
       "/gene/TP53",
     ]
     const receipt = { generated_at: new Date().toISOString(), dispatches: [] }

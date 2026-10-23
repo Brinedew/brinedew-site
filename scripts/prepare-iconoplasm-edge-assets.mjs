@@ -203,7 +203,14 @@ export const ICONOPLASM_MOVED_PATHS = Object.freeze([
   ["/Iconoplasm.html", "/"],
   ["/apps/iconoplasm", "/"],
   ["/posts", `${MAIN_SITE_ORIGIN}/posts`],
-  ["/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm", "/docs/tutorial"],
+  ["/wiki/Tutorial-How-to-generate-and-edit-blots-in-Iconoplasm", "/docs/request-a-new-portrait"],
+  // B-1164: docs pages renamed after their titles (the old ones named the
+  // wrong job: "Tutorial" taught one task, "Fix a bad portrait" covers editing,
+  // voting and copying).
+  ["/docs/tutorial", "/docs/request-a-new-portrait"],
+  ["/docs/fix-a-bad-portrait", "/docs/edit-and-vote-on-portraits"],
+  ["/docs/get-an-image-api-key", "/docs/get-an-api-key"],
+  ["/docs/write-your-genes-story", "/docs/worldbuilding"],
 ])
 export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
   ["/apps/iconoplasm/", "/"],

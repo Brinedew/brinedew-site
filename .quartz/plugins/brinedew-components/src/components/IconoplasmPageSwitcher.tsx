@@ -7,7 +7,7 @@ import { classNames } from "../util/lang"
 // after that prefix; anything else stays on brinedew.bio.
 const DOCS_SECTIONS = [
   "Start here",
-  "Your own image key",
+  "Bring your own key",
   "Caretakers",
   "Reuse and rights",
   "Updates",

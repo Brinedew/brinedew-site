@@ -30,9 +30,13 @@ test("main-site and legal links point at their real owners", () => {
   assert.match(html, /href="https:\/\/brinedew\.bio\/about"/)
   assert.match(html, /href="https:\/\/brinedew\.bio\/posts"/)
   assert.match(html, /href="https:\/\/brinedew\.bio\/posts\/support-me"/)
-  assert.match(html, /href="\/docs\/tutorial"/)
+  assert.match(html, /href="\/docs\/request-a-new-portrait"/)
   assert.deepEqual(
-    unservedIconoplasmLinks(html, ["caretaker-terms.html", "privacy.html", "docs/tutorial.html"]),
+    unservedIconoplasmLinks(html, [
+      "caretaker-terms.html",
+      "privacy.html",
+      "docs/request-a-new-portrait.html",
+    ]),
     [],
   )
 })
@@ -40,7 +44,7 @@ test("main-site and legal links point at their real owners", () => {
 // B-1164: the docs are Quartz pages under apps/iconoplasm/docs/, served here at
 // /docs/<page>. Quartz links them relative to that main-site slug. Ways this can fail:
 //  1. A sibling doc or the landing page resolves against /docs/faq's real URL
-//     and lands on /tutorial or /docs/index, which this host doesn't serve.
+//     and lands on /request-a-new-portrait or /docs/index, which this host doesn't serve.
 //  2. A legal page or the archive is linked as /apps/iconoplasm/..., one redirect away.
 //  3. A tutorial screenshot points at /attachments/ here, which this host doesn't
 //     serve (the vault's attachments stay on brinedew.bio), so readers see broken images.
@@ -51,7 +55,7 @@ test("a docs page's relative links resolve to this host or to brinedew.bio", () 
     [
       '<link href="../../../index.css" rel="stylesheet">',
       '<script src="../../../static/resource-after-1.js"></script>',
-      '<a href="./tutorial#2-log-in">Tutorial</a>',
+      '<a href="./request-a-new-portrait#2-log-in">Request a new portrait</a>',
       '<a href="../docs/">Docs</a>',
       '<a href="../privacy">Privacy</a>',
       '<a href="../">Archive</a>',
@@ -64,7 +68,7 @@ test("a docs page's relative links resolve to this host or to brinedew.bio", () 
     "apps/iconoplasm/docs/faq",
   )
   // 1
-  assert.match(html, /href="\/docs\/tutorial#2-log-in"/)
+  assert.match(html, /href="\/docs\/request-a-new-portrait#2-log-in"/)
   assert.match(html, /href="\/docs"/)
   // 2
   assert.match(html, /href="\/privacy"/)
@@ -85,7 +89,7 @@ test("a docs page's relative links resolve to this host or to brinedew.bio", () 
       "index.html",
       "privacy.html",
       "docs.html",
-      "docs/tutorial.html",
+      "docs/request-a-new-portrait.html",
     ]),
     [],
   )
