@@ -94,7 +94,7 @@ export const PAGES_REDIRECTS = Object.freeze([
   ["/wiki/iconoplasm-faq", "https://iconoplasm.brinedew.bio/docs/faq", 301],
   [
     "/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm",
-    "https://iconoplasm.brinedew.bio/docs/tutorial",
+    "https://iconoplasm.brinedew.bio/docs/request-a-new-portrait",
     301,
   ],
   [

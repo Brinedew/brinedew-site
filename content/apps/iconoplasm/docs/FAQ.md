@@ -1,7 +1,7 @@
 ---
 description: "What Iconoplasm is, who it is for, why the portraits are AI-made, and how to support the project."
 docsSection: Start here
-docsOrder: 3
+docsOrder: 4
 docsLabel: "FAQ"
 title: Iconoplasm FAQ
 date: 2026-03-07

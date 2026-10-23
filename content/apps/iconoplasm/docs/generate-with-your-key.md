@@ -1,7 +1,7 @@
 ---
 title: "Generate with your own key"
 description: "Save your key and emulsion in the settings, then generate a candidate in 1-2 minutes."
-docsSection: Your own image key
+docsSection: Bring your own key
 docsOrder: 2
 docsLabel: "Generate with your key"
 date: 2026-06-14
