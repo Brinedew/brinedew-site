@@ -4211,6 +4211,46 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   display: none !important;
 }
 
+/* The genes a signed-out reader found, over the fading card backs. Each
+   thumbnail is the catalogue's 256px portrait crop and opens its gene page. */
+.icono-guest-discovery-thumbs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.icono-guest-discovery-thumb {
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-md);
+  background: var(--lightgray);
+}
+
+.icono-guest-discovery-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icono-guest-discovery-thumb:hover {
+  border-color: var(--accent);
+}
+
+.icono-guest-discovery-thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* "You discovered 20 genes so far" is 30 characters: one line in the card. */
+.icono-guest-discovery-card .icono-guest-login-card-title {
+  max-width: none;
+  text-wrap: balance;
+}
+
 .icono-collection-summary-host[hidden],
 .icono-empty[hidden] {
   display: none !important;
