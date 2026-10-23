@@ -4211,8 +4211,9 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   display: none !important;
 }
 
-/* The genes a signed-out reader found, over the fading card backs. Each
-   thumbnail is the catalogue's 256px portrait crop and opens its gene page. */
+/* The genes a signed-out reader found, over the fading card backs. Each one is
+   a small card of the whole portrait and opens its gene page. The frame is the
+   candidate strip's 7:9, so a 3:4 portrait loses about 3.5% from the bottom. */
 .icono-guest-discovery-thumbs {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -4222,7 +4223,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 
 .icono-guest-discovery-thumb {
   display: block;
-  aspect-ratio: 1;
+  aspect-ratio: 7 / 9;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-md);
@@ -4234,6 +4235,7 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% 0;
 }
 
 .icono-guest-discovery-thumb:hover {
