@@ -2644,10 +2644,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function buildCollectionSummaryMarkup(collectionState) {
-    var discoveredCount =
-      Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
-      Number(collectionState && collectionState.discoveryEntries.length) ||
-      0
+    // A signed-out reader's count is what they found in this browser, the guest
+    // card's number. The four starters on show are a preview, not finds, as the
+    // server treats them for an empty account. Until the add-on answers, the
+    // count is the gene pages opened here.
+    var guestPreview =
+      !!collectionState && !collectionState.authenticated && !collectionState.sharedDiscoveries
+    var guestCount = guestPreview
+      ? typeof collectionState.guestDiscoveryCount === "number"
+        ? collectionState.guestDiscoveryCount
+        : websiteGuestDiscoveries.listEntries().length
+      : 0
+    var discoveredCount = guestPreview
+      ? guestCount
+      : Math.max(0, Number(collectionState && collectionState.discoveredCount) || 0) ||
+        Number(collectionState && collectionState.discoveryEntries.length) ||
+        0
     // The catalogue's own size, whichever path built the shelf (a restored shelf
     // never fetches counts, so the gallery's total can stay 0).
     var totalCount = catalogueGeneCount
@@ -2657,10 +2669,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var totalCopy = totalCount.toLocaleString()
     var sharedChecked = !!(collectionState && collectionState.sharedDiscoveries)
     var sharedDisabled = false
+    // Once the reader has finds, the guest card says this with its login button.
     var guestStorageCopy =
-      collectionState && !collectionState.authenticated
-        ? " · dossier visits stay in this browser until you sign in"
-        : ""
+      guestPreview && !guestCount ? " · dossier visits stay in this browser until you sign in" : ""
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
       '<article class="icono-collection-card icono-collection-card--archive">' +
@@ -3847,7 +3858,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             count: symbols.length,
             genes: records
               .filter(function (record) {
-                return !!rawPublishedPortraitUrl(record, "thumb")
+                return !!rawPublishedPortraitUrl(record, "medium")
               })
               .slice(0, GUEST_DISCOVERY_CARD_THUMB_COUNT),
           }
@@ -3855,6 +3866,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
+  // Each gene shows as a small card of its whole portrait. The catalogue's
+  // "thumb" is a square crop that cuts off heads and feet, so it uses "medium".
   function buildGuestDiscoveryCardMarkup(shelf) {
     var thumbs = ""
     for (var i = 0; i < shelf.genes.length; i++) {
@@ -3869,8 +3882,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '" aria-label="' +
         esc(label) +
         '"><img src="' +
-        esc(publishedPortraitUrl(gene, "thumb")) +
-        '" alt="" width="256" height="256" loading="lazy" decoding="async"></a>'
+        esc(publishedPortraitUrl(gene, "medium")) +
+        '" alt="" loading="lazy" decoding="async"></a>'
     }
     return (
       '<section class="icono-card icono-guest-login-card icono-guest-discovery-card" data-icono-guest-discovery-card>' +
@@ -3897,15 +3910,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (installed) installed.remove()
   }
 
+  // Resolves with the shelf, so the Archive's count can match the card.
   function appendGuestDiscoveryCard(container) {
-    if (!container || currentUser) return
-    loadGuestDiscoveryShelf().then(function (shelf) {
-      if (currentUser || !shelf.count || !container.isConnected) return
-      if (container.querySelector("[data-icono-guest-discovery-card]")) return
+    if (!container || currentUser) return Promise.resolve(null)
+    return loadGuestDiscoveryShelf().then(function (shelf) {
+      if (currentUser || !shelf.count || !container.isConnected) return shelf
+      if (container.querySelector("[data-icono-guest-discovery-card]")) return shelf
       var wrapper = document.createElement("div")
       wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
       container.insertBefore(wrapper.firstElementChild, container.firstChild)
       dropInstalledCardBesideGuestDiscoveries(container)
+      return shelf
     })
   }
 
@@ -4076,10 +4091,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function appendDiscordActionCard(container) {
-    if (!currentUser) {
-      appendGuestDiscoveryCard(container)
-      return null
-    }
+    if (!currentUser) return null
     if (!container || container.querySelector("[data-icono-discord-action-card]")) {
       return null
     }
@@ -9382,6 +9394,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           auxiliary.hidden = false
           appendHomeInstallCard(auxiliary)
           appendDiscordActionCard(auxiliary)
+          appendGuestDiscoveryCard(auxiliary).then(function (shelf) {
+            if (disposed || !shelf) return
+            galleryState.guestDiscoveryCount = shelf.count
+            syncCollectionChrome()
+          })
         }
         syncCollectionChrome()
         if (restoreState && restoreState.anchorGene) {
