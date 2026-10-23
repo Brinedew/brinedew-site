@@ -4,7 +4,7 @@ Once a day, one post in `#iconoplasm` shows members what the community did on th
 before. It is one long vertical picture, read like a manhwa strip on a phone (and on a laptop),
 plus a short text of gene links, because a picture can't be clicked.
 
-The design took a whole day of rejected drafts on 2026-10-21 (Linear B-733). The 25 mistakes below are
+The design took a whole day of rejected drafts on 2026-10-21 (Linear B-733). The mistakes below are
 why it looks the way it does. Read them before changing it.
 
 ## Who it is for
@@ -17,8 +17,9 @@ honest on a dead day and readable on a viral day.
 
 Sections appear only when they have something in them, in this order:
 
-1. **Canonical portrait updates.** For each gene, the previous portrait and the new blot, the same
-   size and both in colour, with the symbol and the full gene name. Only changes people caused
+1. **Canonical portrait updates.** For each gene, the previous portrait in grey, an ink arrowhead,
+   and the new blot in colour, the same size, with the symbol and the full gene name centred
+   under the pair. Only changes people caused
    count. When nobody has voted on a gene, every candidate ties at zero and the newest one wins.
    A new candidate taking over like that is not an update; it shows under New candidates.
 2. **New caretakers.** The person first: Discord avatar and name, the gene they now look after,
@@ -50,7 +51,8 @@ images above about 10 MB; the worst case so far is 3.6 MB.
   rest become a teal "+ N more" line.
 - The text links at most k genes per section line and counts the rest. k shrinks until the
   message fits Discord's 2,000 characters.
-- A day with nothing in it posts nothing.
+- A day with nothing in any section posts nothing: no picture and no text, and the next post
+  covers only its own day.
 
 Measured on 2026-10-21:
 
@@ -68,7 +70,7 @@ At 100× the strip shows:
 - 20 of 600 comments, one line each;
 - 286 of 10,400 genes with new candidates.
 
-## The 25 mistakes
+## The mistakes
 
 Numbers 1–8 are reconstructed from the owner's corrections. 9–15 and 21–25 are the owner's own
 list. 16–20 are the ones the owner left for the agent to find.
@@ -93,8 +95,9 @@ list. 16–20 are the ones the owner left for the agent to find.
    what although nobody asked for open ballots. They also took one critique as an absolute rule
    and threw away the rest.
 9. **No lore or comment previews.** Members want to read what people wrote, not see a count.
-10. **The old portrait smaller and grey.** Previous portrait and new blot are equals: same size,
-    both in colour.
+10. **The old portrait smaller.** Previous portrait and new blot are the same size. The owner
+    first asked for both in colour, then on 2026-10-23 for the superseded portrait in grey, so
+    the new one reads as current at a glance.
 11. **Bureaucratic markings.** A red dot plus a sentence explaining it. Drop the marking instead
     of explaining it.
 12. **Invented section names.** Nobody says "voted in". The site says "Canonical portrait
@@ -126,6 +129,9 @@ list. 16–20 are the ones the owner left for the agent to find.
     laptop.
 25. **Not saying whether the render survives real loads.** Every render is tested on empty,
     quiet, normal, 10× and 100× days, and the numbers are reported with it.
+26. **Teal on a printed mark (2026-10-23).** The arrowhead between the old portrait and the new
+    blot was drawn teal. Teal means a handwritten Caveat note; printed marks such as arrows and
+    rules are ink.
 
 ## Where it lives
 
