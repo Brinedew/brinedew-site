@@ -611,6 +611,9 @@ const ICONOPLASM_SERVED_PREFIXES = Object.freeze([
 // shared static files become paths here, and everything else (wiki notes,
 // posts, the vault's attachments) goes to brinedew.bio.
 const RELATIVE_URL = /\b(href|src)="(?![a-z][a-z0-9+.-]*:|\/|#)([^"]*)"/gi
+// Quartz's alias pages (docs/FAQ.html for docs/faq) redirect with a relative meta refresh.
+const RELATIVE_REFRESH =
+  /(http-equiv="refresh" content="\d+;\s*url=)(?![a-z][a-z0-9+.-]*:|\/)([^"]*)"/gi
 const SHARED_ROOT_FILE = /^\/[^/]+\.(?:css|js|ico)$/
 function hostUrl(relative, pageSlug) {
   const resolved = new URL(relative, `${MAIN_SITE_ORIGIN}/${pageSlug}`)
@@ -628,9 +631,14 @@ function hostUrl(relative, pageSlug) {
 export function standaloneIconoplasmHtml(html, pageSlug = "") {
   let out = String(html)
   if (pageSlug)
-    out = out.replace(RELATIVE_URL, (match, attribute, relative) =>
-      relative ? `${attribute}="${hostUrl(relative, pageSlug)}"` : match,
-    )
+    out = out
+      .replace(RELATIVE_URL, (match, attribute, relative) =>
+        relative ? `${attribute}="${hostUrl(relative, pageSlug)}"` : match,
+      )
+      .replace(
+        RELATIVE_REFRESH,
+        (match, prefix, relative) => `${prefix}${hostUrl(relative, pageSlug)}"`,
+      )
   for (const [from, to] of ICONOPLASM_LINK_REWRITES) out = out.replaceAll(from, to)
   return out
 }
@@ -659,13 +667,23 @@ async function iconoplasmDocPages(sourceRoot) {
       withFileTypes: true,
     })
   } catch (error) {
-    if (error.code === "ENOENT") return []
+    if (error.code === "ENOENT") return { pages: [], listed: [] }
     throw error
   }
-  return entries
+  const pages = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
     .map((entry) => (entry.name === "index.html" ? "docs" : `docs/${entry.name.slice(0, -5)}`))
     .sort()
+  // Alias pages are served (old links still land) but stay out of the sitemap.
+  const listed = []
+  for (const page of pages) {
+    const html = await readFile(
+      path.join(sourceRoot, "apps", "iconoplasm", sourceDocument(page)),
+      "utf8",
+    )
+    if (!/http-equiv="refresh"/i.test(html)) listed.push(page)
+  }
+  return { pages, listed }
 }
 
 function sourceDocument(page) {
@@ -718,7 +736,7 @@ export async function prepareIconoplasmEdgeAssets({
     "utf8",
   )
   const docs = await iconoplasmDocPages(resolvedSource)
-  const pages = ["privacy", "license", "caretaker-terms", "developers", ...docs]
+  const pages = ["privacy", "license", "caretaker-terms", "developers", ...docs.pages]
   for (const page of pages) {
     const source = await readFile(
       path.join(resolvedSource, "apps", "iconoplasm", sourceDocument(page)),
@@ -737,7 +755,7 @@ export async function prepareIconoplasmEdgeAssets({
   await writeIconoplasmCompatibilityArtifacts({
     outputRoot: resolvedOutput,
     publishedGenes,
-    docs,
+    docs: docs.listed,
   })
   await writeIconoplasmGenePages({ outputRoot: resolvedOutput, publishedGenes })
   await writeIconoplasmGeneIndexPages({ outputRoot: resolvedOutput, publishedGenes })
