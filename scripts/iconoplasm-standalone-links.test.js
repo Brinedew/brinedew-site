@@ -91,6 +91,17 @@ test("a docs page's relative links resolve to this host or to brinedew.bio", () 
   )
 })
 
+// B-1164: Quartz answers the old casing (docs/FAQ) with an alias page whose meta
+// refresh is relative to the main-site slug. Resolved as written it would leave
+// this host for /apps/iconoplasm/docs/faq and take a 301 back.
+test("an alias page's meta refresh points straight at the doc on this host", () => {
+  const html = standaloneIconoplasmHtml(
+    '<meta http-equiv="refresh" content="0; url=../../../apps/iconoplasm/docs/faq">',
+    "apps/iconoplasm/docs/FAQ",
+  )
+  assert.match(html, /content="0; url=\/docs\/faq"/)
+})
+
 // B-818: one table of moved paths drives both the 301s and the link rewrites.
 // Ways this can fail:
 //  1. A moved path gets a 301 but the Quartz pages still link to it, so every
