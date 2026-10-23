@@ -86,7 +86,23 @@ export const PAGES_REDIRECTS = Object.freeze([
   ["/apps/iconoplasm", "https://iconoplasm.brinedew.bio/", 301],
   ["/apps/iconoplasm/", "https://iconoplasm.brinedew.bio/", 301],
   ["/apps/iconoplasm/index", "https://iconoplasm.brinedew.bio/", 301],
+  ["/apps/iconoplasm/docs/", "https://iconoplasm.brinedew.bio/docs", 301],
+  ["/apps/iconoplasm/docs/index", "https://iconoplasm.brinedew.bio/docs", 301],
   ["/apps/iconoplasm/*", "https://iconoplasm.brinedew.bio/:splat", 301],
+  // B-1164: these Iconoplasm notes were wiki pages here until they became
+  // the Iconoplasm docs.
+  ["/wiki/iconoplasm-faq", "https://iconoplasm.brinedew.bio/docs/faq", 301],
+  [
+    "/wiki/tutorial-how-to-generate-and-edit-blots-in-iconoplasm",
+    "https://iconoplasm.brinedew.bio/docs/tutorial",
+    301,
+  ],
+  [
+    "/wiki/iconoplasm---caretakers-handbook",
+    "https://iconoplasm.brinedew.bio/docs/caretakers-handbook",
+    301,
+  ],
+  ["/wiki/iconoplasm-patch-notes", "https://iconoplasm.brinedew.bio/docs/patch-notes", 301],
   ["/support", "/posts/support-me", 301],
   ["/support/", "/posts/support-me", 301],
   ["/posts/support-me.html", "/posts/support-me", 301],

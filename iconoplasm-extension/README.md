@@ -94,7 +94,7 @@ Canonical path:
 What the GUI-confirmed Firefox + Edge release does:
 
 - bumps `iconoplasm-extension/manifest.json` to the next requested version
-- prepends `content/wiki/Iconoplasm Patch Notes.md`
+- prepends `content/apps/iconoplasm/docs/Patch Notes.md`
 - rebuilds the public Chrome developer package and updates its release metadata
 - commits the manifest, patch notes, release metadata, and public package
 - pushes the release commit to `main`

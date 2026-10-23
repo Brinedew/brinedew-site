@@ -59,7 +59,7 @@ test("ordinary repository work has no extension version writer", () => {
 test("published and candidate extension contracts remain explicit", () => {
   const authority = readJson("iconoplasm-extension/publisher-release.json")
   const candidate = readJson("iconoplasm-extension/candidate-contract.json")
-  const patchNotes = readFileSync("content/wiki/Iconoplasm Patch Notes.md", "utf8")
+  const patchNotes = readFileSync("content/apps/iconoplasm/docs/Patch Notes.md", "utf8")
   const worker = readFileSync(
     "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
     "utf8",

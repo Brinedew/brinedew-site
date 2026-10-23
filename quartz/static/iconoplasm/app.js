@@ -2637,7 +2637,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         : '<a class="icono-button icono-button--primary icono-empty-link" href="' +
           esc(voteLoginUrl()) +
           '">Log in with Discord</a>') +
-      '<a class="icono-empty-link icono-empty-link--subtle" href="https://brinedew.bio/wiki/iconoplasm-faq">Read FAQ</a>' +
+      '<a class="icono-empty-link icono-empty-link--subtle" href="/docs/faq">Read FAQ</a>' +
       "</div>"
     return (
       '<section class="icono-empty icono-empty--collection">' +
@@ -2776,7 +2776,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<header class="icono-page-header">' +
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">ICONOPLASM</div>' +
-      '<p class="tagline">Gene character cards - <a class="internal" href="https://brinedew.bio/wiki/iconoplasm-faq">read FAQ</a></p>' +
+      '<p class="tagline">Gene character cards - <a class="internal" href="/docs/faq">read FAQ</a></p>' +
       '<p class="stat" id="icono-public-inventory-stat" hidden aria-live="polite"></p>' +
       "</div>" +
       "</header>" +
@@ -3458,7 +3458,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function currentInstallExperience() {
     syncInstallStateFromDomMarker()
     var browser = detectInstallBrowser()
-    var faqUrl = "https://brinedew.bio/wiki/iconoplasm-faq"
+    var faqUrl = "/docs/faq"
     var guestLoginActions = currentUser
       ? []
       : [
@@ -12011,7 +12011,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // The phone switcher mirrors the desktop sidebar's IconoplasmPageSwitcher
-  // (Archive, Genes, Studio). Clans and Caretakers are tabs inside Genes.
+  // (Archive, Genes, Studio, Docs). Clans and Caretakers are tabs inside Genes.
+  // Docs are Quartz pages, not app routes, so that link is a plain one.
   function ensureMobilePageSwitcher() {
     var root = document.getElementById(ROOT_ID)
     if (!root || !root.parentNode) return
@@ -12023,7 +12024,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     bar.innerHTML =
       '<a href="/" class="icono-page-tab" data-icono-nav data-icono-switch="archive">Archive</a>' +
       '<a href="/genes" class="icono-page-tab" data-icono-nav data-icono-switch="genes">Genes</a>' +
-      '<a href="/studio" class="icono-page-tab" data-icono-nav data-icono-switch="studio">Studio</a>'
+      '<a href="/studio" class="icono-page-tab" data-icono-nav data-icono-switch="studio">Studio</a>' +
+      '<a href="/docs" class="icono-page-tab" data-icono-switch="docs">Docs</a>'
     root.parentNode.insertBefore(bar, root)
   }
 
