@@ -21,6 +21,7 @@ import { buildIconoplasmCollectionVisibleUrl } from "./iconoplasm-collection-rou
 import {
   createWebsiteDiscoveryBatchQueue,
   createWebsiteGuestDiscoveryStore,
+  normalizeWebsiteGuestDiscoveries,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
 } from "./guest-discovery-store.js?v=df8a5536754a5b3d"
@@ -121,6 +122,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var HOME_SKELETON_CARD_COUNT = 4
   var ICONO_EXTENSION_PRESENCE_EVENT = "iconoplasm-extension-presence"
   var ICONO_EXTENSION_PRESENCE_PING_EVENT = "iconoplasm-extension-presence-ping"
+  // The add-on's site bridge (iconoplasm-extension/site-bridge.js) answers with
+  // the genes that a signed-out reader hovered on other websites.
+  var ICONO_EXTENSION_GUEST_DISCOVERIES_EVENT = "iconoplasm-extension-guest-discoveries"
+  var ICONO_EXTENSION_GUEST_DISCOVERIES_REQUEST_EVENT =
+    "iconoplasm-extension-guest-discoveries-request"
+  var ICONO_EXTENSION_GUEST_DISCOVERIES_MERGED_EVENT =
+    "iconoplasm-extension-guest-discoveries-merged"
+  // Add-on versions before the bridge learned this never answer.
+  var ICONO_EXTENSION_GUEST_DISCOVERIES_TIMEOUT_MS = 1500
+  var GUEST_DISCOVERY_CARD_THUMB_COUNT = 6
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
@@ -175,6 +186,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var lastGenePageDiscoveryVisitKey = ""
   var websiteGuestDiscoveryMergePromise = null
   var websiteGuestDiscoveryMergeRemaining = WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE
+  var extensionGuestDiscoveriesPromise = null
   var currentUser = null
   var currentUserIsIconoAdmin = false
   var caretakerPanelPromise = null
@@ -1903,19 +1915,77 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .then(scheduleWebsiteDiscoveryQueueFlush)
   }
 
+  // Genes that the add-on recorded while the reader was signed out, oldest
+  // first. Without the add-on, or with a version whose bridge never answers,
+  // this is an empty list.
+  function readExtensionGuestDiscoveries() {
+    var root = document.documentElement
+    if (!root || root.getAttribute("data-iconoplasm-extension-installed") !== "true") {
+      return Promise.resolve([])
+    }
+    if (extensionGuestDiscoveriesPromise) return extensionGuestDiscoveriesPromise
+    extensionGuestDiscoveriesPromise = new Promise(function (resolve) {
+      var timer = 0
+      function answer(event) {
+        var symbols = []
+        try {
+          symbols = JSON.parse(String((event && event.detail) || "[]"))
+        } catch (_error) {
+          symbols = []
+        }
+        finish(
+          normalizeWebsiteGuestDiscoveries(symbols).map(function (entry) {
+            return entry.gene_symbol
+          }),
+        )
+      }
+      function finish(symbols) {
+        window.clearTimeout(timer)
+        window.removeEventListener(ICONO_EXTENSION_GUEST_DISCOVERIES_EVENT, answer)
+        resolve(symbols)
+      }
+      window.addEventListener(ICONO_EXTENSION_GUEST_DISCOVERIES_EVENT, answer)
+      timer = window.setTimeout(function () {
+        finish([])
+      }, ICONO_EXTENSION_GUEST_DISCOVERIES_TIMEOUT_MS)
+      window.dispatchEvent(new CustomEvent(ICONO_EXTENSION_GUEST_DISCOVERIES_REQUEST_EVENT))
+    }).finally(function () {
+      extensionGuestDiscoveriesPromise = null
+    })
+    return extensionGuestDiscoveriesPromise
+  }
+
+  function forgetExtensionGuestDiscoveries(symbols) {
+    if (!Array.isArray(symbols) || !symbols.length) return
+    window.dispatchEvent(
+      new CustomEvent(ICONO_EXTENSION_GUEST_DISCOVERIES_MERGED_EVENT, {
+        detail: JSON.stringify(symbols),
+      }),
+    )
+  }
+
   function mergeWebsiteGuestDiscoveriesIfSignedIn() {
     if (!currentUser) return Promise.resolve(null)
     if (websiteGuestDiscoveryMergePromise) return websiteGuestDiscoveryMergePromise
     if (websiteGuestDiscoveryMergeRemaining <= 0) return Promise.resolve(null)
-    var pendingSymbols = websiteGuestDiscoveries.pendingSymbols(websiteGuestDiscoveryMergeRemaining)
-    if (!pendingSymbols.length) return Promise.resolve(null)
-    websiteGuestDiscoveryMergeRemaining -= pendingSymbols.length
-    websiteGuestDiscoveryMergePromise = fetchAuthedJSON("/api/iconoplasm/discoveries/merge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbols: pendingSymbols }),
-      cache: "no-store",
-    })
+    var pendingSymbols = []
+    websiteGuestDiscoveryMergePromise = readExtensionGuestDiscoveries()
+      .then(function (extensionSymbols) {
+        // The add-on's hovers join this browser's own dossier visits, so they
+        // fill the Archive at login instead of after the add-on next runs on
+        // another website. The route skips genes the account already has.
+        pendingSymbols = Array.from(
+          new Set(websiteGuestDiscoveries.pendingSymbols().concat(extensionSymbols)),
+        ).slice(0, websiteGuestDiscoveryMergeRemaining)
+        if (!pendingSymbols.length) return null
+        websiteGuestDiscoveryMergeRemaining -= pendingSymbols.length
+        return fetchAuthedJSON("/api/iconoplasm/discoveries/merge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbols: pendingSymbols }),
+          cache: "no-store",
+        })
+      })
       .then(function (payload) {
         if (
           !payload ||
@@ -1932,6 +2002,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         )
           return null
         websiteGuestDiscoveries.remove(payload.merged_symbols)
+        forgetExtensionGuestDiscoveries(payload.merged_symbols)
         return payload
       })
       .catch(function (error) {
@@ -3713,6 +3784,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (existingCard) {
         existingCard.outerHTML = buildInstallPanelMarkup(model)
         wireInstallPanelTabs(document)
+        dropInstalledCardBesideGuestDiscoveries(document)
       }
       return
     }
@@ -3747,8 +3819,94 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return card
   }
 
-  function buildGuestDiscoveryLoginCardMarkup() {
-    return ""
+  // The signed-out Archive stays the four starters (owner, 2026-08-02). This
+  // card shows what the reader found meanwhile in this browser, newest first:
+  // genes hovered with the add-on and gene pages opened here. The merge at
+  // login moves them into the Archive.
+  function loadGuestDiscoveryShelf() {
+    return readExtensionGuestDiscoveries().then(function (extensionSymbols) {
+      var visits = websiteGuestDiscoveries
+        .listEntries()
+        .sort(function (a, b) {
+          return Date.parse(b.last_encountered_at) - Date.parse(a.last_encountered_at)
+        })
+        .map(function (entry) {
+          return entry.gene_symbol
+        })
+      var symbols = Array.from(new Set(extensionSymbols.slice().reverse().concat(visits)))
+      if (!symbols.length) return { count: 0, genes: [] }
+      // A few spares stand in for genes that have no portrait yet. The catalogue
+      // is the one the starters already loaded, so this costs no request.
+      return iconoplasmPublicationReader
+        .genes(symbols.slice(0, GUEST_DISCOVERY_CARD_THUMB_COUNT * 4))
+        .catch(function () {
+          return []
+        })
+        .then(function (records) {
+          return {
+            count: symbols.length,
+            genes: records
+              .filter(function (record) {
+                return !!rawPublishedPortraitUrl(record, "thumb")
+              })
+              .slice(0, GUEST_DISCOVERY_CARD_THUMB_COUNT),
+          }
+        })
+    })
+  }
+
+  function buildGuestDiscoveryCardMarkup(shelf) {
+    var thumbs = ""
+    for (var i = 0; i < shelf.genes.length; i++) {
+      var gene = shelf.genes[i]
+      var symbol = normalizedSymbol(gene.symbol)
+      var label = symbol + (gene.full_name ? " · " + gene.full_name : "")
+      thumbs +=
+        '<a class="icono-guest-discovery-thumb" href="/gene/' +
+        esc(encodeURIComponent(symbol)) +
+        '" title="' +
+        esc(label) +
+        '" aria-label="' +
+        esc(label) +
+        '"><img src="' +
+        esc(publishedPortraitUrl(gene, "thumb")) +
+        '" alt="" width="256" height="256" loading="lazy" decoding="async"></a>'
+    }
+    return (
+      '<section class="icono-card icono-guest-login-card icono-guest-discovery-card" data-icono-guest-discovery-card>' +
+      (thumbs ? '<div class="icono-guest-discovery-thumbs">' + thumbs + "</div>" : "") +
+      '<div class="icono-home-auth-title icono-guest-login-card-title" role="heading" aria-level="2">You discovered ' +
+      esc(shelf.count.toLocaleString()) +
+      (shelf.count === 1 ? " gene" : " genes") +
+      " so far</div>" +
+      '<p class="icono-install-note">Log in to track your discoveries.</p>' +
+      '<div class="icono-install-actions"><a class="icono-button icono-button--primary icono-install-link" href="' +
+      esc(voteLoginUrl()) +
+      '">Log in with Discord</a></div>' +
+      "</section>"
+    )
+  }
+
+  // With discoveries on show, the guest card carries the login button, so the
+  // installed add-on's "Want more cards?" card would only repeat it.
+  function dropInstalledCardBesideGuestDiscoveries(scope) {
+    if (!scope.querySelector("[data-icono-guest-discovery-card]")) return
+    var installed = scope.querySelector(
+      "[data-icono-home-install-card].icono-install-panel--installed",
+    )
+    if (installed) installed.remove()
+  }
+
+  function appendGuestDiscoveryCard(container) {
+    if (!container || currentUser) return
+    loadGuestDiscoveryShelf().then(function (shelf) {
+      if (currentUser || !shelf.count || !container.isConnected) return
+      if (container.querySelector("[data-icono-guest-discovery-card]")) return
+      var wrapper = document.createElement("div")
+      wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
+      container.insertBefore(wrapper.firstElementChild, container.firstChild)
+      dropInstalledCardBesideGuestDiscoveries(container)
+    })
   }
 
   function buildDiscordInviteCardMarkup() {
@@ -3914,11 +4072,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function buildDiscordActionCardMarkup() {
-    if (!currentUser) return buildGuestDiscoveryLoginCardMarkup()
     return readerIsOnDiscordServer() ? "" : buildDiscordInviteCardMarkup()
   }
 
   function appendDiscordActionCard(container) {
+    if (!currentUser) {
+      appendGuestDiscoveryCard(container)
+      return null
+    }
     if (!container || container.querySelector("[data-icono-discord-action-card]")) {
       return null
     }
