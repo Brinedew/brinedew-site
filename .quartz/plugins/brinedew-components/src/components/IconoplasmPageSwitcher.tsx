@@ -5,7 +5,13 @@ import { classNames } from "../util/lang"
 // lines (docsSection, docsOrder, docsLabel), wherever it lives in the vault.
 // Notes under apps/iconoplasm/ are served on iconoplasm.brinedew.bio at the path
 // after that prefix; anything else stays on brinedew.bio.
-const DOCS_SECTIONS = ["Start here", "Your own image key", "Caretakers", "Reuse and rights", "Updates"]
+const DOCS_SECTIONS = [
+  "Start here",
+  "Your own image key",
+  "Caretakers",
+  "Reuse and rights",
+  "Updates",
+]
 
 type DocsEntry = { slug: string; label: string; section: string; order: number }
 
