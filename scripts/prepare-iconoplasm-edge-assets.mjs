@@ -178,7 +178,7 @@ Iconoplasm maps human-gene biology onto memorable character portraits. A gene's 
 - Gene profile: https://iconoplasm.brinedew.bio/gene/{HGNC_SYMBOL}
 - A gene's current blot: https://iconoplasm.brinedew.bio/blot/{HGNC_SYMBOL}.webp
 - [For developers](https://iconoplasm.brinedew.bio/developers): resolving aliases and batches, and the OpenAPI document
-- [Docs](https://iconoplasm.brinedew.bio/docs): tutorial, FAQ, caretaker's handbook, patch notes
+- [Docs](https://iconoplasm.brinedew.bio/docs): tutorial, fixing a bad portrait, your own image key, FAQ, caretaker's handbook, license, patch notes
 
 ## Blots in figures
 

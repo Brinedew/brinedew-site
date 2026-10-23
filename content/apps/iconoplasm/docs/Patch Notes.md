@@ -1,6 +1,6 @@
 ---
 description: "What changed in the Iconoplasm browser extension, release by release."
-docsSection: Reference
+docsSection: Updates
 docsOrder: 1
 docsLabel: "Patch notes"
 title: Iconoplasm Patch Notes
@@ -14,120 +14,120 @@ draft: false
 
 ## 0.5.10 - 2026-10-05
 
-* Improved highlight robustness on animated text
+* Highlights on animated text are now more reliable
 ## 0.5.9 - 2026-10-01
 
-* Hover cards now load each gene from a single always-current file on the free CDN, so hovering never spends metered server requests and reflects portrait changes within minutes.
+* Hover cards now load each gene from one up-to-date file on the free CDN, so hovering never costs a metered request to our server, and portrait changes appear on the cards within minutes.
 
 ## 0.5.8 - 2026-09-30
 
-* Fixed gene name highlights displaying wrong in in multi-column tables.
+* Fixed highlights of gene names that looked wrong in multi-column tables.
 ## 0.5.7 - 2026-09-06
 
 * hotfix for previous release
 ## 0.5.6 - 2026-09-06
 
-* Improved speed and reliability of gene name highlighting
+* Improved the speed and reliability of highlighting gene names
 ## 0.5.5 - 2026-08-28
 
-* Optimized data loading times across browser tabs
+* Made data load faster across browser tabs
 ## 0.5.4 - 2026-08-28
 
 * Fixed duplicated and inefficient image loading
 ## 0.5.3 - 2026-08-27
 
-* Optimized portrait retrieval from host, with regional fallback
+* Made portraits download faster from the host, and added a regional fallback
 ## 0.5.2 - 2026-08-26
 
-* Hotfix: Backend data management.
-* Hotfix: Opening a local PDF now copies the exact PDF path before opening Firefox’s picker, allowing the user to press Ctrl+V → Open.
+* Hotfix to how the backend manages data.
+* Hotfix: when you open a local PDF, the extension now copies the exact PDF path before it opens Firefox’s file picker, so you can press Ctrl+V → Open.
 ## 0.5.1 - 2026-08-26
 
 * Hotfix: PDF highlighting now works with local PDFs
 ## 0.5.0 - 2026-08-26
 
-* Decoupled portrait discovery from the larger rich-detail request for more robust gene portrait loading
+* Separated the lookup of which portraits exist from the larger request for full details, so that gene portraits load more reliably
 ## 0.4.15 - 2026-08-25
 
-* New feature: gene names now highlight in PDFs. Turn on "PDF highlighting" slider in the extension settings - this swaps the browser's PDF reader to a pdf.js based viewer capable of highlighting.
-* Enabled predictive download of gene data on pages - now images will appear quicker on hover.
+* New feature: gene names now highlight in PDFs. Turn on the "PDF highlighting" slider in the extension settings - this replaces the browser's PDF reader with a viewer based on pdf.js that is capable of highlighting.
+* Gene data on a page now downloads in advance, so images appear faster on hover.
 ## 0.4.14 - 2026-08-12
 
 * Hover pop-up now loads faster
-* Fixed some highlight parsing edge cases
+* Fixed some edge cases in how highlights are parsed
 ## 0.4.13 - 2026-08-11
 
-* updated the gene alias blocklist retrieval to rely on online storage instead of purely local storage
+* updated the extension to retrieve the blocklist of gene aliases from online storage instead of relying only on local storage
 ## 0.4.12 - 2026-08-02
 
-- Fixed Microsoft Edge losing all gene highlights after the extension catalog exceeded the browser's local-storage quota.
-- Replaced the portrait-heavy whole-catalog cache with a compact scanner index; hover details and portraits now load only when needed.
-- Existing installs automatically migrate legacy catalog storage from about 19 MB to about 1.9 MB.
-- Removed the unlimited-storage permission and bounded the persistent detail caches.
+- Fixed Microsoft Edge losing all gene highlights after the extension catalog exceeded the browser's quota for local storage.
+- Replaced the large cache of the whole catalog, which was mostly portraits, with a compact index for the page scanner; hover details and portraits now load only when needed.
+- On existing installs, the extension automatically converts the old catalog data to the new index, so storage use drops from about 19 MB to about 1.9 MB.
+- Removed the unlimited-storage permission and set size limits on the persistent caches that store details.
 ## 0.4.11 - 2026-07-24
 
 * Fixed simple hover mode not displaying portraits in MS Edge browser
 * Fixed "on hover" option not hiding color pills
 ## 0.4.10 - 2026-07-19
 
-- Gene highlights now appear from the local catalog immediately while freshness checks run in the background.
-- Highlights now recover after pagination, virtualized-row text changes, and interrupted background startup.
+- Gene highlights now appear from the local catalog immediately while checks for newer data run in the background.
+- Highlights now recover after pagination, after changes to the text of virtualized rows, and after an interrupted startup in the background.
 
 * hotfix
 ## 0.4.9 - 2026-07-19
 
-- Fixed Firefox 0.4.8 starting without its portrait-delivery background dependency, which prevented the gene dictionary and all highlights from loading.
-- Corrected the Firefox Android minimum to the first version that supports the extension's required data-collection declaration.
+- Fixed Firefox 0.4.8 starting without the background component that delivers portraits, which prevented the gene dictionary and all highlights from loading.
+- Corrected the minimum version of Firefox for Android. It is now the first version that supports a required part of the extension: its declaration of what data it collects.
 
 * hotfix
 ## 0.4.8 - 2026-07-19
 
-- Store releases now keep the immediately previous extension/API contract supported during browser-store review, then retire it automatically at the following human-published release.
-- Portrait APIs now publish canonical first-party asset references instead of CDN-provider URLs.
-- The website and extension now use one tab-wide portrait delivery engine and one server-published delivery policy.
-- Fixed newly generated edit and candidate previews failing after Bunny was already found unreachable in the tab.
-- Added bounded retry for transient Bunny Storage operations while permanent authorization/configuration errors fail immediately.
+- While a release is in review at a browser store, we now keep supporting the previous version of the interface between the extension and the API, and then retire that version automatically at the next release that a person publishes.
+- Portrait APIs now return canonical references to first-party assets instead of URLs from the CDN provider.
+- The website and extension now deliver portraits through the same shared code in every part of a browser tab, and both follow one delivery policy that the server publishes.
+- Fixed previews of newly generated edits and candidates, which failed once Bunny had been unreachable earlier in the same tab.
+- Added a limited number of retries for Bunny Storage operations that fail temporarily, while operations with permanent errors in authorization or configuration still fail immediately.
 
 - Fixed the broad term `cadherin` incorrectly resolving to CDH17.
-- Added complete, concrete mappings for E-cadherin/E-cadherins and N-cadherin/N-cadherins, including hyphen-or-space and lowercase-or-capitalized `cadherin` forms.
-- Website-owned alias policy can now retract an incorrect generated alias without downloading the catalog again or requiring another extension release.
-- The published API exposes every effective spelling as an inspectable dictionary; the extension does not execute remote matching rules.
+- Added full, explicit mappings for E-cadherin/E-cadherins and N-cadherin/N-cadherins, including forms of `cadherin` written with a hyphen or a space, in lowercase or with a capital letter.
+- The website can now remove an incorrectly generated alias through its alias policy, with no new download of the catalog and no new release of the extension.
+- The published API lists every spelling that is currently in effect, as a dictionary that anyone can inspect; the extension does not execute matching rules from a remote source.
 
-- Added a versioned publication-alias overlay delivered through the existing catalog manifest.
+- Added a versioned overlay of aliases found in publications, delivered through the catalog's existing manifest.
 - Fixed highlighting for C/EBPβ, IL-1, p65, TGF-β, N1ICD, IL-1α, IL-1β, and cGAS.
-- Alias-only updates now reuse the cached base catalog instead of downloading the roughly 6 MB catalog again.
-- Fixed the five-minute catalog refresh timestamp so unchanged manifests no longer get probed on every page.
+- When an update changes only aliases, the extension now reuses the base catalog that it has already cached, instead of downloading the roughly 6 MB catalog again.
+- Fixed the timestamp for the five-minute refresh of the catalog so unchanged manifests no longer get probed on every page.
 
-* Firefox Android support
+* Support for Firefox on Android
 * Faster alias updates
-* Resilient portrait loading when the CDN is unavailable
-* Mobile/card improvements.
+* Portraits now keep loading when the CDN is unavailable
+* Improvements for mobile and for cards.
 ## 0.4.7 - 2026-05-22
 
 - added link to the extension header
 
 ## 0.4.6 - 2026-05-21
 
-- Improved image loading speed on hover
-- Fixed improper multi-line box splitting
+- Images now load faster on hover
+- Fixed boxes that split incorrectly across multiple lines
 
 ## 0.4.5 - 2026-05-21
 
-Hotfix for frame packaging bug in 0.4.4. Now should render all three hover card styles correctly.
+Hotfix for a bug in how frames were packaged in 0.4.4. All three styles of hover cards should now render correctly.
 
 ## 0.4.4 - 2026-05-21
 
-Fix Firefox hover cards so Blot only and Vintage lab label use the intended rich frame renderer. Blot only portraits now become visible after prewarm, lab-label pen loops load the rough hand-drawn renderer, and the extension frame uses packaged card CSS instead of drifting against live site CSS.
+Fixed Firefox hover cards so that the Blot only and Vintage lab label styles use the intended renderer for detailed frames. Blot only portraits now become visible after the cards are prewarmed, the lab label now loads the renderer that draws its rough, hand-drawn loops, and the extension's frame uses the card CSS that ships with the extension instead of the live site's CSS, which can change independently.
 
 ## 0.4.3 - 2026-05-19
 
-- Refined the extension popup typography.
+- Refined the typography of the extension popup.
 - Renamed popup controls to be clearer.
-- Improved segmented control readability.
-- Removed unused legacy extension font exposure from the manifest.
-- Fixed gene matching boundaries so highlights are less likely to trigger inside larger letter/number tokens.
-- Fixed first-hover card theming so the tooltip frame gets the same card classes immediately, not only after later layout switches.
-- Improved hover-card portrait prewarming.
-- Hardened the archival hover-card renderer against stale async renders, preventing an older card render from replacing a newer hover target.
-- Fixed image-only card sizing and margins so blot-only cards keep a stable 384:512 frame and do not inherit unwanted page-level image spacing.
-- Tightened shared card label layout so row labels have stable width, avoid awkward hyphenation, and leave more reliable room for the body text.
+- Improved how readable the segmented controls are.
+- Stopped the manifest from exposing unused legacy fonts of the extension.
+- Fixed the boundaries for matching genes so highlights are less likely to trigger inside larger tokens made of letters and numbers.
+- Fixed the theming of the card on first hover so that the frame of the tooltip gets the same card classes immediately, not only after the layout changes later.
+- Improved prewarming of portraits for hover cards.
+- Archival hover cards now discard old renders that finish late, so that an older render can no longer replace a newer hover target.
+- Fixed the sizing and margins of image-only cards so that blot-only cards keep a stable 384:512 frame and do not inherit unwanted spacing around images from the page.
+- Tightened the shared layout of card labels so that row labels keep a stable width, wrap without splitting words at awkward points, and reliably leave room for the body text.

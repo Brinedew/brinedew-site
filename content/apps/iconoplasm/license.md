@@ -1,6 +1,6 @@
 ---
-docsSection: Reference
-docsOrder: 2
+docsSection: Reuse and rights
+docsOrder: 1
 docsLabel: "License"
 title: "License"
 description: "Iconoplasm releases its published images, catalogue data and manifestations under the Creative Commons Public Domain (CC0) License"
