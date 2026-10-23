@@ -590,7 +590,7 @@ var HomepageCrawlFrontier_default = (() => {
 });
 
 // src/components/IconoplasmPageSwitcher.tsx
-var DOCS_SECTIONS = ["Start here", "Guides", "Reference", "Background"];
+var DOCS_SECTIONS = ["Start here", "Your own image key", "Caretakers", "Reuse and rights", "Updates"];
 function docsHref(slug2) {
   if (!slug2.startsWith("apps/iconoplasm/")) return `https://brinedew.bio/${slug2}`;
   return `/${slug2.slice("apps/iconoplasm/".length).replace(/(?:^|\/)index$/, "")}`;
