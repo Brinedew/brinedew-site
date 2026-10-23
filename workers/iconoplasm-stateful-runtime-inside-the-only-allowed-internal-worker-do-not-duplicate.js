@@ -3137,6 +3137,7 @@ async function prepareGenerationRequest(
     requestOrigin = "user",
     diagnosticRunId = "",
     sourceSnapshot = null,
+    joinRandomOrder = "",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -3381,7 +3382,7 @@ async function prepareGenerationRequest(
        queue_turn,
        status,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?,
+     ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'random', ?, ?, ?, ?,
                'bound', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                -- The fair turn (B-1146): just behind the queue's head for a reader
                -- with nothing waiting, else after the reader's own last turn. An
@@ -3400,7 +3401,20 @@ async function prepareGenerationRequest(
                    WHERE status = 'open' AND requester_user_id = ?
                  ), 0)
                ) END,
-               'open', CURRENT_TIMESTAMP)
+               'open', CURRENT_TIMESTAMP
+     -- B-1163: a request joining an open random order goes in only while every
+     -- request of that order is still open, checked in this same statement, so
+     -- no request of it can have been delivered (and counted into its receipt)
+     -- in between. A request placing a new order binds '' and always goes in.
+     WHERE ? = '' OR NOT EXISTS (
+       SELECT 1 FROM icono_generation_requests
+       INDEXED BY idx_icono_generation_requests_delivery_batch
+       WHERE requester_user_id = ?
+         AND request_batch_id = ?
+         AND gene_symbol = ?
+         AND request_kind = ?
+         AND status <> 'open'
+     )
      ON CONFLICT(requester_user_id, client_request_id) WHERE client_request_id <> ''
      DO NOTHING`,
   ).bind(
@@ -3449,6 +3463,11 @@ async function prepareGenerationRequest(
     generationConfigHash,
     origin,
     requesterNorm,
+    joinRandomOrder ? batchIdNorm : "",
+    requesterNorm,
+    batchIdNorm,
+    symbolNorm,
+    kind,
   )
   return {
     ok: true,
@@ -3501,8 +3520,71 @@ async function finishGenerationRequestInsert(env, prepared, insertResp) {
   }
 }
 
+// B-1163: clicking "Queue random" several times on one gene is one order, so
+// the clicker gets one Discord receipt with every portrait and one growing
+// entry, not one order per click. A random click joins the clicker's newest
+// random order on that gene while nothing in it has been delivered yet and it
+// holds fewer than the order limit; otherwise it places a new random order.
+// One indexed read of the clicker's waiting requests per click.
+function isPlainRandomClick(options) {
+  return (
+    normalizeGenerationRequestMode(options.requestMode) === "random" &&
+    normalizeGenerationRequestKind(options.requestKind) === "new_candidate" &&
+    !options.clientRequestId &&
+    !options.requestBatchId &&
+    String(options.requestOrigin || "user").trim() === "user"
+  )
+}
+
+async function openRandomOrderToJoin(env, options) {
+  if (!isPlainRandomClick(options)) return null
+  const requester = normalizeUserId(options.requesterUserId || "")
+  const symbol = normalizeSymbol(options.geneSymbol || "")
+  if (!requester || isGuestUserId(requester) || !symbol || !env.ICONOPLASM_DB) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT request_batch_id, COUNT(*) AS size
+     FROM icono_generation_requests
+     INDEXED BY idx_icono_generation_requests_reader_waiting_turn
+     WHERE status = 'open'
+       AND requester_user_id = ?
+       AND gene_symbol = ?
+       AND request_mode = 'random'
+       AND request_kind = 'new_candidate'
+       AND request_batch_id LIKE 'random-%'
+     GROUP BY request_batch_id
+     ORDER BY MAX(id) DESC
+     LIMIT 1`,
+  )
+    .bind(requester, symbol)
+    .first()
+  const id = sanitizeText(row?.request_batch_id || "", 128)
+  const size = Math.trunc(Number(row?.size) || 0)
+  if (!id || size < 1 || size >= ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT) return null
+  return { id, size }
+}
+
 async function createGenerationRequest(env, options = {}) {
-  const prepared = await prepareGenerationRequest(env, options)
+  const order = await openRandomOrderToJoin(env, options)
+  if (order) {
+    const prepared = await prepareGenerationRequest(env, {
+      ...options,
+      requestBatchId: order.id,
+      requestBatchSize: order.size + 1,
+      joinRandomOrder: order.id,
+    })
+    if (!prepared.ok || prepared.existing) return prepared
+    const joined = await prepared.statement.run()
+    if (Number(joined?.meta?.changes || 0) > 0) {
+      return finishGenerationRequestInsert(env, prepared, joined)
+    }
+    // Something in that order was delivered between the read and the insert.
+  }
+  const prepared = await prepareGenerationRequest(
+    env,
+    isPlainRandomClick(options)
+      ? { ...options, requestBatchId: `random-${crypto.randomUUID()}` }
+      : options,
+  )
   if (!prepared.ok || prepared.existing) return prepared
   return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
 }
