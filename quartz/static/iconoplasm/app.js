@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=865fadf418dd27a1"
+import { createRequestInbox } from "./request-inbox.js?v=264272694ec49176"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=155a9d5dde12e030"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import {
@@ -45,19 +45,19 @@ import { installCandidateStrips } from "./candidate-strip.js?v=06cec6e8e7de16ba"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
-} from "./lightbox.js?v=6811676792cc67ba"
+} from "./lightbox.js?v=500608cd9d314449"
 import {
   openCandidateDeleteDialog,
   removeCandidateFromPageState,
   showCandidateDeleteNotice,
-} from "./candidate-delete-dialog.js?v=e9b90dccfb37810b"
+} from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
 import {
   registerDiagramWebMcp,
   renderDiagramStudio,
   unmountDiagramStudio,
-} from "./diagram-studio.js?v=f7aaa5b67057ce80"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=0fd7513f3d3593c8"
+} from "./diagram-studio.js?v=4893a9a309a70414"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=2033cc31cb7f0de1"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -305,7 +305,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=5b49fb84f4900e0a", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=91feb5192143a3ce", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -321,9 +321,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=335b5f6a79eb50ea"),
+      import("./caretaker-manifestations.js?v=ed32b5a55ea4f859"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=b09853cc7dd8e392"),
+      import("./caretaker-candidate-sources.js?v=4b8d0da229b29318"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
