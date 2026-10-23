@@ -1,7 +1,9 @@
 ---
+description: "What changed in the Iconoplasm browser extension, release by release."
+docsSection: Reference
+docsOrder: 1
+docsLabel: "Patch notes"
 title: Iconoplasm Patch Notes
-tags:
-  - content/wiki
 date: 2026-05-19
 draft: false
 ---

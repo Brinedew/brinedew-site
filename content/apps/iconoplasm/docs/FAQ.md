@@ -1,7 +1,9 @@
 ---
+description: "What Iconoplasm is, who it is for, why the portraits are AI-made, and how to edit, vote and block a style."
+docsSection: Start here
+docsOrder: 2
+docsLabel: "FAQ"
 title: Iconoplasm FAQ
-tags:
-  - content/wiki
 date: 2026-03-07
 draft: false
 faqpage: true
@@ -15,11 +17,11 @@ faq:
   - question: "One of the images looks like my work. I want that artist tag blocked."
     answer: "You can use the blocklist form to purge your style from the gallery. Enter the exact @name tag as it appears in the artist tag library: . You need to log in to brinedew.bio website with your Discord account to bypass the blocklist bot guard. If you don't want to use Discord site login, you can send a blocklist email request to from your business email account. The first @name you send me will be blocklisted. Make sure to use the @ symbol in front of the name for the email to be reviewed automati"
   - question: "How do I edit the illustration?"
-    answer: "Tap the gene card to go to the gene page. Tap \"edit portrait\" under the portrait you want to edit, and select your desired corrections. The edited portrait will be added as a new candidate portrait. Some corrections you can select for editing: * Remove AI slop tells * Adjust sex, age, mass, or color * Correction to the fantastical feature or fashion style"
+    answer: "Tap the gene card to go to the gene page. Tap \"edit portrait\" under the portrait you want to edit, and select your desired corrections. The edited portrait will be added as a new candidate portrait. Editing uses your own image API key, saved in the user settings. Some corrections you can select for editing: * Remove AI slop tells * Adjust sex, age, mass, or color * Correction to the fantastical feature or fashion style"
   - question: "It's not easily fixable - I don't like the entire concept or art style of the current portrait."
     answer: "Downvote the current portrait by tapping X or \"misfit\" under the current portrait. Upvote a better candidate portrait by pressing the checkmark under that candidate."
   - question: "All candidate portraits are even worse!"
-    answer: "Tap \"new candidate\" to make a new candidate portrait. Make sure you have saved your API keys for your portrait generation service of choice in the user settings."
+    answer: "Tap \"new candidate\" and queue one in the free queue. To get a portrait in a minute or two instead, save an API key for your portrait generation service of choice in the user settings and use the Image API tab."
   - question: "All generated portraits for a gene reuse the same bad character concept."
     answer: "Join our Discord to discuss how to modify character prompts for various gene families."
   - question: "I noticed a candidate portrait that would better fit another gene."
@@ -96,7 +98,7 @@ If you don't want to use Discord site login, you can send a blocklist email requ
 
 ## How do I edit the illustration?
 
-Tap the gene card to go to the gene page. Tap "edit portrait" under the portrait you want to edit, and select your desired corrections. The edited portrait will be added as a new candidate portrait.
+Tap the gene card to go to the gene page. Tap "edit portrait" under the portrait you want to edit, and select your desired corrections. The edited portrait will be added as a new candidate portrait. Editing uses your own image API key: see [[apps/iconoplasm/docs/Tutorial#5. Use your own image API key (optional)|tutorial step 5]].
 
 Some corrections you can select  for editing:
 * Remove AI slop tells
@@ -109,7 +111,7 @@ Downvote the current portrait by tapping X or "misfit" under the current portrai
 
 ## All candidate portraits are even worse!
 
-Tap "new candidate" to make a new candidate portrait. Make sure you have saved your API keys for your portrait generation service of choice in the user settings.
+Tap "new candidate" and queue one in the free queue (see the [[apps/iconoplasm/docs/Tutorial#3. Queue a free candidate|tutorial]]). To get a portrait in a minute or two instead, save an API key for your portrait generation service of choice in the user settings and use the **Image API** tab.
 
 ## All generated portraits for a gene reuse the same bad character concept.
 

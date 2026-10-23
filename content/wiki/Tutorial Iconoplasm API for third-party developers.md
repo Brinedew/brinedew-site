@@ -8,7 +8,7 @@ draft: true
 
 # Tutorial: Iconoplasm API for third-party developers
 
-This tutorial walks through how a third-party developer (a script, an AI agent, a research tool, a small game) integrates with Iconoplasm programmatically. It is the developer counterpart to [Tutorial: How to generate and edit portraits in Iconoplasm](tutorial-how-to-generate-and-edit-blots-in-iconoplasm), which is aimed at humans clicking through the website.
+This tutorial walks through how a third-party developer (a script, an AI agent, a research tool, a small game) integrates with Iconoplasm programmatically. It is the developer counterpart to [Tutorial: How to generate and edit portraits in Iconoplasm](https://iconoplasm.brinedew.bio/docs/tutorial), which is aimed at humans clicking through the website.
 
 It will take around 10 minutes of your time.
 
@@ -432,8 +432,8 @@ These are the rules the server enforces on itself, and that any well-behaved thi
 
 ## 12. Where to go next
 
-- [Tutorial: How to generate and edit portraits in Iconoplasm](tutorial-how-to-generate-and-edit-blots-in-iconoplasm) — for humans using the website
-- [Iconoplasm FAQ](Iconoplasm-FAQ) — practical questions about generating, editing, voting, and pricing
-- [Iconoplasm Patch Notes](Iconoplasm-Patch-Notes) — what changed recently, including any agent-API rollouts
+- [Tutorial: How to generate and edit portraits in Iconoplasm](https://iconoplasm.brinedew.bio/docs/tutorial) — for humans using the website
+- [Iconoplasm FAQ](https://iconoplasm.brinedew.bio/docs/faq) — practical questions about generating, editing, voting, and pricing
+- [Iconoplasm Patch Notes](https://iconoplasm.brinedew.bio/docs/patch-notes) — what changed recently, including any agent-API rollouts
 
 If you are a third-party developer with a concrete integration need, the fastest path is the brinedew.bio Discord: ask there, and Vladimir can decide which gate to open next.

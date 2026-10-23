@@ -1,4 +1,7 @@
 ---
+docsSection: Background
+docsOrder: 1
+docsLabel: "Mnemonic portraits"
 title: "Mnemonic portraits for 19,023 human genes"
 tags:
   - content/post

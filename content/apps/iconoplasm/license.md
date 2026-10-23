@@ -1,4 +1,7 @@
 ---
+docsSection: Reference
+docsOrder: 2
+docsLabel: "License"
 title: "License"
 description: "Iconoplasm releases its published images, catalogue data and manifestations under the Creative Commons Public Domain (CC0) License"
 date: 2026-09-25
