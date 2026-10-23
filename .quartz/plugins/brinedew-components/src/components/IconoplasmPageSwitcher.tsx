@@ -316,6 +316,10 @@ IconoplasmPageSwitcher.css = `
     border-radius: 0;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
+    /* !important: Quartz puts component CSS in the quartz-base layer, and the
+       blog layer's plain link rule (custom.css, colour and weight 400) outranks
+       any selector there. app.js's row is unlayered, so it never meets that. */
+    color: var(--secondary, var(--darkgray)) !important;
   }
 
   .icono-page-switcher .icono-page-tab:hover {
@@ -325,8 +329,8 @@ IconoplasmPageSwitcher.css = `
   .icono-page-switcher .icono-page-tab.is-active,
   .icono-page-switcher .icono-page-tab[aria-current="page"] {
     background: transparent;
-    color: var(--accent);
-    font-weight: 600;
+    color: var(--accent) !important;
+    font-weight: 600 !important;
     border-bottom-color: var(--accent);
   }
 
