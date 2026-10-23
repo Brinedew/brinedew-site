@@ -12,7 +12,7 @@ draft: false
 
 Iconoplasm is a browser extension that highlights all the gene names on any web page. When you hover your cursor over any human gene, it shows that gene as a character card.
 
-Steps 1 to 4 happen in your browser, on pages that you already read. Steps 5 to 7 happen on the Iconoplasm website. The numbers in each picture match the numbered list under it.
+Steps 1 to 3 happen in your browser, on pages that you already read. Steps 4 to 6 happen on the Iconoplasm website. The numbers in each picture match the numbered list under it.
 
 ## 1. Install the extension
 
@@ -32,7 +32,6 @@ Open any page that names human genes. Here it's the table of human Hox clusters 
 1. Every human gene symbol gets a color pill. Rest your cursor on one, here **HOXA5**.
 2. The gene's character card opens. HOXA5 is a centaur in a magical girl's dress, and her skin is the color of her pill.
 3. Gene symbols that start with the same letter share a hue, so the whole Hox array is olive. The pills differ only in how light and how vivid they are.
-4. **DDT** has no pill. On this page DDT is a class of plant homeobox genes, not the human gene DDT, so this reader has put it on the blocklist (step 4).
 
 A pill's color comes from three numbers about the gene:
 
@@ -48,6 +47,8 @@ So, looking at a gene symbol pill in your browser, you will be able to deduce:
 - gray pill? ubiquitous gene, medium importance.
 
 The essay [[posts/Mnemonic-portraits-for-19023-human-genes|Mnemonic portraits for 19,023 human genes]] explains why each number got its job.
+
+To stop the extension from highlighting a word, click its icon in your browser's toolbar and add the word on the **Blocklist** tab.
 
 ## 3. Turn on PDF highlighting
 
@@ -69,17 +70,7 @@ Now open a paper. This one is Sanchez-Vega et al., [Oncogenic Signaling Pathways
 4. NF1's card opens. Her card gives her 319 kg, because the protein weighs 319 kDa. Her skin is a very dark green, because the gene tolerates few mutations. The figure marks NF1 blue, as a tumor suppressor, and her gene card marks her *pro-control* for the same reason.
 5. To read this PDF without highlights, click **Use browser PDF viewer** in the top-right corner.
 
-## 4. Hide a word that isn't a gene
-
-Some gene symbols are also everyday words or abbreviations. The extension ignores 112 of them by default, and you can add more.
-
-![[iconoplasm-start-blocklist.webp|The Blocklist tab in the extension's settings|362]]
-
-1. Open the **Blocklist** tab.
-2. Type the symbol, here **DDT**. On the Homeobox page DDT names plant genes, while the human gene with that symbol is D-dopachrome tautomerase.
-3. Click **Add**. From now on, the extension leaves that word alone on every page.
-
-## 5. Collect cards in the Archive
+## 4. Collect cards in the Archive
 
 The front page of [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio) is the Archive. It's basically a Pokedex system: the genes that you have hovered over get added into your archive gallery.
 
@@ -89,9 +80,9 @@ The front page of [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio) is 
 2. To see discoveries of others, tick **Show discoveries made by others**.
 3. You get four starter genes that you probably already know: INS, RHO, PRL and CD4. Click a card to open its gene page.
 
-To build your own collection, click **Discord Login** in the top-right corner. From then on, each gene that you rest your cursor on for about a second, on any web page, joins your Archive. The genes that you hovered before you logged in join it too. Hovers inside the PDF reader don't count yet.
+To build your own collection, click **Discord Login** in the top-right corner. From then on, each gene that you rest your cursor on for about a second, on any web page or PDF, joins your Archive. The genes that you hovered before you logged in join it too.
 
-## 6. Open a gene page
+## 5. Open a gene page
 
 Clicking on a gene image transfers you to the gene's page. There you will find the gene card, as well as an interface for image generation, editing, transfer and voting.
 
@@ -103,7 +94,7 @@ Clicking on a gene image transfers you to the gene's page. There you will find t
 4. **MISFIT** and **FIT** are your vote on this portrait: **Reject portrait** or **Approve portrait**. The current portrait is the one with the highest approval score.
 5. Under the card, **Overview** shows comments and the other candidate portraits for this gene. **Comments** and **Candidates** show one of the two.
 
-## 7. Read the gene card
+## 6. Read the gene card
 
 The gene card is an accession sheet. Each handwritten note on it is a fact about the gene, written as a feature of the character. A portrait that fits its card shows all of them.
 
