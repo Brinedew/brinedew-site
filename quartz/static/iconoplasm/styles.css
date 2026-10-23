@@ -4298,6 +4298,23 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   overflow: hidden;
 }
 
+/* A first-time visitor has no count to show, so the switch stands alone as a
+   line under the search bar instead of in an otherwise empty box. */
+.icono-collection-card--switch-only {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.icono-collection-card--switch-only .icono-collection-summary-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.icono-collection-card--switch-only .icono-collection-shared-toggle {
+  justify-content: flex-start;
+}
+
 .icono-collection-summary--skeleton {
   min-height: 65px;
   pointer-events: none;
