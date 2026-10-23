@@ -893,6 +893,9 @@
   font-family: "Special Elite";
   font-size: calc(24 / 1220 * 100cqw);
   line-height: 0.95;
+  /* B-1170: an emulsion number is one code; "0-18482-e" broke after its last
+     hyphen. Nine characters, the longest in real use, fit the cell. */
+  white-space: nowrap;
 }
 
 .icono-label-family {
@@ -1729,6 +1732,12 @@
     .icono-label-dossier-shell
     .icono-label-typed-value--unit-kda {
     letter-spacing: 0.01em;
+  }
+
+  /* B-1170: the phone card's 0.03em tracking pushed a nine-character emulsion
+     number 3px past its cell; typewriter spacing stays legible at -0.02em. */
+  .icono-card--variant-lab-label.icono-card--brick .icono-label-dossier-shell .icono-label-serial {
+    letter-spacing: -0.02em;
   }
 
   .icono-card--variant-lab-label.icono-card--brick

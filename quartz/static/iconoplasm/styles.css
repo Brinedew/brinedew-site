@@ -597,15 +597,18 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-sizing: border-box;
 }
 
-.icono-grid[data-layout="image-only-masonry"] {
+/* B-1168: tiles shrink to 320px so a 1280px laptop gets two columns, and the
+   grid never holds more than two full tiles. The feed renders in segments of 4,
+   then 12 (8 on phones), each its own grid, so a third column would leave a
+   ragged row at every segment seam. */
+.icono-grid[data-layout="image-only-masonry"],
+.icono-guest-continuation-grid {
   display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, var(--icono-image-tile-width)), var(--icono-image-tile-width))
-  );
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: var(--icono-image-tile-gutter);
-  justify-content: center;
+  justify-items: center;
   align-items: start;
+  max-width: calc(2 * var(--icono-image-tile-width) + var(--icono-image-tile-gutter));
   margin-inline: auto;
 }
 
@@ -4170,16 +4173,6 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
 .icono-post-feed-stage--guest-preview > .icono-guest-continuation {
   position: absolute;
   inset: 0;
-}
-
-.icono-guest-continuation-grid {
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, var(--icono-image-tile-width)), var(--icono-image-tile-width))
-  );
-  gap: var(--icono-image-tile-gutter);
-  justify-content: center;
 }
 
 .icono-card--guest-reverse {
