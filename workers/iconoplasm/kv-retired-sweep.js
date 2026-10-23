@@ -17,11 +17,15 @@
 // publication that is writing its next version.
 //
 // Price: Cloudflare's free plan allows 1,000 KV deletes and 1,000 lists a day.
-// The sweep is sheddable work (nobody waits for it), so it stops at 60% of the
-// delete wall, the sheddable tier's line: 600 deletes and a handful of lists a
-// day. About 30 days clears the backlog; afterwards each run lists and finds
-// nothing.
-export const RETIRED_KV_SWEEP_DAILY_DELETES = 600
+// The sweep is sheddable work (nobody waits for it). Cloudflare emails the
+// owner "KV operations are nearing the daily cap" once any KV meter passes 50%,
+// and at 600 a day (the sheddable tier's 60% line) the first run, 2026-10-22,
+// deleted 537 and sent that warning; it would have arrived every day for a
+// month, teaching the owner to ignore it. So the sweep stays under Cloudflare's
+// own warning line, leaving room for the publication's few deletes of its
+// previous version: 480 deletes and a handful of lists a day. About 36 days
+// clears the backlog; afterwards each run lists and finds nothing.
+export const RETIRED_KV_SWEEP_DAILY_DELETES = 480
 
 function retiredRules({ catalogArtifactVersionToken, portraitSnapshotSchemaVersion }) {
   const hydrated = "iconoplasm:hydrated-catalog-artifact:"
