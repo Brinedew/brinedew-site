@@ -33,7 +33,7 @@ All of these changes instantly propagate to the engine that generates images. As
 
 Caretakers can help the Iconoplasm project in multiple ways:
 
-- **Worldbuilding:** you can modify the gene's lore and appearance in a way that suits your creative narrative. See [[apps/iconoplasm/docs/write-your-genes-story|Write your gene's story]].
+- **Worldbuilding:** you can modify the gene's lore and appearance in a way that suits your creative narrative. See [[apps/iconoplasm/docs/worldbuilding|Worldbuilding]].
 - **Quality control:** if the gene's portraits consistently differ from the value that is assigned to the gene on its card, you can become a caretaker and correct the deviation.
 - **Social coordination:** groups of caretakers can coordinate to propose a better mapping for a clan or a gene family.
 

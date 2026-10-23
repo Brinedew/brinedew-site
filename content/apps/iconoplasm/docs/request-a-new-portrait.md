@@ -1,15 +1,15 @@
 ---
 description: "Free, and takes about 5 minutes: log in, find a gene, queue a free portrait and vote on candidates."
 docsSection: Start here
-docsOrder: 1
-docsLabel: "Tutorial"
-title: "Tutorial: How to generate portraits in Iconoplasm"
+docsOrder: 2
+docsLabel: "Request a new portrait"
+title: "Request a new portrait"
 date: 2026-06-14
 updated: 2026-10-23
 draft: false
 ---
 
-# Tutorial: How to generate portraits in Iconoplasm
+# Request a new portrait
 
 Here are the steps to request a new character portrait for a gene on Iconoplasm.
 
@@ -49,6 +49,6 @@ Your request goes into the free queue, which is open to members of the brinedew.
 
 Portraits from the free queue are drawn in turn. With your own key you get a portrait in 1-2 minutes, and you can edit portraits.
 
-1. [[apps/iconoplasm/docs/get-an-image-api-key|Get an image API key]] from one of the providers.
+1. [[apps/iconoplasm/docs/get-an-api-key|Get an API key]] from one of the providers.
 2. [[apps/iconoplasm/docs/generate-with-your-key|Generate with your own key]].
-3. [[apps/iconoplasm/docs/fix-a-bad-portrait|Edit a portrait]] with your key.
+3. [[apps/iconoplasm/docs/edit-and-vote-on-portraits|Edit a portrait]] with your key.

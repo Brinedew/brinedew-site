@@ -1,19 +1,19 @@
 ---
-title: "Fix a bad portrait"
-description: "Edit it, vote on it, order new candidates, or copy it to a gene that it fits better."
+title: "Edit and vote on portraits"
+description: "Edit a portrait, vote on it, order new candidates, or copy it to a gene that it fits better."
 docsSection: Start here
-docsOrder: 2
-docsLabel: "Fix a bad portrait"
+docsOrder: 3
+docsLabel: "Edit and vote on portraits"
 date: 2026-03-07
 updated: 2026-10-23
 draft: false
 ---
 
-# Fix a bad portrait
+# Edit and vote on portraits
 
 ## How do I edit the illustration?
 
-The edited portrait will be added as a new candidate portrait. Editing uses your own API key for image generation: see [[apps/iconoplasm/docs/get-an-image-api-key|Get an image API key]].
+The edited portrait will be added as a new candidate portrait. Editing uses your own API key for image generation: see [[apps/iconoplasm/docs/get-an-api-key|Get an API key]].
 
 Some corrections that you can select for editing:
 * Remove the telltale signs of AI slop
@@ -38,7 +38,7 @@ Downvote the current portrait by tapping X or "misfit" under the current portrai
 
 ## All candidate portraits are even worse!
 
-Tap "new candidate" and put one in the free queue (see the [[apps/iconoplasm/docs/Tutorial#3. Queue a free candidate|tutorial]]). To get a portrait in a minute or two instead, save an API key in the user settings for the service that you prefer for generating portraits, and use the **Image API** tab (see [[apps/iconoplasm/docs/generate-with-your-key|Generate with your own key]]).
+Tap "new candidate" and put one in the free queue (see the [[apps/iconoplasm/docs/request-a-new-portrait#3. Queue a free candidate|Request a new portrait]]). To get a portrait in a minute or two instead, save an API key in the user settings for the service that you prefer for generating portraits, and use the **Image API** tab (see [[apps/iconoplasm/docs/generate-with-your-key|Generate with your own key]]).
 
 ## All generated portraits for a gene are built on the same bad character concept.
 
