@@ -1,31 +1,42 @@
 ---
 title: "Docs"
-description: "Everything about using Iconoplasm: the tutorial, the FAQ, the caretaker's handbook, the developer guide, patch notes and the legal pages."
+enableToc: false
+description: "How to get a portrait for a gene, fix a bad one, use your own image key, look after a gene as its caretaker, and reuse the images."
 date: 2026-10-23
 draft: false
 ---
 
 # Docs
 
-Everything about using Iconoplasm: how to get a portrait made for a gene, how voting and caretaking work, and what changed in each release.
+Iconoplasm is a browser extension that gives character portraits to any human gene symbol on any web page.
 
 ## Start here
 
-- [[apps/iconoplasm/docs/Tutorial|Tutorial]]: queue a free character portrait for a gene and vote on candidates; add your own image API key to generate instantly and edit portraits.
-- [[apps/iconoplasm/docs/FAQ|FAQ]]: what Iconoplasm is, who it is for, why the portraits are AI-made, and how to edit, vote and block a style.
+- [[apps/iconoplasm/docs/Tutorial|Tutorial]]
+  - Request a new character portrait for a gene: free, and takes about 5 minutes.
+- [[apps/iconoplasm/docs/fix-a-bad-portrait|Fix a bad portrait]]
+  - Edit it, vote on it, order new candidates, or copy it to a gene that it fits better.
+- [[apps/iconoplasm/docs/get-an-image-api-key|Use your own image key]]
+  - With your own key you get a portrait in 1-2 minutes, and you can edit portraits.
+- [[apps/iconoplasm/docs/FAQ|FAQ]]
+  - What Iconoplasm is, who it is for, and why the portraits are AI-made.
 
-## Guides
+## Caretakers
 
-- [[apps/iconoplasm/docs/Caretakers Handbook|Caretaker's handbook]]: become a gene's caretaker, write its lore, set its visual tags, and give its supervote to a portrait.
-- [[apps/iconoplasm/developers|For developers]]: put Iconoplasm gene blots in your own tools, with one image URL per gene, a free resolver and a one-file bulk download.
+- [[apps/iconoplasm/docs/Caretakers Handbook|Caretaker's handbook]]
+  - Any Iconoplasm user can visit a gene page and become that gene's caretaker.
+- [[apps/iconoplasm/docs/write-your-genes-story|Write your gene's story]]
+  - Make up an Iconoplasm story that makes sense in the context of your research interest.
+- [[apps/iconoplasm/docs/generation-tips|Generation tips]]
+  - How to show a character's weight and age in the image.
 
-## Reference
+## Reuse and rights
 
-- [[apps/iconoplasm/docs/Patch Notes|Patch notes]]: what changed in the browser extension, release by release.
-- [[apps/iconoplasm/license|License]]: published images, catalogue data and manifestations are CC0.
-- [[apps/iconoplasm/privacy|Privacy policy]]: how Iconoplasm handles your data.
-- [[apps/iconoplasm/caretaker-terms|Caretaker terms]]: the terms for writing and editing gene manifestations.
+- [[apps/iconoplasm/license|License]]
+  - Published images, catalogue data and manifestations are CC0.
+- [[apps/iconoplasm/developers|For developers]]
+  - One image URL per gene, a free resolver and a one-file bulk download.
+- [[apps/iconoplasm/docs/remove-an-artists-style|Remove an artist's style]]
+  - You can use the blocklist form to remove your style from the gallery.
 
-## Background
-
-- [[posts/Mnemonic-portraits-for-19023-human-genes|Mnemonic portraits for 19,023 human genes]]: the essay that introduced Iconoplasm.
+[[apps/iconoplasm/docs/Patch Notes|Patch notes]] · [[apps/iconoplasm/privacy|Privacy policy]] · [[apps/iconoplasm/caretaker-terms|Caretaker terms]]

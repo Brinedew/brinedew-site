@@ -2092,3 +2092,221 @@
     touch-action: pan-y;
   }
 }
+
+@layer blog {
+  /* B-1164: the Iconoplasm docs landing (content/apps/iconoplasm/docs/index.md)
+     draws each link list as tiles. The note stays a plain nested list that the
+     owner edits in Obsidian: a link, then one indented line under it. Icons are
+     Lucide 0.460.0 (ISC licence, lucide.dev), inlined as masks so they take the
+     theme's teal. A new tile without an icon rule still works, without an icon. */
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: 0.75rem;
+    padding: 0;
+    margin: 0.75rem 0 1.25rem;
+    list-style: none;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li {
+    position: relative;
+    display: block;
+    margin: 0;
+    padding: 1rem 1.1rem 1.05rem;
+    border: 1px solid var(--lightgray);
+    border-radius: 8px;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li::before {
+    content: "";
+    display: block;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-bottom: 0.55rem;
+    background-color: var(--accent);
+    -webkit-mask: var(--docs-tile-icon) center / contain no-repeat;
+    mask: var(--docs-tile-icon) center / contain no-repeat;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li:hover {
+    border-color: var(--accent);
+    background-color: var(--highlight);
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li
+    > a {
+    display: block;
+    padding: 0;
+    background: none;
+    color: var(--dark);
+    font-family: var(--headerFont);
+    font-size: 1.15em;
+    font-weight: 600;
+    line-height: 1.25;
+    text-decoration: none;
+    outline: none;
+  }
+
+  /* The whole tile is the link. */
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li
+    > a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li
+    > ul {
+    margin: 0.3rem 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--darkgray);
+    font-size: 0.9em;
+    line-height: 1.4;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > ul:has(> li > ul)
+    > li
+    > ul
+    > li {
+    display: block;
+    line-height: 1.45;
+  }
+
+  /* On a phone the icon sits beside the title, so ten tiles fit in fewer screens. */
+  @media (max-width: 40rem) {
+    body[data-slug="apps/iconoplasm/docs/index"]
+      .markdown-preview-view.markdown-rendered
+      > ul:has(> li > ul)
+      > li {
+      display: grid;
+      grid-template-columns: 1.35rem 1fr;
+      column-gap: 0.75rem;
+      padding: 0.85rem 1rem;
+    }
+
+    body[data-slug="apps/iconoplasm/docs/index"]
+      .markdown-preview-view.markdown-rendered
+      > ul:has(> li > ul)
+      > li::before {
+      grid-row: 1 / span 2;
+      margin: 0.1rem 0 0;
+    }
+
+    body[data-slug="apps/iconoplasm/docs/index"]
+      .markdown-preview-view.markdown-rendered
+      > ul:has(> li > ul)
+      > li
+      > :is(a, ul) {
+      grid-column: 2;
+    }
+  }
+
+  /* The closing line of small links (patch notes, policies). */
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    > p:last-child {
+    margin-top: 2.5rem;
+    color: var(--gray);
+    font-size: 0.9em;
+  }
+
+  /* A tile is a destination, not a footnote: no hover previews here. */
+  body[data-slug="apps/iconoplasm/docs/index"] .popover {
+    display: none !important;
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/tutorial"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M12 7v14'/%3E%3Cpath d='M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/fix-a-bad-portrait"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/get-an-image-api-key"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z'/%3E%3Ccircle cx='16.5' cy='7.5' r='.5' fill='currentColor'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/faq"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/caretakers-handbook"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M7 20h10'/%3E%3Cpath d='M10 20c5.5-2.5.8-6.4 3-10'/%3E%3Cpath d='M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z'/%3E%3Cpath d='M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/write-your-genes-story"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z'/%3E%3Cpath d='M16 8 2 22'/%3E%3Cpath d='M17.5 15H9'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/generation-tips"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'/%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/license"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpath d='m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z'/%3E%3Cpath d='m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z'/%3E%3Cpath d='M7 21h10'/%3E%3Cpath d='M12 3v18'/%3E%3Cpath d='M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/developers"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Cpolyline points='16 18 22 12 16 6'/%3E%3Cpolyline points='8 6 2 12 8 18'/%3E%3C/svg%3E");
+  }
+
+  body[data-slug="apps/iconoplasm/docs/index"]
+    .markdown-preview-view.markdown-rendered
+    li:has(> a[data-slug="apps/iconoplasm/docs/remove-an-artists-style"]) {
+    --docs-tile-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' %3E%3Ccircle cx='13.5' cy='6.5' r='.5' fill='currentColor'/%3E%3Ccircle cx='17.5' cy='10.5' r='.5' fill='currentColor'/%3E%3Ccircle cx='8.5' cy='7.5' r='.5' fill='currentColor'/%3E%3Ccircle cx='6.5' cy='12.5' r='.5' fill='currentColor'/%3E%3Cpath d='M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z'/%3E%3C/svg%3E");
+  }
+}

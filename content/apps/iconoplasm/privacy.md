@@ -1,6 +1,6 @@
 ---
-docsSection: Reference
-docsOrder: 3
+docsSection: Reuse and rights
+docsOrder: 4
 docsLabel: "Privacy policy"
 title: "Privacy Policy"
 description: "How Iconoplasm handles your data"

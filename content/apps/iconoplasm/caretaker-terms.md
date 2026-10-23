@@ -1,6 +1,6 @@
 ---
-docsSection: Reference
-docsOrder: 4
+docsSection: Reuse and rights
+docsOrder: 5
 docsLabel: "Caretaker terms"
 title: "Caretaker Terms"
 description: "The terms for writing and editing Iconoplasm gene manifestations"
