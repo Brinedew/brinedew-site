@@ -128,22 +128,31 @@
         overflow: hidden;
       }
 
-      /* Canonical portrait updates: previous portrait › new blot, same size */
+      /* Canonical portrait updates: previous portrait ▶ new blot, same size.
+         The superseded portrait is grey (owner, 2026-10-23), so the new one
+         reads as current at a glance. The arrowhead is a solid ink triangle:
+         a Caveat "›" in the gutter read as a speck on the posted strip. Ink,
+         not teal: teal marks handwritten notes, and this arrow is printed. */
       .pair {
         display: grid;
         grid-template-columns: 1fr var(--arrow, 20px) 1fr;
         align-items: center;
       }
-      .pair i {
-        font: 400 var(--af, 32px)/1 "Caveat";
-        color: var(--teal);
-        text-align: center;
-        font-style: normal;
+      .pair > .frame:first-child {
+        filter: grayscale(1);
+      }
+      .pair svg {
+        display: block;
+        width: 62%;
+        margin: 0 auto;
+        fill: var(--ink);
       }
       .update .label {
         margin-top: 8px;
         display: grid;
         gap: 4px;
+        justify-items: center;
+        text-align: center;
       }
 
       /* People rows: caretakers and comments */
@@ -278,7 +287,7 @@
               items
                 .map(
                   (u) =>
-                    `<div class="update"><div class="pair" style="--af:${l.af}px;--arrow:${l.af * 0.6}px"><img class="frame" src="${u.from}"><i>›</i><img class="frame" src="${blot(u.symbol)}"></div>` +
+                    `<div class="update"><div class="pair" style="--arrow:${l.af}px"><img class="frame" src="${u.from}"><svg viewBox="0 0 10 14" aria-hidden="true"><path d="M0 0L10 7L0 14Z"/></svg><img class="frame" src="${blot(u.symbol)}"></div>` +
                     `<div class="label"><span class="sym" style="--s:${l.s}px">${u.symbol}</span>${l.n ? `<span class="name" style="--n:${l.n}px">${esc(nm(u.symbol))}</span>` : ""}</div></div>`,
                 )
                 .join("") +
