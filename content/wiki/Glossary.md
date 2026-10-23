@@ -233,6 +233,9 @@ Behavior pattern that, once common in a group, cannot be easily displaced by an 
 **Field cancerization**
 Region of seemingly normal tissue that shares early mutations, raising the chance that multiple tumors can arise there.
 
+**[[first-passage-models-of-mortality|First-passage model]]**
+A model in which death occurs when a randomly changing state, such as vitality or damage, first crosses a threshold. With constant drift it gives an inverse Gaussian distribution of lifespans and a late-life mortality plateau, but not the Gompertz law.
+
 **[[flower-drosophila.md|Flower (Drosophila)]]**
 Cell-surface protein that marks relative fitness for cell competition in flies.
 
