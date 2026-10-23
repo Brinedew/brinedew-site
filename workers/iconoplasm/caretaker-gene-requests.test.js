@@ -18,11 +18,15 @@
 //  9. someone other than the caretaker accepts or rejects, someone other than
 //     the asker withdraws, or a cross-site page does either;
 // 10. a stale page sends a request against a caretaker who has changed;
-// 11. a queued message goes out after it stopped being true.
+// 11. a queued message goes out after it stopped being true;
+// 12. the count of requests waiting on a caretaker, or the faces beside it
+//     (caretaker/me, for the sidebar), includes an answered or expired one,
+//     or another gene's.
 import assert from "node:assert/strict"
 import test from "node:test"
 
 import { deliverPendingCaretakerGeneRequestNotifications } from "../iconoplasm-caretaker-comment-notifications.js"
+import { readCaretakerCoordination } from "../iconoplasm-caretaker-notifications.js"
 import { changeCaretakerRoleAsAdmin } from "../iconoplasm-caretaker-admin-routes.js"
 import { blankDatabase, iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
@@ -481,12 +485,31 @@ test("4: every role change ends the requests that name it, and a gene left free 
   assert.equal(offer.reason, "caretaker_unavailable")
 })
 
-test("7, 11: a rejection keeps its asker away from that gene for 14 days, and old requests expire", async (t) => {
+test("7, 11, 12: a rejection keeps its asker away from that gene for 14 days, and old requests expire", async (t) => {
   const h = harness(t)
+  // 12: the count counts what still waits on the caretaker, and nothing once it
+  // is answered or expired.
+  const sidebar = async (account) =>
+    (await readCaretakerCoordination(h.db, { accountId: account, accountDb: h.accounts })).caretaker
+  const waiting = async (account) => (await sidebar(account)).pending_request_count
+  // Bob has no picture of his own, so his face is Discord's default for his id,
+  // at Discord's own address (the sidebar is signed-in only).
+  const bobFace = {
+    name: "bob",
+    avatar_url: `https://cdn.discordapp.com/embed/avatars/${(BigInt(discordIdOf(BOB)) >> 22n) % 6n}.png`,
+  }
   await h.claim("MFNG", ALICE)
   await h.claim("WEE1", CAROL)
+  assert.equal(await waiting(ALICE), 0)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [])
   const sent = await h.ask("MFNG", BOB)
+  assert.equal(await waiting(ALICE), 1)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [bobFace])
+  assert.equal(await waiting(CAROL), 0, "only the gene asked for counts it")
+  assert.deepEqual((await sidebar(CAROL)).request_faces, [])
   const rejected = await h.decide("MFNG", sent.body.request_id, "reject", ALICE)
+  assert.equal(await waiting(ALICE), 0)
+  assert.deepEqual((await sidebar(ALICE)).request_faces, [], "an answered request loses its face")
   assert.equal(rejected.body.status, "rejected")
   assert.equal((await h.decide("MFNG", sent.body.request_id, "reject", ALICE)).body.replayed, true)
   assert.equal((await h.accept("MFNG", sent.body.request_id)).status, 409)
@@ -500,8 +523,11 @@ test("7, 11: a rejection keeps its asker away from that gene for 14 days, and ol
   assert.equal(again.headers.get("retry-after"), String(14 * 24 * 60 * 60))
   const elsewhere = await h.ask("WEE1", BOB)
   assert.equal(elsewhere.status, 200, "the block covers one gene, not the asker")
+  assert.equal(await waiting(CAROL), 1)
 
   t.mock.timers.tick(14 * DAY + MINUTE)
+  assert.equal(await waiting(CAROL), 0, "an expired request stops counting before anyone reads it")
+  assert.deepEqual((await sidebar(CAROL)).request_faces, [])
   assert.deepEqual((await h.page("WEE1", CAROL)).incoming.requests, [], "Bob's request expired")
   assert.equal((await h.accept("WEE1", elsewhere.body.request_id, CAROL)).status, 409)
   const later = await h.ask("MFNG", BOB)
@@ -621,7 +647,12 @@ test("11: each message goes out once, and one that stopped being true is dropped
     if (String(url).endsWith("/users/@me/channels")) {
       return Response.json({ id: `dm-${body.recipient_id}` })
     }
-    sends.push({ channel: String(url).split("/channels/")[1].split("/")[0], content: body.content })
+    sends.push({
+      channel: String(url).split("/channels/")[1].split("/")[0],
+      content: body.content,
+      embeds: body.embeds ?? null,
+      components: body.components ?? null,
+    })
     return Response.json({ id: `message-${sends.length}` })
   }
   t.after(() => {
@@ -629,9 +660,17 @@ test("11: each message goes out once, and one that stopped being true is dropped
   })
   const deliver = () =>
     deliverPendingCaretakerGeneRequestNotifications({ ...h.env, DISCORD_BOT_TOKEN: "test-token" })
+  const button = (label, url) => [{ type: 1, components: [{ type: 2, style: 5, label, url }] }]
+  const wee1Portrait = "ab".repeat(32)
+  h.db.database
+    .prepare(
+      `INSERT INTO icono_publish_state (gene_symbol, current_asset_sha256) VALUES ('WEE1', ?)`,
+    )
+    .run(wee1Portrait)
 
   await h.claim("MFNG", ALICE)
-  const bob = await h.ask("MFNG", BOB)
+  await h.claim("WEE1", BOB)
+  const bob = await h.ask("MFNG", BOB, { note: "I *study* [Notch](https://x.test) glycosylation." })
   await deliver()
   await h.decide("MFNG", bob.body.request_id, "reject", ALICE)
   await deliver()
@@ -647,16 +686,35 @@ test("11: each message goes out once, and one that stopped being true is dropped
   )
   await h.claim("MFNG", CAROL) // MFNG is taken again before Dave hears it was free.
   await deliver()
+  await h.ask("MFNG", DAVE) // A handover with no note: the sentence and the button only.
+  await deliver()
   await deliver()
 
   assert.deepEqual(sends, [
     {
       channel: `dm-${discordIdOf(ALICE)}`,
-      content: "New request for **MFNG**\nhttps://iconoplasm.brinedew.bio/gene/MFNG",
+      content: "**bob** asked to swap **WEE1** for **MFNG**",
+      embeds: [
+        {
+          description: String.raw`I \*study\* \[Notch\](https://x.test) glycosylation.`,
+          thumbnail: {
+            url: `https://iconoplasm.brinedew.bio/portraits/v1/ab/${wee1Portrait}/thumb.webp`,
+          },
+        },
+      ],
+      components: button("Review", "https://iconoplasm.brinedew.bio/gene/MFNG#gene-requests"),
     },
     {
       channel: `dm-${discordIdOf(BOB)}`,
-      content: "Your request for **MFNG** was rejected.\nhttps://iconoplasm.brinedew.bio/gene/MFNG",
+      content: "Your request for **MFNG** was rejected.",
+      embeds: null,
+      components: button("Open", "https://iconoplasm.brinedew.bio/gene/MFNG"),
+    },
+    {
+      channel: `dm-${discordIdOf(CAROL)}`,
+      content: "**dave** asked to become a **MFNG** caretaker",
+      embeds: null,
+      components: button("Review", "https://iconoplasm.brinedew.bio/gene/MFNG#gene-requests"),
     },
   ])
   assert.deepEqual(
@@ -666,6 +724,7 @@ test("11: each message goes out once, and one that stopped being true is dropped
       ["rejected", BOB, "sent"],
       ["requested", ALICE, "suppressed"],
       ["freed", DAVE, "suppressed"],
+      ["requested", CAROL, "sent"],
     ],
   )
 })

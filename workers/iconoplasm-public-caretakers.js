@@ -49,8 +49,14 @@ function chunks(values) {
 
 // B-1137: each account's Discord name and avatar, as the toolbar shows a
 // caretaker. A gene request shows its asker the same way. Accounts without a
-// usable profile are left out.
-export async function readAccountProfiles(accountDb, requestedAccountIds) {
+// usable profile are left out. `discordUrls` gives Discord's own picture
+// address instead of the /api/avatar path (a Worker request per face), for
+// screens only a signed-in person sees, as the /caretakers directory does.
+export async function readAccountProfiles(
+  accountDb,
+  requestedAccountIds,
+  { discordUrls = false } = {},
+) {
   const accountIds = Array.from(
     new Set((requestedAccountIds || []).map((id) => String(id || "").trim()).filter(Boolean)),
   )
@@ -78,9 +84,11 @@ export async function readAccountProfiles(accountDb, requestedAccountIds) {
         .trim()
         .slice(0, 80)
       if (!accountId || !username || profileByAccount.has(accountId)) continue
-      const avatarUrl = buildAvatarProxyPath(
-        String(row?.avatar_url || "").trim() || discordDefaultAvatarUrl(row?.discord_id),
-      )
+      const picture =
+        String(row?.avatar_url || "").trim() || discordDefaultAvatarUrl(row?.discord_id)
+      const avatarUrl = discordUrls
+        ? sanitizeDiscordAvatarUrl(picture)
+        : buildAvatarProxyPath(picture)
       if (!avatarUrl) continue
       profileByAccount.set(
         accountId,

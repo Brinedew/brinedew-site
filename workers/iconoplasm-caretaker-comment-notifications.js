@@ -1,4 +1,6 @@
 import { discordSwitchIsOn } from "./discord-integration-switches.js"
+import { readAccountProfiles } from "./iconoplasm-public-caretakers.js"
+import { caretakerPseudonym } from "./iconoplasm/caretaker-roles.js"
 
 const DELIVERY_STATUSES = Object.freeze(["pending", "retry"])
 // One selector plus two/three D1 queries per successful message. Each delivery
@@ -136,7 +138,14 @@ function deliveryError(response, body) {
 // Opens the bot's DM channel with one person and posts one message. Answers
 // "sent", "retry" (worth trying again later), "failed", or "unknown" when the
 // message POST may have reached Discord: retrying that could send it twice.
-async function sendDiscordDirectMessage(token, recipientId, content) {
+// `outgoing` is the text, or { content, embeds, components } for a message that
+// also carries a card or a link button.
+async function sendDiscordDirectMessage(token, recipientId, outgoing) {
+  const {
+    content = "",
+    embeds,
+    components,
+  } = typeof outgoing === "string" ? { content: outgoing } : outgoing || {}
   let channelResponse
   try {
     channelResponse = await fetch("https://discord.com/api/v10/users/@me/channels", {
@@ -169,6 +178,8 @@ async function sendDiscordDirectMessage(token, recipientId, content) {
       headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         content: boundedCodePoints(content, 2000),
+        ...(embeds?.length ? { embeds } : {}),
+        ...(components?.length ? { components } : {}),
         allowed_mentions: { parse: [] },
       }),
     })
@@ -198,8 +209,8 @@ async function sendDiscordDirectMessage(token, recipientId, content) {
 }
 
 // Sends one claimed outbox row and records the outcome. Returns 1 when sent.
-async function deliverClaimedRow(db, table, token, row, recipientId, content) {
-  const outcome = await sendDiscordDirectMessage(token, recipientId, content)
+async function deliverClaimedRow(db, table, token, row, recipientId, message) {
+  const outcome = await sendDiscordDirectMessage(token, recipientId, message)
   await finishDelivery(db, table, row.notification_key, outcome.status, {
     ...outcome,
     nextAttemptAt:
@@ -394,11 +405,74 @@ ${geneUrl}`,
 // "requested" message whose request was answered or already seen on the gene
 // page, a "freed" message for a gene somebody has taken again.
 const GENE_REQUEST_MESSAGES = Object.freeze({
-  requested: (symbol) => `New request for **${symbol}**`,
   accepted: (symbol) => `Your request for **${symbol}** was accepted.`,
   rejected: (symbol) => `Your request for **${symbol}** was rejected.`,
   freed: (symbol) => `**${symbol}** has no caretaker now, so you can claim it.`,
 })
+
+const GENE_PAGE_ORIGIN = "https://iconoplasm.brinedew.bio"
+const geneUrl = (symbol) => `${GENE_PAGE_ORIGIN}/gene/${encodeURIComponent(symbol)}`
+
+// Discord markdown would read a name or a note as formatting, or as a disguised
+// link ([text](address)).
+function plain(value) {
+  return String(value || "").replace(/([\\*_~`|[\]])/g, "\\$1")
+}
+
+function linkButton(label, url) {
+  return [{ type: 1, components: [{ type: 2, style: 5, label, url }] }]
+}
+
+// A new request says who asks and for what, the way Google Drive's "Keith
+// O'Brien asked to comment · Review" does: the sentence is the text (it is what
+// a phone notification shows), the asker's note and the offered gene's portrait
+// sit in a card under it, and one button opens the requests list. There is no
+// address in the text, so Discord doesn't unfold a card of the caretaker's own
+// gene over it.
+async function geneRequestMessage(db, accounts, row) {
+  const request = await db
+    .prepare(
+      `SELECT request.requester_account_id, request.offered_gene_symbol, request.note,
+              portrait.current_asset_sha256 AS offered_asset_sha256
+         FROM icono_caretaker_gene_requests request
+         LEFT JOIN icono_publish_state portrait
+           ON portrait.gene_symbol = request.offered_gene_symbol
+        WHERE request.request_id = ?`,
+    )
+    .bind(row.request_id)
+    .first()
+  if (!request) return null
+  let name = ""
+  try {
+    name = (await readAccountProfiles(accounts, [request.requester_account_id])).get(
+      request.requester_account_id,
+    )?.username
+  } catch (error) {
+    console.error("[ICONOPLASM_GENE_REQUEST_DM_PROFILE]", error)
+  }
+  name ||= await caretakerPseudonym(request.requester_account_id)
+  const symbol = row.gene_symbol
+  const offered = request.offered_gene_symbol
+  const content = offered
+    ? `**${plain(name)}** asked to swap **${plain(offered)}** for **${plain(symbol)}**`
+    : `**${plain(name)}** asked to become a **${plain(symbol)}** caretaker`
+  const sha = String(request.offered_asset_sha256 || "")
+  const card = {
+    ...(request.note ? { description: plain(request.note) } : {}),
+    ...(/^[0-9a-f]{64}$/.test(sha)
+      ? {
+          thumbnail: {
+            url: `${GENE_PAGE_ORIGIN}/portraits/v1/${sha.slice(0, 2)}/${sha}/thumb.webp`,
+          },
+        }
+      : {}),
+  }
+  return {
+    content,
+    embeds: Object.keys(card).length ? [card] : [],
+    components: linkButton("Review", `${geneUrl(symbol)}#gene-requests`),
+  }
+}
 
 export async function deliverPendingCaretakerGeneRequestNotifications(
   env,
@@ -474,21 +548,30 @@ export async function deliverPendingCaretakerGeneRequestNotifications(
       })
       continue
     }
-    const message = GENE_REQUEST_MESSAGES[row.kind]
+    let message = null
+    try {
+      // The others say what happened in one line, with Google Drive's "Open" to the gene.
+      message =
+        row.kind === "requested"
+          ? await geneRequestMessage(db, accounts, row)
+          : GENE_REQUEST_MESSAGES[row.kind]
+            ? {
+                content: GENE_REQUEST_MESSAGES[row.kind](plain(row.gene_symbol)),
+                components: linkButton("Open", geneUrl(row.gene_symbol)),
+              }
+            : null
+    } catch (error) {
+      await finishDelivery(db, table, row.notification_key, "retry", {
+        error: bounded(error?.message || "gene_request_read_failed", 300),
+        nextAttemptAt: retryAt(Number(row.discord_attempt_count || 0) + 1),
+      })
+      continue
+    }
     if (!message) {
       await finishDelivery(db, table, row.notification_key, "failed", { error: "unknown_kind" })
       continue
     }
-    const geneUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(row.gene_symbol)}`
-    delivered += await deliverClaimedRow(
-      db,
-      table,
-      token,
-      row,
-      discordUserId,
-      `${message(row.gene_symbol)}
-${geneUrl}`,
-    )
+    delivered += await deliverClaimedRow(db, table, token, row, discordUserId, message)
   }
   return { ok: true, delivered }
 }
