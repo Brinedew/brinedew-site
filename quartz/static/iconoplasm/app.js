@@ -2669,18 +2669,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var totalCopy = totalCount.toLocaleString()
     var sharedChecked = !!(collectionState && collectionState.sharedDiscoveries)
     var sharedDisabled = false
-    // Once the reader has finds, the guest card says this with its login button.
-    var guestStorageCopy =
-      guestPreview && !guestCount ? " · dossier visits stay in this browser until you sign in" : ""
+    // A first-time visitor has found nothing, and "0 genes found" over an
+    // empty bar is the first line they would read. They get the switch alone.
+    var showProgress = !guestPreview || guestCount > 0
     return (
       '<section class="icono-collection-summary icono-collection-summary--single" aria-label="Collection progress">' +
-      '<article class="icono-collection-card icono-collection-card--archive">' +
+      '<article class="icono-collection-card icono-collection-card--archive' +
+      (showProgress ? "" : " icono-collection-card--switch-only") +
+      '">' +
       '<div class="icono-collection-summary-row">' +
-      '<div class="icono-collection-copy">' +
-      esc(discoveredCount.toLocaleString()) +
-      (totalCount > 0 ? " genes found out of " + esc(totalCopy) : " genes found") +
-      esc(guestStorageCopy) +
-      "</div>" +
+      (showProgress
+        ? '<div class="icono-collection-copy">' +
+          esc(discoveredCount.toLocaleString()) +
+          (totalCount > 0 ? " genes found out of " + esc(totalCopy) : " genes found") +
+          "</div>"
+        : "") +
       '<label class="icono-collection-shared-toggle">' +
       '<input type="checkbox" data-icono-shared-discoveries-toggle' +
       (sharedChecked ? " checked" : "") +
@@ -2689,13 +2692,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "<span>show discoveries made by others</span>" +
       "</label>" +
       "</div>" +
-      '<div class="icono-collection-progress-inline">' +
-      '<div class="icono-collection-progress-track" aria-hidden="true">' +
-      '<span class="icono-collection-progress-fill" style="width:' +
-      esc(progressWidth.toFixed(1)) +
-      '%"></span>' +
-      "</div>" +
-      "</div>" +
+      (showProgress
+        ? '<div class="icono-collection-progress-inline">' +
+          '<div class="icono-collection-progress-track" aria-hidden="true">' +
+          '<span class="icono-collection-progress-fill" style="width:' +
+          esc(progressWidth.toFixed(1)) +
+          '%"></span>' +
+          "</div>" +
+          "</div>"
+        : "") +
       "</article>" +
       "</section>"
     )
