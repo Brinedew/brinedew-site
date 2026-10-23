@@ -88,6 +88,9 @@ for (const client of ["extension", "website"]) {
           remove: (symbols) => symbols.forEach((s) => pending.delete(s)),
         },
         fetchAuthedJSON: transport,
+        // The add-on's site bridge: this browser has no add-on hovers to add.
+        readExtensionGuestDiscoveries: async () => [],
+        forgetExtensionGuestDiscoveries() {},
         console: { warn() {}, error() {} },
       }
       vm.createContext(context)
