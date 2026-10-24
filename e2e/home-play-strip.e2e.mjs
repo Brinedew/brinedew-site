@@ -270,7 +270,11 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       // 2. The count changes the moment the card rises. A plain mouse move,
       // as a person's pointer: Playwright's hover() scrolls its target back
       // into view when it moves, which would hide failure 3.
-      await page.$eval(pill("MYC"), (element) => element.scrollIntoView({ block: "center" }))
+      // Instant: the page scrolls smoothly, and a measurement mid-scroll
+      // would aim the pointer at an empty spot.
+      await page.$eval(pill("MYC"), (element) =>
+        element.scrollIntoView({ block: "center", behavior: "instant" }),
+      )
       const rest = await page.$eval(pill("MYC"), (element) => element.getBoundingClientRect())
       await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2, { steps: 4 })
       assert.equal(await title(page), "You discovered 1 gene so far")
