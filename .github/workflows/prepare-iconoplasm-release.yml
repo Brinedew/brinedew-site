@@ -19,13 +19,48 @@ permissions:
   actions: read
 
 jobs:
+  # The Firefox and Edge workflows both call this one. Whichever runs first
+  # seals the release, and only after the Firefox PDF suite passed on this
+  # commit, so a sealed release already carries that verdict. The second store
+  # reuses it instead of running the suite again against that day's newest
+  # Firefox and the live API: on 2026-10-24 the 0.5.11 Edge run failed the
+  # suite on the commit that the Firefox run had just passed and sealed.
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      sealed: ${{ steps.archive.outputs.sealed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_commit }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Inspect immutable archive
+        id: archive
+        run: node scripts/iconoplasm-release-bundle.mjs inspect
+
   firefox-pdf-e2e:
+    needs: archive
+    if: needs.archive.outputs.sealed != 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/firefox-pdf-e2e.yml
 
   prepare:
-    needs: firefox-pdf-e2e
+    needs: [archive, firefox-pdf-e2e]
+    if: >-
+      always() && needs.archive.result == 'success' &&
+      (needs.firefox-pdf-e2e.result == 'success' ||
+      (needs.firefox-pdf-e2e.result == 'skipped' && needs.archive.outputs.sealed == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:

@@ -74,14 +74,23 @@ bindRadioGroup("highlight-mode", normalizeHighlightMode, HIGHLIGHT_MODE_KEY)
 bindRadioGroup("highlight-visibility", normalizeHighlightVisibility, HIGHLIGHT_VISIBILITY_KEY)
 bindRadioGroup("card-variant", normalizeCardVariant, CARD_VARIANT_KEY)
 
+// Counts the reader's own clicks on the PDF switch. The popup asks the
+// background for the current setting when it opens, and a background that is
+// still waking up can answer after the reader has already clicked; that late
+// answer must not flip their choice back (the release gate's Selenium click
+// lost this race on 2026-10-24).
+let pdfHighlightingChoices = 0
+
 async function loadPdfHighlightingSetting(storedValue) {
   const field = document.getElementById("pdf-highlighting-field")
+  const choicesBefore = pdfHighlightingChoices
   let capability
   try {
     capability = await chrome.runtime.sendMessage({ type: "PDF_OWNERSHIP_GET_CAPABILITY" })
   } catch (_) {
     capability = null
   }
+  if (choicesBefore !== pdfHighlightingChoices) return
   if (!capability?.ok || !capability.supported) {
     if (field) field.hidden = true
     return
@@ -101,6 +110,7 @@ async function loadPdfHighlightingSetting(storedValue) {
 for (const radio of document.querySelectorAll('input[name="pdf-highlighting"]')) {
   radio.addEventListener("change", async () => {
     if (!radio.checked) return
+    pdfHighlightingChoices += 1
     const enabled = radio.value === "on"
     const radios = document.querySelectorAll('input[name="pdf-highlighting"]')
     for (const option of radios) option.disabled = true
