@@ -25,7 +25,12 @@ import {
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
 } from "./guest-discovery-store.js?v=df8a5536754a5b3d"
-import { HOME_PLAY_SYMBOLS, mountHomePlayStrip } from "./home-play-strip.js?v=ce8e6b9c4378bb30"
+import {
+  HOME_PLAY_DOCS_LINE,
+  HOME_PLAY_SYMBOLS,
+  homePlayActionMarkup,
+  mountHomePlayStrip,
+} from "./home-play-strip.js?v=49825fa6a0e0ae4e"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -3542,14 +3547,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     syncInstallStateFromDomMarker()
     var browser = detectInstallBrowser()
     var faqUrl = "/docs/faq"
-    var guestLoginActions = currentUser
-      ? []
-      : [
-          {
-            href: voteLoginUrl(),
-            label: "Log in with Discord",
-          },
-        ]
     if (iconoInstallState.installed) {
       return {
         tone: "installed",
@@ -3558,7 +3555,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         title: "Want more cards? Hover over gene names on other websites.",
         note: "When you are logged in, your Iconoplasm add-on will record discoveries in the archive above.",
         steps: [],
-        actions: guestLoginActions,
+        actions: [],
       }
     }
     if (browser && browser.isMobile && browser.family !== "firefox") {
@@ -3599,7 +3596,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       note: activePanel.note,
       managerUrl: activePanel.managerUrl,
       steps: activePanel.steps,
-      actions: (activePanel.actions || []).concat(guestLoginActions),
+      actions: activePanel.actions || [],
     }
   }
 
@@ -3869,6 +3866,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   // Each gene shows as a small card of its whole portrait. The catalogue's
   // "thumb" is a square crop that cuts off heads and feet, so it uses "medium".
+  // Under them comes the one next step (B-1173). Without the add-on it is the
+  // strip's install step, because in this browser the add-on keeps the finds;
+  // the two sites stay with the strip, so the card stays one row of cards.
+  // With it, the finds already live here, and logging in is what moves them to
+  // other devices: the Chrome store listing's "Connect with Discord to sync
+  // across devices."
   function buildGuestDiscoveryCardMarkup(shelf) {
     var thumbs = ""
     for (var i = 0; i < shelf.genes.length; i++) {
@@ -3893,15 +3896,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(shelf.count.toLocaleString()) +
       (shelf.count === 1 ? " gene" : " genes") +
       " so far</div>" +
-      '<p class="icono-install-note">Log in to track your discoveries.</p>' +
-      '<div class="icono-install-actions"><a class="icono-button icono-button--primary icono-install-link" href="' +
-      esc(voteLoginUrl()) +
-      '">Log in with Discord</a></div>' +
+      (iconoInstallState.installed
+        ? '<p class="icono-install-note">Connect with Discord to sync across devices.</p>' +
+          '<div class="icono-install-actions"><a class="icono-button icono-button--primary icono-install-link" href="' +
+          esc(voteLoginUrl()) +
+          '">Log in with Discord</a></div>'
+        : '<div class="icono-play-next">' +
+          homePlayActionMarkup(Object.assign(homePlayAction(), { sites: false })) +
+          "</div>") +
       "</section>"
     )
   }
 
-  // With discoveries on show, the guest card carries the login button, so the
+  // With discoveries on show, the guest card carries the next step, so the
   // installed add-on's "Want more cards?" card would only repeat it.
   function dropInstalledCardBesideGuestDiscoveries(scope) {
     if (!scope.querySelector("[data-icono-guest-discovery-card]")) return
@@ -3920,68 +3927,95 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (container.querySelector("[data-icono-guest-discovery-card], [data-icono-home-play]")) {
         return shelf
       }
+      syncInstallStateFromDomMarker()
       var wrapper = document.createElement("div")
       wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
-      container.insertBefore(wrapper.firstElementChild, container.firstChild)
+      var card = wrapper.firstElementChild
+      container.insertBefore(card, container.firstChild)
       dropInstalledCardBesideGuestDiscoveries(container)
+      var openButton = card.querySelector("[data-icono-play-open]")
+      if (openButton) {
+        openButton.addEventListener("click", function () {
+          openButton.remove()
+          var steps = appendHomeInstallCard(container)
+          if (steps) steps.scrollIntoView({ block: "nearest", behavior: "smooth" })
+        })
+      }
       return shelf
     })
   }
 
-  // B-1173: one button follows the strip's first find. Firefox and desktop
-  // Edge go to their add-on store. Chrome, Brave and other phone browsers open
-  // the install steps under the strip, so nothing downloads until the reader
-  // presses the download button inside them. A reader who already has the
-  // add-on, and an iPhone, which has no install path, keep the finds by
-  // logging in.
+  // B-1173: what follows the strip's first find, and what a returning guest's
+  // card offers. Install comes first: in the same browser the add-on keeps
+  // every find, while a Discord login only matters across devices, and the
+  // sidebar's Discord Login stays for that. The notes are the docs' and the
+  // install card's own words.
+  //   Firefox (desktop or Android) and desktop Edge: their add-on store.
+  //   Chrome, Brave and other phone browsers: the install steps under the
+  //     strip, so nothing downloads until the reader presses the download
+  //     button inside them.
+  //   Safari and iPhone: no install path, so what it is and where it works.
+  //   The add-on already here: a page to try it on, docs step 2's Homeobox.
   function homePlayAction() {
     var browser = detectInstallBrowser()
     var release = iconoInstallState.release || {}
-    var note =
-      "Want more cards? " +
-      (browser.isMobile ? "Tap gene names" : "Hover over gene names") +
-      " on other websites."
-    if (iconoInstallState.installed || browser.platform === "ios") {
+    if (iconoInstallState.installed) {
       return {
-        kind: "login",
-        note: "Log in to track your discoveries.",
-        label: "Log in with Discord",
-        href: voteLoginUrl(),
+        kind: "link",
+        note: "Open any page that names human genes.",
+        label: "Wikipedia's Homeobox article",
+        href: "https://en.wikipedia.org/wiki/Homeobox",
+      }
+    }
+    if (browser.platform === "ios") {
+      return { kind: "none", note: HOME_PLAY_DOCS_LINE, sites: true }
+    }
+    if (browser.family === "safari") {
+      return {
+        kind: "none",
+        note:
+          HOME_PLAY_DOCS_LINE +
+          " For one-click install, visit this page on Edge or Firefox browsers.",
+        sites: true,
       }
     }
     if (browser.family === "firefox") {
       return {
         kind: "link",
-        note: note,
+        note: HOME_PLAY_DOCS_LINE,
         label: "Get extension for Firefox",
         href: release.firefoxListingUrl || ICONO_EXTENSION_FIREFOX_LISTING_URL,
+        glyph: "firefox",
+        sites: true,
       }
     }
     if (browser.family === "edge" && !browser.isMobile) {
       return {
         kind: "link",
-        note: note,
+        note: HOME_PLAY_DOCS_LINE,
         label: "Get extension for Edge",
         href: release.edgeListingUrl || ICONO_EXTENSION_EDGE_LISTING_URL,
+        glyph: "edge",
+        sites: true,
       }
     }
+    if (browser.isMobile) {
+      return { kind: "open", note: HOME_PLAY_DOCS_LINE, label: "Install on mobile", sites: true }
+    }
+    var named = { brave: "Brave", chromium: "Chrome" }[browser.family]
     return {
       kind: "open",
-      note: note,
-      label: browser.isMobile
-        ? "Install on mobile"
-        : browser.family === "brave"
-          ? "Install for Brave"
-          : browser.family === "chromium"
-            ? "Install for Chrome"
-            : "Install the extension",
+      note: HOME_PLAY_DOCS_LINE,
+      label: named ? "Install for " + named : "Install the extension",
+      glyph: browser.family === "brave" ? "brave" : browser.family === "chromium" ? "chrome" : "",
+      sites: true,
     }
   }
 
   // A signed-out reader who has found nothing yet gets the essay strip in
   // place of the install card (B-1173), with the add-on or without it. A
-  // reader with finds gets the guest card, and a catalogue that cannot draw
-  // all seven genes gets the install card.
+  // reader with finds gets only the guest card (appendGuestDiscoveryCard), and
+  // a catalogue that cannot draw all seven genes gets the install card.
   function appendHomePlayStripOrInstallCard(container, onCount) {
     if (!container) return
     if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
@@ -3998,12 +4032,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return shelf.count ? null : iconoplasmPublicationReader.genes(HOME_PLAY_SYMBOLS.slice())
       })
       .then(function (records) {
-        if (!records) {
-          if (!container.isConnected) return
-          appendHomeInstallCard(container)
-          dropInstalledCardBesideGuestDiscoveries(container)
-          return
-        }
+        if (!records) return
         var bySymbol = new Map()
         records.forEach(function (record) {
           bySymbol.set(normalizedSymbol(record.symbol), record)
