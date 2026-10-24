@@ -3955,7 +3955,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   //     strip, so nothing downloads until the reader presses the download
   //     button inside them.
   //   Safari and iPhone: no install path, so what it is and where it works.
-  //   The add-on already here: a page to try it on, docs step 2's Homeobox.
+  //   The add-on already here: a page to try it on, docs step 2's Homeobox,
+  //     whose picture is the first of the two.
   function homePlayAction() {
     var browser = detectInstallBrowser()
     var release = iconoInstallState.release || {}
@@ -3965,6 +3966,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         note: "Open any page that names human genes.",
         label: "Wikipedia's Homeobox article",
         href: "https://en.wikipedia.org/wiki/Homeobox",
+        sites: true,
       }
     }
     if (browser.platform === "ios") {
@@ -9577,8 +9579,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           } else {
             appendHomePlayStripOrInstallCard(auxiliary, function (count) {
               if (disposed) return
+              // The first find gives the header above the cards a progress
+              // line, 46 px, while the reader's pointer is on the strip below
+              // it. The strip keeps its place on screen; otherwise the symbol
+              // slides out from under the pointer and its card drops
+              // (2026-10-24). Chrome's own scroll anchoring doesn't catch
+              // this here, and Safari has it only from version 27.
+              var strip = auxiliary.querySelector("[data-icono-home-play]")
+              var stripTop = strip ? strip.getBoundingClientRect().top : null
               galleryState.guestDiscoveryCount = count
               syncCollectionChrome()
+              if (stripTop === null) return
+              var moved = strip.getBoundingClientRect().top - stripTop
+              if (Math.abs(moved) > 0.5) window.scrollBy({ top: moved, behavior: "instant" })
             })
           }
           appendDiscordActionCard(auxiliary)
