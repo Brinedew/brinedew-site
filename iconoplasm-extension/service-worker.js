@@ -260,10 +260,19 @@ async function fetchStableGene(rawSymbol) {
   return pending
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+// A first install opens the getting-started page at "Read a page as usual"
+// (B-1173). Chrome does not reach tabs that were open before the install, so
+// the Archive tab that sent the reader here still shows its install steps.
+// Updates of the add-on or the browser open nothing.
+const GETTING_STARTED_URL = `${HOST}/docs/getting-started#2-read-a-page-as-usual`
+
+chrome.runtime.onInstalled.addListener((details) => {
   void initializePdfPreferences()
   void refreshGeneData()
   void forgetRetiredCardCaches()
+  if (details?.reason === "install" && chrome.tabs?.create) {
+    Promise.resolve(chrome.tabs.create({ url: GETTING_STARTED_URL })).catch(() => {})
+  }
 })
 
 chrome.runtime.onStartup.addListener(() => {

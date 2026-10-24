@@ -9,10 +9,14 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.selenium_manager import SeleniumManager
+from selenium.webdriver.support.ui import WebDriverWait
 
 from pdf_conformance_server import PdfConformanceServer
 
 DEFAULT_PAPER = Path(__file__).resolve().parent / "PLOS_BRCA1_BRCA2_TP53.pdf"
+GETTING_STARTED_URL = (
+    "https://iconoplasm.brinedew.bio/docs/getting-started#2-read-a-page-as-usual"
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -68,7 +72,25 @@ def firefox(request: pytest.FixtureRequest, artifacts: Path):
     )
     driver = webdriver.Firefox(options=options, service=service)
     try:
+        start = driver.current_window_handle
         addon_id = driver.install_addon(str(xpi), temporary=True)
+        # A first install opens getting-started at "Read a page as usual"
+        # (B-1173). Check that it did, then close it: every test drives the one
+        # tab that the driver opened, and the PDF radio in the popup stopped
+        # answering in two runs while the docs tab stayed open.
+        WebDriverWait(driver, 20).until(lambda current: len(current.window_handles) > 1)
+        opened = []
+        for handle in driver.window_handles:
+            if handle == start:
+                continue
+            driver.switch_to.window(handle)
+            WebDriverWait(driver, 20).until(
+                lambda current: current.current_url != "about:blank"
+            )
+            opened.append(driver.current_url)
+            driver.close()
+        driver.switch_to.window(start)
+        assert opened == [GETTING_STARTED_URL], opened
         with driver.context(driver.CONTEXT_CHROME):
             runtime_uuid = driver.execute_script(
                 """

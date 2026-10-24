@@ -4253,6 +4253,10 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: balance;
 }
 
+.icono-guest-discovery-card .icono-play-next {
+  justify-self: stretch;
+}
+
 /* B-1173: a first-time visitor finds genes right here (home-play-strip.js).
    The essay lines need a reading measure, so the column widens from one tile
    to 38rem while the strip is in it. */
@@ -4268,10 +4272,81 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   max-width: none;
 }
 
+/* The essay lines sit in a drawn browser window whose toolbar carries the
+   add-on's icon, so the strip reads as one page of many. The window controls
+   keep their usual colours in both themes. */
+.icono-play-window {
+  --icono-play-dot-close: #e0605a;
+  --icono-play-dot-minimize: #e9b44c;
+  --icono-play-dot-zoom: #7cbf7a;
+  overflow: hidden;
+  border: 1px solid var(--gray);
+  border-radius: 8px;
+  background: var(--light);
+}
+
+.icono-play-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--gray);
+  background: var(--lightgray);
+}
+
+.icono-play-dots {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  padding: 0 0.2rem;
+}
+
+.icono-play-dots i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--icono-play-dot-close);
+}
+
+.icono-play-dots i:nth-child(2) {
+  background: var(--icono-play-dot-minimize);
+}
+
+.icono-play-dots i:nth-child(3) {
+  background: var(--icono-play-dot-zoom);
+}
+
+.icono-play-address {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--light);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--darkgray);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icono-play-addon {
+  display: block;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+}
+
 .icono-play-quote {
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.icono-play-window .icono-play-quote {
+  padding: 0.6rem 0.8rem 0.7rem;
 }
 
 /* One reading size: the quote reads at the card's own note size. */
@@ -4422,9 +4497,48 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   display: none;
 }
 
-.icono-play-next .icono-install-note b {
-  font-weight: 600;
-  color: var(--dark);
+.icono-play-next .icono-install-note {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* The add-on on Wikipedia and the UCSC Genome Browser, cut to the cards'
+   7:9 so they read as two more cards. */
+.icono-play-sites {
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.icono-play-site {
+  margin: 0;
+}
+
+.icono-play-site img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 7 / 9;
+  object-fit: cover;
+  object-position: 0 0;
+  border: 1px solid var(--gray);
+  border-radius: 4px;
+  background: var(--lightgray);
+}
+
+.icono-play-site figcaption {
+  margin-top: 0.3rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  color: var(--darkgray);
+  text-align: center;
+}
+
+.icono-play-glyph {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
 }
 
 /* The raised card is the site's own image-only card, placed the way the
