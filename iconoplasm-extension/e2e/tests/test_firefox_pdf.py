@@ -39,6 +39,9 @@ def set_pdf_highlighting(driver, runtime_uuid: str, enabled: bool) -> None:
         # label; Selenium's is_displayed() is therefore false even when the control
         # is available to a real click.
         wait(driver, lambda _current: radio.is_enabled())
+        # Clicks as soon as the switch exists, as a quick reader does, before the
+        # popup's own question to the background may have come back. Don't wait
+        # for it here: the popup must keep the click (it lost it on 2026-10-24).
         driver.execute_script("arguments[0].closest('label').click()", radio)
         wait(driver, lambda _current: radio.is_selected() and radio.is_enabled())
         capability = driver.execute_async_script(
