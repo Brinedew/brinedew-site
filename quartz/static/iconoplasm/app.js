@@ -25,7 +25,7 @@ import {
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
 } from "./guest-discovery-store.js?v=df8a5536754a5b3d"
-import { HOME_PLAY_SYMBOLS, mountHomePlayStrip } from "./home-play-strip.js?v=ce8e6b9c4378bb30"
+import { HOME_PLAY_SYMBOLS, mountHomePlayStrip } from "./home-play-strip.js?v=7ceb25545c0531a3"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -2887,6 +2887,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-gallery-install" id="icono-gallery-install"></div>' +
       "</div>" +
       "</div>" +
+      // Above the count, which appears with the first find and would push the strip down.
+      '<div class="icono-home-play-stage" id="icono-home-play-stage" hidden></div>' +
       '<div class="icono-collection-shell" id="icono-collection-shell">' +
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
@@ -3978,32 +3980,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  // A signed-out reader who has found nothing yet gets the essay strip in
-  // place of the install card (B-1173), with the add-on or without it. A
-  // reader with finds gets the guest card, and a catalogue that cannot draw
-  // all seven genes gets the install card.
-  function appendHomePlayStripOrInstallCard(container, onCount) {
-    if (!container) return
-    if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
+  // A signed-out reader who has found nothing yet meets the essay strip at
+  // the top of the Archive, above the starter cards (B-1173), with the add-on
+  // or without it. The strip carries their one install button. Resolves true
+  // once the strip is in the stage; otherwise the install card goes over the
+  // card backs as before. A reader with finds gets the guest card, and a
+  // catalogue that cannot draw all seven genes gets the install card.
+  function mountHomePlayStage(stage, onCount) {
+    if (!stage || stage.querySelector("[data-icono-home-play]")) return Promise.resolve(false)
     syncInstallStateFromDomMarker()
-    if (currentUser || hasSharedSessionPresenceHint()) {
-      appendHomeInstallCard(container)
-      return
-    }
+    if (currentUser || hasSharedSessionPresenceHint()) return Promise.resolve(false)
     // The guest card's shelf: gene pages opened in this browser plus what the
-    // add-on found while signed out. The catalogue is the one the starters
-    // already loaded, so neither read is a request.
-    loadGuestDiscoveryShelf()
+    // add-on found while signed out. The catalogue is the one fetch that the
+    // starter cards share, so neither read adds a request.
+    return loadGuestDiscoveryShelf()
       .then(function (shelf) {
         return shelf.count ? null : iconoplasmPublicationReader.genes(HOME_PLAY_SYMBOLS.slice())
       })
       .then(function (records) {
-        if (!records) {
-          if (!container.isConnected) return
-          appendHomeInstallCard(container)
-          dropInstalledCardBesideGuestDiscoveries(container)
-          return
-        }
+        if (!records) return false
         var bySymbol = new Map()
         records.forEach(function (record) {
           bySymbol.set(normalizedSymbol(record.symbol), record)
@@ -4021,13 +4016,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             portraitUrl: portraitUrl,
           }
         })
-        if (!container.isConnected) return
-        if (currentUser) {
-          appendHomeInstallCard(container)
-          return
-        }
-        container.classList.add("icono-home-auxiliary--play")
-        mountHomePlayStrip(container, {
+        if (!stage.isConnected || currentUser) return false
+        stage.hidden = false
+        mountHomePlayStrip(stage, {
           genes: genes,
           reverseFaceHtml: buildReverseCardFaceMarkup(),
           action: homePlayAction(),
@@ -4054,14 +4045,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             return count
           },
           onOpen: function () {
-            var steps = appendHomeInstallCard(container)
+            var steps = appendHomeInstallCard(stage)
             if (steps) steps.scrollIntoView({ block: "nearest", behavior: "smooth" })
           },
         })
+        return true
       })
       .catch(function (error) {
         console.warn(error)
-        if (container.isConnected) appendHomeInstallCard(container)
+        return false
       })
   }
 
@@ -4257,8 +4249,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!host) return
     host.innerHTML = ""
     host.hidden = true
-    host.classList.remove("icono-home-auxiliary--play")
-    removeHomePlayRaisedCards()
   }
 
   // A card that a strip symbol raised hangs from the body, so leaving the
@@ -9157,6 +9147,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     syncPublicInventoryStat()
     probeForIconoplasmExtensionPresence()
 
+    // The strip starts with the Archive rather than with the first page of
+    // cards, so it is in place before the starter cards below it draw.
+    var playStage = document.getElementById("icono-home-play-stage")
+    var homePlay = useClassicGallery
+      ? Promise.resolve(false)
+      : mountHomePlayStage(playStage, function (count) {
+          if (disposed) return
+          galleryState.guestDiscoveryCount = count
+          syncCollectionChrome()
+        })
+
     var feed = document.getElementById("icono-grid")
     var statusEl = document.getElementById("icono-feed-status")
     var retryButton = document.getElementById("icono-feed-retry")
@@ -9543,13 +9544,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (segment.startIndex === 0) {
           var auxiliary = document.getElementById("icono-home-auxiliary")
           auxiliary.hidden = false
-          if (useClassicGallery || galleryState.authenticated || galleryState.sharedDiscoveries) {
+          if (useClassicGallery || galleryState.authenticated) {
             appendHomeInstallCard(auxiliary)
           } else {
-            appendHomePlayStripOrInstallCard(auxiliary, function (count) {
-              if (disposed) return
-              galleryState.guestDiscoveryCount = count
-              syncCollectionChrome()
+            // The strip carries the install button in either scope; without the strip, this card does.
+            homePlay.then(function (up) {
+              if (up || disposed || !auxiliary.isConnected) return
+              appendHomeInstallCard(auxiliary)
+              dropInstalledCardBesideGuestDiscoveries(auxiliary)
             })
           }
           appendDiscordActionCard(auxiliary)

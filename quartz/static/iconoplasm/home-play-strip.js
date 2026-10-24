@@ -192,9 +192,8 @@ export function mountHomePlayStrip(container, options) {
     })
   }
 
-  // The raised card hangs from the page body: the guest stage clips whatever
-  // leaves it, and the card rises above the strip. It exists only while it is
-  // up, so it never outlives the Archive.
+  // The raised card hangs from the page body, so no box on the page clips
+  // it. It exists only while it is up, so it never outlives the Archive.
   let raised = null
   let current = ""
   let hideTimer = 0
@@ -220,20 +219,21 @@ export function mountHomePlayStrip(container, options) {
   }
 
   function place(pill) {
-    const width = raised.offsetWidth
-    const height = raised.offsetHeight || (width * 4) / 3
+    raised.style.inlineSize = ""
+    let width = raised.offsetWidth
+    let height = raised.offsetHeight || (width * 4) / 3
     const word = pill.getBoundingClientRect()
     const strip = card.getBoundingClientRect()
     const gap = 18
     const viewportWidth = doc.documentElement.clientWidth
-    const column = Math.max(
-      8,
-      Math.min(viewportWidth - width - 8, word.left + word.width / 2 - width / 2),
-    )
     // Above the strip in the word's column, the way the add-on puts its card
     // above the word: over the word itself it would cover the counter as the
     // counter changes. Without room above, beside the strip level with the
-    // word; failing both, above or below the word.
+    // word. On a phone the Archive header above the strip is a little
+    // shorter than the card, so the card shrinks to fit above, down to three
+    // quarters of its size, rather than cover the strip's own button.
+    // Failing all three, below the word, where the counter stays in sight,
+    // or above it when below would leave the screen.
     const rightHalf = word.left + word.width / 2 > strip.left + strip.width / 2
     const fitsRight = viewportWidth - strip.right - gap - 8 >= width
     const fitsLeft = strip.left - gap - 8 >= width
@@ -248,6 +248,19 @@ export function mountHomePlayStrip(container, options) {
         : fitsRight
           ? "right"
           : ""
+    const roomAbove = strip.top - 12 - 8
+    if (height > roomAbove && !side && roomAbove >= height * 0.75) {
+      // The border adds to the size set here, so take off what it adds.
+      const target = Math.floor((width * roomAbove) / height)
+      raised.style.inlineSize = target + "px"
+      raised.style.inlineSize = 2 * target - raised.offsetWidth + "px"
+      width = raised.offsetWidth
+      height = raised.offsetHeight
+    }
+    const column = Math.max(
+      8,
+      Math.min(viewportWidth - width - 8, word.left + word.width / 2 - width / 2),
+    )
     let left = column
     let top
     let origin = "50% 100%"
@@ -261,16 +274,20 @@ export function mountHomePlayStrip(container, options) {
       )
       origin = side === "right" ? "0 50%" : "100% 50%"
     } else {
-      top = word.top - height - 10 >= 8 ? word.top - height - 10 : word.bottom + 10
+      top =
+        word.bottom + 10 + height <= win.innerHeight - 8 || word.top - height - 10 < 8
+          ? word.bottom + 10
+          : word.top - height - 10
     }
     raised.style.transformOrigin = origin
     raised.style.left = left + win.scrollX + "px"
     raised.style.top = top + win.scrollY + "px"
   }
 
-  // Lazy cards above the strip load after the tap and push the strip down,
-  // and the card settles its own height after it mounts. While the card is
-  // up, it is placed again whenever the page, the strip or the card resizes.
+  // Anything above the strip that changes height after the tap moves the
+  // strip, and the card settles its own height after it mounts. While the
+  // card is up, it is placed again whenever the page, the strip or the card
+  // resizes.
   let follower = null
   function follow(pill) {
     if (follower) follower.disconnect()

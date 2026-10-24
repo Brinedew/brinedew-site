@@ -11,8 +11,10 @@
 // 2. hovering (desktop) or tapping (phone) a symbol raises no card, or the
 //    counter waits for anything: it must read "You discovered 1 gene so far"
 //    the moment the card rises;
-// 3. the raised card covers the counter, leaves the screen, or drifts away
-//    from its word when late cards above push the strip down;
+// 3. the visitor has to scroll to see the strip, it sits below the starter
+//    cards, or the first find moves it; the raised card covers the counter,
+//    leaves the screen, or drifts away from its word when something above
+//    pushes the strip down;
 // 4. the find is not stored in this browser, or the Archive header doesn't
 //    count it;
 // 5. more than one button follows the find;
@@ -139,7 +141,9 @@ async function openArchive(browser, origin, options, { seed = null, addOn = null
   const downloads = []
   page.on("download", (download) => downloads.push(download.suggestedFilename()))
   await page.goto(`${HOST}/`)
-  await page.waitForSelector("#icono-home-auxiliary:not([hidden]) > *", { timeout: 45_000 })
+  await page.waitForSelector("[data-icono-home-play], #icono-home-auxiliary:not([hidden]) > *", {
+    timeout: 45_000,
+  })
   return { context, page, api, downloads }
 }
 
@@ -196,6 +200,29 @@ function assertPlaced(where, g) {
   assert.ok(attached, `${where}: the card drifted from its word ${JSON.stringify(g)}`)
 }
 
+// The strip and the first starter card, in page pixels.
+const stripPlace = (page) =>
+  page.evaluate(() => {
+    const strip = document.querySelector(".icono-play-card").getBoundingClientRect()
+    const feed = document.getElementById("icono-grid").getBoundingClientRect()
+    return {
+      top: strip.top + scrollY,
+      bottom: strip.bottom + scrollY,
+      feedTop: feed.top + scrollY,
+      screen: innerHeight,
+    }
+  })
+
+// A first-time visitor sees the strip without scrolling, above the starter
+// cards, and the first find does not move it. On 2026-10-24 it sat 1.8
+// screens down on a computer and 3.5 on a phone, and the owner's first look
+// in a private window found nothing new.
+function assertFirstScreen(where, before, after) {
+  assert.ok(before.bottom <= before.screen, `${where}: the strip is below the first screen`)
+  assert.ok(before.bottom <= before.feedTop, `${where}: the strip is not above the cards`)
+  assert.ok(Math.abs(after.top - before.top) <= 1, `${where}: the first find moved the strip`)
+}
+
 const storedSymbols = (page) =>
   page.evaluate(
     (key) =>
@@ -222,10 +249,13 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.equal(await page.$("[data-icono-home-install-card]"), null, "install card shown too")
       assert.equal(await title(page), "Hover any gene symbol")
       await shot(page, "desktop-rest")
+      const before = await stripPlace(page)
 
       // 2. The count changes the moment the card rises.
       await page.hover(pill("MYC"))
       assert.equal(await title(page), "You discovered 1 gene so far")
+      await page.waitForTimeout(300)
+      assertFirstScreen("desktop", before, await stripPlace(page))
       await page.waitForSelector(".icono-play-raised.is-up", { timeout: 1_000 })
       await page.waitForTimeout(300)
       const g = await page.evaluate(geometry, "MYC")
@@ -297,24 +327,27 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       })
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
       assert.equal(await title(page), "Tap any gene symbol")
+      const before = await stripPlace(page)
       await page.tap(pill("TP53"))
       // 8. The first tap stays on the Archive and raises the card.
       assert.equal(new URL(page.url()).pathname, "/")
       assert.equal(await title(page), "You discovered 1 gene so far")
+      await page.waitForTimeout(300)
+      assertFirstScreen("phone", before, await stripPlace(page))
       await page.waitForSelector(".icono-play-raised.is-up", { timeout: 1_000 })
       await page.waitForTimeout(300)
       assertPlaced("phone", await page.evaluate(geometry, "TP53"))
-      // A late card above the strip grows by 300 px: the card goes with its word.
+      // Something above the strip grows by 300 px: the card goes with its word.
       await page.evaluate(() => {
         const late = document.createElement("div")
         late.style.height = "300px"
-        document.getElementById("icono-home-auxiliary").before(late)
+        document.getElementById("icono-home-play-stage").before(late)
       })
       await page.waitForTimeout(300)
       const g = await page.evaluate(geometry, "TP53")
       assertPlaced("phone, after a late card", g)
       await page.evaluate(() =>
-        document.getElementById("icono-home-auxiliary").previousSibling.remove(),
+        document.getElementById("icono-home-play-stage").previousSibling.remove(),
       )
       await shot(page, "phone-card")
 

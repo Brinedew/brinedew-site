@@ -4207,6 +4207,12 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   margin-bottom: clamp(4rem, 10vw, 6rem);
 }
 
+/* With nothing over them (the strip sits at the top), the card backs still
+   fade out fully: the margins plus this height reach the gradient's end. */
+.icono-post-feed-stage--guest-preview > .icono-home-auxiliary:empty {
+  min-height: clamp(8rem, 28vw, 12rem);
+}
+
 .icono-home-auxiliary[hidden] {
   display: none !important;
 }
@@ -4253,11 +4259,18 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   text-wrap: balance;
 }
 
-/* B-1173: a first-time visitor finds genes right here (home-play-strip.js).
-   The essay lines need a reading measure, so the column widens from one tile
-   to 38rem while the strip is in it. */
-.icono-home-auxiliary--play {
+/* B-1173: a first-time visitor finds genes right here (home-play-strip.js),
+   above the starter cards, where the first screen shows it. The essay lines
+   need a reading measure of 38rem. The install steps open under the strip. */
+.icono-home-play-stage {
+  display: grid;
+  gap: 1rem;
   width: min(100%, 38rem);
+  margin: 0 auto var(--icono-image-tile-gutter);
+}
+
+.icono-home-play-stage[hidden] {
+  display: none !important;
 }
 
 .icono-play-card.icono-guest-login-card {
