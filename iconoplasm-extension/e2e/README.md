@@ -17,7 +17,7 @@ pnpm run package:iconoplasm-firefox
 
 ## CI
 
-`.github/workflows/firefox-pdf-e2e.yml` runs this suite on ubuntu-latest under `xvfb-run` for pull requests that touch PDF-related extension files, on manual dispatch, and as a required job of `prepare-iconoplasm-release.yml`, so a Firefox PDF routing regression cannot reach a store release. Screenshots, request ledger and geckodriver log are uploaded as the `firefox-pdf-e2e` artifact.
+`.github/workflows/firefox-pdf-e2e.yml` runs this suite on ubuntu-latest under `xvfb-run` for pull requests that touch PDF-related extension files, on manual dispatch, and as a required job of `prepare-iconoplasm-release.yml` for the first store workflow of a version, so a Firefox PDF routing regression cannot reach a store release. The second store workflow finds the release already sealed, which only happens after the suite passed on that commit, and skips the suite. Screenshots, request ledger and geckodriver log are uploaded as the `firefox-pdf-e2e` artifact.
 
 ## Fixture attribution
 

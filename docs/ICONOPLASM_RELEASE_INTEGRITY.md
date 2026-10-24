@@ -62,6 +62,8 @@ The Firefox PDF ownership Selenium suite (`iconoplasm-extension/e2e`) runs in
 CI on every pull request that touches the extension, as a real Firefox with the
 real validation package, and again as a required job of the preparation
 workflow: preparation does not start unless it passes on the release commit.
+The second store workflow of a version finds the release sealed, which proves
+the suite passed on that commit, and skips it.
 The recorded `pdf-ownership-certification.json` claim is still checked, but it
 is no longer the only evidence.
 
