@@ -5,6 +5,9 @@
 // Ways this can fail, written before the code:
 // 1. the visitor still gets the install card, or gets both, or a returning
 //    guest with finds gets the strip again instead of their guest card;
+//    a signed-out reader with the add-on and no finds gets no strip (it hid
+//    the strip from the owner's private window on 2026-10-24), or one whose
+//    add-on already found genes gets the strip instead of their guest card;
 // 2. hovering (desktop) or tapping (phone) a symbol raises no card, or the
 //    counter waits for anything: it must read "You discovered 1 gene so far"
 //    the moment the card rises;
@@ -16,7 +19,8 @@
 // 6. a Chrome reader's button downloads a file or leaves the page, instead of
 //    opening the install steps under the strip;
 // 7. Firefox gets anything but its add-on store, an Android phone anything
-//    but the Firefox steps, an iPhone anything but the Discord login;
+//    but the Firefox steps, an iPhone or a reader who has the add-on
+//    anything but the Discord login;
 // 8. the first tap on a phone opens the gene page (it must raise the card);
 //    the second tap, or a desktop click, doesn't open it, or the raised card
 //    stays on the gene page;
@@ -82,7 +86,31 @@ function cdnObject(pathname) {
   return CDN_OBJECTS.get(pathname)
 }
 
-async function openArchive(browser, origin, options, { seed = null } = {}) {
+// The add-on's site bridge (iconoplasm-extension/site-bridge.js) marks the
+// page at document start and answers the Archive's request for the genes it
+// found while the reader was signed out.
+function addOnBridge(symbols) {
+  // An init script can run before <html> exists; document_start runs after.
+  const mark = () =>
+    document.documentElement.setAttribute("data-iconoplasm-extension-installed", "true")
+  if (document.documentElement) mark()
+  else {
+    new MutationObserver((_records, observer) => {
+      if (!document.documentElement) return
+      observer.disconnect()
+      mark()
+    }).observe(document, { childList: true })
+  }
+  window.addEventListener("iconoplasm-extension-guest-discoveries-request", () => {
+    window.dispatchEvent(
+      new CustomEvent("iconoplasm-extension-guest-discoveries", {
+        detail: JSON.stringify(symbols),
+      }),
+    )
+  })
+}
+
+async function openArchive(browser, origin, options, { seed = null, addOn = null } = {}) {
   const context = await browser.newContext(options)
   const api = []
   await routeProduction(
@@ -100,6 +128,7 @@ async function openArchive(browser, origin, options, { seed = null } = {}) {
     const object = await cdnObject(pathname)
     return route.fulfill({ ...object, headers: { "access-control-allow-origin": "*" } })
   })
+  if (addOn) await context.addInitScript(addOnBridge, addOn)
   if (seed) {
     await context.addInitScript(
       ([key, value]) => localStorage.setItem(key, value),
@@ -327,6 +356,37 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.equal(found[0].text, "Log in with Discord")
       assert.match(found[0].href, /\/api\/auth\//)
       report.iphone = found
+      await context.close()
+    })
+
+    await t.test("a signed-out reader with the add-on: the strip, then the login", async () => {
+      const { context, page } = await openArchive(
+        browser,
+        origin,
+        { ...DESKTOP, userAgent: UA.chrome },
+        { addOn: [] },
+      )
+      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      await page.hover(pill("MDM2"))
+      assert.equal(await title(page), "You discovered 1 gene so far")
+      const found = await buttons(page)
+      assert.deepEqual(
+        found.map((button) => button.text),
+        ["Log in with Discord"],
+      )
+      report.addOn = found
+      await context.close()
+    })
+
+    await t.test("a reader whose add-on found genes gets the guest card", async () => {
+      const { context, page } = await openArchive(
+        browser,
+        origin,
+        { ...DESKTOP, userAgent: UA.chrome },
+        { addOn: ["TP53", "BRCA1"] },
+      )
+      await page.waitForSelector("[data-icono-guest-discovery-card]", { timeout: 20_000 })
+      assert.equal(await page.$("[data-icono-home-play]"), null, "the strip hid the add-on's finds")
       await context.close()
     })
 
