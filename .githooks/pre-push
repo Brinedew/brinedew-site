@@ -9,26 +9,34 @@ fi
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$repo_root"
 
-current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+# Check only the pushes that become pull requests: branches other than main.
+# A push to main from this laptop is the Obsidian vault's note backup or the
+# extension release (its version commit, then its tag), and CI checks main after
+# every push anyway. Until 2026-10-05 the vault's hooks pointed at an empty
+# folder and a release pushed in seconds. Once they were switched on, the full
+# check that used to run here for main took 2 min 38 s on the v0.5.11 release
+# commit, and the release's 60-second tag push was killed (2026-10-24).
+pushes_a_branch=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main | refs/tags/*) ;;
+    *) pushes_a_branch=1 ;;
+  esac
+done
+if [ "$pushes_a_branch" = "0" ]; then
+  exit 0
+fi
 
 if [ ! -d node_modules ]; then
   pnpm install --frozen-lockfile
 fi
 
-# Every branch: the two cheap checks CI's build-and-test runs first. On
-# 2026-10-04 two PRs (B-977 #497, B-994 #498) failed CI on Prettier alone and sat
-# red for about six hours before anyone looked; a third (#500) failed on stale
-# module stamps. Both checks take seconds here and fail the same way CI would.
+# The two cheap checks CI's build-and-test runs first. On 2026-10-04 two PRs
+# (B-977 #497, B-994 #498) failed CI on Prettier alone and sat red for about six
+# hours before anyone looked; a third (#500) failed on stale module stamps. Both
+# checks take seconds here and fail the same way CI would.
 echo "[pre-push] Prettier and module-stamp checks..."
 pnpm run check:format
 pnpm run check:stamps
-
-# Main only: the full types + prettier pass. Not a Quartz build: the CI build in
-# .github/workflows/deploy-quartz.yml is the canonical production path, and
-# building here as well added about 20 s of laptop time per push for nothing.
-if [ "$current_branch" = "main" ]; then
-  echo "[pre-push] Running pnpm check (types + prettier) for main..."
-  pnpm run check
-fi
 
 echo "[pre-push] Check passed."
