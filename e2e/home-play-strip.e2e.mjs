@@ -12,12 +12,16 @@
 //    counter waits for anything: it must read "You discovered 1 gene so far"
 //    the moment the card rises;
 // 3. the raised card covers the counter, leaves the screen, or drifts away
-//    from its word when late cards above push the strip down;
+//    from its word when late cards above push the strip down; or the find
+//    itself moves the strip: the Archive header's new progress line (46 px,
+//    above the strip) slid the symbol out from under the owner's pointer in
+//    Edge on 2026-10-24 and the card dropped;
 // 4. the find is not stored in this browser, or the Archive header doesn't
 //    count it;
 // 5. more than one button follows the find, the strip never says that it is
 //    a sample of a browser extension, or the add-on on other sites (the two
-//    screenshots) is missing for a reader without it or loads before a find;
+//    screenshots) is missing after a find, for a reader with the add-on too,
+//    or loads before a find;
 // 6. a Chrome reader's button downloads a file or leaves the page, instead of
 //    opening the install steps under the strip, or those steps carry a second,
 //    login button;
@@ -263,8 +267,12 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.deepEqual(sites, [], "the other sites loaded before a find")
       await shot(page, "desktop-rest")
 
-      // 2. The count changes the moment the card rises.
-      await page.hover(pill("MYC"))
+      // 2. The count changes the moment the card rises. A plain mouse move,
+      // as a person's pointer: Playwright's hover() scrolls its target back
+      // into view when it moves, which would hide failure 3.
+      await page.$eval(pill("MYC"), (element) => element.scrollIntoView({ block: "center" }))
+      const rest = await page.$eval(pill("MYC"), (element) => element.getBoundingClientRect())
+      await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2, { steps: 4 })
       assert.equal(await title(page), "You discovered 1 gene so far")
       await page.waitForSelector(".icono-play-raised.is-up", { timeout: 1_000 })
       await page.waitForTimeout(300)
@@ -279,6 +287,16 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         null,
         { timeout: 5_000 },
       )
+      // 3. The header grew above the strip; the symbol stayed under the pointer.
+      const counted = await page.$eval(
+        pill("MYC"),
+        (element) => element.getBoundingClientRect().top,
+      )
+      assert.ok(
+        Math.abs(counted - rest.y) <= 1,
+        `the find moved MYC from ${rest.y} to ${counted} px on screen`,
+      )
+      assert.ok(await page.$(".icono-play-raised.is-up"), "MYC's card dropped after the find")
 
       // The card goes when the pointer leaves.
       await page.mouse.move(5, 5)
@@ -467,7 +485,14 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         found.map((button) => [button.text, button.href, button.target]),
         [["Wikipedia's Homeobox article", "https://en.wikipedia.org/wiki/Homeobox", "_blank"]],
       )
-      assert.deepEqual(await siteImages(page), [], "the add-on's reader got the other sites")
+      assert.deepEqual(
+        (await siteImages(page)).map((image) => image.alt),
+        [
+          "Wikipedia's Homeobox article with Iconoplasm installed",
+          "The UCSC Genome Browser with Iconoplasm installed",
+        ],
+        "the add-on's reader lost the two other sites",
+      )
       await page.mouse.move(5, 5)
       await page.waitForTimeout(400)
       await (
