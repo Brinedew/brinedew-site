@@ -3931,8 +3931,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // B-1173: one button follows the strip's first find. Firefox and desktop
   // Edge go to their add-on store. Chrome, Brave and other phone browsers open
   // the install steps under the strip, so nothing downloads until the reader
-  // presses the download button inside them. An iPhone has no install path,
-  // so it keeps the finds by logging in.
+  // presses the download button inside them. A reader who already has the
+  // add-on, and an iPhone, which has no install path, keep the finds by
+  // logging in.
   function homePlayAction() {
     var browser = detectInstallBrowser()
     var release = iconoInstallState.release || {}
@@ -3940,6 +3941,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "Want more cards? " +
       (browser.isMobile ? "Tap gene names" : "Hover over gene names") +
       " on other websites."
+    if (iconoInstallState.installed || browser.platform === "ios") {
+      return {
+        kind: "login",
+        note: "Log in to track your discoveries.",
+        label: "Log in with Discord",
+        href: voteLoginUrl(),
+      }
+    }
     if (browser.family === "firefox") {
       return {
         kind: "link",
@@ -3956,14 +3965,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         href: release.edgeListingUrl || ICONO_EXTENSION_EDGE_LISTING_URL,
       }
     }
-    if (browser.platform === "ios") {
-      return {
-        kind: "login",
-        note: "Log in to track your discoveries.",
-        label: "Log in with Discord",
-        href: voteLoginUrl(),
-      }
-    }
     return {
       kind: "open",
       note: note,
@@ -3977,26 +3978,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  // A signed-out reader who has found nothing yet, without the add-on, gets
-  // the essay strip in place of the install card (B-1173). Everyone else, or a
-  // catalogue that cannot draw all seven genes, gets the install card.
+  // A signed-out reader who has found nothing yet gets the essay strip in
+  // place of the install card (B-1173), with the add-on or without it. A
+  // reader with finds gets the guest card, and a catalogue that cannot draw
+  // all seven genes gets the install card.
   function appendHomePlayStripOrInstallCard(container, onCount) {
     if (!container) return
     if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
     syncInstallStateFromDomMarker()
-    var firstVisit =
-      !currentUser &&
-      !hasSharedSessionPresenceHint() &&
-      !iconoInstallState.installed &&
-      !websiteGuestDiscoveries.listEntries().length
-    if (!firstVisit) {
+    if (currentUser || hasSharedSessionPresenceHint()) {
       appendHomeInstallCard(container)
       return
     }
-    // The catalogue is the one the starters already loaded: no request.
-    iconoplasmPublicationReader
-      .genes(HOME_PLAY_SYMBOLS.slice())
+    // The guest card's shelf: gene pages opened in this browser plus what the
+    // add-on found while signed out. The catalogue is the one the starters
+    // already loaded, so neither read is a request.
+    loadGuestDiscoveryShelf()
+      .then(function (shelf) {
+        return shelf.count ? null : iconoplasmPublicationReader.genes(HOME_PLAY_SYMBOLS.slice())
+      })
       .then(function (records) {
+        if (!records) {
+          if (!container.isConnected) return
+          appendHomeInstallCard(container)
+          dropInstalledCardBesideGuestDiscoveries(container)
+          return
+        }
         var bySymbol = new Map()
         records.forEach(function (record) {
           bySymbol.set(normalizedSymbol(record.symbol), record)
@@ -4015,7 +4022,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           }
         })
         if (!container.isConnected) return
-        if (currentUser || iconoInstallState.installed) {
+        if (currentUser) {
           appendHomeInstallCard(container)
           return
         }
