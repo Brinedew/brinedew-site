@@ -12,6 +12,12 @@ draft: false
 
 ## Unreleased
 
+## 0.5.11 - 2026-10-24
+
+* After you install the extension, it opens the Getting started page.
+* Genes you hover before logging in now show up in your Archive as soon as you log in.
+* Cards of genes that have no portrait yet now show the gene's name.
+* Long gene names on cards stay readable.
 ## 0.5.10 - 2026-10-05
 
 * Highlights on animated text are now more reliable
