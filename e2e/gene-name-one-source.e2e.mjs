@@ -399,6 +399,9 @@ async function loadGenePage(
     text: document.body.innerText,
     // B-833: what Google indexes from the rendered gene page.
     ogTitle: document.querySelector('meta[property="og:title"]')?.content,
+    headings: [...document.querySelectorAll("h1")]
+      .filter((node) => !node.closest("[hidden]"))
+      .map((node) => node.textContent.trim()),
     homeOnlyBlocks: document.querySelectorAll("[data-icono-home-only]").length,
     homeOnlyShown: [...document.querySelectorAll("[data-icono-home-only]")].filter(
       (node) => !node.hidden,
@@ -476,6 +479,11 @@ test("the tab title never changes while the gene card loads (real browser)", asy
     assert.equal(real.ogTitle, expected, "rendered og:title is the gene's")
     assert.ok(real.homeOnlyBlocks >= 2, "the shell's home-only heading and paragraph exist")
     assert.equal(real.homeOnlyShown, 0, "no home-only block is shown on a gene page")
+    assert.deepEqual(
+      real.headings,
+      [`${gene.symbol} — ${object.full_name}`],
+      "the gene page has one <h1>: the gene's symbol and name",
+    )
     // 5. The control shows the change.
     assert.equal(controlTitles.length, 2, `control title values: ${JSON.stringify(controlTitles)}`)
     assert.equal(controlTitles[0], iconoplasmGenePageTitle(gene.symbol, gene.essence))
