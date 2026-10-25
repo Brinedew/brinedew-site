@@ -13,7 +13,7 @@
 //    from the static document's first paint to the loaded card, in a real
 //    browser, and wants exactly one.
 //    Measured with names already in agreement: the static document's title,
-//    then the shell's home title ("Iconoplasm | Gene character cards") for
+//    then the shell's home title (ICONOPLASM_HOME_TITLE) for
 //    ~300 ms while the app starts, then a symbol-only title, then the card's.
 //    The document hands over to the shell with the shell's own <title>, so the
 //    check needs the hand-off to carry the document's title across too.
@@ -397,6 +397,12 @@ async function loadGenePage(
     log: window.__titleLog,
     finalTitle: document.title,
     text: document.body.innerText,
+    // B-833: what Google indexes from the rendered gene page.
+    ogTitle: document.querySelector('meta[property="og:title"]')?.content,
+    homeOnlyBlocks: document.querySelectorAll("[data-icono-home-only]").length,
+    homeOnlyShown: [...document.querySelectorAll("[data-icono-home-only]")].filter(
+      (node) => !node.hidden,
+    ).length,
   }))
   await page.screenshot({ path: path.join(OUT, `gene-name-one-source-${symbol}.png`) })
   await context.close()
@@ -464,6 +470,12 @@ test("the tab title never changes while the gene card loads (real browser)", asy
       real.log.some((entry) => entry.via === "app" && entry.value === expected),
       "the app set the title from the loaded card",
     )
+    // B-833: the rendered gene page is the gene's, not a copy of the home page.
+    // homeOnlyBlocks > 0 proves the shell still carries the blocks, so a pass
+    // isn't the selector finding nothing.
+    assert.equal(real.ogTitle, expected, "rendered og:title is the gene's")
+    assert.ok(real.homeOnlyBlocks >= 2, "the shell's home-only heading and paragraph exist")
+    assert.equal(real.homeOnlyShown, 0, "no home-only block is shown on a gene page")
     // 5. The control shows the change.
     assert.equal(controlTitles.length, 2, `control title values: ${JSON.stringify(controlTitles)}`)
     assert.equal(controlTitles[0], iconoplasmGenePageTitle(gene.symbol, gene.essence))

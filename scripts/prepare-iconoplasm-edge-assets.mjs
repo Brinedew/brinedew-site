@@ -256,7 +256,7 @@ function escapeHtml(value) {
 // runs no scripts (ChatGPT's browsing tool, 2026-10-20) never gets the shell,
 // so a body hidden by CSS alone left it the title and nothing else.
 // B-908: the shell carries the home page's <title>, so writing it over the stub
-// would put "Iconoplasm | Gene character cards" in the tab for the ~300 ms the
+// would put the home title in the tab for the ~300 ms the
 // app takes to start, then a symbol-only title, before the gene's own. The stub
 // writes its own title into the shell it hands over to. The app keeps a title
 // that is already this gene's (isIconoplasmGenePageTitle) and sets the loaded

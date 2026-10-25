@@ -86,7 +86,7 @@ test("Iconoplasm pages are titled by the one template, everywhere a title appear
       assert.equal(heading, page, `${name} h1`)
     }
   }
-  assert.equal(ICONOPLASM_HOME_TITLE, "Iconoplasm | Gene character cards")
+  assert.equal(ICONOPLASM_HOME_TITLE, "Iconoplasm | Mnemonic portraits for 19,000+ human genes")
   assert.equal(iconoplasmPageTitle("Privacy Policy"), "Privacy Policy | Iconoplasm")
 })
 
