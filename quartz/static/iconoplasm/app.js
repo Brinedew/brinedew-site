@@ -10391,6 +10391,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "All genes</a>" +
       "</div></header>" +
       '<main class="icono-gene-page-main" id="icono-main">' +
+      // B-833: the page's one heading. The card paints the name as artwork, and
+      // the home shell's <h1> is hidden here, so without this the page had none.
+      '<h1 class="sr-only" id="icono-gene-heading">' +
+      esc(normalizedSymbol(symbol)) +
+      "</h1>" +
       (includeSkeleton ? geneSkeletonMarkup(symbol) : "") +
       '<div id="icono-gene-content"></div>' +
       "</main>"
@@ -10557,15 +10562,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         geneProfileDescription(g, symbol),
       )
       if (!contentEl) {
-        root.innerHTML = genePageShellMarkup(false)
+        root.innerHTML = genePageShellMarkup(false, symbol)
         contentEl = document.getElementById("icono-gene-content")
       }
       // B-1105: the skeleton repeats the loaded page's classes, so it leaves the
       // page once the gene arrives; a hidden copy would answer every selector first.
       if (loadingEl) loadingEl.remove()
       if (!contentEl) {
-        root.innerHTML = genePageShellMarkup(false)
+        root.innerHTML = genePageShellMarkup(false, symbol)
         contentEl = document.getElementById("icono-gene-content")
+      }
+      var geneHeading = document.getElementById("icono-gene-heading")
+      if (geneHeading) {
+        var headingName = String(g.full_name || "").trim()
+        geneHeading.textContent =
+          normalizedSymbol(g.symbol || symbol) + (headingName ? " — " + headingName : "")
       }
       // B-1029: the gene page is where requested results are seen.
       void requestInbox.noteGeneViewed(normalizedSymbol(g.symbol || symbol))
