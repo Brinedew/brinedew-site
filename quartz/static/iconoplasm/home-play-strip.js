@@ -149,10 +149,25 @@ function glyphMarkup(name) {
 //   { kind: "open", note, label, glyph?, sites? }  the caller shows the
 //     install steps when [data-icono-play-open] is pressed;
 //   { kind: "none", note, sites? }  this browser has no install path.
-// `sites` adds the add-on on Wikipedia and the UCSC Genome Browser. The guest
-// card on the Archive uses the same row.
+// `sites` adds the add-on on Wikipedia and the UCSC Genome Browser, under the
+// button: the sentence and its button read together, and the pictures prove
+// it. The guest card on the Archive uses the same row.
 export function homePlayActionMarkup(action) {
   let html = '<p class="icono-install-note">' + esc(action.note) + "</p>"
+  const label = glyphMarkup(action.glyph) + "<span>" + esc(action.label) + "</span>"
+  if (action.kind === "open") {
+    html +=
+      '<button type="button" class="icono-button icono-button--primary icono-install-link" data-icono-play-open>' +
+      label +
+      "</button>"
+  } else if (action.kind === "link") {
+    html +=
+      '<a class="icono-button icono-button--primary icono-install-link" href="' +
+      esc(action.href) +
+      '" target="_blank" rel="noopener noreferrer">' +
+      label +
+      '<span aria-hidden="true">↗</span></a>'
+  }
   if (action.sites) {
     html +=
       '<div class="icono-play-sites">' +
@@ -167,20 +182,6 @@ export function homePlayActionMarkup(action) {
           "</figcaption></figure>",
       ).join("") +
       "</div>"
-  }
-  const label = glyphMarkup(action.glyph) + "<span>" + esc(action.label) + "</span>"
-  if (action.kind === "open") {
-    html +=
-      '<button type="button" class="icono-button icono-button--primary icono-install-link" data-icono-play-open>' +
-      label +
-      "</button>"
-  } else if (action.kind === "link") {
-    html +=
-      '<a class="icono-button icono-button--primary icono-install-link" href="' +
-      esc(action.href) +
-      '" target="_blank" rel="noopener noreferrer">' +
-      label +
-      '<span aria-hidden="true">↗</span></a>'
   }
   return html
 }
@@ -202,6 +203,9 @@ function windowBarMarkup() {
 }
 
 // genes: [{ symbol, name, color, portraitUrl }] in HOME_PLAY_SYMBOLS order.
+// found: symbols this reader has found already. A returning reader sees the
+//   strip as they left it: those cards turned over, the count in the title and
+//   the next step open, with nothing animating.
 // cardMarkup(gene): the site's image-only card for the raised card.
 // onCardMounted(element): marks the card's portrait loaded once it is.
 // onFind(symbol): stores the find and returns the reader's total so far.
@@ -211,6 +215,9 @@ export function mountHomePlayStrip(container, options) {
   const win = doc.defaultView
   const genes = new Map(options.genes.map((gene) => [gene.symbol, gene]))
   const hover = !!(win.matchMedia && win.matchMedia("(hover: hover)").matches)
+  const found = new Set((options.found || []).filter((symbol) => genes.has(symbol)))
+  const foundTitle = () =>
+    "You discovered " + found.size + (found.size === 1 ? " gene" : " genes") + " so far"
 
   let quote = esc(QUOTE)
   for (const symbol of HOME_PLAY_SYMBOLS) {
@@ -233,17 +240,23 @@ export function mountHomePlayStrip(container, options) {
     )
   }
   const back = options.reverseFaceHtml
-  const slots = HOME_PLAY_SYMBOLS.map(
-    (symbol) =>
-      '<span class="icono-play-slot" data-icono-play-slot="' +
+  const slots = HOME_PLAY_SYMBOLS.map((symbol) => {
+    const turned = found.has(symbol)
+    return (
+      '<span class="icono-play-slot' +
+      (turned ? " is-found" : "") +
+      '" data-icono-play-slot="' +
       symbol +
       '"><span class="icono-play-slot-inner">' +
       '<span class="icono-play-slot-face icono-play-slot-back">' +
       back +
       "</span>" +
-      '<span class="icono-play-slot-face icono-play-slot-front"><img alt="" decoding="async"></span>' +
-      "</span></span>",
-  ).join("")
+      '<span class="icono-play-slot-face icono-play-slot-front"><img alt="" decoding="async"' +
+      (turned ? ' src="' + esc(genes.get(symbol).portraitUrl) + '"' : "") +
+      "></span>" +
+      "</span></span>"
+    )
+  }).join("")
 
   const root = doc.createElement("div")
   root.className = "icono-play"
@@ -251,8 +264,8 @@ export function mountHomePlayStrip(container, options) {
   root.innerHTML =
     '<section class="icono-card icono-guest-login-card icono-play-card">' +
     '<div class="icono-home-auth-title icono-guest-login-card-title" role="heading" aria-level="2" aria-live="polite" data-icono-play-title>' +
-    (hover ? "Hover" : "Tap") +
-    " any gene symbol</div>" +
+    (found.size ? esc(foundTitle()) : (hover ? "Hover" : "Tap") + " any gene symbol") +
+    "</div>" +
     '<div class="icono-play-window">' +
     windowBarMarkup() +
     '<blockquote class="icono-play-quote"><p><strong>' +
@@ -268,23 +281,45 @@ export function mountHomePlayStrip(container, options) {
     '<div class="icono-play-slots" aria-hidden="true">' +
     slots +
     "</div>" +
-    '<div class="icono-play-next" data-icono-play-next hidden>' +
-    homePlayActionMarkup(options.action) +
-    "</div>" +
+    // The next step grows out of the strip after the first find, so the strip
+    // never snaps open under the pointer. Its content is built at that moment:
+    // the two pictures load only for a reader who has found something. A
+    // returning reader gets it open from the start. While it is closed, it is
+    // inert, so Tab skips it.
+    '<div class="icono-play-reveal" data-icono-play-next' +
+    (found.size ? " data-open" : " inert") +
+    '><div class="icono-play-reveal-inner"></div></div>' +
     "</section>"
   container.insertBefore(root, container.firstChild)
 
   const card = root.querySelector(".icono-play-card")
   const title = root.querySelector("[data-icono-play-title]")
-  const next = root.querySelector("[data-icono-play-next]")
-  const openButton = root.querySelector("[data-icono-play-open]")
-  // Once the install steps are open under the strip, the button has done its
-  // job; the note and the two sites stay.
-  if (openButton) {
-    openButton.addEventListener("click", () => {
-      openButton.remove()
-      options.onOpen()
-    })
+  const reveal = root.querySelector("[data-icono-play-next]")
+
+  function fillNext() {
+    const inner = reveal.firstElementChild
+    inner.innerHTML =
+      '<div class="icono-play-next">' + homePlayActionMarkup(options.action) + "</div>"
+    const openButton = inner.querySelector("[data-icono-play-open]")
+    // Once the install steps are open under the strip, the button has done its
+    // job; the note and the two sites stay.
+    if (openButton) {
+      openButton.addEventListener("click", () => {
+        openButton.remove()
+        options.onOpen()
+      })
+    }
+  }
+  if (found.size) fillNext()
+
+  function openNext() {
+    if (reveal.hasAttribute("data-open")) return
+    fillNext()
+    reveal.removeAttribute("inert")
+    // Reading the height settles the closed state first, so the row grows from
+    // it instead of appearing at its full size.
+    void reveal.offsetHeight
+    reveal.setAttribute("data-open", "")
   }
 
   // The raised card hangs from the page body: the guest stage clips whatever
@@ -294,7 +329,6 @@ export function mountHomePlayStrip(container, options) {
   let current = ""
   let hideTimer = 0
   let removeTimer = 0
-  const found = new Set()
 
   function warmPortraits() {
     for (const gene of genes.values()) {
@@ -443,7 +477,7 @@ export function mountHomePlayStrip(container, options) {
     slot.classList.add("is-found")
     const total = Math.max(found.size, Number(options.onFind(symbol)) || 0)
     title.textContent = "You discovered " + total + (total === 1 ? " gene" : " genes") + " so far"
-    next.hidden = false
+    openNext()
   }
 
   for (const pill of root.querySelectorAll(".icono-play-pill")) {

@@ -30,7 +30,7 @@ import {
   HOME_PLAY_SYMBOLS,
   homePlayActionMarkup,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=49825fa6a0e0ae4e"
+} from "./home-play-strip.js?v=1633d5c8b48f2bb0"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -3843,7 +3843,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return entry.gene_symbol
         })
       var symbols = Array.from(new Set(extensionSymbols.slice().reverse().concat(visits)))
-      if (!symbols.length) return { count: 0, genes: [] }
+      if (!symbols.length) return { count: 0, symbols: [], genes: [] }
       // A few spares stand in for genes that have no portrait yet. The catalogue
       // is the one the starters already loaded, so this costs no request.
       return iconoplasmPublicationReader
@@ -3854,6 +3854,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         .then(function (records) {
           return {
             count: symbols.length,
+            symbols: symbols,
             genes: records
               .filter(function (record) {
                 return !!rawPublishedPortraitUrl(record, "medium")
@@ -3918,30 +3919,44 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (installed) installed.remove()
   }
 
+  function mountGuestDiscoveryCard(container, shelf) {
+    if (currentUser || !shelf.count || !container.isConnected) return
+    if (container.querySelector("[data-icono-guest-discovery-card], [data-icono-home-play]")) {
+      return
+    }
+    syncInstallStateFromDomMarker()
+    var wrapper = document.createElement("div")
+    wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
+    var card = wrapper.firstElementChild
+    container.insertBefore(card, container.firstChild)
+    dropInstalledCardBesideGuestDiscoveries(container)
+    var openButton = card.querySelector("[data-icono-play-open]")
+    if (openButton) {
+      openButton.addEventListener("click", function () {
+        openButton.remove()
+        var steps = appendHomeInstallCard(container)
+        if (steps) steps.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      })
+    }
+  }
+
   // Resolves with the shelf, so the Archive's count can match the card.
   function appendGuestDiscoveryCard(container) {
     if (!container || currentUser) return Promise.resolve(null)
     return loadGuestDiscoveryShelf().then(function (shelf) {
-      if (currentUser || !shelf.count || !container.isConnected) return shelf
-      // The strip counts its own finds; this card waits for the next visit.
-      if (container.querySelector("[data-icono-guest-discovery-card], [data-icono-home-play]")) {
-        return shelf
-      }
-      syncInstallStateFromDomMarker()
-      var wrapper = document.createElement("div")
-      wrapper.innerHTML = buildGuestDiscoveryCardMarkup(shelf)
-      var card = wrapper.firstElementChild
-      container.insertBefore(card, container.firstChild)
-      dropInstalledCardBesideGuestDiscoveries(container)
-      var openButton = card.querySelector("[data-icono-play-open]")
-      if (openButton) {
-        openButton.addEventListener("click", function () {
-          openButton.remove()
-          var steps = appendHomeInstallCard(container)
-          if (steps) steps.scrollIntoView({ block: "nearest", behavior: "smooth" })
-        })
-      }
+      mountGuestDiscoveryCard(container, shelf)
       return shelf
+    })
+  }
+
+  // The strip holds the seven genes of its sentence. A reader whose finds are
+  // all among them gets the strip back as they left it; one who has found
+  // other genes (a gene page, the add-on on another site) gets the card of
+  // everything they found, because a strip that showed three of their five
+  // finds would disagree with the count above the cards.
+  function shelfFitsHomePlayStrip(shelf) {
+    return shelf.symbols.every(function (symbol) {
+      return HOME_PLAY_SYMBOLS.indexOf(normalizedSymbol(symbol)) >= 0
     })
   }
 
@@ -4014,24 +4029,39 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  // A signed-out reader who has found nothing yet gets the essay strip in
-  // place of the install card (B-1173), with the add-on or without it. A
-  // reader with finds gets only the guest card (appendGuestDiscoveryCard), and
-  // a catalogue that cannot draw all seven genes gets the install card.
+  // A signed-out reader gets the essay strip in place of the install card
+  // (B-1173), with the add-on or without it, on every visit: the first one
+  // empty, a later one with the cards they turned over and the next step open.
+  // A reader who has found genes outside the strip's seven gets the guest card
+  // of all their finds instead (shelfFitsHomePlayStrip), and a catalogue that
+  // cannot draw all seven genes gets the install card. Returns true when this
+  // call also decides the guest card, so the caller does not mount a second.
   function appendHomePlayStripOrInstallCard(container, onCount) {
-    if (!container) return
-    if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
+    if (!container) return false
+    if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) {
+      return false
+    }
     syncInstallStateFromDomMarker()
     if (currentUser || hasSharedSessionPresenceHint()) {
       appendHomeInstallCard(container)
-      return
+      return false
     }
     // The guest card's shelf: gene pages opened in this browser plus what the
     // add-on found while signed out. The catalogue is the one the starters
     // already loaded, so neither read is a request.
+    var shelfRead
     loadGuestDiscoveryShelf()
       .then(function (shelf) {
-        return shelf.count ? null : iconoplasmPublicationReader.genes(HOME_PLAY_SYMBOLS.slice())
+        shelfRead = shelf
+        // The count above the cards matches the shelf before either card is
+        // drawn, so the page settles once; the strip is not on screen yet to
+        // be kept in place.
+        if (shelf.count) onCount(shelf.count)
+        if (!shelfFitsHomePlayStrip(shelf)) {
+          mountGuestDiscoveryCard(container, shelf)
+          return null
+        }
+        return iconoplasmPublicationReader.genes(HOME_PLAY_SYMBOLS.slice())
       })
       .then(function (records) {
         if (!records) return
@@ -4060,6 +4090,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         container.classList.add("icono-home-auxiliary--play")
         mountHomePlayStrip(container, {
           genes: genes,
+          found: shelfRead.symbols.map(normalizedSymbol),
           reverseFaceHtml: buildReverseCardFaceMarkup(),
           action: homePlayAction(),
           cardMarkup: function (gene) {
@@ -4079,8 +4110,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           onCardMounted: syncImageOnlyLoadState,
           onFind: function (symbol) {
             // The same browser-local shelf as a gene page visit: no request.
+            // The count is the shelf's, which also holds what the add-on found.
             websiteGuestDiscoveries.remember(symbol)
-            var count = websiteGuestDiscoveries.listEntries().length
+            var known = new Set(shelfRead.symbols.map(normalizedSymbol))
+            websiteGuestDiscoveries.listEntries().forEach(function (entry) {
+              known.add(normalizedSymbol(entry.gene_symbol))
+            })
+            var count = known.size
             onCount(count)
             return count
           },
@@ -4094,6 +4130,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         console.warn(error)
         if (container.isConnected) appendHomeInstallCard(container)
       })
+    return true
   }
 
   function buildDiscordInviteCardMarkup() {
@@ -9574,10 +9611,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (segment.startIndex === 0) {
           var auxiliary = document.getElementById("icono-home-auxiliary")
           auxiliary.hidden = false
+          var decidesGuestCard = false
           if (useClassicGallery || galleryState.authenticated || galleryState.sharedDiscoveries) {
             appendHomeInstallCard(auxiliary)
           } else {
-            appendHomePlayStripOrInstallCard(auxiliary, function (count) {
+            decidesGuestCard = appendHomePlayStripOrInstallCard(auxiliary, function (count) {
               if (disposed) return
               // The first find gives the header above the cards a progress
               // line, 46 px, while the reader's pointer is on the strip below
@@ -9595,11 +9633,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             })
           }
           appendDiscordActionCard(auxiliary)
-          appendGuestDiscoveryCard(auxiliary).then(function (shelf) {
-            if (disposed || !shelf) return
-            galleryState.guestDiscoveryCount = shelf.count
-            syncCollectionChrome()
-          })
+          if (!decidesGuestCard) {
+            appendGuestDiscoveryCard(auxiliary).then(function (shelf) {
+              if (disposed || !shelf) return
+              galleryState.guestDiscoveryCount = shelf.count
+              syncCollectionChrome()
+            })
+          }
         }
         syncCollectionChrome()
         if (restoreState && restoreState.anchorGene) {
