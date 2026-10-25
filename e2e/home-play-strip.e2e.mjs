@@ -3,11 +3,14 @@
 // published catalogue.
 //
 // Ways this can fail, written before the code:
-// 1. the visitor still gets the install card, or gets both, or a returning
-//    guest with finds gets the strip again instead of their guest card;
-//    a signed-out reader with the add-on and no finds gets no strip (it hid
-//    the strip from the owner's private window on 2026-10-24), or one whose
-//    add-on already found genes gets the strip instead of their guest card;
+// 1. the visitor still gets the install card, or gets both; a returning guest
+//    whose finds are all among the strip's seven does not get the strip back
+//    as they left it (cards turned over, count in the title, next step open
+//    and not animating); one who has found other genes (a gene page, the
+//    add-on on another site) gets the strip instead of the card of all their
+//    finds, or the strip's count disagrees with the header; a signed-out
+//    reader with the add-on and no finds gets no strip (it hid the strip from
+//    the owner's private window on 2026-10-24);
 // 2. hovering (desktop) or tapping (phone) a symbol raises no card, or the
 //    counter waits for anything: it must read "You discovered 1 gene so far"
 //    the moment the card rises;
@@ -33,9 +36,15 @@
 //    the second tap, or a desktop click, doesn't open it, or the raised card
 //    stays on the gene page;
 // 9. the strip asks the Worker anything (it must cost nothing per reader);
-// 10. a returning guest gets more than their guest card with one install
+// 10. a returning guest (strip or guest card) gets more than one install
 //    button, or a login before the add-on; a guest whose add-on found genes
-//    gets the login without its reason (syncing across devices).
+//    gets the login without its reason (syncing across devices);
+// 11. after a find, the next step snaps open instead of growing (the strip was
+//    353 px and became 852 in one frame, with the reader's pointer on it), or
+//    its pictures sit between the sentence and its button, or the button lies
+//    below the first screen (owner's window 1194x773: it was at 1011; phone
+//    402x874: it was at 959), or a reader with the add-on loses the toy or the
+//    pictures to get there.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/home-play-strip*.
@@ -61,6 +70,8 @@ const UA = {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15",
 }
 const DESKTOP = { viewport: { width: 1280, height: 860 } }
+// The owner's window when the strip's first find snapped open (2026-10-25).
+const OWNER_DESKTOP = { viewport: { width: 1194, height: 773 } }
 const DOCS_LINE =
   "Iconoplasm is a browser extension that highlights all the gene names on any web page."
 const PHONE = { viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true }
@@ -189,6 +200,49 @@ const siteImages = (page) =>
       .filter((image) => image.checkVisibility())
       .map((image) => ({ alt: image.alt, loaded: image.complete && image.naturalWidth > 0 })),
   )
+// Where the next step's parts sit in the window, top to bottom: the sentence,
+// its button and the two pictures, and the window's height.
+const stack = (page) =>
+  page.evaluate(() => {
+    const scope = document.querySelector("[data-icono-play-next]")
+    const box = (element) => {
+      if (!element) return null
+      const rect = element.getBoundingClientRect()
+      return { top: rect.top, bottom: rect.bottom }
+    }
+    return {
+      note: box(scope.querySelector(".icono-install-note")),
+      button: box(scope.querySelector(".icono-button")),
+      pictures: box(scope.querySelector(".icono-play-sites")),
+      height: window.innerHeight,
+    }
+  })
+// The strip's height on every frame for a while: starts at once, read later
+// with strideOf. A single jump to the full height is the snap.
+const watchStripHeight = (page, ms = 1_200) =>
+  page.evaluate((span) => {
+    window.__stripHeights = []
+    const start = performance.now()
+    ;(function tick() {
+      window.__stripHeights.push(
+        document.querySelector(".icono-play-card").getBoundingClientRect().height,
+      )
+      if (performance.now() - start < span) requestAnimationFrame(tick)
+    })()
+  }, ms)
+const strideOf = async (page) => {
+  const heights = await page.evaluate(() => window.__stripHeights)
+  const first = heights[0]
+  const last = heights[heights.length - 1]
+  const steps = heights.slice(1).map((height, i) => Math.abs(height - heights[i]))
+  return {
+    first,
+    last,
+    grew: last - first,
+    between: heights.filter((height) => height > first + 5 && height < last - 5).length,
+    biggestStep: Math.max(...steps),
+  }
+}
 // The drawn window: the essay's address and the add-on's toolbar icon.
 const windowBar = (page) =>
   page.$eval(".icono-play-bar", (bar) => ({
@@ -276,12 +330,36 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         element.scrollIntoView({ block: "center", behavior: "instant" }),
       )
       const rest = await page.$eval(pill("MYC"), (element) => element.getBoundingClientRect())
+      await watchStripHeight(page)
       await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2, { steps: 4 })
       assert.equal(await title(page), "You discovered 1 gene so far")
+      // 11. The next step is growing out of the strip: the row is mid-transition.
+      assert.ok(
+        await page.evaluate(() =>
+          document
+            .getAnimations()
+            .some((animation) => animation.transitionProperty === "grid-template-rows"),
+        ),
+        "the next step did not grow: nothing was transitioning",
+      )
       await page.waitForSelector(".icono-play-raised.is-up", { timeout: 1_000 })
       await page.waitForTimeout(300)
       const g = await page.evaluate(geometry, "MYC")
       assertPlaced("desktop", g)
+
+      // 11. Over several frames, not one; then the sentence, its button and the
+      // pictures read top to bottom in that order.
+      await page.waitForTimeout(1_000)
+      const stride = await strideOf(page)
+      assert.ok(stride.grew > 150, `the find grew the strip by ${stride.grew} px`)
+      assert.ok(stride.between >= 2, `the strip snapped open: ${JSON.stringify(stride)}`)
+      assert.ok(
+        stride.biggestStep <= stride.grew * 0.85,
+        `the strip jumped most of the way in a frame: ${JSON.stringify(stride)}`,
+      )
+      const column = await stack(page)
+      assert.ok(column.note.bottom <= column.button.top, "the button is above its sentence")
+      assert.ok(column.button.bottom <= column.pictures.top, "the pictures sit above the button")
       await shot(page, "desktop-card")
 
       // 4. Stored here and counted in the Archive header.
@@ -358,7 +436,45 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
 
       // 9. Nothing reached the Worker.
       assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
-      report.desktop = { geometry: g, buttons: found, bar, sites, api }
+      report.desktop = { geometry: g, buttons: found, bar, sites, api, stride, column }
+      await context.close()
+    })
+
+    await t.test("the owner's window: the strip and its button fit on screen", async () => {
+      const { context, page } = await openArchive(browser, origin, {
+        ...OWNER_DESKTOP,
+        userAgent: UA.chrome,
+        colorScheme: "dark",
+      })
+      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      // The strip sits under the four starter cards: the reader scrolls down to
+      // it and finds a gene with it centred in the window.
+      await page.$eval(".icono-play-card", (element) =>
+        element.scrollIntoView({ block: "center", behavior: "instant" }),
+      )
+      await page.waitForTimeout(600)
+      const rest = await page.$eval(pill("MYC"), (element) => element.getBoundingClientRect())
+      await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2, { steps: 4 })
+      assert.equal(await title(page), "You discovered 1 gene so far")
+      await page.mouse.move(5, 5)
+      await page.waitForTimeout(900)
+      const column = await stack(page)
+      assert.ok(
+        column.button.bottom <= column.height,
+        `the install button lies below the window's edge: ${JSON.stringify(column)}`,
+      )
+      // The whole strip fits the window: with its top at the window's top, the
+      // reader sees all of it, button included.
+      const card = await page.$eval(
+        ".icono-play-card",
+        (element) => element.getBoundingClientRect().height,
+      )
+      assert.ok(card <= column.height - 16, `the strip is ${card} px, taller than the window`)
+      assert.ok(
+        column.note.bottom <= column.button.top && column.button.bottom <= column.pictures.top,
+      )
+      await shot(page, "owner-window-found")
+      report.ownerWindow = column
       await context.close()
     })
 
@@ -394,6 +510,17 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await page.waitForSelector(".icono-play-raised.is-up", { timeout: 1_000 })
       await page.waitForTimeout(300)
       assertPlaced("phone", await page.evaluate(geometry, "TP53"))
+      // 11. The install button is on the first screen, under its sentence and
+      // above the pictures.
+      await page.waitForTimeout(600)
+      const column = await stack(page)
+      assert.ok(
+        column.button.bottom <= column.height,
+        `the install button lies below the first screen: ${JSON.stringify(column)}`,
+      )
+      assert.ok(
+        column.note.bottom <= column.button.top && column.button.bottom <= column.pictures.top,
+      )
       // A late card above the strip grows by 300 px: the card goes with its word.
       await page.evaluate(() => {
         const late = document.createElement("div")
@@ -432,7 +559,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await page.tap(pill("TP53"))
       await page.waitForURL(/\/gene\/TP53$/, { timeout: 20_000 })
       assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
-      report.android = { geometry: g, buttons: found }
+      report.android = { geometry: g, buttons: found, column }
       await context.close()
     })
 
@@ -498,7 +625,12 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         "the add-on's reader lost the two other sites",
       )
       await page.mouse.move(5, 5)
-      await page.waitForTimeout(400)
+      await page.waitForTimeout(900)
+      // 11. Same order as for everyone: sentence, button, pictures.
+      const column = await stack(page)
+      assert.ok(
+        column.note.bottom <= column.button.top && column.button.bottom <= column.pictures.top,
+      )
       await (
         await page.$(".icono-play-card")
       ).screenshot({
@@ -533,7 +665,28 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await context.close()
     })
 
-    await t.test("a returning guest gets their guest card, not the strip", async () => {
+    await t.test("a reader whose add-on found only the strip's genes keeps the strip", async () => {
+      const { context, page } = await openArchive(
+        browser,
+        origin,
+        { ...DESKTOP, userAgent: UA.chrome },
+        { addOn: ["MYC"] },
+      )
+      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      assert.equal(await page.$("[data-icono-guest-discovery-card]"), null, "a card as well")
+      assert.equal(await title(page), "You discovered 1 gene so far")
+      assert.equal(await nextNote(page), "Open any page that names human genes.")
+      assert.deepEqual(
+        (await buttons(page)).map((button) => button.text),
+        ["Wikipedia's Homeobox article"],
+      )
+      assert.equal((await siteImages(page)).length, 2, "the add-on's reader lost the pictures")
+      await page.hover(pill("BAX"))
+      assert.equal(await title(page), "You discovered 2 genes so far", "the toy no longer plays")
+      await context.close()
+    })
+
+    await t.test("a returning guest gets the strip as they left it", async () => {
       const now = new Date().toISOString()
       const { context, page } = await openArchive(
         browser,
@@ -543,24 +696,110 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
           seed: [{ gene_symbol: "TP53", first_discovered_at: now, last_encountered_at: now }],
         },
       )
-      await page.waitForSelector("[data-icono-guest-discovery-card]", { timeout: 20_000 })
-      assert.equal(await page.$("[data-icono-home-play]"), null, "the strip came back")
-      // 10. One card, one install button, no login; the steps open under it.
-      const scope = "[data-icono-guest-discovery-card]"
-      assert.equal(await nextNote(page, scope), DOCS_LINE)
+      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      // 1. One surface: the strip, with the card they turned over and the
+      // title they left it with, not a second card.
+      await watchStripHeight(page, 800)
+      assert.equal(await page.$("[data-icono-guest-discovery-card]"), null, "a card as well")
+      assert.equal(await title(page), "You discovered 1 gene so far")
       assert.deepEqual(
-        (await buttons(page, scope)).map((button) => [button.text, button.glyph]),
+        await page.$$eval("[data-icono-play-slot]", (slots) =>
+          slots
+            .filter((slot) => slot.classList.contains("is-found"))
+            .map((slot) => slot.dataset.iconoPlaySlot),
+        ),
+        ["TP53"],
+      )
+      await page.waitForFunction(
+        () => {
+          const image = document.querySelector('[data-icono-play-slot="TP53"] img')
+          return image && image.complete && image.naturalWidth > 0
+        },
+        null,
+        { timeout: 10_000 },
+      )
+      await page.waitForFunction(
+        () => /^1 gene found/.test(document.querySelector(".icono-collection-copy")?.textContent),
+        null,
+        { timeout: 5_000 },
+      )
+      // 10. One install button, no login, there from the first frame: the next
+      // step was open when the strip appeared, and did not grow into view.
+      assert.equal(await nextNote(page), DOCS_LINE)
+      assert.deepEqual(
+        (await buttons(page)).map((button) => [button.text, button.glyph]),
         [["Install for Chrome", true]],
       )
+      assert.equal((await siteImages(page)).length, 2)
       assert.equal(await page.$("[data-icono-home-install-card]"), null, "the steps came uninvited")
+      await page.waitForTimeout(900)
+      const stride = await strideOf(page)
+      assert.ok(
+        stride.between === 0 && Math.abs(stride.grew) < 5,
+        `the returning reader's strip moved after it appeared: ${JSON.stringify(stride)}`,
+      )
       await (
         await page.$("#icono-home-auxiliary")
       ).screenshot({
         path: path.join(OUT, "home-play-strip-returning-guest.png"),
       })
-      await page.click(`${scope} [data-icono-play-open]`)
+      // The toy still plays: a second gene turns over and the count follows.
+      await page.hover(pill("MYC"))
+      assert.equal(await title(page), "You discovered 2 genes so far")
+      assert.deepEqual((await storedSymbols(page)).sort(), ["MYC", "TP53"])
+      await page.mouse.move(5, 5)
+      // The steps open under the strip and the button goes.
+      await page.click("[data-icono-play-open]")
       await page.waitForSelector("[data-icono-home-install-card]", { timeout: 5_000 })
-      assert.deepEqual(await buttons(page, scope), [], "the button stayed after opening the steps")
+      assert.deepEqual(await buttons(page), [], "the button stayed after opening the steps")
+      report.returning = stride
+      await context.close()
+    })
+
+    await t.test(
+      "a guest who opened another gene page gets the card of all their finds",
+      async () => {
+        const now = new Date().toISOString()
+        const entry = (gene_symbol) => ({
+          gene_symbol,
+          first_discovered_at: now,
+          last_encountered_at: now,
+        })
+        const { context, page } = await openArchive(
+          browser,
+          origin,
+          { ...DESKTOP, userAgent: UA.chrome },
+          { seed: [entry("TP53"), entry("BRCA1")] },
+        )
+        const card = await page.waitForSelector("[data-icono-guest-discovery-card]", {
+          timeout: 20_000,
+        })
+        assert.equal(await page.$("[data-icono-home-play]"), null, "the strip hid a find")
+        assert.match(await card.textContent(), /You discovered 2 genes so far/)
+        // 10. One install button here too, with the same sentence.
+        const scope = "[data-icono-guest-discovery-card]"
+        assert.equal(await nextNote(page, scope), DOCS_LINE)
+        assert.deepEqual(
+          (await buttons(page, scope)).map((button) => [button.text, button.glyph]),
+          [["Install for Chrome", true]],
+        )
+        await context.close()
+      },
+    )
+
+    await t.test("reduced motion: the next step opens without growing", async () => {
+      const { context, page } = await openArchive(browser, origin, {
+        ...DESKTOP,
+        userAgent: UA.chrome,
+        reducedMotion: "reduce",
+      })
+      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      await watchStripHeight(page, 800)
+      await page.hover(pill("MDM2"))
+      await page.waitForTimeout(900)
+      const stride = await strideOf(page)
+      assert.ok(stride.grew > 150, `the find did not open the next step: ${JSON.stringify(stride)}`)
+      assert.equal(stride.between, 0, `the next step grew in frames: ${JSON.stringify(stride)}`)
       await context.close()
     })
   } finally {
