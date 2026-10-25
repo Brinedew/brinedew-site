@@ -65,7 +65,7 @@ import {
   iconoplasmGenePageTitle,
   iconoplasmPageTitle,
   isIconoplasmGenePageTitle,
-} from "./page-title.js?v=f698161fd92b8205"
+} from "./page-title.js?v=5937348a3d24440c"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm
@@ -2870,7 +2870,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<header class="icono-page-header">' +
       '<div class="icono-hero">' +
       '<div class="icono-hero-title">ICONOPLASM</div>' +
-      '<p class="tagline">Gene character cards - <a class="internal" href="/docs/faq">read FAQ</a></p>' +
+      '<p class="tagline">Mnemonic portraits for 19,000+ human genes - <a class="internal" href="/docs/faq">read FAQ</a></p>' +
       '<p class="stat" id="icono-public-inventory-stat" hidden aria-live="polite"></p>' +
       "</div>" +
       "</header>" +
@@ -10451,6 +10451,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
         meta.setAttribute("content", description)
       }
+      // B-833: a gene document hands over to the home shell, so Google's render
+      // of every gene page carried the home page's og/twitter tags, <h1> and
+      // crawler paragraph: 19,000 pages that opened with the same 150 words.
+      // Each route keeps its own social tags, and the home-only blocks show on
+      // "/" alone (hidden, not removed, so SPA navigation home brings them back).
+      var socialTitle = document.title
+      var pageDescription = head.querySelector('meta[name="description"]')
+      var socialDescription = pageDescription && pageDescription.getAttribute("content")
+      head
+        .querySelectorAll('meta[property="og:title"], meta[name="twitter:title"]')
+        .forEach(function (tag) {
+          tag.setAttribute("content", socialTitle)
+        })
+      if (socialDescription) {
+        head
+          .querySelectorAll('meta[property="og:description"], meta[name="twitter:description"]')
+          .forEach(function (tag) {
+            tag.setAttribute("content", socialDescription)
+          })
+      }
+      head.querySelectorAll('meta[property="og:url"]').forEach(function (tag) {
+        tag.setAttribute("content", ICONOPLASM_CANONICAL_ORIGIN + pathname)
+      })
+      document.querySelectorAll("[data-icono-home-only]").forEach(function (node) {
+        node.hidden = pathname !== "/"
+      })
     } catch (_canonicalError) {}
   }
 
