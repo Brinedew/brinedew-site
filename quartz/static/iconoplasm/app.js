@@ -8289,10 +8289,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .filter(Boolean)[0]
       }
 
+      function requestBatchTileKey(option) {
+        return String((option && (option.key || option.vision_id)) || "")
+      }
+
       function requestBatchTileMarkup(option, checked) {
+        var key = esc(requestBatchTileKey(option))
+        // A random candidate has no style until it is drawn: a face-down card
+        // of four styles it could be.
+        if (option && option.random && Array.isArray(option.covers) && option.covers.length) {
+          return (
+            '<span class="icono-request-batch-tile icono-request-batch-tile--sealed" data-icono-batch-key="' +
+            key +
+            '"><span class="icono-request-batch-sealed">' +
+            option.covers
+              .map(function (src) {
+                return '<img src="' + esc(src) + '" alt="" decoding="async">'
+              })
+              .join("") +
+            '</span><span class="icono-request-batch-sealed-mark" aria-hidden="true">?</span></span>'
+          )
+        }
         var first = requestOptionFirstPreview(option)
         return (
-          '<span class="icono-request-batch-tile">' +
+          '<span class="icono-request-batch-tile" data-icono-batch-key="' +
+          key +
+          '">' +
           (checked
             ? '<span class="icono-request-card-check" aria-hidden="true">' +
               ICONO_CHECK_ICON +
@@ -8314,9 +8336,46 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             })
             .join("") +
           (options.length > fits
-            ? '<span class="icono-request-batch-tile">+' + (options.length - fits) + "</span>"
+            ? '<span class="icono-request-batch-tile" data-icono-batch-more>+' +
+              (options.length - fits) +
+              "</span>"
             : "")
         )
+      }
+
+      // The just-queued mosaic grows tile by tile while random clicks come in:
+      // tiles already shown stay in place (and keep their animation), new ones
+      // are added, and the last cell counts the ones that don't fit.
+      function paintDoneMosaic(mosaic, options, columns) {
+        var fits = options.length > columns * 2 ? columns * 2 - 1 : options.length
+        var shown = mosaic.querySelectorAll("[data-icono-batch-key]")
+        var keys = options.slice(0, fits).map(requestBatchTileKey)
+        var isPrefix = shown.length <= keys.length
+        for (var s = 0; isPrefix && s < shown.length; s++) {
+          isPrefix = shown[s].getAttribute("data-icono-batch-key") === keys[s]
+        }
+        if (!isPrefix) {
+          mosaic.innerHTML = requestBatchMosaicMarkup(options, columns, true)
+          return
+        }
+        var more = mosaic.querySelector("[data-icono-batch-more]")
+        for (var i = shown.length; i < fits; i++) {
+          var holder = document.createElement("span")
+          holder.innerHTML = requestBatchTileMarkup(options[i], true)
+          mosaic.insertBefore(holder.firstChild, more)
+        }
+        var rest = options.length - fits
+        if (rest > 0) {
+          if (!more) {
+            more = document.createElement("span")
+            more.className = "icono-request-batch-tile"
+            more.setAttribute("data-icono-batch-more", "")
+            mosaic.appendChild(more)
+          }
+          more.textContent = "+" + rest
+        } else if (more) {
+          more.remove()
+        }
       }
 
       // The favorites not in the batch yet, as far as one order holds.
@@ -8407,7 +8466,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           done.hidden = !showDone
           var doneMosaic = done.querySelector("[data-icono-request-batch-done-mosaic]")
           if (doneMosaic && showDone) {
-            doneMosaic.innerHTML = requestBatchMosaicMarkup(justQueuedOptions, 6, true)
+            paintDoneMosaic(doneMosaic, justQueuedOptions, 6)
             doneMosaic.setAttribute("role", "img")
             var doneNoun =
               justQueuedOptions[0] && justQueuedOptions[0].random ? " random candidate" : " style"
@@ -8420,6 +8479,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             )
           }
         }
+        paintRandomCount(false)
       }
 
       form._iconoRepaintRequestResults = function () {
@@ -8870,110 +8930,291 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ) {
         initializeDirectTab()
       }
-      form.addEventListener("submit", function (event) {
-        event.preventDefault()
-        var requestedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
-        var isBatch = requestedVisionIds.length > 0
-        var payload = isBatch
-          ? {
-              symbol: symbol,
-              request_kind: "new_candidate",
-              request_mode: "specific",
-              requested_vision_ids: requestedVisionIds,
-              client_batch_id: crypto.randomUUID(),
-            }
-          : {
-              symbol: symbol,
-              request_kind: "new_candidate",
-              request_mode: "random",
-              requested_vision_id: null,
-            }
-        var button = event.submitter || queueSubmitButton
-        // B-1163: "Queue random" takes every click. A click while the last
-        // one is still on its way is queued too, instead of meeting a
-        // disabled button; the server folds them into one order.
-        if (button && isBatch) {
-          button.disabled = true
-          button.textContent = "Queueing " + requestedVisionIds.length + "…"
+      // After an order: the style cards' queued badges, the inbox and the
+      // gene's open requests catch up.
+      function refreshAfterQueue() {
+        void renderResultsList()
+        delete geneRequestSummaryCache[symbol]
+        void requestInbox.refresh()
+        return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
+          wireAuthenticatedRequestForm(state)
+          return state
+        })
+      }
+
+      function isRandomQueued(option) {
+        return option.random === true
+      }
+
+      function sealedCardCovers() {
+        var pool = requestOptions.map(requestOptionFirstPreview).filter(Boolean)
+        var covers = []
+        while (covers.length < 4 && pool.length) {
+          covers.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
         }
+        return covers
+      }
+
+      function motionAllowed() {
+        return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+      }
+
+      function justQueuedTile(option) {
+        var mosaic = batchTray && batchTray.querySelector("[data-icono-request-batch-done-mosaic]")
+        if (!mosaic) return null
+        return (
+          mosaic.querySelector('[data-icono-batch-key="' + requestBatchTileKey(option) + '"]') ||
+          mosaic.querySelector("[data-icono-batch-more]")
+        )
+      }
+
+      // The count of random candidates in this order sits on the Queue
+      // button's corner, so phones, which hide the tray, see it too.
+      function paintRandomCount(roll) {
+        var actions = queueSubmitButton && queueSubmitButton.parentElement
+        if (!actions) return
+        var count = justQueuedOptions.filter(isRandomQueued).length
+        var badge = actions.querySelector("[data-icono-request-random-count]")
+        if (!count) {
+          if (badge) badge.hidden = true
+          return
+        }
+        if (!badge) {
+          badge = document.createElement("span")
+          badge.className = "icono-request-random-count"
+          badge.setAttribute("data-icono-request-random-count", "")
+          badge.setAttribute("aria-hidden", "true")
+          actions.appendChild(badge)
+        }
+        badge.hidden = false
+        badge.style.top = queueSubmitButton.offsetTop - 8 + "px"
+        badge.style.right =
+          actions.clientWidth -
+          queueSubmitButton.offsetLeft -
+          queueSubmitButton.offsetWidth -
+          8 +
+          "px"
+        var old = badge.firstElementChild
+        if (old && old.textContent === String(count)) return
+        var next = document.createElement("span")
+        next.textContent = String(count)
+        badge.appendChild(next)
+        if (!old) return
+        if (!roll || !motionAllowed()) {
+          old.remove()
+          return
+        }
+        // Motion Reference "Clap Counter": one click, one digit, rolled up in 200 ms.
+        var rollEase = "cubic-bezier(0.33, 1, 0.68, 1)"
+        old
+          .animate([{ transform: "translateY(0)" }, { transform: "translateY(-100%)" }], {
+            duration: 200,
+            easing: rollEase,
+          })
+          .finished.then(function () {
+            old.remove()
+          })
+        next.animate([{ transform: "translateY(100%)" }, { transform: "translateY(0)" }], {
+          duration: 200,
+          easing: rollEase,
+        })
+      }
+
+      // B-1177: a random click answers on the click. Its card pops into the
+      // tray (Motion Reference "Pop Scale", 520 ms easeOutBack) and a +1 rises
+      // off the button; the order goes out behind it.
+      function celebrateRandomClick(option) {
+        paintRandomCount(true)
+        if (!motionAllowed()) return
+        var outBack = "cubic-bezier(0.34, 1.56, 0.64, 1)"
+        var tile = justQueuedTile(option)
+        if (tile && tile.hasAttribute("data-icono-batch-more")) {
+          tile.animate([{ transform: "scale(1.15)" }, { transform: "scale(1)" }], {
+            duration: 260,
+            easing: outBack,
+          })
+        } else if (tile) {
+          tile.animate(
+            [
+              { transform: "scale(0.4)", opacity: 0 },
+              { transform: "scale(1)", opacity: 1 },
+            ],
+            { duration: 520, easing: outBack },
+          )
+        }
+        var actions = queueSubmitButton && queueSubmitButton.parentElement
+        if (!actions) return
+        var plus = document.createElement("span")
+        plus.className = "icono-request-plus-one"
+        plus.setAttribute("aria-hidden", "true")
+        plus.textContent = "+1"
+        plus.style.left =
+          queueSubmitButton.offsetLeft +
+          queueSubmitButton.offsetWidth / 2 -
+          10 +
+          Math.round(Math.random() * 12 - 6) +
+          "px"
+        plus.style.top = queueSubmitButton.offsetTop - 6 + "px"
+        actions.appendChild(plus)
+        plus
+          .animate(
+            [
+              { transform: "translateY(0)", opacity: 1 },
+              { transform: "translateY(-22px)", opacity: 0 },
+            ],
+            { duration: 550, easing: "cubic-bezier(0.33, 1, 0.68, 1)" },
+          )
+          .finished.then(function () {
+            plus.remove()
+          })
+      }
+
+      // The server refused this one: its card shakes and leaves.
+      function dropRandomCandidate(option) {
+        var tile = justQueuedTile(option)
+        var forget = function () {
+          justQueuedOptions = justQueuedOptions.filter(function (queued) {
+            return queued !== option
+          })
+          updateQueueSelectionControls()
+        }
+        if (!tile || tile.hasAttribute("data-icono-batch-more") || !motionAllowed()) {
+          forget()
+          return
+        }
+        tile
+          .animate(
+            [0, -6, 5, -4, 3, -2, 0].map(function (x) {
+              return { transform: "translateX(" + x + "px)" }
+            }),
+            { duration: 360 },
+          )
+          .finished.then(forget, forget)
+      }
+
+      var randomClickCount = 0
+      var randomClicksWaiting = 0
+      function queueRandomCandidate() {
+        randomClickCount += 1
+        var option = {
+          vision_id: "",
+          random: true,
+          key: "random-" + randomClickCount,
+          covers: sealedCardCovers(),
+        }
+        justQueuedOptions = justQueuedOptions.filter(isRandomQueued).concat([option])
         setStatus("", "")
-        var send = function () {
+        updateQueueSelectionControls()
+        celebrateRandomClick(option)
+        randomClicksWaiting += 1
+        // B-1163: random clicks go out one after another, so each sees the
+        // order the one before it opened and joins it; the server folds them
+        // into one order.
+        randomClicks = randomClicks.then(function () {
           return fetchJSON("/api/iconoplasm/requests", {
             method: "POST",
             credentials: "include",
             headers: {
               "Content-Type": "application/json; charset=utf-8",
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              symbol: symbol,
+              request_kind: "new_candidate",
+              request_mode: "random",
+              requested_vision_id: null,
+            }),
           })
-            .then(function (responsePayload) {
-              var failures = Array.isArray(responsePayload && responsePayload.failures)
-                ? responsePayload.failures
-                : []
-              var failedVisionIds = new Set(
-                failures.map(function (failure) {
-                  return String((failure && failure.requested_vision_id) || "").trim()
-                }),
-              )
-              justQueuedOptions = isBatch
-                ? requestedVisionIds
-                    .filter(function (visionId) {
-                      return !failedVisionIds.has(visionId)
-                    })
-                    .map(function (visionId) {
-                      return requestOptionsByVisionId[visionId] || { vision_id: visionId }
-                    })
-                : // Each random click adds a tile to the random order in view.
-                  justQueuedOptions
-                    .filter(function (option) {
-                      return option.random === true
-                    })
-                    .concat([{ vision_id: "", random: true }])
-              selectedRequestVisionIds.clear()
-              failedVisionIds.forEach(function (visionId) {
-                if (visionId) selectedRequestVisionIds.add(visionId)
-              })
-              if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
-              updateQueueSelectionControls()
-              void renderResultsList()
-              delete geneRequestSummaryCache[symbol]
-              var queuedCount = Math.max(
-                0,
-                Number(responsePayload && responsePayload.queued_count) ||
-                  (isBatch ? requestedVisionIds.length : 1),
-              )
-              if (failures.length) {
-                setStatus(
-                  "Queued " +
-                    queuedCount +
-                    "; " +
-                    failures.length +
-                    " could not be queued and remain selected.",
-                  "error",
-                )
-              }
-              void requestInbox.refresh()
-              return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
-                wireAuthenticatedRequestForm(state)
-                return state
-              })
-            })
             .catch(function (error) {
+              dropRandomCandidate(option)
               setStatus(String((error && error.message) || "Could not queue request."), "error")
             })
-            .finally(function () {
-              if (button && isBatch) {
-                button.disabled = false
-                button.textContent = String(
-                  button.getAttribute("data-default-label") || "Queue random",
-                )
+            .then(function () {
+              randomClicksWaiting -= 1
+              if (!randomClicksWaiting) {
+                refreshAfterQueue().catch(function () {
+                  // The order is placed; the badges catch up on the next open.
+                })
               }
             })
+        })
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault()
+        var requestedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
+        if (!requestedVisionIds.length) {
+          queueRandomCandidate()
+          return
         }
-        // Random clicks go out one after another, so each sees the order the
-        // one before it opened and joins it.
-        if (isBatch) void send()
-        else randomClicks = randomClicks.then(send)
+        var button = event.submitter || queueSubmitButton
+        if (button) {
+          button.disabled = true
+          button.textContent = "Queueing " + requestedVisionIds.length + "…"
+        }
+        setStatus("", "")
+        fetchJSON("/api/iconoplasm/requests", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+          },
+          body: JSON.stringify({
+            symbol: symbol,
+            request_kind: "new_candidate",
+            request_mode: "specific",
+            requested_vision_ids: requestedVisionIds,
+            client_batch_id: crypto.randomUUID(),
+          }),
+        })
+          .then(function (responsePayload) {
+            var failures = Array.isArray(responsePayload && responsePayload.failures)
+              ? responsePayload.failures
+              : []
+            var failedVisionIds = new Set(
+              failures.map(function (failure) {
+                return String((failure && failure.requested_vision_id) || "").trim()
+              }),
+            )
+            justQueuedOptions = requestedVisionIds
+              .filter(function (visionId) {
+                return !failedVisionIds.has(visionId)
+              })
+              .map(function (visionId) {
+                return requestOptionsByVisionId[visionId] || { vision_id: visionId }
+              })
+            selectedRequestVisionIds.clear()
+            failedVisionIds.forEach(function (visionId) {
+              if (visionId) selectedRequestVisionIds.add(visionId)
+            })
+            if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
+            updateQueueSelectionControls()
+            var queuedCount = Math.max(
+              0,
+              Number(responsePayload && responsePayload.queued_count) || requestedVisionIds.length,
+            )
+            if (failures.length) {
+              setStatus(
+                "Queued " +
+                  queuedCount +
+                  "; " +
+                  failures.length +
+                  " could not be queued and remain selected.",
+                "error",
+              )
+            }
+            return refreshAfterQueue()
+          })
+          .catch(function (error) {
+            setStatus(String((error && error.message) || "Could not queue request."), "error")
+          })
+          .finally(function () {
+            if (button) {
+              button.disabled = false
+              button.textContent = String(
+                button.getAttribute("data-default-label") || "Queue random",
+              )
+            }
+          })
       })
     }
 
