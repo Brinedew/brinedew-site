@@ -5,9 +5,19 @@
 ## Product contract
 
 A Discord DM and a Ready item in the Request inbox are receipts for one reader
-order: one press of Queue, for one gene. The receipt waits until every request
-in the order that can still finish has finished, however many Drain sessions
-drew it (B-1145). Two orders for the same gene are two receipts.
+order. An order is everything that a reader requests on one gene before the
+Drain delivers any of it: "Request random" clicks, taps on style cards and
+"Request all favorites", from one dialog or several, up to 100 requests. The
+receipt waits until every request in the order that can still finish has
+finished, however many Drain sessions drew it (B-1145). A request placed after
+part of the order was delivered starts a new order, and so a second receipt.
+
+- A reader who taps three styles, clicks "Request random" twice and presses
+  "Request all favorites" on one gene gets one DM. Until 2026-10-27 each tap
+  was its own order and its own DM: B-1163 had joined repeated random clicks,
+  and B-1179 then made each style tap a separate request.
+- The boundary is state, never a clock: the Drain claiming a request does not
+  close its order, because a request stays `open` until it is delivered.
 
 - An order of ten produces one DM with ten previews.
 - An order of one hundred, drawn by the Drain over many sessions, still
@@ -38,8 +48,12 @@ therefore treats ten as a hard preview-attachment ceiling and also applies a
 
 ## Durable ownership
 
-Placing an order persists one `request_batch_id` (a single request is an order
-of one, `single-<uuid>`) and `request_batch_size` on every request in it. When a
+Placing an order persists one `request_batch_id` and `request_batch_size` on
+every request in it. A reader's new-candidate request first looks for that
+reader's newest open order on the gene (`readersOpenOrderOnGene` in the
+stateful runtime) and joins it. The INSERT itself refuses the join if any
+request of that order has left `open`, and the request then places a new order
+(`order-<uuid>`, or the dialog's `client_batch_id` for style taps). When a
 request reaches `delivery_pending`, the D1 trigger in
 `migrations-iconoplasm/0134_delivery_groups_by_order.sql` creates its
 notification with `fulfillment_publication_id` set to the order id (on a
