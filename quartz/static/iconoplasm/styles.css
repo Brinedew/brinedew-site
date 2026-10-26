@@ -1414,34 +1414,21 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   transform: scale(1.15);
 }
 
+/* The count on the top card, light on the darkened covers in both themes;
+   the number rolls inside its own line (app.js paintDeck). */
 .icono-request-deck-mark {
   position: relative;
+  display: inline-grid;
+  overflow: hidden;
   color: oklch(97% 0.01 75);
-  font: 600 0.95rem / 1 var(--icono-action-font);
+  font: 600 1rem / 1.2 var(--icono-action-font);
+  font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px color-mix(in srgb, black 50%, transparent);
 }
 
-/* The digit rolls (app.js paintDeck). */
-.icono-request-random-count {
-  position: absolute;
-  z-index: 2;
-  top: -0.55rem;
-  right: -0.65rem;
-  display: inline-grid;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.3rem;
-  overflow: hidden;
-  background: var(--accent);
-  color: var(--light);
-  font: 600 0.72rem / 1.25rem var(--icono-action-font);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  pointer-events: none;
-}
-
-.icono-request-random-count > span {
+.icono-request-deck-mark > span {
   grid-area: 1 / 1;
+  text-align: center;
 }
 
 .icono-request-plus-one {
