@@ -1073,45 +1073,39 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   color: var(--secondary);
 }
 
-/* B-1104: what a switch leaves on the old gene, and what it undoes there. */
+/* B-1104: what a switch leaves on the old gene, and what it undoes there. Set
+   like the dialog's siblings (the capabilities list, the gene request lead):
+   one column, one face, plain bullets. The owner, 2026-10-26, on two columns of
+   tracked caps over serif sentences with check and cross marks: "breaks all
+   rules of lettering and typesetting". */
 .icono-caretaker-switch-inventory {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem 1.5rem;
+  gap: 0.85rem;
   font-family: "IBM Plex Mono", monospace;
+  line-height: 1.45;
 }
 
 .icono-caretaker-switch-inventory h3 {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.3rem;
   color: var(--dark);
-  font: 500 var(--icono-action-font-size) / 1.2 var(--icono-action-font);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font: inherit;
+  font-weight: 600;
 }
 
 .icono-caretaker-switch-inventory ul {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.3rem;
   margin: 0;
   padding-inline-start: 1.35rem;
 }
 
 .icono-caretaker-switch-inventory li {
   margin: 0;
-  /* Sentences read in the lore's face; the mono headings stay the printed form. */
-  font:
-    1.0625rem / 1.3 "Crimson Pro",
-    Georgia,
-    serif;
+  /* The site's list rule sets its own line height; the list reads at its own. */
+  line-height: inherit;
 }
 
-.icono-caretaker-switch-inventory__kept li::marker {
-  content: "✓  ";
-  color: var(--secondary);
-}
-
-.icono-caretaker-switch-inventory__undone li::marker {
-  content: "✕  ";
+.icono-caretaker-switch-inventory li::marker {
   color: var(--secondary);
 }
 
@@ -1138,6 +1132,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-caretaker-claim-terms::part(label) {
   min-width: 0;
   font-family: "IBM Plex Mono", monospace;
+  /* The dialog's own size; the checkbox would set its label at 16 px. */
+  font-size: 0.88rem;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -1296,22 +1293,16 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
     gap: 0.75rem;
   }
 
-  .icono-caretaker-switch-inventory h3 {
-    margin-bottom: 0.35rem;
-    letter-spacing: 0.08em;
+  .icono-caretaker-switch-inventory {
+    gap: 0.6rem;
   }
 
-  .icono-caretaker-switch-inventory li {
-    line-height: 1.22;
+  .icono-caretaker-switch-inventory ul {
+    gap: 0.15rem;
   }
 
   .icono-caretaker-claim-terms {
     padding: 0.5rem 0.6rem;
-  }
-
-  .icono-caretaker-claim-terms::part(label) {
-    font-size: 0.8rem;
-    line-height: 1.35;
   }
 }
 
