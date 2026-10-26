@@ -328,7 +328,8 @@ export function mountHomePlayStrip(container, options) {
     // Above the strip in the word's column, the way the add-on puts its card
     // above the word: over the word itself it would cover the counter as the
     // counter changes. Without room above, beside the strip level with the
-    // word; failing both, above or below the word.
+    // word; failing both, above the word when that clears the counter, else
+    // below it.
     const rightHalf = word.left + word.width / 2 > strip.left + strip.width / 2
     const fitsRight = viewportWidth - strip.right - gap - 8 >= width
     const fitsLeft = strip.left - gap - 8 >= width
@@ -356,7 +357,11 @@ export function mountHomePlayStrip(container, options) {
       )
       origin = side === "right" ? "0 50%" : "100% 50%"
     } else {
-      top = word.top - height - 10 >= 8 ? word.top - height - 10 : word.bottom + 10
+      const counter = title.getBoundingClientRect()
+      top =
+        word.top - height - 10 >= Math.max(8, counter.bottom + 8)
+          ? word.top - height - 10
+          : word.bottom + 10
     }
     raised.style.transformOrigin = origin
     raised.style.left = left + win.scrollX + "px"

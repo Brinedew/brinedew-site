@@ -30,7 +30,7 @@ import {
   HOME_PLAY_SYMBOLS,
   homePlayActionMarkup,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=49825fa6a0e0ae4e"
+} from "./home-play-strip.js?v=fce543f1ee740af6"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
