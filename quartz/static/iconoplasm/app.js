@@ -171,10 +171,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m10 2.9 2.15 4.35 4.8.7-3.47 3.38.82 4.77-4.3-2.26-4.3 2.26.82-4.77L3.05 7.95l4.8-.7L10 2.9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
   var ICONO_PRINT_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="M5.5 7.5V3h9v4.5M5.5 14H4.25a1.5 1.5 0 0 1-1.5-1.5V9a1.5 1.5 0 0 1 1.5-1.5h11.5a1.5 1.5 0 0 1 1.5 1.5v3.5a1.5 1.5 0 0 1-1.5 1.5H14.5M5.5 11.5h9V17h-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
-  var ICONO_CHECK_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m5 10.4 3.2 3.1L15 6.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-  var ICONO_CLOSE_ICON =
-    '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><path d="m5.5 5.5 9 9m0-9-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
   var ICONO_SEARCH_ICON =
     '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false"><circle cx="8.75" cy="8.75" r="5.25" stroke="currentColor" stroke-width="1.6"/><path d="m12.75 12.75 3.75 3.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
   var portraitDetailCache = Object.create(null)
@@ -6113,15 +6109,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // B-883: the Free queue is a style grid (3:4 cards) beside a "Your batch"
-  // tray, not an autocomplete dropdown. Public copy says "style"; artists are
-  // never shown, so the search takes a style number or code only.
+  // B-883: the Free queue is a style grid of 3:4 cards, not an autocomplete
+  // dropdown. Public copy says "style"; artists are never shown, so the search
+  // takes a style number or code only. B-1179: a tap on a card requests it.
   function renderRequestFormMarkup(symbol) {
     return (
       '<form id="icono-request-form-' +
       esc(symbol) +
       '" data-icono-request-form class="icono-request-form">' +
-      '<input type="hidden" data-icono-request-vision value="">' +
       '<div class="icono-request-browser">' +
       // Grid areas place the search: beside the views on desktop, docked
       // under the cards on a phone (B-884), so only the views sit above them.
@@ -6141,34 +6136,30 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       '<div class="icono-request-grid" data-icono-request-results role="list" aria-label="Styles" aria-busy="true"></div>' +
       "</div>" +
-      '<aside class="icono-request-batch" data-icono-request-batch aria-label="Your batch">' +
-      '<div class="icono-request-batch-head"><span class="icono-request-batch-title">Your batch</span><button type="button" class="icono-request-batch-clear" data-icono-request-batch-clear hidden>Clear</button></div>' +
-      // B-1143: an empty batch shows the favorites it can take in one click;
-      // the count lives on the Queue button, so the tray carries no counter.
-      '<div class="icono-request-batch-fill" data-icono-request-batch-fill hidden>' +
-      '<div class="icono-request-batch-mosaic" aria-hidden="true" data-icono-request-batch-fill-mosaic></div>' +
-      '<button type="button" class="icono-button icono-request-add-favorites" data-icono-request-add-favorites>Add all favorites</button>' +
-      "</div>" +
-      // Divs with list roles: Quartz styles bare ul/li inside the article.
-      '<div class="icono-request-batch-list" role="list" data-icono-request-batch-list></div>' +
-      '<button type="button" class="icono-request-batch-rest" data-icono-request-batch-rest hidden></button>' +
-      // B-1178: the picks come first, under the header whose Clear empties
-      // them; below them, the pile of everything queued and not yet received.
-      '<div class="icono-request-batch-done" data-icono-request-batch-done hidden>' +
-      '<div class="icono-request-batch-mosaic icono-request-batch-mosaic--done" data-icono-request-batch-done-mosaic></div>' +
-      '<button type="button" class="icono-request-batch-link" data-icono-request-see-requests>See your requests</button>' +
-      "</div>" +
-      "</aside>" +
       "</div>" +
       "</form>"
     )
   }
 
-  // One style card: the toggle (the art) and, under it, the caption row with
-  // the number, the favorite star right after it (as on the gene page's
-  // "Emulsion 21329 ☆") and the count or queued badge. The star is never
-  // nested in the toggle; a click anywhere else on the card toggles it.
-  function renderRequestStyleCardMarkup(option, isSelected, queuedCount) {
+  // How many of a style are requested on this gene, on its picture's corner.
+  function renderRequestCardChipMarkup(requestedCount) {
+    return requestedCount
+      ? '<span class="icono-request-card-queued" data-icono-request-queued>' +
+          esc(String(requestedCount)) +
+          " requested</span>"
+      : ""
+  }
+
+  function requestCardLabel(label, requestedCount) {
+    return "Request style " + label + (requestedCount ? ", " + requestedCount + " requested" : "")
+  }
+
+  // One style card: the art (a button that requests the style, with "N
+  // requested" on its corner) and, under it, the caption row with the number,
+  // the favorite star right after it (as on the gene page's "Emulsion 21329
+  // ☆") and the blot count. The star is never nested in the button; a click
+  // anywhere else on the card requests it.
+  function renderRequestStyleCardMarkup(option, requestedCount) {
     var item = option || {}
     var visionId = String(item.vision_id || "").trim()
     var label = requestOptionPrimaryLabel(item)
@@ -6198,26 +6189,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // orders the list.
     var imageCount = Number(item.canonical_count || 0) || 0
     return (
-      '<div class="icono-request-card' +
-      (isSelected ? " is-selected" : "") +
-      '" role="listitem" data-icono-request-card="' +
+      '<div class="icono-request-card" role="listitem" data-icono-request-card="' +
       esc(label) +
       '">' +
       '<button type="button" class="icono-request-card-toggle" data-icono-request-option="' +
       esc(visionId) +
-      '" aria-pressed="' +
-      (isSelected ? "true" : "false") +
-      '" aria-label="Style ' +
-      esc(label) +
+      '" aria-label="' +
+      esc(requestCardLabel(label, requestedCount)) +
       '">' +
       '<span class="icono-request-card-art' +
       (shown.length > 1 ? " is-mosaic is-mosaic-" + shown.length : "") +
       '">' +
       art +
       "</span>" +
-      '<span class="icono-request-card-check" aria-hidden="true">' +
-      ICONO_CHECK_ICON +
-      "</span>" +
+      renderRequestCardChipMarkup(requestedCount) +
       "</button>" +
       '<div class="icono-request-card-meta"><span class="icono-request-card-label">' +
       esc(label) +
@@ -6228,44 +6213,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             item.emulsion_family_id || item.emulsion_id,
             "icono-emulsion-favorite-button--card",
           )) +
-      (queuedCount
-        ? '<span class="icono-request-card-queued" data-icono-request-queued>' +
-          esc(String(queuedCount)) +
-          " queued</span>"
-        : imageCount
-          ? '<span class="icono-request-card-count">' +
-            esc(String(imageCount)) +
-            " blot" +
-            (imageCount === 1 ? "" : "s") +
-            "</span>"
-          : "") +
+      (imageCount
+        ? '<span class="icono-request-card-count">' +
+          esc(String(imageCount)) +
+          " blot" +
+          (imageCount === 1 ? "" : "s") +
+          "</span>"
+        : "") +
       "</div>" +
-      "</div>"
-    )
-  }
-
-  function renderRequestBatchRowMarkup(option) {
-    var item = option || {}
-    var visionId = String(item.vision_id || "").trim()
-    var label = requestOptionPrimaryLabel(item)
-    var first = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
-      .map(requestOptionPreviewUrl)
-      .filter(Boolean)[0]
-    return (
-      '<div class="icono-request-batch-row" role="listitem" data-icono-request-batch-row>' +
-      '<span class="icono-request-batch-thumb">' +
-      (first ? '<img src="' + esc(first) + '" alt="" loading="lazy" decoding="async">' : "") +
-      "</span>" +
-      '<span class="icono-request-batch-label">' +
-      esc(label) +
-      "</span>" +
-      '<button type="button" class="icono-button icono-button--icon icono-request-batch-remove" data-icono-request-batch-remove="' +
-      esc(visionId) +
-      '" aria-label="Remove ' +
-      esc(label) +
-      ' from the batch">' +
-      ICONO_CLOSE_ICON +
-      "</button>" +
       "</div>"
     )
   }
@@ -6365,14 +6320,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       footerClass: "icono-request-footer",
       footer:
         '<div class="icono-request-free-actions" data-icono-request-free-footer>' +
-        // Phones hide the tray, so its two actions join the action bar, left of
-        // Queue (B-1143; B-884 keeps the row above the cards for the view switch).
-        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-add-favorites hidden>Add all favorites</button>' +
-        '<button type="button" class="icono-button icono-request-footer-batch-action" data-icono-request-batch-clear hidden>Clear</button>' +
-        '<button type="button" class="icono-button icono-request-random" data-icono-request-random hidden>Queue random</button>' +
+        // B-1179: favorites at the left; at the right, the deck of every
+        // candidate requested and not yet received (it opens the inbox), then
+        // Request random.
+        '<button type="button" class="icono-button icono-request-all-favorites" data-icono-request-add-favorites hidden>Request all favorites</button>' +
+        '<button type="button" class="icono-request-deck" data-icono-request-deck data-icono-request-see-requests title="See your requests" hidden>' +
+        '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
+        '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
+        '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
+        '<span class="icono-request-random-count" data-icono-request-random-count aria-hidden="true"></span>' +
+        "</button>" +
         '<button type="submit" form="icono-request-form-' +
         esc(safeSymbol) +
-        '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit data-default-label="Queue random">Queue random</button>' +
+        '" class="icono-button icono-button--primary icono-request-free-submit" data-icono-request-free-submit>Request random</button>' +
         "</div>" +
         '<div class="icono-request-direct-actions" data-icono-request-direct-footer hidden>' +
         '<button type="button" class="icono-button icono-button--primary icono-request-direct-generate" data-icono-request-image-generate disabled>Generate candidate</button>' +
@@ -7458,10 +7418,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       rememberQueuedStyles(safeState.gene_lane_summary)
 
       var form = body.querySelector("[data-icono-request-form]")
-      var hiddenInput = body.querySelector("[data-icono-request-vision]")
       var queryInput = body.querySelector("[data-icono-request-query]")
       var results = body.querySelector("[data-icono-request-results]")
-      if (!form || !hiddenInput || !queryInput || !results) return
+      if (!form || !queryInput || !results) return
       if (form._iconoRequestFormWired) {
         if (typeof form._iconoTakeSummary === "function") form._iconoTakeSummary(safeState)
         if (typeof form._iconoRepaintRequestResults === "function")
@@ -7473,7 +7432,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var queueSubmitButton = dialog
         ? dialog.querySelector("[data-icono-request-free-submit]")
         : null
-      var queueRandomButton = dialog ? dialog.querySelector("[data-icono-request-random]") : null
+      var deck = dialog ? dialog.querySelector("[data-icono-request-deck]") : null
+      var favoritesButton = dialog
+        ? dialog.querySelector("[data-icono-request-add-favorites]")
+        : null
       var providerSelect = body.querySelector("[data-icono-request-provider]")
       var directGenerateButton = dialog
         ? dialog.querySelector("[data-icono-request-image-generate]")
@@ -7509,27 +7471,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var requestOptionsMoreLoading = null
       // After a failed page, the next scroll may try again only after this.
       var requestOptionsMoreRetryAt = 0
-      var selectedRequestVisionIds = new Set([""])
       // The server's order limit (ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT in
-      // the stateful runtime, which says why). workers/iconoplasm.request-order.test.js
-      // fails if the two differ.
+      // the stateful runtime, which says why): more favorites go out as more
+      // orders. workers/iconoplasm.request-order.test.js fails if the two differ.
       var requestSelectionLimit = 100
-      // B-1178: the tray's pile is every candidate this reader queued on this
-      // gene and has not received yet: the server's list (my_lane_summary) and
-      // the clicks still on their way. Picking, Clear, another queue, closing
-      // the dialog or reloading never empties it.
+      // B-1178: the deck is every candidate this reader requested on this gene
+      // and has not received yet: the server's list (my_lane_summary) and the
+      // clicks still on their way. Another request, closing the dialog or
+      // reloading never empties it.
       var pileFromServer = []
       var pileOnTheWay = []
       // Requests go out one after another (B-1163), random and picked alike.
       var queueChain = Promise.resolve()
       var queueWaiting = 0
-      // Bumped on every queue click; a summary fetched before the latest click
-      // can't describe it, so it doesn't replace the pile.
+      // Bumped on every request click; a summary fetched before the latest
+      // click can't describe it, so it doesn't replace the pile.
       var queueEpoch = 0
       var filteredOptions = []
       var requestView = ""
       var browse = body.querySelector("[data-icono-request-browse]")
-      var batchTray = body.querySelector("[data-icono-request-batch]")
       var directUserEmulsionOptions = []
       var directUserEmulsionOptionsLoaded = false
       var directUserEmulsionOptionsLoading = null
@@ -8274,11 +8234,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         rememberRequestOptions(filteredOptions)
         var html = filteredOptions
           .map(function (option) {
-            return renderRequestStyleCardMarkup(
-              option,
-              selectedRequestVisionIds.has(String(option.vision_id || "").trim()),
-              styleQueuedCount(option),
-            )
+            return renderRequestStyleCardMarkup(option, styleQueuedCount(option))
           })
           .join("")
         if (!html) {
@@ -8294,7 +8250,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         results.innerHTML = html
         results.removeAttribute("aria-busy")
         paintRequestViews()
-        paintRequestBatch()
+        paintRequestFooter()
         maybeLoadMoreRequestOptions()
       }
 
@@ -8302,140 +8258,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return (Array.isArray(option && option.preview_assets) ? option.preview_assets : [])
           .map(requestOptionPreviewUrl)
           .filter(Boolean)[0]
-      }
-
-      function requestBatchTileKey(option) {
-        return String((option && (option.key || option.vision_id)) || "")
-      }
-
-      function requestBatchTileMarkup(option, checked) {
-        var key = esc(requestBatchTileKey(option))
-        // A random candidate has no style until it is drawn: a face-down card
-        // of four styles it could be.
-        if (option && option.random) {
-          return (
-            '<span class="icono-request-batch-tile icono-request-batch-tile--sealed" data-icono-batch-key="' +
-            key +
-            '"><span class="icono-request-batch-sealed">' +
-            (option.covers || [])
-              .map(function (src) {
-                return '<img src="' + esc(src) + '" alt="" decoding="async">'
-              })
-              .join("") +
-            '</span><span class="icono-request-batch-sealed-mark" aria-hidden="true">?</span></span>'
-          )
-        }
-        var first = requestOptionFirstPreview(option)
-        return (
-          '<span class="icono-request-batch-tile" data-icono-batch-key="' +
-          key +
-          '">' +
-          (checked
-            ? '<span class="icono-request-card-check" aria-hidden="true">' +
-              ICONO_CHECK_ICON +
-              "</span>"
-            : "") +
-          (first ? '<img src="' + esc(first) + '" alt="" loading="lazy" decoding="async">' : "") +
-          "</span>"
-        )
-      }
-
-      // Covers in a mosaic two rows of `columns` high; the last tile counts the rest.
-      function requestBatchMosaicMarkup(options, columns, checked) {
-        var fits = options.length > columns * 2 ? columns * 2 - 1 : options.length
-        return (
-          options
-            .slice(0, fits)
-            .map(function (option) {
-              return requestBatchTileMarkup(option, checked)
-            })
-            .join("") +
-          (options.length > fits
-            ? '<span class="icono-request-batch-tile" data-icono-batch-more>+' +
-              (options.length - fits) +
-              "</span>"
-            : "")
-        )
-      }
-
-      // The pile's mosaic changes tile by tile: a tile already shown keeps its
-      // node (and its animation) wherever the pile adds or drops cards, and the
-      // last cell counts the ones that don't fit.
-      function paintDoneMosaic(mosaic, options, columns) {
-        var fits = options.length > columns * 2 ? columns * 2 - 1 : options.length
-        var shownByKey = {}
-        var shown = mosaic.querySelectorAll("[data-icono-batch-key]")
-        for (var s = 0; s < shown.length; s++) {
-          shownByKey[shown[s].getAttribute("data-icono-batch-key")] = shown[s]
-        }
-        var cursor = mosaic.firstElementChild
-        for (var i = 0; i < fits; i++) {
-          var key = requestBatchTileKey(options[i])
-          var tile = shownByKey[key]
-          delete shownByKey[key]
-          if (!tile) {
-            var holder = document.createElement("span")
-            // No check mark: in the grid it means "picked", and everything
-            // in the pile is queued.
-            holder.innerHTML = requestBatchTileMarkup(options[i], false)
-            tile = holder.firstChild
-          }
-          if (tile === cursor) cursor = cursor.nextElementSibling
-          else mosaic.insertBefore(tile, cursor)
-        }
-        Object.keys(shownByKey).forEach(function (gone) {
-          shownByKey[gone].remove()
-        })
-        var more = mosaic.querySelector("[data-icono-batch-more]")
-        var rest = options.length - fits
-        if (rest > 0) {
-          if (!more) {
-            more = document.createElement("span")
-            more.className = "icono-request-batch-tile"
-            more.setAttribute("data-icono-batch-more", "")
-          }
-          mosaic.appendChild(more)
-          more.textContent = "+" + rest
-        } else if (more) {
-          more.remove()
-        }
-      }
-
-      // Every candidate in the pile, random ones first and then the styles in
-      // the order they were first queued. A tile's key is its place among its
-      // kind, so the server's list replacing the clicks on their way keeps the
-      // same tiles. Each source entry learns its tile's key (`tileKey`).
-      function queuedPile() {
-        var all = pileFromServer.concat(pileOnTheWay)
-        var randoms = []
-        var styles = []
-        var styleOrder = []
-        var styleTiles = {}
-        for (var i = 0; i < all.length; i++) {
-          if (all[i].random) {
-            all[i].tileKey = "random-" + randoms.length
-            randoms.push({
-              random: true,
-              key: all[i].tileKey,
-              covers: sealedCardCovers(randoms.length),
-            })
-            continue
-          }
-          var visionId = all[i].vision_id
-          if (!styleTiles[visionId]) {
-            styleTiles[visionId] = []
-            styleOrder.push(visionId)
-          }
-          all[i].tileKey = "style-" + visionId + "-" + styleTiles[visionId].length
-          styleTiles[visionId].push(
-            Object.assign({}, requestOptionsByVisionId[visionId] || { vision_id: visionId }, {
-              key: all[i].tileKey,
-            }),
-          )
-        }
-        for (var s = 0; s < styleOrder.length; s++)
-          styles = styles.concat(styleTiles[styleOrder[s]])
-        return randoms.concat(styles)
       }
 
       function pileFromSummary(state) {
@@ -8464,117 +8286,52 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (epoch === undefined ? pileOnTheWay.length : epoch !== queueEpoch) return
         pileFromServer = pileFromSummary(state)
         pileOnTheWay = []
-        paintRequestBatch()
+        paintRequestFooter()
       }
 
-      // The favorites not in the batch yet, as far as one order holds.
-      function favoriteRequestOptionsToAdd() {
-        var room = Math.max(
-          0,
-          requestSelectionLimit - Array.from(selectedRequestVisionIds).filter(Boolean).length,
-        )
-        var options = emulsionFavorites
-          .ids()
-          .map(requestOptionForFavoriteFamilyId)
-          .filter(function (option) {
-            return option && !selectedRequestVisionIds.has(option.vision_id)
-          })
-        if (options.length <= room) return options
-        // More favorites than one order holds: after an order, continue with
-        // the ones it left out instead of sending the same ones again.
-        var queued = new Set(
-          queuedPile().map(function (option) {
-            return option.vision_id
-          }),
-        )
-        var unsent = options.filter(function (option) {
-          return !queued.has(option.vision_id)
-        })
-        return (unsent.length ? unsent : options).slice(0, room)
+      // Every favorite this picker can name, in the order they were starred.
+      function favoriteRequestOptions() {
+        return emulsionFavorites.ids().map(requestOptionForFavoriteFamilyId).filter(Boolean)
       }
 
-      // B-1143: an empty tray offers the favorites in one click; a partly picked
-      // one offers the rest as one row. B-1178: under the picks, the pile shows
-      // everything queued and not yet received.
-      function paintRequestBatch() {
-        var picked = Array.from(selectedRequestVisionIds).filter(Boolean)
-        var toAdd = favoriteRequestOptionsToAdd()
-        var pile = queuedPile()
-        var showDone = pile.length > 0
-        var addButtons = dialog ? dialog.querySelectorAll("[data-icono-request-add-favorites]") : []
-        for (var a = 0; a < addButtons.length; a++) {
-          addButtons[a].hidden = picked.length > 0 || !toAdd.length
+      function paintRequestFooter() {
+        if (favoritesButton) favoritesButton.hidden = !favoriteRequestOptions().length
+        paintDeck(false)
+      }
+
+      // A card's request count changes in place, so focus stays on the card.
+      function paintCardChip(button, option) {
+        var count = styleQueuedCount(option)
+        button.setAttribute(
+          "aria-label",
+          requestCardLabel(requestOptionPrimaryLabel(option), count),
+        )
+        var chip = button.querySelector("[data-icono-request-queued]")
+        if (!count) {
+          if (chip) chip.remove()
+          return null
         }
-        var clearButtons = dialog ? dialog.querySelectorAll("[data-icono-request-batch-clear]") : []
-        for (var c = 0; c < clearButtons.length; c++) clearButtons[c].hidden = !picked.length
-        if (!batchTray) return
-        var fill = batchTray.querySelector("[data-icono-request-batch-fill]")
-        if (fill) {
-          // The covers stay above the pile: the pile lasts until the candidates
-          // arrive, and a favorites button without its favorites says less.
-          fill.hidden = picked.length > 0 || !toAdd.length
-          var fillMosaic = fill.querySelector("[data-icono-request-batch-fill-mosaic]")
-          if (fillMosaic && !fill.hidden) {
-            fillMosaic.innerHTML = requestBatchMosaicMarkup(toAdd, 4, false)
-          }
-        }
-        var list = batchTray.querySelector("[data-icono-request-batch-list]")
-        if (list) {
-          list.innerHTML = picked
-            .map(function (visionId) {
-              return renderRequestBatchRowMarkup(
-                requestOptionsByVisionId[visionId] || { vision_id: visionId },
-              )
-            })
-            .join("")
-        }
-        var rest = batchTray.querySelector("[data-icono-request-batch-rest]")
-        if (rest) {
-          rest.hidden = !picked.length || !toAdd.length
-          if (!rest.hidden) {
-            rest.setAttribute(
-              "aria-label",
-              "Add the other " + toAdd.length + " favorite" + (toAdd.length === 1 ? "" : "s"),
-            )
-            rest.innerHTML =
-              '<span class="icono-request-batch-stack" aria-hidden="true">' +
-              toAdd
-                .slice(0, 3)
-                .map(function (option) {
-                  var src = requestOptionFirstPreview(option)
-                  return src ? '<img src="' + esc(src) + '" alt="">' : ""
-                })
-                .join("") +
-              '</span><span aria-hidden="true">+' +
-              toAdd.length +
-              "</span>" +
-              ICONO_PLUS_ICON
-          }
-        }
-        var done = batchTray.querySelector("[data-icono-request-batch-done]")
-        if (done) {
-          done.hidden = !showDone
-          var doneMosaic = done.querySelector("[data-icono-request-batch-done-mosaic]")
-          if (doneMosaic && showDone) {
-            paintDoneMosaic(doneMosaic, pile, 6)
-            doneMosaic.setAttribute("role", "img")
-            doneMosaic.setAttribute(
-              "aria-label",
-              pile.length + " candidate" + (pile.length === 1 ? "" : "s") + " queued",
-            )
-          }
-        }
-        paintQueuedCount(false)
+        if (chip && chip.textContent === count + " requested") return null
+        var holder = document.createElement("span")
+        holder.innerHTML = renderRequestCardChipMarkup(count)
+        if (chip) chip.replaceWith(holder.firstChild)
+        else button.appendChild(holder.firstChild)
+        return button.querySelector("[data-icono-request-queued]")
       }
 
       form._iconoRepaintRequestResults = function () {
-        if (optionsLoaded) void renderResultsList()
+        var buttons = results.querySelectorAll("[data-icono-request-option]")
+        for (var i = 0; i < buttons.length; i++) {
+          var option =
+            requestOptionsByVisionId[buttons[i].getAttribute("data-icono-request-option")]
+          if (option) paintCardChip(buttons[i], option)
+        }
       }
       form._iconoTakeSummary = function (state) {
         takeSummary(state)
       }
       form._iconoPaintQueuedCount = function () {
-        paintQueuedCount(false)
+        paintDeck(false)
       }
 
       function scheduleNumericRequestHydration(renderQuery, immediateOption) {
@@ -8645,39 +8402,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         paintRequestResults(renderQuery, loadedOptions)
       }
 
-      function updateQueueSelectionControls() {
-        var selectedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
-        hiddenInput.value = selectedVisionIds.join(",")
-        // With styles picked, Queue sends them; random stays one click away.
-        if (queueRandomButton) queueRandomButton.hidden = !selectedVisionIds.length
-        var optionButtons = results.querySelectorAll("[data-icono-request-option]")
-        for (var i = 0; i < optionButtons.length; i++) {
-          var optionVisionId = String(
-            optionButtons[i].getAttribute("data-icono-request-option") || "",
-          ).trim()
-          var selected = selectedRequestVisionIds.has(optionVisionId)
-          var card = optionButtons[i].closest("[data-icono-request-card]")
-          if (card) card.classList.toggle("is-selected", selected)
-          optionButtons[i].setAttribute("aria-pressed", selected ? "true" : "false")
-        }
-        paintRequestBatch()
-        if (queueSubmitButton) {
-          var queueLabel = "Queue random"
-          if (selectedVisionIds.length === 1) {
-            var selectedOption = requestOptionsByVisionId[selectedVisionIds[0]] || null
-            queueLabel = selectedOption
-              ? "Queue " + requestOptionPrimaryLabel(selectedOption)
-              : "Queue 1 candidate"
-          } else if (selectedVisionIds.length > 1) {
-            queueLabel = "Queue " + selectedVisionIds.length + " candidates"
-          }
-          queueSubmitButton.textContent = queueLabel
-          queueSubmitButton.setAttribute("data-default-label", queueLabel)
-          // The label changes the button's width: the count moves with its corner.
-          paintQueuedCount(false)
-        }
-      }
-
       function requestOptionForFavoriteFamilyId(rawFamilyId) {
         var familyId = normalizeEmulsionFamilyId(rawFamilyId)
         if (!familyId) return null
@@ -8690,35 +8414,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
         var neutralSlot = /^0-([1-9][0-9]*)$/.exec(familyId)
         return neutralSlot ? requestOptionFromImmediateNumericQuery(neutralSlot[1]) : null
-      }
-
-      function addFavoriteRequestOptions() {
-        var adding = favoriteRequestOptionsToAdd()
-        if (!adding.length) return
-        rememberRequestOptions(adding)
-        selectedRequestVisionIds.delete("")
-        for (var i = 0; i < adding.length; i++) selectedRequestVisionIds.add(adding[i].vision_id)
-        updateQueueSelectionControls()
-      }
-
-      function setSelection(option) {
-        var visionId = String((option && option.vision_id) || "").trim()
-        if (!visionId) {
-          selectedRequestVisionIds.clear()
-          selectedRequestVisionIds.add("")
-        } else {
-          selectedRequestVisionIds.delete("")
-          if (selectedRequestVisionIds.has(visionId)) {
-            selectedRequestVisionIds.delete(visionId)
-          } else if (selectedRequestVisionIds.size >= requestSelectionLimit) {
-            setStatus("Choose up to " + requestSelectionLimit + " styles at once.", "error")
-            return
-          } else {
-            selectedRequestVisionIds.add(visionId)
-          }
-          if (!selectedRequestVisionIds.size) selectedRequestVisionIds.add("")
-        }
-        updateQueueSelectionControls()
       }
 
       function closeDirectUserEmulsionResults() {
@@ -8836,7 +8531,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       panel._iconoFavoriteViewsHandler = function () {
         paintRequestViews()
-        paintRequestBatch()
+        paintRequestFooter()
       }
       document.addEventListener("icono-emulsion-favorites-change", panel._iconoFavoriteViewsHandler)
       if (browse) browse.addEventListener("scroll", maybeLoadMoreRequestOptions, { passive: true })
@@ -8848,51 +8543,31 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           void renderResultsList()
         })
       }
-      if (batchTray) {
-        batchTray.addEventListener("click", function (event) {
-          var remove = event.target.closest("[data-icono-request-batch-remove]")
-          if (!remove) return
-          var visionId = String(remove.getAttribute("data-icono-request-batch-remove") || "")
-          if (visionId && selectedRequestVisionIds.has(visionId)) {
-            setSelection(requestOptionsByVisionId[visionId] || { vision_id: visionId })
-          }
-        })
-      }
       results.addEventListener("click", function (event) {
         if (event.target.closest("[data-icono-request-retry]")) {
           results.innerHTML = ""
           void renderResultsList()
           return
         }
-        // The star has its own action; anywhere else on a card toggles it.
+        // The star has its own action; anywhere else on a card requests it.
         if (event.target.closest("[data-icono-emulsion-favorite]")) return
         var cardElement = event.target.closest("[data-icono-request-card]")
         var button = cardElement
           ? cardElement.querySelector("[data-icono-request-option]")
           : event.target.closest("[data-icono-request-option]")
         if (!button) return
+        // The second click of a double click (the habit for opening a
+        // picture) is the same intent as the first: one request.
+        if (event.detail > 1) return
         var visionId = String(button.getAttribute("data-icono-request-option") || "").trim()
-        if (!visionId) {
-          setSelection(null)
-          return
-        }
-        for (var i = 0; i < requestOptions.length; i++) {
-          if (
-            String((requestOptions[i] && requestOptions[i].vision_id) || "").trim() === visionId
-          ) {
-            setSelection(requestOptions[i])
-            return
+        if (!visionId) return
+        if (!requestOptionsByVisionId[visionId]) {
+          for (var i = 0; i < filteredOptions.length; i++) {
+            if (String((filteredOptions[i] && filteredOptions[i].vision_id) || "") === visionId)
+              rememberRequestOptions([filteredOptions[i]])
           }
         }
-        for (var j = 0; j < filteredOptions.length; j++) {
-          if (
-            String((filteredOptions[j] && filteredOptions[j].vision_id) || "").trim() === visionId
-          ) {
-            setSelection(filteredOptions[j])
-            return
-          }
-        }
-        if (requestOptionsByVisionId[visionId]) setSelection(requestOptionsByVisionId[visionId])
+        requestStyles([visionId], button)
       })
       if (directEmulsionQuery && directEmulsionResults && directEmulsionPicker) {
         directEmulsionQuery.addEventListener("focus", function () {
@@ -8983,23 +8658,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (providerSelect) {
         providerSelect.addEventListener("change", updateDirectGenerationButtons)
       }
-      // The tray's and the phone footer's batch actions (B-1143).
-      if (dialog && !dialog._iconoBatchActionsWired) {
-        dialog._iconoBatchActionsWired = true
-        dialog.addEventListener("click", function (event) {
-          var target = event.target.closest(
-            "[data-icono-request-add-favorites], [data-icono-request-batch-rest], [data-icono-request-batch-clear], [data-icono-request-see-requests]",
+      // The deck opens the inbox; "Request all favorites" requests one of each.
+      if (deck) {
+        deck.addEventListener("click", function () {
+          closeDialog(dialog)
+          var inbox = document.getElementById("icono-request-inbox-panel")
+          if (inbox) inbox.scrollIntoView({ block: "nearest" })
+        })
+      }
+      if (favoritesButton) {
+        favoritesButton.addEventListener("click", function () {
+          var options = favoriteRequestOptions()
+          if (!options.length) return
+          rememberRequestOptions(options)
+          requestStyles(
+            options.map(function (option) {
+              return option.vision_id
+            }),
+            favoritesButton,
           )
-          if (!target || !dialog.contains(target)) return
-          if (target.matches("[data-icono-request-batch-clear]")) {
-            setSelection(null)
-          } else if (target.matches("[data-icono-request-see-requests]")) {
-            closeDialog(dialog)
-            var inbox = document.getElementById("icono-request-inbox-panel")
-            if (inbox) inbox.scrollIntoView({ block: "nearest" })
-          } else {
-            addFavoriteRequestOptions()
-          }
         })
       }
       if (directGenerateButton) {
@@ -9019,22 +8696,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ) {
         initializeDirectTab()
       }
-      // After an order: the style cards' queued counts, the inbox and the pile
-      // catch up with the server.
+      // After an order: the style cards' counts, the inbox and the deck catch
+      // up with the server. A click after the summary was asked for gets its
+      // own refresh, so this one would only roll the counts back.
       function refreshAfterQueue() {
         var epoch = queueEpoch
-        void renderResultsList()
         delete geneRequestSummaryCache[symbol]
         void requestInbox.refresh()
         return fetchGeneRequestSummary(symbol, { forceFresh: true }).then(function (state) {
+          if (epoch !== queueEpoch) return state
           takeSummary(state, epoch)
           wireAuthenticatedRequestForm(state)
           return state
         })
       }
 
-      // A face-down card shows four styles it could be. The nth random card
-      // always draws the same four, so painting it again changes nothing.
+      // A face-down card shows four styles it could be. The nth card always
+      // draws the same four, so painting it again changes nothing.
       function sealedCardCovers(n) {
         var pool = requestOptions.map(requestOptionFirstPreview).filter(Boolean)
         var covers = []
@@ -9047,63 +8725,45 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
       }
 
-      // A queued card's tile, or the "+N" cell that counts it.
-      function pileTile(key) {
-        var mosaic = batchTray && batchTray.querySelector("[data-icono-request-batch-done-mosaic]")
-        if (!mosaic) return null
-        return (
-          mosaic.querySelector('[data-icono-batch-key="' + CSS.escape(key) + '"]') ||
-          mosaic.querySelector("[data-icono-batch-more]")
-        )
-      }
+      var outBack = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 
-      // The pile's size sits on the corner of the button that says "Queue
-      // random", so phones, which hide the tray, see it too. While picks give
-      // the main button another label and no second button shows (phones),
-      // the count waits: on "Queue 2 candidates" it would read as the picks.
-      function queuedCountAnchor() {
-        if (!Array.from(selectedRequestVisionIds).filter(Boolean).length) return queueSubmitButton
-        if (queueRandomButton && !queueRandomButton.hidden) {
-          if (getComputedStyle(queueRandomButton).display !== "none") return queueRandomButton
+      // B-1179: the deck holds every candidate requested and not yet received,
+      // face down, with its size on the corner. One click, one digit, rolled
+      // up in 200 ms (Motion Reference "Clap Counter").
+      function paintDeck(roll) {
+        if (!deck) return
+        var count = pileFromServer.length + pileOnTheWay.length
+        deck.hidden = !count
+        deck.setAttribute("aria-label", count + " requested. See your requests")
+        var cards = deck.querySelectorAll(".icono-request-deck-card")
+        for (var c = 0; c < cards.length; c++) {
+          if (cards[c].childElementCount) continue
+          var covers = sealedCardCovers(c)
+          if (!covers.length) continue
+          cards[c].innerHTML =
+            '<span class="icono-request-deck-covers">' +
+            covers
+              .map(function (src) {
+                return '<img src="' + esc(src) + '" alt="" decoding="async">'
+              })
+              .join("") +
+            "</span>" +
+            (c === cards.length - 1 ? '<span class="icono-request-deck-mark">?</span>' : "")
         }
-        return null
-      }
-
-      function paintQueuedCount(roll) {
-        var actions = queueSubmitButton && queueSubmitButton.parentElement
-        if (!actions) return
-        var count = queuedPile().length
-        var anchor = queuedCountAnchor()
-        var badge = actions.querySelector("[data-icono-request-random-count]")
-        if (!count || !anchor) {
-          if (badge) badge.hidden = true
-          return
-        }
-        if (!badge) {
-          badge = document.createElement("span")
-          badge.className = "icono-request-random-count"
-          badge.setAttribute("data-icono-request-random-count", "")
-          badge.setAttribute("aria-hidden", "true")
-          actions.appendChild(badge)
-        }
-        badge.hidden = false
-        // A closed dialog has no layout; opening it paints the count again.
-        if (anchor.offsetParent) {
-          badge.style.top = anchor.offsetTop - 8 + "px"
-          badge.style.right =
-            actions.clientWidth - anchor.offsetLeft - anchor.offsetWidth - 8 + "px"
-        }
+        var badge = deck.querySelector("[data-icono-request-random-count]")
+        if (!badge) return
+        // A digit still rolling away leaves at once when the next one comes.
+        while (badge.children.length > 1) badge.firstElementChild.remove()
         var old = badge.firstElementChild
         if (old && old.textContent === String(count)) return
         var next = document.createElement("span")
         next.textContent = String(count)
         badge.appendChild(next)
         if (!old) return
-        if (!roll || !motionAllowed()) {
+        if (!roll || !motionAllowed() || deck.hidden) {
           old.remove()
           return
         }
-        // Motion Reference "Clap Counter": one click, one digit, rolled up in 200 ms.
         var rollEase = "cubic-bezier(0.33, 1, 0.68, 1)"
         old
           .animate([{ transform: "translateY(0)" }, { transform: "translateY(-100%)" }], {
@@ -9119,41 +8779,73 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         })
       }
 
-      // B-1177: a queue click answers on the click. Its cards pop into the pile
-      // (Motion Reference "Pop Scale", 520 ms easeOutBack) and "+1", or "+N" for
-      // N styles, rises off the button; the order goes out behind it.
-      function celebrateQueue(entries, fromButton) {
-        var source = fromButton && !fromButton.hidden ? fromButton : queueSubmitButton
-        paintQueuedCount(true)
-        if (!motionAllowed()) return
-        var outBack = "cubic-bezier(0.34, 1.56, 0.64, 1)"
-        var bumpedMore = false
-        entries.forEach(function (entry, i) {
-          var tile = pileTile(entry.tileKey)
-          if (!tile) return
-          if (tile.hasAttribute("data-icono-batch-more")) {
-            if (bumpedMore) return
-            bumpedMore = true
-            tile.animate([{ transform: "scale(1.15)" }, { transform: "scale(1)" }], {
-              duration: 260,
-              easing: outBack,
-            })
-            return
-          }
-          tile.animate(
-            [
-              { transform: "scale(0.4)", opacity: 0 },
-              { transform: "scale(1)", opacity: 1 },
-            ],
-            { duration: 520, easing: outBack, delay: Math.min(i, 10) * 30, fill: "backwards" },
-          )
+      // The deck gives a little when a card lands on it (Motion Reference
+      // "Pop Scale", easeOutBack).
+      function popDeck() {
+        if (!deck || deck.hidden || !motionAllowed()) return
+        deck.animate([{ transform: "scale(1.12)" }, { transform: "scale(1)" }], {
+          duration: 260,
+          easing: outBack,
         })
-        var actions = queueSubmitButton && queueSubmitButton.parentElement
-        if (!actions) return
+      }
+
+      // A requested style's picture flies from its card into the deck, shrinking
+      // to the deck's size, the way a product flies into a shop's cart.
+      function flyToDeck(card, delay) {
+        if (!deck || deck.hidden || !dialog || !motionAllowed()) return
+        var art = card && card.querySelector(".icono-request-card-art")
+        if (!art) return
+        var from = art.getBoundingClientRect()
+        var to = deck.getBoundingClientRect()
+        if (!from.width || !to.width) return
+        var flier = art.cloneNode(true)
+        flier.classList.add("icono-request-flier")
+        // Inline, over the art's own "relative", or the copy takes room in
+        // the dialog's layout while it flies.
+        flier.style.position = "fixed"
+        flier.style.width = from.width + "px"
+        flier.style.height = from.height + "px"
+        flier.style.left = from.left + "px"
+        flier.style.top = from.top + "px"
+        dialog.appendChild(flier)
+        // Inside an open dialog, "fixed" may be the dialog's box, not the
+        // window's: put the copy exactly over the card either way.
+        var placed = flier.getBoundingClientRect()
+        flier.style.left = from.left * 2 - placed.left + "px"
+        flier.style.top = from.top * 2 - placed.top + "px"
+        var dx = to.left + to.width / 2 - (from.left + from.width / 2)
+        var dy = to.top + to.height / 2 - (from.top + from.height / 2)
+        flier
+          .animate(
+            [
+              { transform: "translate(0, 0) scale(1)", opacity: 1 },
+              {
+                transform:
+                  "translate(" + dx + "px, " + dy + "px) scale(" + to.width / from.width + ")",
+                opacity: 0.85,
+              },
+            ],
+            {
+              duration: 450,
+              delay: delay || 0,
+              easing: "cubic-bezier(0.55, 0, 0.45, 1)",
+              fill: "backwards",
+            },
+          )
+          .finished.then(function () {
+            flier.remove()
+            popDeck()
+          })
+      }
+
+      // "+N" rises off the button that requested N candidates.
+      function riseFrom(source, n) {
+        var actions = source && source.parentElement
+        if (!actions || !motionAllowed() || !source.offsetParent) return
         var plus = document.createElement("span")
         plus.className = "icono-request-plus-one"
         plus.setAttribute("aria-hidden", "true")
-        plus.textContent = "+" + entries.length
+        plus.textContent = "+" + n
         plus.style.left =
           source.offsetLeft +
           source.offsetWidth / 2 -
@@ -9175,8 +8867,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
       }
 
-      // The style cards say how many of each are queued; a click moves the
-      // count at once, so a phone, which hides the tray, sees its styles go.
+      function styleCard(visionId) {
+        var button = results.querySelector(
+          '[data-icono-request-option="' + CSS.escape(visionId) + '"]',
+        )
+        return button && button.closest("[data-icono-request-card]")
+      }
+
+      // The style cards say how many of each are requested; a click moves the
+      // count at once.
       function bumpStyleQueued(visionIds, delta) {
         visionIds.forEach(function (visionId) {
           var option = requestOptionsByVisionId[visionId]
@@ -9185,55 +8884,53 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           )
           if (!key) return
           queuedCountByStyle[key] = Math.max(0, (queuedCountByStyle[key] || 0) + delta)
-          var button = results.querySelector(
-            '[data-icono-request-option="' + CSS.escape(visionId) + '"]',
-          )
-          var card = button && button.closest("[data-icono-request-card]")
-          if (!card) return
-          var holder = document.createElement("div")
-          holder.innerHTML = renderRequestStyleCardMarkup(
-            option,
-            selectedRequestVisionIds.has(visionId),
-            styleQueuedCount(option),
-          )
-          if (holder.firstElementChild) card.replaceWith(holder.firstElementChild)
+          var card = styleCard(visionId)
+          var button = card && card.querySelector("[data-icono-request-option]")
+          if (!button) return
+          var chip = paintCardChip(button, option)
+          if (chip && delta > 0 && motionAllowed()) {
+            chip.animate([{ transform: "scale(1.15)" }, { transform: "scale(1)" }], {
+              duration: 260,
+              easing: outBack,
+            })
+          }
         })
       }
 
-      // The server refused these: their cards shake and leave the pile.
-      function dropFromPile(entries) {
-        var tiles = entries
-          .map(function (entry) {
-            return pileTile(entry.tileKey)
-          })
-          .filter(function (tile) {
-            return tile && !tile.hasAttribute("data-icono-batch-more")
-          })
-        var forget = function () {
-          pileOnTheWay = pileOnTheWay.filter(function (entry) {
-            return entries.indexOf(entry) < 0
-          })
-          updateQueueSelectionControls()
-        }
-        if (!tiles.length || !motionAllowed()) {
-          forget()
-          return
-        }
-        Promise.all(
-          tiles.map(function (tile) {
-            return tile.animate(
-              [0, -6, 5, -4, 3, -2, 0].map(function (x) {
-                return { transform: "translateX(" + x + "px)" }
-              }),
-              { duration: 360 },
-            ).finished
+      function shake(element) {
+        if (!element || !motionAllowed()) return
+        element.animate(
+          [0, -6, 5, -4, 3, -2, 0].map(function (x) {
+            return { transform: "translateX(" + x + "px)" }
           }),
-        ).then(forget, forget)
+          { duration: 360 },
+        )
       }
 
-      // B-1163: requests go out one after another, random and picked alike, so
-      // each sees the order the one before it opened and joins it. The pile and
-      // the inbox catch up once the last one is answered.
+      // The server refused these: they leave the deck, and the deck and their
+      // cards shake.
+      function refuse(entries) {
+        var styles = entries
+          .filter(function (entry) {
+            return !entry.random
+          })
+          .map(function (entry) {
+            return entry.vision_id
+          })
+        bumpStyleQueued(styles, -1)
+        pileOnTheWay = pileOnTheWay.filter(function (entry) {
+          return entries.indexOf(entry) < 0
+        })
+        paintDeck(true)
+        shake(deck && !deck.hidden ? deck : null)
+        styles.forEach(function (visionId) {
+          shake(styleCard(visionId))
+        })
+      }
+
+      // B-1163: requests go out one after another, random and styles alike, so
+      // each sees the order the one before it opened and joins it. The deck,
+      // the cards and the inbox catch up once the last one is answered.
       function sendInOrder(send) {
         queueWaiting += 1
         queueChain = queueChain
@@ -9243,7 +8940,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             queueWaiting -= 1
             if (queueWaiting) return
             refreshAfterQueue().catch(function () {
-              // The order is placed; the pile catches up on the next open.
+              // The order is placed; the deck catches up on the next open.
             })
           })
       }
@@ -9261,51 +8958,63 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         })
       }
 
-      function queueRandomCandidate(event) {
+      // B-1177: a request answers on the click; the order goes out behind it.
+      function requestRandom() {
         var entry = { random: true }
         queueEpoch += 1
         pileOnTheWay = pileOnTheWay.concat([entry])
         setStatus("", "")
-        updateQueueSelectionControls()
-        celebrateQueue([entry], event && event.currentTarget)
+        paintDeck(true)
+        popDeck()
+        riseFrom(queueSubmitButton, 1)
         sendInOrder(function () {
           return postRequest({ request_mode: "random", requested_vision_id: null }).catch(
             function (error) {
-              dropFromPile([entry])
-              setStatus(String((error && error.message) || "Could not queue request."), "error")
+              refuse([entry])
+              setStatus(String((error && error.message) || "Could not send the request."), "error")
             },
           )
         })
       }
 
-      // B-1178: picked styles answer on the click like a random one: they leave
-      // the picks for the pile at once. Refused ones shake out of the pile and
-      // go back to the picks.
-      function queuePickedStyles(visionIds) {
+      // B-1179: a tap on a style requests it, and "Request all favorites"
+      // requests one of each. The cards in view fly to the deck; more than one
+      // order's worth goes out as several orders.
+      function requestStyles(visionIds, source) {
         var entries = visionIds.map(function (visionId) {
           return { vision_id: visionId }
         })
-        var refuse = function (refused) {
-          bumpStyleQueued(
-            refused.map(function (entry) {
-              return entry.vision_id
-            }),
-            -1,
-          )
-          selectedRequestVisionIds.delete("")
-          refused.forEach(function (entry) {
-            selectedRequestVisionIds.add(entry.vision_id)
-          })
-          dropFromPile(refused)
-        }
         queueEpoch += 1
         pileOnTheWay = pileOnTheWay.concat(entries)
-        selectedRequestVisionIds.clear()
-        selectedRequestVisionIds.add("")
-        bumpStyleQueued(visionIds, 1)
         setStatus("", "")
-        updateQueueSelectionControls()
-        celebrateQueue(entries)
+        paintDeck(true)
+        var fromCard = source && source.closest("[data-icono-request-card]")
+        if (fromCard) {
+          flyToDeck(fromCard, 0)
+        } else {
+          popDeck()
+          riseFrom(source, visionIds.length)
+          var view = browse ? browse.getBoundingClientRect() : null
+          var flown = 0
+          visionIds.forEach(function (visionId) {
+            var card = styleCard(visionId)
+            if (!card || !view || flown >= 8) return
+            var box = card.getBoundingClientRect()
+            if (box.bottom < view.top || box.top > view.bottom) return
+            flyToDeck(card, flown * 40)
+            flown += 1
+          })
+        }
+        bumpStyleQueued(visionIds, 1)
+        for (var start = 0; start < visionIds.length; start += requestSelectionLimit) {
+          sendStyleOrder(
+            visionIds.slice(start, start + requestSelectionLimit),
+            entries.slice(start, start + requestSelectionLimit),
+          )
+        }
+      }
+
+      function sendStyleOrder(visionIds, entries) {
         sendInOrder(function () {
           return postRequest({
             request_mode: "specific",
@@ -9327,49 +9036,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                   return failedVisionIds.has(entry.vision_id)
                 }),
               )
-              var queuedCount = Math.max(
+              var requestedCount = Math.max(
                 0,
                 Number(responsePayload && responsePayload.queued_count) ||
                   visionIds.length - failures.length,
               )
               setStatus(
-                "Queued " +
-                  queuedCount +
-                  "; " +
-                  failures.length +
-                  " could not be queued and remain selected.",
+                "Requested " + requestedCount + "; " + failures.length + " could not be requested.",
                 "error",
               )
             })
             .catch(function (error) {
               refuse(entries)
-              setStatus(String((error && error.message) || "Could not queue request."), "error")
+              setStatus(String((error && error.message) || "Could not send the request."), "error")
             })
         })
       }
 
-      // After a click that queued picked styles the button under the pointer
-      // reads "Queue random"; the second click of a double click (or a double
-      // tap) is the same intent as the first, not a random request. A separate
-      // click, however soon, is a new one.
-      var stylesJustQueued = false
-      if (queueSubmitButton) {
-        queueSubmitButton.addEventListener("click", function (event) {
-          if (event.detail > 1 && stylesJustQueued) event.preventDefault()
-          if (event.detail <= 1) stylesJustQueued = false
-        })
-      }
       form.addEventListener("submit", function (event) {
         event.preventDefault()
-        var requestedVisionIds = Array.from(selectedRequestVisionIds).filter(Boolean)
-        if (!requestedVisionIds.length) {
-          queueRandomCandidate()
-          return
-        }
-        stylesJustQueued = true
-        queuePickedStyles(requestedVisionIds)
+        requestRandom()
       })
-      if (queueRandomButton) queueRandomButton.addEventListener("click", queueRandomCandidate)
     }
 
     function loadSummary() {
