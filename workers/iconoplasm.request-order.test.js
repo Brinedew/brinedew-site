@@ -356,7 +356,8 @@ test("a one-style order is drawn before the rest of a big order queued ahead of 
   await place("reader-a", styles(1, 30), "a-big")
   await place("reader-b", styles(31, 1), "b-one")
   await place("reader-c", styles(32, 5), "c-five")
-  // 3. A orders again while 30 still wait: it goes after A's own turns.
+  // 3. A orders again while 30 still wait: it joins A's open order on CA3 (one
+  // receipt), and its styles go after A's own turns.
   await place("reader-a", styles(37, 2), "a-again")
 
   // The Drain: claim a batch of 10, draw it, finish it, claim the next.
@@ -370,7 +371,7 @@ test("a one-style order is drawn before the rest of a big order queued ahead of 
     const drawn = claim.leases.map((lease) =>
       raw
         .prepare(
-          "SELECT id, requester_user_id, request_batch_id FROM icono_generation_requests WHERE generation_request_id = ?",
+          "SELECT id, requester_user_id, request_batch_id, requested_vision_id FROM icono_generation_requests WHERE generation_request_id = ?",
         )
         .get(lease.generation_request_id),
     )
@@ -402,15 +403,16 @@ test("a one-style order is drawn before the rest of a big order queued ahead of 
   assert.equal(second[1].requester_user_id, "reader-c")
   assert.ok(second.slice(2).every((row) => row.requester_user_id === "reader-a"))
 
-  // A's second order is drawn only after A's first.
+  // A's second request is drawn only after A's first.
   const rest = []
   for (let drawn = await session(); drawn.length; drawn = await session()) rest.push(...drawn)
-  const aOrder = [...first, ...second, ...rest]
-    .filter((row) => row.requester_user_id === "reader-a")
-    .map((row) => row.request_batch_id)
-  assert.equal(aOrder.length, 32)
-  assert.deepEqual(aOrder.slice(-2), ["a-again", "a-again"])
-  assert.ok(aOrder.slice(0, 30).every((batch) => batch === "a-big"))
+  const aRows = [...first, ...second, ...rest].filter((row) => row.requester_user_id === "reader-a")
+  assert.equal(aRows.length, 32)
+  assert.ok(aRows.every((row) => row.request_batch_id === "a-big"))
+  assert.deepEqual(
+    aRows.slice(-2).map((row) => row.requested_vision_id),
+    ["anima-v1-37", "anima-v1-38"],
+  )
 
   // 4. A diagnostic cell queued now holds turn 0 and goes first.
   await place("reader-b", styles(40, 1), "b-later")
@@ -546,16 +548,21 @@ test(
   },
 )
 
-// B-1163: clicking "Queue random" ten times is one order, one receipt.
+// One reader, one gene, one order, one receipt, until any of it is delivered.
 //
-// On 2026-10-22 the owner clicked it six times on ALMS1 in four seconds and got
-// six orders and six Discord messages. Ways it could go wrong, written before
-// the fix:
-// 1. each click places its own order (the incident);
+// On 2026-10-22 the owner clicked "Queue random" six times on ALMS1 in four
+// seconds and got six Discord messages (B-1163, fixed for random clicks only).
+// On 2026-10-27, after B-1179 made each tap on a style its own request, the
+// owner tapped favorites and "Request random" on one gene in one dialog and
+// again got one message per tap. Ways it could go wrong, written before the
+// fix:
+// 1. each click or tap places its own order (both incidents);
 // 2. a click lands after part of the order was delivered, joins it, and the
 //    receipt waits for a count it was born without, so it never goes out;
-// 3. a click on another gene, or a style pick, joins the random order.
-test("random clicks on one gene join one order until any of it is delivered", async (t) => {
+// 3. a click on another gene joins the order;
+// 4. a replayed style tap (same client_batch_id) adds rows or is refused as an
+//    idempotency conflict because its order changed.
+test("everything a reader requests on one gene joins one order until any of it is delivered", async (t) => {
   const { db, raw } = watchedDatabase()
   t.after(() => raw.close())
   const storage = fakeBunnyStorage(t).env
@@ -567,48 +574,61 @@ test("random clicks on one gene join one order until any of it is delivered", as
   const reader = ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID
   const click = (symbol = "CA3") =>
     order(db, { symbol, request_kind: "new_candidate", request_mode: "random" }, reader)
-
-  for (let i = 0; i < 10; i++) assert.equal((await click()).status, 200)
+  // What the dialog sends for a tap on a style card, or for "Request all
+  // favorites": one batch with a fresh client_batch_id each time.
+  const tap = (visionIds, batch) =>
+    order(
+      db,
+      {
+        symbol: "CA3",
+        request_mode: "specific",
+        requested_vision_ids: visionIds,
+        client_batch_id: batch,
+      },
+      reader,
+    )
   const orders = () =>
     raw
       .prepare(
-        `SELECT gene_symbol AS symbol, request_mode AS mode, request_batch_id AS id, COUNT(*) AS n
+        `SELECT gene_symbol AS symbol, request_batch_id AS id, COUNT(*) AS n,
+                SUM(request_mode = 'random') AS random
          FROM icono_generation_requests GROUP BY request_batch_id ORDER BY MIN(id)`,
       )
       .all()
       .map((row) => ({ ...row }))
-  // 1. Ten clicks, one order.
+
+  // 1. The burst: taps, random clicks and the favorites button, interleaved.
+  assert.equal((await tap(["anima-v1-1"], "tap-1")).status, 200)
+  for (let i = 0; i < 4; i++) assert.equal((await click()).status, 200)
+  assert.equal((await tap(["anima-v1-2"], "tap-2")).status, 200)
+  assert.equal((await tap(["anima-v1-3", "anima-v1-4", "anima-v1-5"], "favorites")).status, 200)
+  for (let i = 0; i < 4; i++) assert.equal((await click()).status, 200)
   let placed = orders()
   assert.equal(placed.length, 1, JSON.stringify(placed))
-  assert.match(placed[0].id, /^random-/)
-  assert.equal(placed[0].n, 10)
+  assert.equal(placed[0].n, 13)
+  assert.equal(placed[0].random, 8)
 
-  // 3. Another gene and a style pick each place their own order.
+  // 4. A replayed tap returns its row and adds nothing.
+  const replay = await tap(["anima-v1-2"], "tap-2")
+  assert.equal(replay.status, 200, JSON.stringify(replay.payload))
+  assert.equal(replay.payload.queued_count, 1)
+  assert.equal(orders()[0].n, 13)
+
+  // 3. Another gene places its own order.
   assert.equal((await click("SOX11")).status, 200)
-  assert.equal(
-    (
-      await order(
-        db,
-        { symbol: "CA3", requested_vision_ids: ["anima-v1-1"], client_batch_id: "pick" },
-        reader,
-      )
-    ).status,
-    200,
-  )
   placed = orders()
   assert.deepEqual(
-    placed.map((row) => [row.symbol, row.mode, row.n]),
+    placed.map((row) => [row.symbol, row.n]),
     [
-      ["CA3", "random", 10],
-      ["SOX11", "random", 1],
-      ["CA3", "specific", 1],
+      ["CA3", 13],
+      ["SOX11", 1],
     ],
   )
-  const randomOrder = placed[0].id
+  const burstOrder = placed[0].id
 
   const ids = raw
     .prepare("SELECT id FROM icono_generation_requests WHERE request_batch_id = ? ORDER BY id")
-    .all(randomOrder)
+    .all(burstOrder)
     .map((row) => row.id)
   const finish = (requestIds) => {
     for (const id of requestIds)
@@ -622,15 +642,17 @@ test("random clicks on one gene join one order until any of it is delivered", as
         .run(String(id).padStart(64, "b"), id)
   }
 
-  // 2. Once one request of the order is delivered, the next click starts a
-  // new order: the open order is still found, and the insert's own check
-  // turns the join away.
+  // 2. Once one request of the order is delivered, the next click and the
+  // next tap start a new order: the open order is still found, and the
+  // insert's own check turns the join away.
   finish(ids.slice(0, 1))
   assert.equal((await click()).status, 200)
-  const after = orders().filter((row) => row.symbol === "CA3" && row.mode === "random")
-  assert.equal(after.length, 2)
-  assert.equal(after[0].n, 10)
-  assert.equal(after[1].n, 1)
+  assert.equal((await tap(["anima-v1-6"], "tap-late")).status, 200)
+  const after = orders().filter((row) => row.symbol === "CA3")
+  assert.deepEqual(
+    after.map((row) => row.n),
+    [13, 2],
+  )
 
   const sent = []
   const originalFetch = globalThis.fetch
@@ -656,7 +678,7 @@ test("random clicks on one gene join one order until any of it is delivered", as
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
   })
   assert.equal(delivered.delivered, 1)
-  assert.equal(delivered.delivered_requests, 10)
+  assert.equal(delivered.delivered_requests, 13)
   assert.equal(sent.length, 1)
-  assert.match(sent[0].content, /Your 10 free queue candidate portraits for \*\*CA3\*\*/)
+  assert.match(sent[0].content, /Your 13 free queue candidate portraits for \*\*CA3\*\*/)
 })

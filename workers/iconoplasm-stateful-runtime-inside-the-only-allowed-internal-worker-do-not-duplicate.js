@@ -3137,7 +3137,7 @@ async function prepareGenerationRequest(
     requestOrigin = "user",
     diagnosticRunId = "",
     sourceSnapshot = null,
-    joinRandomOrder = "",
+    joinOrder = "",
   } = {},
 ) {
   if (!env.ICONOPLASM_DB) return { ok: false, error: "ICONOPLASM_DB binding missing" }
@@ -3402,10 +3402,11 @@ async function prepareGenerationRequest(
                  ), 0)
                ) END,
                'open', CURRENT_TIMESTAMP
-     -- B-1163: a request joining an open random order goes in only while every
-     -- request of that order is still open, checked in this same statement, so
-     -- no request of it can have been delivered (and counted into its receipt)
-     -- in between. A request placing a new order binds '' and always goes in.
+     -- B-1163: a request joining the reader's open order goes in only while
+     -- every request of that order is still open, checked in this same
+     -- statement, so no request of it can have been delivered (and counted into
+     -- its receipt) in between. A request placing a new order binds '' and
+     -- always goes in.
      WHERE ? = '' OR NOT EXISTS (
        SELECT 1 FROM icono_generation_requests
        INDEXED BY idx_icono_generation_requests_delivery_batch
@@ -3463,7 +3464,7 @@ async function prepareGenerationRequest(
     generationConfigHash,
     origin,
     requesterNorm,
-    joinRandomOrder ? batchIdNorm : "",
+    joinOrder ? batchIdNorm : "",
     requesterNorm,
     batchIdNorm,
     symbolNorm,
@@ -3520,15 +3521,25 @@ async function finishGenerationRequestInsert(env, prepared, insertResp) {
   }
 }
 
-// B-1163: clicking "Queue random" several times on one gene is one order, so
-// the clicker gets one Discord receipt with every portrait and one growing
-// entry, not one order per click. A random click joins the clicker's newest
-// random order on that gene while nothing in it has been delivered yet and it
-// holds fewer than the order limit; otherwise it places a new random order.
-// One indexed read of the clicker's waiting requests per click.
-function isPlainRandomClick(options) {
+// One order, one Discord receipt, per reader and gene. Everything a reader
+// asks for on one gene before the Drain delivers any of it joins one order:
+// "Request random" clicks, taps on style cards, "Request all favorites", from
+// one dialog or several. The order is the reader's newest one on that gene,
+// while nothing in it has been delivered and it has room up to the order
+// limit; otherwise the request places a new order. The Drain claiming a
+// request does not close its order (a request stays 'open' until delivered),
+// so a burst can't split around a Drain tick. No clock decides it.
+//
+// History: B-1163 (2026-10-22) did this for random clicks only, because style
+// orders were then placed whole from a tray. B-1179 (2026-10-26) made each tap
+// on a style its own request with its own order, and a burst of taps, random
+// clicks and favorites on one gene came back as one Discord message per tap
+// (owner, 2026-10-27). The rule now covers every new-candidate request a
+// reader places.
+//
+// One indexed read of the reader's waiting requests per placement.
+function joinsReadersOpenOrder(options) {
   return (
-    normalizeGenerationRequestMode(options.requestMode) === "random" &&
     normalizeGenerationRequestKind(options.requestKind) === "new_candidate" &&
     !options.clientRequestId &&
     !options.requestBatchId &&
@@ -3536,10 +3547,9 @@ function isPlainRandomClick(options) {
   )
 }
 
-async function openRandomOrderToJoin(env, options) {
-  if (!isPlainRandomClick(options)) return null
-  const requester = normalizeUserId(options.requesterUserId || "")
-  const symbol = normalizeSymbol(options.geneSymbol || "")
+async function readersOpenOrderOnGene(env, { requesterUserId, geneSymbol, adding = 1 }) {
+  const requester = normalizeUserId(requesterUserId || "")
+  const symbol = normalizeSymbol(geneSymbol || "")
   if (!requester || isGuestUserId(requester) || !symbol || !env.ICONOPLASM_DB) return null
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT request_batch_id, COUNT(*) AS size
@@ -3548,9 +3558,8 @@ async function openRandomOrderToJoin(env, options) {
      WHERE status = 'open'
        AND requester_user_id = ?
        AND gene_symbol = ?
-       AND request_mode = 'random'
        AND request_kind = 'new_candidate'
-       AND request_batch_id LIKE 'random-%'
+       AND request_origin = 'user'
      GROUP BY request_batch_id
      ORDER BY MAX(id) DESC
      LIMIT 1`,
@@ -3559,18 +3568,19 @@ async function openRandomOrderToJoin(env, options) {
     .first()
   const id = sanitizeText(row?.request_batch_id || "", 128)
   const size = Math.trunc(Number(row?.size) || 0)
-  if (!id || size < 1 || size >= ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT) return null
+  if (!id || size < 1 || size + adding > ICONOPLASM_GENERATION_REQUEST_BATCH_LIMIT) return null
   return { id, size }
 }
 
 async function createGenerationRequest(env, options = {}) {
-  const order = await openRandomOrderToJoin(env, options)
+  const joins = joinsReadersOpenOrder(options)
+  const order = joins ? await readersOpenOrderOnGene(env, options) : null
   if (order) {
     const prepared = await prepareGenerationRequest(env, {
       ...options,
       requestBatchId: order.id,
       requestBatchSize: order.size + 1,
-      joinRandomOrder: order.id,
+      joinOrder: order.id,
     })
     if (!prepared.ok || prepared.existing) return prepared
     const joined = await prepared.statement.run()
@@ -3581,12 +3591,32 @@ async function createGenerationRequest(env, options = {}) {
   }
   const prepared = await prepareGenerationRequest(
     env,
-    isPlainRandomClick(options)
-      ? { ...options, requestBatchId: `random-${crypto.randomUUID()}` }
-      : options,
+    joins ? { ...options, requestBatchId: `order-${crypto.randomUUID()}` } : options,
   )
   if (!prepared.ok || prepared.existing) return prepared
   return finishGenerationRequestInsert(env, prepared, await prepared.statement.run())
+}
+
+// A replayed batch (the same client_batch_id) keeps the order that its first
+// placement went into, so its rows match their idempotency contract. The
+// batch's rows are `<batch>:<index>`: a range on the client-request index.
+async function placedBatchOrder(env, requesterUserId, batchId) {
+  const requester = normalizeUserId(requesterUserId || "")
+  if (!requester || !env.ICONOPLASM_DB) return null
+  const row = await env.ICONOPLASM_DB.prepare(
+    `SELECT request_batch_id, request_batch_size
+     FROM icono_generation_requests
+     INDEXED BY idx_icono_generation_requests_client_request
+     WHERE requester_user_id = ?
+       AND client_request_id >= ?
+       AND client_request_id < ?
+       AND client_request_id <> ''
+     LIMIT 1`,
+  )
+    .bind(requester, `${batchId}:`, `${batchId};`)
+    .first()
+  const id = sanitizeText(row?.request_batch_id || "", 128)
+  return id ? { id, size: Math.trunc(Number(row?.request_batch_size) || 1) } : null
 }
 
 // The one limit a reader meets: how many styles one order holds. Placing an
@@ -3633,8 +3663,18 @@ async function createGenerationRequestBatch(
     uniqueVisionIds.push(visionId)
   }
 
-  // Prepare every row first, then insert the order as one D1 batch (a single
-  // transaction), so the Drain sees the whole order or none of it.
+  // Prepare every row first, then insert them as one D1 batch (a single
+  // transaction), so the Drain sees all of them or none. They join the
+  // reader's open order on this gene when there is one (see
+  // readersOpenOrderOnGene), else they place a new order named by the batch.
+  const placed = await placedBatchOrder(env, requesterUserId, batchId)
+  let order = placed
+    ? null
+    : await readersOpenOrderOnGene(env, {
+        requesterUserId,
+        geneSymbol,
+        adding: uniqueVisionIds.length,
+      })
   let sourceSnapshot = null
   const prepareAll = async (indexes, batchSize) => {
     const prepared = []
@@ -3648,10 +3688,11 @@ async function createGenerationRequestBatch(
         requestKind: "new_candidate",
         sourceGeneSymbol: geneSymbol,
         clientRequestId: `${batchId}:${index}`,
-        requestBatchId: batchId,
-        requestBatchSize: batchSize,
+        requestBatchId: placed?.id || order?.id || batchId,
+        requestBatchSize: placed ? placed.size : (order?.size || 0) + batchSize,
         promptBodyMode,
         sourceSnapshot,
+        joinOrder: order?.id || "",
       })
       if (result.ok) sourceSnapshot = sourceSnapshot || result.source_snapshot || null
       prepared.push({ index, result })
@@ -3676,10 +3717,23 @@ async function createGenerationRequestBatch(
   } else {
     prepared = prepared.filter(({ result }) => result.ok)
   }
-  const toInsert = prepared.filter(({ result }) => result.ok && !result.existing)
-  const insertResults = toInsert.length
+  let toInsert = prepared.filter(({ result }) => result.ok && !result.existing)
+  let insertResults = toInsert.length
     ? await env.ICONOPLASM_DB.batch(toInsert.map(({ result }) => result.statement))
     : []
+  if (order && toInsert.length && insertResults.every((r) => !Number(r?.meta?.changes || 0))) {
+    // Something in that order was delivered between the read and the insert,
+    // so these rows place a new order instead.
+    order = null
+    prepared = await prepareAll(
+      prepared.map(({ index }) => index),
+      prepared.length,
+    )
+    toInsert = prepared.filter(({ result }) => result.ok && !result.existing)
+    insertResults = toInsert.length
+      ? await env.ICONOPLASM_DB.batch(toInsert.map(({ result }) => result.statement))
+      : []
+  }
   const requests = []
   for (const { index, result } of prepared) {
     if (!result.ok) {
