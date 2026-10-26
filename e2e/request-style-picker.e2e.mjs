@@ -1,37 +1,38 @@
 // B-883: the New candidate > Free queue style picker, checked in a real browser.
-// Owner decision (27 Sep 2026): mockup C on desktop (3:4 style cards plus a
-// "Your batch" tray) and A-mobile on phones, built from the design system.
+// Owner decision (27 Sep 2026): 3:4 style cards, built from the design system.
+// Owner decision (26 Oct 2026, B-1179): no picking; a tap on a style requests
+// it, "Request all favorites" sits at the bottom-left, and a deck of what is
+// requested sits beside "Request random".
 //
 // Ways this picker can fail, written before the code, each asserted below at
 // 1280 and 400 px in light and dark:
 // 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop;
 // 2. anything artist-shaped reaches the page: the search offers artists, a
 //    card shows an artist label, or typing an artist name finds a style;
-// 3. "Add all favorites" (B-1143) is not a shared `.icono-button`, or it is
-//    not where the batch is: in the desktop tray, under the favorites' covers;
-//    on a phone (no tray) in the footer on the Queue button's row, to its left
-//    (B-884: in the top panel it cost phones a whole row);
+// 3. "Request all favorites" is not a shared `.icono-button`, or it is not at
+//    the footer's left on the Request random row;
 // 4. the view switch offers anything beyond Favorites and All styles;
 // 5. the dialog explains open requests in prose instead of marking the card
-//    ("2 queued") of a style that is already queued for this gene;
+//    ("2 requested", on its picture's corner) of a style already requested on
+//    this gene;
 // 6. on a phone, anything besides the view switch sits between the method
 //    switch and the first card, or the search is above the grid instead of
 //    docked below it (where it stays visible while the grid scrolls);
-// 7. the primary action is not at the bottom-right of the dialog;
-// 8. the primary label does not follow the batch (random, one number, N);
-// 9. the desktop tray is missing, lists other than the picked styles, or
-//    cannot remove a style, or the tray shows on a phone; a partly picked
-//    batch does not offer the other favorites as one row; a queued order does
-//    not stay in the tray, with "Add all favorites" still offered;
-// 10. "Add all favorites" adds other than every favorite not yet picked
-//     (22 here, under the 100-style order limit), or Clear does not empty it;
-// 11. the queue request payload changes shape (random vs specific batch);
+// 7. Request random is not at the bottom-right of the dialog;
+// 8. a tap on a style card (its picture or its number) does not request that
+//    style at once, as one specific order;
+// 9. the deck (every candidate requested and not yet received, with its count)
+//    is missing, is not between "Request all favorites" and Request random, or
+//    tapping it does not take the reader to their requests;
+// 10. "Request all favorites" requests other than every favorite (22 here,
+//     under the 100-style order limit), in one order;
+// 11. the request payload changes shape (random vs specific batch);
 // 12. the card star no longer toggles a favorite, covers the art, or leaves
 //     the style number's line (it sits right after the number, as on the gene
-//     page); clicking the star picks the card, or clicking the number doesn't;
+//     page); clicking the star requests the style;
 // 13. the dialog scrolls sideways at phone width;
 // 14. the analytics consent box (EU/UK, bottom-right, top z-index) covers the
-//     bottom-right Queue button while the dialog is open;
+//     bottom-right Request random button while the dialog is open;
 // 15. the first style-list request fails (the free plan ends a request that
 //     runs past its CPU cap: the edge answers 503) and the grid stays blank,
 //     or shows a bare "HTTP 503", until the reader switches views (B-884);
@@ -47,22 +48,21 @@
 //     when the CDN cannot be reached;
 // 20. the view switch (and, on desktop, the search) scrolls out of view while
 //     the cards scroll (B-1044: the owner lost it on scrolling down);
-// 21. a "Queue random" click waits for the server before the reader sees
-//     anything: five fast clicks against a slow server must show five
-//     face-down cards in the desktop tray and "5" on the button's corner at
-//     once, and still send five requests one after another (B-1177);
-// 22. the tray drops what was queued (B-1178, the owner on 2026-10-26: "you
-//     just implemented happy path"): picking a style hides or empties the
-//     pile, queueing styles drops random cards or a random click drops styles,
-//     closing the dialog or reloading the page forgets requests still open;
-// 23. with styles picked there is no way to queue random;
-// 24. queueing styles waits for the server ("Queueing 2…"), or a double click
-//     on "Queue <style>" queues the style and then a random candidate;
-// 25. a refused request keeps its card, or a refused style is lost instead of
-//     going back to the picks, or the reader is not told;
-// 26. the server's refresh after the clicks reorders the pile or blinks a
-//     card out and back, or the count on the button disagrees with the pile;
-// 27. a style card's number is cut off once it says "1 queued".
+// 21. a Request random click waits for the server before the reader sees
+//     anything: five fast clicks against a slow server must put "+5" on the
+//     deck at once and still send five requests one after another (B-1177);
+// 22. the deck drops what was requested (B-1178, the owner on 2026-10-26: "you
+//     just implemented happy path"): random and style requests miss the count,
+//     or closing the dialog or reloading the page forgets requests still open;
+// 23. a double click on a card requests the style twice (double-clicking is
+//     how people open a picture), or Enter on a focused card moves the focus;
+// 24. a style request waits for the server before the deck and the card's
+//     "N requested" move;
+// 25. a refused request stays in the deck or on its card, or the reader is not
+//     told;
+// 26. the server's refresh after the clicks disagrees with the deck;
+// 27. a card's number or caption is cut off, "N requested" leaves its picture,
+//     or the footer's three controls leave one row at 360 px.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -251,14 +251,19 @@ function createApi(posts, options = {}) {
         }
       } else if (refuse) {
         body.refusedIds = body.requested_vision_ids.filter((id) => id === refuse.visionId)
-        answer = {
-          ok: true,
-          queued_count: count - body.refusedIds.length,
-          failures: body.refusedIds.map((id) => ({
-            requested_vision_id: id,
-            error: "Unavailable",
-          })),
-        }
+        const failures = body.refusedIds.map((id) => ({
+          requested_vision_id: id,
+          error: "Unavailable",
+        }))
+        if (body.refusedIds.length === count) {
+          body.refused = true
+          answer = new HttpStatus(400, { ok: false, error: "Unavailable", failures })
+        } else
+          answer = {
+            ok: true,
+            queued_count: count - body.refusedIds.length,
+            failures,
+          }
       }
       const delay = body.request_mode === "random" ? options.randomDelay : options.styleDelay
       if (!delay) return answer
@@ -320,10 +325,10 @@ function measurePicker() {
     .filter((art) => visible(art))
   const images = [...dialog.querySelectorAll(".icono-request-card-art img")].filter(visible)
   const addAll = [...dialog.querySelectorAll("[data-icono-request-add-favorites]")].find(visible)
-  const clear = [...dialog.querySelectorAll("[data-icono-request-batch-clear]")].find(visible)
   const primary = dialog.querySelector("[data-icono-request-free-submit]")
   const footer = dialog.querySelector("[data-icono-request-free-footer]")
-  const tray = dialog.querySelector("[data-icono-request-batch]")
+  const deck = dialog.querySelector("[data-icono-request-deck]")
+  const deckBadge = deck && deck.querySelector("[data-icono-request-random-count]")
   const viewSwitch = dialog.querySelector(".icono-request-views")
   const find = dialog.querySelector(".icono-request-find")
   const firstCard = cards.find(visible)
@@ -347,7 +352,6 @@ function measurePicker() {
     browseScrolls: browse ? browse.scrollHeight > browse.clientHeight : false,
     viewsInsideBrowse: views.length > 0 && views.every((v) => browse && browse.contains(v)),
     addAllInFooter: !!(footer && addAll && footer.contains(addAll)),
-    addAllInTray: !!(tray && addAll && tray.contains(addAll)),
     tabsInsideBrowse: !!(browse && tabs && browse.contains(tabs)),
     viewSwitch: box(viewSwitch),
     find: box(find),
@@ -373,10 +377,21 @@ function measurePicker() {
     })),
     queuedBadges: [...dialog.querySelectorAll("[data-icono-request-queued]")]
       .filter(visible)
-      .map((b) => ({
-        card: b.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
-        text: b.textContent.trim(),
-      })),
+      .map((b) => {
+        const art = box(
+          b.closest("[data-icono-request-card]").querySelector(".icono-request-card-art"),
+        )
+        const chip = box(b)
+        return {
+          card: b.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
+          text: b.textContent.trim(),
+          onArt:
+            chip.left >= art.left &&
+            chip.right <= art.right &&
+            chip.top >= art.top &&
+            chip.bottom <= art.bottom,
+        }
+      }),
     addAll: addAll
       ? {
           tag: addAll.tagName,
@@ -385,24 +400,21 @@ function measurePicker() {
           ...box(addAll),
         }
       : null,
-    clear: clear ? box(clear) : null,
     primary: primary
       ? { text: primary.textContent.trim(), className: String(primary.className), ...box(primary) }
       : null,
-    trayVisible: visible(tray),
-    trayFillTiles: tray
-      ? [...tray.querySelectorAll("[data-icono-request-batch-fill-mosaic] > *")].filter(visible)
-          .length
-      : 0,
-    trayRest: tray
-      ? visible(tray.querySelector("[data-icono-request-batch-rest]")) &&
-        tray.querySelector("[data-icono-request-batch-rest]").getAttribute("aria-label")
-      : false,
-    trayDoneTiles: tray
-      ? [...tray.querySelectorAll("[data-icono-request-batch-done-mosaic] > *")].filter(visible)
-          .length
-      : 0,
-    trayRows: tray ? [...tray.querySelectorAll("[data-icono-request-batch-row]")].length : 0,
+    deck: visible(deck)
+      ? (() => {
+          const d = box(deck)
+          const b = box(deckBadge)
+          return {
+            ...d,
+            count: deckBadge.lastElementChild?.textContent || "",
+            badgeOnCorner: b.right > d.right && b.top < d.top,
+            badgeInView: b.top >= 0 && b.right <= innerWidth,
+          }
+        })()
+      : null,
     mentionsArtist: /artist/i.test(text) || /secretartist|secret artist/i.test(attributes),
     mentionsOpenRequests: /open request/i.test(text),
     horizontalOverflow: browse ? browse.scrollWidth > browse.clientWidth + 1 : false,
@@ -423,7 +435,7 @@ async function openPicker(page) {
 
 const card = (slot) => `[data-icono-request-card='${slot}'] [data-icono-request-option]`
 
-test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-right action", async (t) => {
+test("the Free queue picker is a 3:4 style grid where a tap requests a style", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
   const { server, origin } = await startSite()
@@ -495,24 +507,31 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.equal(/artist/i.test(first.searchPlaceholder || ""), false, `${where}: placeholder`)
         assert.equal(/artist/i.test(first.searchLabel || ""), false, `${where}: search label`)
 
-        // 3. "Add all favorites" is a shared button where the batch is.
+        // 3. "Request all favorites" is a shared button at the footer's left,
+        // on Request random's row; 9. the deck sits between them.
         const desktop = size === "desktop"
-        assert.ok(first.addAll, `${where}: Add all favorites is missing`)
-        assert.equal(first.addAll.tag, "BUTTON", `${where}: Add all is not a button`)
-        assert.match(first.addAll.className, /\bicono-button\b/, `${where}: Add all style`)
-        assert.equal(first.addAll.text, "Add all favorites", `${where}: Add all label`)
-        if (desktop) {
-          assert.equal(first.addAllInTray, true, `${where}: Add all is not in the tray`)
-          // Seven covers and a "+15" tile.
-          assert.equal(first.trayFillTiles, 8, `${where}: the empty tray's covers`)
-        } else {
-          assert.equal(first.addAllInFooter, true, `${where}: Add all is not in the footer`)
-          assert.ok(first.addAll.right < first.primary.left, `${where}: Add all is not left`)
-          assert.ok(
-            Math.abs(first.addAll.top - first.primary.top) < 2,
-            `${where}: Add all and Queue are on different rows`,
-          )
-        }
+        assert.ok(first.addAll, `${where}: Request all favorites is missing`)
+        assert.equal(first.addAll.tag, "BUTTON", `${where}: Request all favorites is not a button`)
+        assert.match(first.addAll.className, /\bicono-button\b/, `${where}: its style`)
+        assert.equal(
+          first.addAll.text.replace(/\s+/g, " "),
+          "Request all favorites",
+          `${where}: label`,
+        )
+        assert.equal(first.addAllInFooter, true, `${where}: it is not in the footer`)
+        assert.ok(first.addAll.left - first.panel.left < 40, `${where}: it is not at the left`)
+        const sameRow = (a, b) => a.top < b.bottom && b.top < a.bottom
+        assert.ok(
+          sameRow(first.addAll, first.primary),
+          `${where}: it is not on Request random's row`,
+        )
+        // This reader's open random request and their 51084 are in the deck.
+        assert.equal(first.deck?.count, "2", `${where}: the deck does not count open requests`)
+        assert.ok(
+          first.addAll.right < first.deck.left && first.deck.right < first.primary.left,
+          `${where}: the deck is not between the two buttons`,
+        )
+        assert.ok(sameRow(first.deck, first.primary), `${where}: the deck left the footer row`)
 
         // 4. Two views only.
         assert.deepEqual(
@@ -523,12 +542,13 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.match(first.views[0].text, /^Favorites/, `${where}: Favorites label`)
         assert.match(first.views[1].text, /^All styles/, `${where}: All styles label`)
 
-        // 5. Queued styles are marked on the card, and nothing explains it in prose.
+        // 5. Requested styles are marked on the card's picture, and nothing
+        // explains it in prose.
         assert.equal(first.mentionsOpenRequests, false, `${where}: open-requests prose`)
         assert.deepEqual(
           first.queuedBadges,
-          [{ card: String(QUEUED_SLOT), text: "2 queued" }],
-          `${where}: queued badge`,
+          [{ card: String(QUEUED_SLOT), text: "2 requested", onArt: true }],
+          `${where}: requested badge`,
         )
 
         // 6. Only the view switch sits between the method switch and the
@@ -573,93 +593,70 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           )
         }
 
-        // 7. Primary bottom-right.
+        // 7. Request random at the bottom-right.
         const p = first.primary
         assert.ok(first.panel.right - p.right < 36, `${where}: primary is not at the right edge`)
         assert.ok(first.panel.bottom - p.bottom < 40, `${where}: primary is not at the bottom`)
         assert.ok(p.left > (first.panel.left + first.panel.right) / 2, `${where}: primary is left`)
         assert.match(p.className, /icono-button--primary/, `${where}: primary style`)
+        assert.equal(p.text, "Request random", `${where}: primary label`)
 
-        // 14. Nothing sits on top of the Queue button (the consent box did).
+        // 14. Nothing sits on top of Request random (the consent box did).
         const topmost = await page.evaluate(() => {
           const b = document.querySelector("[data-icono-request-free-submit]")
           const r = b.getBoundingClientRect()
           const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-          return hit === b || b.contains(hit) ? "queue" : hit?.closest("[class]")?.className || "?"
+          return hit === b || b.contains(hit)
+            ? "request"
+            : hit?.closest("[class]")?.className || "?"
         })
-        assert.equal(topmost, "queue", `${where}: ${topmost} covers the Queue button`)
+        assert.equal(topmost, "request", `${where}: ${topmost} covers Request random`)
         assert.match(first.cardFont, /IBM Plex Mono/, `${where}: card label font`)
 
-        // 8 + 9. Labels and tray follow the batch.
-        assert.equal(p.text, "Queue random", `${where}: empty-batch label`)
-        assert.equal(first.trayVisible, desktop, `${where}: tray visibility`)
-        if (desktop) assert.equal(first.trayRows, 0, `${where}: the empty tray lists styles`)
-
+        // 8 + 24. A tap on a card requests it: the deck and the card's count
+        // move on the click, and one specific order goes out.
         await page.click(card(36978))
         let m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue 36978", `${where}: one-pick label`)
-        // 12. The number picks its card too.
+        assert.equal(m.deck?.count, "3", `${where}: the deck did not take the tapped style`)
+        assert.ok(
+          m.queuedBadges.some((b) => b.card === "36978" && b.text === "1 requested" && b.onArt),
+          `${where}: the tapped card does not say "1 requested"`,
+        )
+        // 8 + 12. The number requests its card too.
         await page.click(`[data-icono-request-card='31261'] .icono-request-card-label`)
         m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue 2 candidates", `${where}: two-pick label`)
-        if (desktop) {
-          assert.equal(m.trayRows, 2, `${where}: tray rows`)
-          assert.equal(m.trayRest, "Add the other 20 favorites", `${where}: the rest row`)
-        }
-        await page.screenshot({ path: shot("two-picked") })
-        if (desktop) {
-          await page.click("[data-icono-request-batch-remove='anima-v1-36978']")
-          m = await page.evaluate(measurePicker)
-          assert.equal(m.trayRows, 1, `${where}: tray rows after remove`)
-          assert.equal(m.primary.text, "Queue 31261", `${where}: label after remove`)
-        } else {
-          await page.click(card(36978))
-          m = await page.evaluate(measurePicker)
-          assert.equal(m.primary.text, "Queue 31261", `${where}: label after un-pick`)
-        }
+        assert.equal(m.deck?.count, "4", `${where}: tapping the number did not request`)
+        await page.screenshot({ path: shot("two-requested") })
 
-        // 11. Specific batch payload.
-        await page.click("[data-icono-request-free-submit]")
+        // 11. Specific order payload, one per tap.
         await page.waitForTimeout(400)
-        assert.equal(posts.length, 1, `${where}: specific batch was not posted`)
-        assert.equal(posts[0].request_mode, "specific", `${where}: batch mode`)
-        assert.deepEqual(posts[0].requested_vision_ids, ["anima-v1-31261"], `${where}: batch ids`)
-        // The server refuses a batch without an id of this shape, so every Queue click would fail.
+        assert.equal(posts.length, 2, `${where}: ${posts.length} orders for two taps`)
+        assert.equal(posts[0].request_mode, "specific", `${where}: order mode`)
+        assert.deepEqual(posts[0].requested_vision_ids, ["anima-v1-36978"], `${where}: order ids`)
+        assert.deepEqual(posts[1].requested_vision_ids, ["anima-v1-31261"], `${where}: order ids`)
+        // The server refuses an order without an id of this shape, so every tap would fail.
         assert.match(
           String(posts[0].client_batch_id),
           /^[a-z0-9][a-z0-9._:-]*$/i,
           `${where}: client batch id`,
         )
 
-        // 9. The queued order joins the pile (the reader's open random request
-        // and their 51084 were there before), and Add all is still offered.
+        // 10. "Request all favorites" requests every favorite, in one order.
+        await page.click("[data-icono-request-add-favorites]")
         m = await page.evaluate(measurePicker)
-        if (desktop) {
-          assert.equal(m.trayDoneTiles, 3, `${where}: the queued order left the tray`)
-          assert.equal(m.addAllInTray, true, `${where}: Add all is gone after queueing`)
-        }
-
-        // 10. Add all favorites takes every favorite, then Clear empties the batch.
-        await page.click("[data-icono-request-add-favorites]:visible")
-        m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue 22 candidates", `${where}: add-all label`)
-        if (desktop) {
-          assert.equal(m.trayRows, 22, `${where}: add-all tray`)
-          // 22. Picking leaves the pile alone.
-          assert.equal(m.trayDoneTiles, 3, `${where}: picking emptied the pile`)
-        } else {
-          // 3. Clear and the longest Queue label share the footer row, one line each.
-          assert.ok(
-            m.clear && Math.abs(m.clear.top - m.primary.top) < 2 && m.clear.right < m.primary.left,
-            `${where}: Clear and "Queue 22 candidates" do not share the footer row`,
-          )
-          assert.ok(m.primary.h < 48 && m.clear.h < 48, `${where}: a footer label wrapped`)
-        }
+        assert.equal(m.deck?.count, "26", `${where}: the deck did not take 22 favorites`)
+        await page.waitForTimeout(400)
+        assert.equal(
+          posts.length,
+          3,
+          `${where}: the favorites went out as ${posts.length - 2} orders`,
+        )
+        assert.deepEqual(
+          posts[2].requested_vision_ids,
+          FAVORITES.map((id) => id.replace(/^0-/, "anima-v1-")),
+          `${where}: the favorites order`,
+        )
         await page.screenshot({ path: shot("all-favorites") })
-        await page.click("[data-icono-request-batch-clear]:visible")
-        m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue random", `${where}: label after Clear`)
-        await page.click("[data-icono-request-add-favorites]:visible")
 
         // 2 again: typing an artist name finds nothing; a number finds its card.
         await page.click("[data-icono-request-view='all']")
@@ -701,11 +698,9 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         assert.equal(new Set(pagedGenes).size, pagedGenes.length, `${where}: paged repeats`)
         await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 0))
 
-        // 12. The card star toggles a favorite.
-        // ...and does not pick or un-pick the card it sits on.
+        // 12. The card star toggles a favorite, and requests nothing.
         const star = `[data-icono-request-card='${ARTIST_SLOT}'] [data-icono-emulsion-favorite]`
         const before = await page.getAttribute(star, "aria-pressed")
-        const pickedBefore = await page.getAttribute(card(ARTIST_SLOT), "aria-pressed")
         await page.click(star)
         await page.waitForFunction(
           ([selector, previous]) =>
@@ -713,11 +708,9 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
           [star, before],
           { timeout: 5_000 },
         )
-        assert.equal(
-          await page.getAttribute(card(ARTIST_SLOT), "aria-pressed"),
-          pickedBefore,
-          `${where}: the star click toggled the card`,
-        )
+        m = await page.evaluate(measurePicker)
+        assert.equal(posts.length, 3, `${where}: the star click sent a request`)
+        assert.equal(m.deck?.count, "26", `${where}: the star click moved the deck`)
 
         // 6 and 20: while the cards scroll, the view switch stays pinned at the
         // top of the scroller, and the search with it on desktop; on a phone
@@ -734,57 +727,29 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         )
         await page.screenshot({ path: shot("scrolled") })
 
-        // 11 again: an empty batch queues a random candidate.
-        // All styles: the star click above un-favorited a picked style, so
-        // Favorites no longer lists every card in the batch.
-        await page.$eval("[data-icono-request-browse]", (el) => el.scrollTo(0, 0))
-        await page.click("[data-icono-request-view='all']")
-        const selected = await page.$$eval(
-          "[data-icono-request-option][aria-pressed='true']",
-          (els) => els.map((el) => el.getAttribute("data-icono-request-option")),
-        )
-        for (const visionId of selected) {
-          await page.click(`[data-icono-request-option='${visionId}']`)
-        }
-        m = await page.evaluate(measurePicker)
-        assert.equal(m.primary.text, "Queue random", `${where}: cleared label`)
         // 21 (B-1177). Five fast random clicks against a slow server: each
-        // click answers at once (a face-down card in the tray on desktop, the
-        // count on the button's corner everywhere), and the five go out one
-        // after another.
+        // click answers at once on the deck, and the five go out one after
+        // another.
         for (let i = 0; i < 5; i++) await page.click("[data-icono-request-free-submit]")
         await page.waitForTimeout(250) // the count's last digit finishes rolling
-        const answer = await page.evaluate(() => {
-          const button = document.querySelector("[data-icono-request-free-submit]")
-          const badge = document.querySelector("[data-icono-request-random-count]")
-          const b = button.getBoundingClientRect()
-          const c = badge && !badge.hidden ? badge.getBoundingClientRect() : null
-          return {
-            label: button.textContent.trim(),
-            count: badge && !badge.hidden ? badge.textContent.trim() : "",
-            onCorner:
-              !!c && Math.abs(c.right - (b.right + 8)) < 3 && Math.abs(c.top - (b.top - 8)) < 3,
-            inView: !!c && c.top >= 0 && c.right <= window.innerWidth,
-            sealed: document.querySelectorAll(
-              "[data-icono-request-batch-done-mosaic] .icono-request-batch-tile--sealed",
-            ).length,
-          }
-        })
-        assert.ok(posts.length < 6, `${where}: the test server answered too fast to prove anything`)
-        assert.equal(answer.label, "Queue random", `${where}: label after random clicks`)
-        // The count is the whole pile: 3 before the clicks, 5 more.
-        assert.equal(answer.count, "8", `${where}: the count did not follow the clicks`)
-        assert.ok(answer.onCorner, `${where}: the count is not on the Queue button's corner`)
-        assert.ok(answer.inView, `${where}: the count is outside the window`)
-        if (desktop) assert.equal(answer.sealed, 6, `${where}: the tray did not get five cards`)
+        m = await page.evaluate(measurePicker)
+        assert.ok(posts.length < 8, `${where}: the test server answered too fast to prove anything`)
+        assert.equal(m.primary.text, "Request random", `${where}: label after random clicks`)
+        assert.equal(m.deck?.count, "31", `${where}: the deck did not follow the clicks`)
+        assert.ok(m.deck.badgeOnCorner, `${where}: the count is not on the deck's corner`)
+        assert.ok(m.deck.badgeInView, `${where}: the count is outside the window`)
         await page.screenshot({ path: shot("random-clicks") })
         const deadline = Date.now() + RANDOM_DELAY * 5 + 5_000
-        while (posts.length < 6 && Date.now() < deadline) await page.waitForTimeout(100)
-        assert.equal(posts.length, 6, `${where}: five random clicks did not make five requests`)
+        while (posts.length < 8 && Date.now() < deadline) await page.waitForTimeout(100)
+        assert.equal(posts.length, 8, `${where}: five random clicks did not make five requests`)
         assert.ok(
-          posts.slice(1).every((post) => post.request_mode === "random"),
+          posts.slice(3).every((post) => post.request_mode === "random"),
           `${where}: random mode`,
         )
+
+        // 9. The deck takes the reader to their requests.
+        await page.click("[data-icono-request-deck]")
+        await page.waitForSelector(`${DIALOG}:not([open])`, { state: "attached" })
 
         await context.close()
       }
@@ -796,29 +761,36 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
   }
 })
 
-// Runs in the page: what the reader sees of their queue right now.
+// Runs in the page: what the reader sees of their requests right now.
 function measureQueue() {
   const visible = (el) => !!el && el.checkVisibility()
-  const badge = document.querySelector("[data-icono-request-random-count]")
-  const tiles = [
-    ...document.querySelectorAll("[data-icono-request-batch-done-mosaic] [data-icono-batch-key]"),
-  ]
-  const button = document.querySelector("[data-icono-request-free-submit]")
+  const deck = document.querySelector("[data-icono-request-deck]")
+  const footer = document.querySelector("[data-icono-request-free-footer]")
+  const controls = [...footer.querySelectorAll(":scope > button")].filter(visible)
+  const box = footer.getBoundingClientRect()
+  const rows = controls.map((el) => el.getBoundingClientRect())
   return {
-    label: button.textContent.trim(),
-    count: visible(badge) ? badge.textContent.trim() : "",
-    pile: tiles.map((tile) =>
-      tile.classList.contains("icono-request-batch-tile--sealed")
-        ? "?"
-        : tile.getAttribute("data-icono-batch-key").replace(/^style-anima-v1-(\d+)-\d+$/, "$1"),
+    label: document.querySelector("[data-icono-request-free-submit]").textContent.trim(),
+    count: visible(deck)
+      ? deck.querySelector("[data-icono-request-random-count]").lastElementChild?.textContent || ""
+      : "",
+    chips: Object.fromEntries(
+      [...document.querySelectorAll("[data-icono-request-queued]")].map((chip) => [
+        chip.closest("[data-icono-request-card]").getAttribute("data-icono-request-card"),
+        chip.textContent.trim(),
+      ]),
     ),
-    picked: document.querySelectorAll("[data-icono-request-batch-row]").length,
-    random: visible(document.querySelector("[data-icono-request-random]")),
-    footerRows: new Set(
-      [...document.querySelectorAll(".icono-request-free-actions > button")]
-        .filter((el) => el.checkVisibility())
-        .map((el) => Math.round(el.getBoundingClientRect().top)),
-    ).size,
+    chipsOffArt: [...document.querySelectorAll("[data-icono-request-queued]")].filter((chip) => {
+      const art = chip.closest("[data-icono-request-card]").querySelector(".icono-request-card-art")
+      const a = art.getBoundingClientRect()
+      const c = chip.getBoundingClientRect()
+      return c.left < a.left || c.right > a.right || c.top < a.top || c.bottom > a.bottom
+    }).length,
+    // Every control shares one row, inside the footer.
+    oneRow: rows.every((a) => rows.every((b) => a.top < b.bottom && b.top < a.bottom)),
+    inFooter: rows.every((r) => r.left >= box.left - 1 && r.right <= box.right + 1),
+    focus: document.activeElement?.getAttribute("data-icono-request-option") || "",
+    open: !!document.querySelector("[data-icono-request-dialog][open]"),
     note: (
       document.querySelector("[data-icono-request-dialog] [data-icono-request-note]")
         ?.textContent || ""
@@ -832,11 +804,12 @@ function measureQueue() {
   }
 }
 
-// 22-27 (B-1178). The reader leaves the happy path: random clicks mixed with
-// picks, a double click, refusals, closing the dialog and reloading the page.
-// Every click answers at once, nothing queued leaves the pile unless the
-// server refuses it, and the count on the button is the pile.
-test("random and picked requests share one pile that survives every detour", async (t) => {
+// 22-27 (B-1178, B-1179). The reader leaves the happy path: random clicks
+// mixed with style taps, a double click, Enter on a card, refusals, closing the
+// dialog and reloading the page. Every click answers at once, nothing requested
+// leaves the deck unless the server refuses it, and the deck's count is what
+// the server holds once it answers.
+test("random and style requests share one deck that survives every detour", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
   const { server, origin } = await startSite()
@@ -844,8 +817,7 @@ test("random and picked requests share one pile that survives every detour", asy
   try {
     for (const [width, height, size] of [...VIEWPORTS, [360, 780, "phone360"]]) {
       const where = size
-      const desktop = width >= 900
-      const shot = (name) => path.join(OUT, `queue-mixes-${size}-${name}.png`)
+      const shot = (name) => path.join(OUT, `request-mixes-${size}-${name}.png`)
       const posts = []
       const context = await browser.newContext({ viewport: { width, height } })
       await context.addInitScript(() =>
@@ -873,114 +845,87 @@ test("random and picked requests share one pile that survives every detour", asy
       // Before anything: this reader's open random request and their 51084.
       let q = await page.evaluate(measureQueue)
       assert.equal(q.count, "2", `${where}: the requests already open are not counted`)
-      if (desktop) assert.deepEqual(q.pile, ["?", String(QUEUED_SLOT)], `${where}: open pile`)
+      assert.equal(q.oneRow && q.inFooter, true, `${where}: the footer controls left their row`)
 
-      // 1. Two random clicks, then a pick: the pick leaves the pile alone (22).
-      // On desktop a second button still queues random, and the count moves
-      // onto it (23); a phone row has no room for it, and the count waits
-      // rather than sit on "Queue 36978".
+      // 1. Two random clicks, then a style tap: all three join the deck at
+      // once (22, 24).
       await page.click("[data-icono-request-free-submit]")
       await page.click("[data-icono-request-free-submit]")
       await page.click(card(36978))
       q = await page.evaluate(measureQueue)
-      assert.equal(q.label, "Queue 36978", `${where}: label with one pick`)
-      assert.equal(q.count, desktop ? "4" : "", `${where}: count with a pick`)
-      assert.equal(q.random, desktop, `${where}: second Queue random button`)
-      assert.equal(q.footerRows, 1, `${where}: the footer buttons wrapped`)
-      if (desktop) {
-        assert.deepEqual(q.pile, ["?", "?", "?", String(QUEUED_SLOT)], `${where}: pile`)
-      }
-
-      // 2. One more random click (desktop: the second button, which keeps the
-      // pick; phones: right after queueing the pick, when the main button says
-      // Queue random again). The pick joins the pile on the click (24).
-      if (desktop) {
-        await page.click("[data-icono-request-random]")
-        q = await page.evaluate(measureQueue)
-        assert.equal(q.label, "Queue 36978", `${where}: random dropped the pick`)
-        assert.equal(q.count, "5", `${where}: second random button`)
-      }
-      await page.click("[data-icono-request-free-submit]")
-      q = await page.evaluate(measureQueue)
-      assert.equal(q.label, "Queue random", `${where}: the pick did not leave at once`)
-      assert.equal(
-        q.count,
-        desktop ? "6" : "5",
-        `${where}: the queued style is not counted at once`,
-      )
-      assert.doesNotMatch(q.note, /Queueing/, `${where}: queueing styles waits for the server`)
-      if (!desktop) {
-        await page.click("[data-icono-request-free-submit]")
-        q = await page.evaluate(measureQueue)
-        assert.equal(q.count, "6", `${where}: random after queueing the pick`)
-      }
-      const pileBeforeRefresh = q.pile.join(" ")
+      assert.equal(q.count, "5", `${where}: the deck missed a click`)
+      assert.equal(q.chips["36978"], "1 requested", `${where}: the tapped card's count`)
+      assert.equal(q.label, "Request random", `${where}: the main button changed`)
+      assert.equal(q.oneRow && q.inFooter, true, `${where}: the deck pushed a control out (27)`)
       await page.screenshot({ path: shot("mixed") })
 
-      // 3. The second random click was refused (25): its card leaves and the
-      // reader is told; the server's refresh keeps the order (26).
-      await settle(4)
+      // 2. A double click on a card is one request; Enter on a focused card
+      // is another, and the focus stays on that card (23).
+      await page.dblclick(card(1184))
+      await page.focus(card(21006))
+      await page.keyboard.press("Enter")
       q = await page.evaluate(measureQueue)
-      assert.equal(q.count, "5", `${where}: the refused random card stayed`)
-      assert.match(q.note, /Queue is busy/, `${where}: the refusal was not shown`)
-      if (desktop) {
-        assert.deepEqual(
-          q.pile,
-          ["?", "?", "?", String(QUEUED_SLOT), "36978"],
-          `${where}: pile after the refresh (was ${pileBeforeRefresh})`,
-        )
-      }
+      assert.equal(q.count, "7", `${where}: count after the double click and Enter`)
+      assert.equal(q.chips["1184"], "1 requested", `${where}: the double click requested twice`)
+      assert.equal(q.focus, "anima-v1-21006", `${where}: Enter moved the focus off the card`)
 
-      // 4. A double click on "Queue <style>" queues the style once (24).
-      await page.click(card(1184))
-      await page.dblclick("[data-icono-request-free-submit]")
+      // 3. The second random click was refused (25): it leaves the deck, and
+      // the reader is told; the server's refresh agrees with the deck (26).
       await settle(5)
-      assert.equal(posts.length, 5, `${where}: the double click sent ${posts.length - 4} requests`)
-      assert.deepEqual(posts[4].requested_vision_ids, ["anima-v1-1184"], `${where}: double click`)
+      assert.equal(
+        posts.filter((post) => (post.requested_vision_ids || []).includes("anima-v1-1184")).length,
+        1,
+        `${where}: the double click sent two orders`,
+      )
       q = await page.evaluate(measureQueue)
-      assert.equal(q.count, "6", `${where}: count after the double click`)
+      assert.equal(q.count, "6", `${where}: the refused random click stayed in the deck`)
+      assert.match(q.note, /Queue is busy/, `${where}: the refusal was not shown`)
 
-      // 5. Two styles, one refused: it shakes out of the pile and goes back
-      // to the picks with a line saying so (25).
+      // 4. A refused style leaves the deck and its card, with the reason.
       await page.click(card(31261))
-      await page.click(card(21006))
-      await page.click("[data-icono-request-free-submit]")
       q = await page.evaluate(measureQueue)
-      assert.equal(q.count, "8", `${where}: two styles at once`)
+      assert.equal(q.count, "7", `${where}: the style tap did not count at once`)
       await settle(6)
       q = await page.evaluate(measureQueue)
-      assert.equal(q.count, desktop ? "7" : "", `${where}: the refused style stayed in the pile`)
-      assert.equal(q.label, "Queue 31261", `${where}: the refused style is not picked again`)
-      assert.match(q.note, /could not be queued and remain selected/, `${where}: refusal note`)
+      assert.equal(q.count, "6", `${where}: the refused style stayed in the deck`)
+      assert.equal(q.chips["31261"], undefined, `${where}: the refused card says requested`)
+      assert.match(q.note, /Unavailable/, `${where}: the style refusal was not shown`)
+
+      // 5. All 22 favorites at once; the server turns away 31261 among them.
+      await page.click("[data-icono-request-add-favorites]")
+      q = await page.evaluate(measureQueue)
+      assert.equal(q.count, "28", `${where}: the favorites did not count at once`)
+      await settle(7)
+      q = await page.evaluate(measureQueue)
+      assert.equal(q.count, "27", `${where}: the deck after the favorites`)
+      assert.match(q.note, /Requested 21; 1 could not be requested/, `${where}: refusal note`)
+      assert.equal(q.chips["36978"], "2 requested", `${where}: a favorite's count`)
+      assert.equal(q.chips["31261"], undefined, `${where}: the refused favorite says requested`)
       assert.equal(q.cutLabels, 0, `${where}: a style number is cut off (27)`)
       assert.equal(q.metaOverflow, 0, `${where}: a caption line overflows its card (27)`)
+      assert.equal(q.chipsOffArt, 0, `${where}: "N requested" leaves its picture (27)`)
       await page.screenshot({ path: shot("refused") })
 
-      // 6. Unpick it: the pile stays. Close and reopen: it stays.
-      await page.click(card(31261))
+      // 6. A tap, then the dialog closes before the server answers and opens
+      // again: the request is still in the deck.
+      await page.click(card(22811))
       await page.keyboard.press("Escape")
       await page.waitForSelector(`${DIALOG}:not([open])`, { state: "attached" })
       await page.click("[data-icono-request-dialog-open]")
       await page.waitForSelector(`${DIALOG}[open]`)
-      await page.waitForTimeout(600)
+      await page.waitForTimeout(300)
       q = await page.evaluate(measureQueue)
-      assert.equal(q.label, "Queue random", `${where}: the unpicked style stayed picked`)
-      assert.equal(q.count, "7", `${where}: closing the dialog emptied the pile`)
+      assert.equal(q.count, "28", `${where}: closing the dialog dropped a request`)
+      await settle(8)
 
-      // 7. Reload: the server's open requests rebuild the same pile.
+      // 7. Reload: the server's open requests rebuild the same deck.
       await page.reload()
       await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
       await openPicker(page)
       await page.waitForTimeout(800)
       q = await page.evaluate(measureQueue)
-      assert.equal(q.count, "7", `${where}: the reload forgot open requests`)
-      if (desktop) {
-        assert.deepEqual(
-          q.pile.slice(0, 4),
-          ["?", "?", "?", String(QUEUED_SLOT)],
-          `${where}: pile after reload`,
-        )
-      }
+      assert.equal(q.count, "28", `${where}: the reload forgot open requests`)
+      assert.equal(q.chips["22811"], "2 requested", `${where}: the reload forgot a card's count`)
       await page.screenshot({ path: shot("reloaded") })
       await context.close()
     }
