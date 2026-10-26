@@ -6327,8 +6327,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<button type="button" class="icono-request-deck" data-icono-request-deck data-icono-request-see-requests title="See your requests" hidden>' +
         '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
         '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
-        '<span class="icono-request-deck-card" aria-hidden="true"></span>' +
-        '<span class="icono-request-random-count" data-icono-request-random-count aria-hidden="true"></span>' +
+        // The top card's face is the count, where a face-down card would say "?".
+        '<span class="icono-request-deck-card" aria-hidden="true"><span class="icono-request-deck-mark" data-icono-request-random-count></span></span>' +
         "</button>" +
         '<button type="submit" form="icono-request-form-' +
         esc(safeSymbol) +
@@ -8728,8 +8728,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var outBack = "cubic-bezier(0.34, 1.56, 0.64, 1)"
 
       // B-1179: the deck holds every candidate requested and not yet received,
-      // face down, with its size on the corner. One click, one digit, rolled
-      // up in 200 ms (Motion Reference "Clap Counter").
+      // face down, its size written on the top card. One click, one digit,
+      // rolled up in 200 ms (Motion Reference "Clap Counter").
       function paintDeck(roll) {
         if (!deck) return
         var count = pileFromServer.length + pileOnTheWay.length
@@ -8737,18 +8737,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         deck.setAttribute("aria-label", count + " requested. See your requests")
         var cards = deck.querySelectorAll(".icono-request-deck-card")
         for (var c = 0; c < cards.length; c++) {
-          if (cards[c].childElementCount) continue
+          if (cards[c].querySelector(".icono-request-deck-covers")) continue
           var covers = sealedCardCovers(c)
           if (!covers.length) continue
-          cards[c].innerHTML =
+          cards[c].insertAdjacentHTML(
+            "afterbegin",
             '<span class="icono-request-deck-covers">' +
-            covers
-              .map(function (src) {
-                return '<img src="' + esc(src) + '" alt="" decoding="async">'
-              })
-              .join("") +
-            "</span>" +
-            (c === cards.length - 1 ? '<span class="icono-request-deck-mark">?</span>' : "")
+              covers
+                .map(function (src) {
+                  return '<img src="' + esc(src) + '" alt="" decoding="async">'
+                })
+                .join("") +
+              "</span>",
+          )
         }
         var badge = deck.querySelector("[data-icono-request-random-count]")
         if (!badge) return

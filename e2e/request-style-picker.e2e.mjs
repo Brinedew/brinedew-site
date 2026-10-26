@@ -21,7 +21,7 @@
 // 7. Request random is not at the bottom-right of the dialog;
 // 8. a tap on a style card (its picture or its number) does not request that
 //    style at once, as one specific order;
-// 9. the deck (every candidate requested and not yet received, with its count)
+// 9. the deck (every candidate requested and not yet received, with its count on the top card)
 //    is missing, is not between "Request all favorites" and Request random, or
 //    tapping it does not take the reader to their requests;
 // 10. "Request all favorites" requests other than every favorite (22 here,
@@ -410,8 +410,8 @@ function measurePicker() {
           return {
             ...d,
             count: deckBadge.lastElementChild?.textContent || "",
-            badgeOnCorner: b.right > d.right && b.top < d.top,
-            badgeInView: b.top >= 0 && b.right <= innerWidth,
+            onTopCard:
+              b.left >= d.left && b.right <= d.right && b.top >= d.top && b.bottom <= d.bottom,
           }
         })()
       : null,
@@ -736,8 +736,7 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         assert.ok(posts.length < 8, `${where}: the test server answered too fast to prove anything`)
         assert.equal(m.primary.text, "Request random", `${where}: label after random clicks`)
         assert.equal(m.deck?.count, "31", `${where}: the deck did not follow the clicks`)
-        assert.ok(m.deck.badgeOnCorner, `${where}: the count is not on the deck's corner`)
-        assert.ok(m.deck.badgeInView, `${where}: the count is outside the window`)
+        assert.ok(m.deck.onTopCard, `${where}: the count is not on the deck's top card`)
         await page.screenshot({ path: shot("random-clicks") })
         const deadline = Date.now() + RANDOM_DELAY * 5 + 5_000
         while (posts.length < 8 && Date.now() < deadline) await page.waitForTimeout(100)
