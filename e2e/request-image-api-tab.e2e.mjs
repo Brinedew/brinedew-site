@@ -177,7 +177,7 @@ test("the Image API tab shows only for a reader with a saved image API key", asy
         )
 
         await page.keyboard.press("Escape")
-        await page.waitForSelector(`${DIALOG}:not([open])`)
+        await page.waitForSelector(`${DIALOG}[open]`, { state: "detached" })
         const calls = api.providerCalls()
         await open(page)
         m = await page.evaluate(measureTabs)
