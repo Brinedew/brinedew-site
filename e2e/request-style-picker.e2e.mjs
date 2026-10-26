@@ -46,7 +46,11 @@
 //     object has it and every favourite (B-896), or the picker shows nothing
 //     when the CDN cannot be reached;
 // 20. the view switch (and, on desktop, the search) scrolls out of view while
-//     the cards scroll (B-1044: the owner lost it on scrolling down).
+//     the cards scroll (B-1044: the owner lost it on scrolling down);
+// 21. a "Queue random" click waits for the server before the reader sees
+//     anything: five fast clicks against a slow server must show five
+//     face-down cards in the desktop tray and "5" on the button's corner at
+//     once, and still send five requests one after another (B-1177).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -75,6 +79,8 @@ const ARTIST_SLOT = 28478
 const SINGLE_PREVIEW_SLOT = 11111
 const EMPTY_SLOT = 33333
 const QUEUED_SLOT = 51084
+// How long the test server takes to answer a random request (21).
+const RANDOM_DELAY = 1_000
 
 // The server's shape since migration 0130: the style's published portraits
 // only, most upvoted first, at most four, medium (3:4) only; canonical_count
@@ -201,7 +207,9 @@ function createApi(posts, options = {}) {
       const body = JSON.parse(request.postData() || "{}")
       posts.push(body)
       const count = Array.isArray(body.requested_vision_ids) ? body.requested_vision_ids.length : 1
-      return { ok: true, queued_count: count, failures: [] }
+      const answer = { ok: true, queued_count: count, failures: [] }
+      if (body.request_mode !== "random" || !options.randomDelay) return answer
+      return new Promise((resolve) => setTimeout(() => resolve(answer), options.randomDelay))
     }
     return undefined
   }
@@ -382,7 +390,7 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         // 19. Light runs read the first page from the CDN. Dark runs cannot
         // reach the CDN, and 15. the Worker's first answer is the edge's 503.
         const cdn = theme === "light"
-        const api = createApi(posts, { failFirst: cdn ? 0 : 1 })
+        const api = createApi(posts, { failFirst: cdn ? 0 : 1, randomDelay: RANDOM_DELAY })
         await routeProduction(context, origin, api)
         await routePicker(context, cdn)
         await routePortraits(context)
@@ -685,10 +693,42 @@ test("the Free queue picker is a 3:4 style grid with a batch tray and a bottom-r
         }
         m = await page.evaluate(measurePicker)
         assert.equal(m.primary.text, "Queue random", `${where}: cleared label`)
-        await page.click("[data-icono-request-free-submit]")
-        await page.waitForTimeout(300)
-        assert.equal(posts.length, 2, `${where}: random was not posted`)
-        assert.equal(posts[1].request_mode, "random", `${where}: random mode`)
+        // 21 (B-1177). Five fast random clicks against a slow server: each
+        // click answers at once (a face-down card in the tray on desktop, the
+        // count on the button's corner everywhere), and the five go out one
+        // after another.
+        for (let i = 0; i < 5; i++) await page.click("[data-icono-request-free-submit]")
+        await page.waitForTimeout(250) // the count's last digit finishes rolling
+        const answer = await page.evaluate(() => {
+          const button = document.querySelector("[data-icono-request-free-submit]")
+          const badge = document.querySelector("[data-icono-request-random-count]")
+          const b = button.getBoundingClientRect()
+          const c = badge && !badge.hidden ? badge.getBoundingClientRect() : null
+          return {
+            label: button.textContent.trim(),
+            count: badge && !badge.hidden ? badge.textContent.trim() : "",
+            onCorner:
+              !!c && Math.abs(c.right - (b.right + 8)) < 3 && Math.abs(c.top - (b.top - 8)) < 3,
+            inView: !!c && c.top >= 0 && c.right <= window.innerWidth,
+            sealed: document.querySelectorAll(
+              "[data-icono-request-batch-done-mosaic] .icono-request-batch-tile--sealed",
+            ).length,
+          }
+        })
+        assert.ok(posts.length < 6, `${where}: the test server answered too fast to prove anything`)
+        assert.equal(answer.label, "Queue random", `${where}: label after random clicks`)
+        assert.equal(answer.count, "5", `${where}: the count did not follow the clicks`)
+        assert.ok(answer.onCorner, `${where}: the count is not on the Queue button's corner`)
+        assert.ok(answer.inView, `${where}: the count is outside the window`)
+        if (desktop) assert.equal(answer.sealed, 5, `${where}: the tray did not get five cards`)
+        await page.screenshot({ path: shot("random-clicks") })
+        const deadline = Date.now() + RANDOM_DELAY * 5 + 5_000
+        while (posts.length < 6 && Date.now() < deadline) await page.waitForTimeout(100)
+        assert.equal(posts.length, 6, `${where}: five random clicks did not make five requests`)
+        assert.ok(
+          posts.slice(1).every((post) => post.request_mode === "random"),
+          `${where}: random mode`,
+        )
 
         await context.close()
       }

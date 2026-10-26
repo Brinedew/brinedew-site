@@ -103,7 +103,8 @@ export async function routeProduction(
     if (url.pathname.startsWith("/api/")) {
       const json = (body) =>
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) })
-      const mocked = api(url.pathname, route.request())
+      // A mock may answer late (a Promise), like a slow server.
+      const mocked = await api(url.pathname, route.request())
       if (mocked instanceof HttpStatus) {
         return route.fulfill({
           status: mocked.status,
