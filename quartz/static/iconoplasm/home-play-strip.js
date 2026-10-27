@@ -211,22 +211,19 @@ function windowBarMarkup(address) {
 }
 
 // The backs under the cards, fading into the next step: the Archive goes on,
-// face down, past what this browser found.
+// face down.
 const BACK_COUNT = 4
-// The cards that the strip shows before "Load more…": one page of the
-// Archive's feed.
-const CARD_PAGE = 24
 
+// The strip is always the four starters. Genes found elsewhere count in the
+// "Yours" tab but get no card here: the demo is four cards, not a collection.
 // genes: [{ symbol, name, color, portraitUrl }] in HOME_STARTERS order.
 // found: the starters that this browser already found; they start face up.
-// extras: other genes found in this browser, the same shape, face up after
-//   the starters, a page at a time.
 // cardMarkup(gene): the site's image-only card for a face-up gene.
 // onCardMounted(element): marks the card's portrait loaded once it is.
 // onFind(symbol): stores the find and recounts the Archive's "Yours" tab.
 // onOpen(): shows the install steps under the next step.
-// Returns { root, addFinds(symbols, extras), setAction(action) } for finds
-// and a next step that arrive after the strip is on screen (the add-on's).
+// Returns { root, addFinds(symbols), setAction(action) } for finds and a next
+// step that arrive after the strip is on screen (the add-on's).
 export function mountHomePlayStrip(container, options) {
   const doc = container.ownerDocument
   const win = doc.defaultView
@@ -286,7 +283,6 @@ export function mountHomePlayStrip(container, options) {
     '<div class="icono-play-slots">' +
     options.genes.map((gene) => slot(gene, found.has(gene.symbol))).join("") +
     "</div>" +
-    '<button type="button" class="icono-button icono-play-load" data-icono-play-load hidden>Load more…</button>' +
     '<div class="icono-play-more">' +
     '<div class="icono-play-backs" aria-hidden="true">' +
     backs +
@@ -299,32 +295,6 @@ export function mountHomePlayStrip(container, options) {
   for (const card of root.querySelectorAll(".icono-play-slot-front > *")) {
     options.onCardMounted(card)
   }
-
-  // Other finds, face up after the starters, a page at a time.
-  const slotsEl = root.querySelector(".icono-play-slots")
-  const loadButton = root.querySelector("[data-icono-play-load]")
-  const waiting = []
-  const placed = new Set(genes.keys())
-  function showPage() {
-    const room = Math.max(0, CARD_PAGE - (slotsEl.children.length % CARD_PAGE || CARD_PAGE))
-    const page = waiting.splice(0, room || CARD_PAGE)
-    if (page.length) {
-      slotsEl.insertAdjacentHTML("beforeend", page.map((gene) => slot(gene, true)).join(""))
-      for (const gene of page) {
-        const card = slotOf(gene.symbol).querySelector(".icono-play-slot-front > *")
-        if (card) options.onCardMounted(card)
-      }
-    }
-    loadButton.hidden = waiting.length === 0
-  }
-  function queueExtras(list) {
-    for (const gene of list || []) {
-      if (placed.has(gene.symbol)) continue
-      placed.add(gene.symbol)
-      waiting.push(gene)
-    }
-  }
-  loadButton.addEventListener("click", showPage)
 
   const next = root.querySelector("[data-icono-play-next]")
   function wireAction() {
@@ -420,21 +390,14 @@ export function mountHomePlayStrip(container, options) {
     })
   }
 
-  queueExtras(options.extras)
-  showPage()
-
   return {
     root,
-    // Finds that this browser already holds: they turn without counting again.
-    addFinds(symbols, extras) {
+    // Starters that this browser already found: they turn without counting
+    // again.
+    addFinds(symbols) {
       for (const symbol of symbols || []) {
         if (genes.has(symbol) && !found.has(symbol)) turn(symbol)
       }
-      queueExtras(extras)
-      // Whatever fits in the open page shows at once; the rest waits for
-      // "Load more…".
-      if (slotsEl.children.length % CARD_PAGE) showPage()
-      else loadButton.hidden = waiting.length === 0
     },
     setAction(action) {
       next.innerHTML = homePlayActionMarkup(action)
