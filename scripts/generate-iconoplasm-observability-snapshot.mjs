@@ -528,6 +528,8 @@ async function fetchBudgetAttributionSnapshot({ apiToken, accountId, config, d1 
     limit,
     parameters: {
       ...baseParameters,
+      // Grouped results stop at 10 unless the limit is also set here.
+      limit,
       ...(groupBys.length ? { groupBys } : {}),
       ...(orderBy ? { orderBy } : {}),
     },
