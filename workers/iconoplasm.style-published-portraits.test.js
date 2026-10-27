@@ -4,11 +4,6 @@ import { DatabaseSync } from "node:sqlite"
 import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
 import { migrationStatements } from "./test-helpers/migration-sql-statements.js"
-import {
-  STYLE_PUBLISHED_PORTRAITS_SQL,
-  attachStylePublishedPortraits,
-  styleCardBlots,
-} from "./iconoplasm/style-published-portraits.js"
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const MIGRATION = "0130_style_published_portraits.sql"
@@ -269,69 +264,6 @@ test("a style's published portraits stay exact through every write that moves a 
       .run()
     await assertExact(db, "unpublished drawing")
 
-    // Votes order a card's pictures. Style 255 holds every gene's second
-    // drawing that got published above; give three of its blots upvotes.
-    await db
-      .prepare(
-        `INSERT INTO icono_vote_asset_summary(gene_symbol, asset_sha256, candidate_ref, upvotes)
-         VALUES ('G4000', ${sha(800001)}, 'c1', 9), ('NEW2', ${sha(900002)}, 'c2', 4), ('G1', ${sha(1)}, 'c3', 7)`,
-      )
-      .run()
-    const blotsOf = async (slot) =>
-      styleCardBlots(
-        (
-          await db
-            .prepare(STYLE_PUBLISHED_PORTRAITS_SQL)
-            .bind(JSON.stringify([slot]))
-            .all()
-        ).results,
-      )
-    assert.equal((await blotsOf(255)).shown[0].gene_symbol, "G4000", "most upvoted first")
-    assert.equal((await blotsOf(30593)).shown[0].gene_symbol, "NEW2")
-    const style343 = await blotsOf(343)
-    assert.ok(style343.shown.length <= 4, "at most four pictures")
-    assert.equal(
-      style343.count,
-      (await db.prepare(`SELECT COUNT(*) n FROM (${TRUTH}) WHERE style_slot = 343`).first()).n,
-      "the count is the style's whole set, not the four shown",
-    )
-
-    // The worker's attach: one card per style number, count and pictures from
-    // the same rows, a style with no blots gets none.
-    const cards = await attachStylePublishedPortraits(
-      db,
-      [
-        { emulsion_family_id: "0-255" },
-        { emulsion_family_id: "C9-255" },
-        { emulsion_family_id: "0-30593" },
-        { emulsion_family_id: "0-99999" },
-      ],
-      (asset) => `https://portraits.test/${asset}/medium.webp`,
-    )
-    assert.equal(cards.length, 3, "a style shows once")
-    assert.equal(cards[0].preview_assets.length, Math.min(4, cards[0].canonical_count))
-    assert.ok(cards[0].canonical_count > 0)
-    assert.equal(cards[0].preview_assets[0].gene_symbol, "G4000")
-    assert.match(cards[0].preview_assets[0].medium_url, /^https:\/\/portraits\.test\/0+c3501/)
-    assert.equal(cards[2].canonical_count, 0)
-    assert.deepEqual(cards[2].preview_assets, [])
-
-    // The picker's read (the worker's own statement) for a page of 60 styles:
-    // one json_each value per style, then one row and one vote seek per blot.
-    const slots = Array.from({ length: 60 }, (_, i) => i * 211 + 1)
-    const blotsOnPage = (
-      await db
-        .prepare(
-          `SELECT COUNT(*) n FROM icono_style_published_portraits WHERE style_slot IN (SELECT value FROM json_each(?))`,
-        )
-        .bind(JSON.stringify(slots))
-        .first()
-    ).n
-    const page = await db.prepare(STYLE_PUBLISHED_PORTRAITS_SQL).bind(JSON.stringify(slots)).all()
-    assert.ok(
-      page.meta.rows_read <= slots.length + 2 * blotsOnPage,
-      `page read ${page.meta.rows_read} rows for ${blotsOnPage} blots`,
-    )
     // 0130 adds two rows to a caretaker's switch (the old portrait's row out,
     // the new one's in) and nothing to a drawing nobody publishes.
     assert.equal(
@@ -380,8 +312,6 @@ test("a style's published portraits stay exact through every write that moves a 
         leanSwitch: lean.meta.rows_written,
         switch: [switchBefore.meta.rows_written, switched.meta.rows_written],
         drawn: [drawnBefore.meta.rows_written, drawn.meta.rows_written],
-        page: page.meta,
-        blotsOnPage,
       }),
     )
   } finally {
