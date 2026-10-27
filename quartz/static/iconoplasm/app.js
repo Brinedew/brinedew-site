@@ -140,6 +140,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var GUEST_DISCOVERY_CARD_THUMB_COUNT = 6
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
+  // "1" while this browser last saw an image API key on the reader's account,
+  // so the New candidate tabs show at once; the account's answer still decides.
+  var ICONO_IMAGE_KEY_HINT_STORAGE_KEY = "iconoplasm.has-image-api-key"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
   var ICONO_EXTENSION_EDGE_LISTING_URL =
@@ -2024,6 +2027,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditProvidersCache = Object.create(null)
     imageEditProvidersPromise = Object.create(null)
   }
+
+  // Keys are saved on brinedew.bio/settings, another page. A reader coming
+  // back from it (focus, or the back button restoring this page) gets a fresh
+  // answer the next time a dialog asks, so a new key shows its tab (B-1181).
+  window.addEventListener("focus", invalidateImageEditProviders)
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) invalidateImageEditProviders()
+  })
 
   function fetchImageEditProviders(options) {
     // B-612: image-edit provider metadata is authenticated account state.
@@ -6256,7 +6267,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return (
       '<div class="icono-request-shell">' +
       '<div class="icono-request-actions">' +
-      '<div class="icono-request-tabs" role="tablist" aria-label="Generation method">' +
+      // B-1181: hidden until the reader's account has an image API key.
+      '<div class="icono-request-tabs" role="tablist" aria-label="Generation method" hidden>' +
       '<button type="button" class="icono-request-tab" id="icono-request-tab-free-' +
       esc(safeSymbol) +
       '" role="tab" aria-selected="true" aria-controls="icono-request-panel-free-' +
@@ -7316,13 +7328,51 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var freeFooter = dialog ? dialog.querySelector("[data-icono-request-free-footer]") : null
     var directFooter = dialog ? dialog.querySelector("[data-icono-request-direct-footer]") : null
     var freeQueueAvailable = !!currentUser
+    // B-1181: the Image API tab is for readers who saved an image API key in
+    // Settings, who went looking for it. Everyone else gets the free grid with
+    // no tabs, and never meets providers, models or keys (owner, 2026-10-27).
+    var requestTabList = body.querySelector(".icono-request-tabs")
+    var imageKeySaved = false
+    try {
+      imageKeySaved = localStorage.getItem(ICONO_IMAGE_KEY_HINT_STORAGE_KEY) === "1"
+    } catch (_error) {}
+    if (requestTabList) requestTabList.hidden = !imageKeySaved
 
     function savedRequestTab() {
+      if (!imageKeySaved) return "free"
       try {
         return localStorage.getItem(ICONO_REQUEST_TAB_STORAGE_KEY) === "api" ? "api" : "free"
       } catch (_error) {
         return "free"
       }
+    }
+
+    function showImageApiTab(saved) {
+      var wasSaved = imageKeySaved
+      imageKeySaved = saved
+      try {
+        if (saved) localStorage.setItem(ICONO_IMAGE_KEY_HINT_STORAGE_KEY, "1")
+        else localStorage.removeItem(ICONO_IMAGE_KEY_HINT_STORAGE_KEY)
+      } catch (_error) {}
+      if (requestTabList) requestTabList.hidden = !saved
+      // A reader who last used the Image API tab goes back to it once the
+      // account confirms the key; a reader whose key is gone leaves it.
+      if (dialog && dialog.open && saved !== wasSaved) activateRequestTab(savedRequestTab())
+    }
+
+    // The provider list is cached for the page; it is asked for when the
+    // reader points at New candidate or opens it, never on a page view.
+    function checkImageApiKey() {
+      if (!currentUser) {
+        if (requestTabList) requestTabList.hidden = true
+        return
+      }
+      fetchImageEditProviders({ op: "candidate_generation" })
+        .then(function (payload) {
+          var providers = Array.isArray(payload && payload.providers) ? payload.providers : []
+          showImageApiTab(providers.length > 0)
+        })
+        .catch(function () {})
     }
 
     function activateRequestTab(tabName, options) {
@@ -7376,12 +7426,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!dialog) return
       activateRequestTab(savedRequestTab())
       openDialog(dialog)
+      checkImageApiKey()
       var form = body.querySelector("[data-icono-request-form]")
       if (form && typeof form._iconoPaintQueuedCount === "function") form._iconoPaintQueuedCount()
     }
 
     if (dialogOpenButton) {
       dialogOpenButton.addEventListener("click", openRequestDialog)
+      dialogOpenButton.addEventListener("pointerenter", checkImageApiKey)
+      dialogOpenButton.addEventListener("focus", checkImageApiKey)
     }
 
     function setStatus(message, tone) {
@@ -7519,8 +7572,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           lastUsedValue = lastUsedSelection.provider_id + ":" + lastUsedSelection.model
         }
         var options = []
+        // With no last-used model, the first provider (A to Z) starts on its
+        // saved model, else its own default. Picking the first model A to Z
+        // put Gemini readers on Gemini 3 Pro Image at twice Flash's price
+        // (B-1181).
+        var defaultValue = ""
+        var defaultLabel = ""
         supported.forEach(function (sp) {
           if (!configured[sp.provider_id]) return
+          var models = (sp.model_options || []).map(function (m) {
+            return m.model
+          })
+          var savedModel = configured[sp.provider_id].model
+          var providerDefault =
+            models.indexOf(savedModel) >= 0
+              ? savedModel
+              : models.indexOf(sp.default_model) >= 0
+                ? sp.default_model
+                : models[0]
+          if (
+            providerDefault &&
+            (!defaultLabel ||
+              String(sp.label).localeCompare(defaultLabel, undefined, { sensitivity: "base" }) < 0)
+          ) {
+            defaultLabel = String(sp.label)
+            defaultValue = sp.provider_id + ":" + providerDefault
+          }
           ;(sp.model_options || []).forEach(function (m) {
             var value = sp.provider_id + ":" + m.model
             var label = sp.label + " · " + m.label
@@ -7536,7 +7613,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             if (opt.value === lastUsedValue) opt.label = opt.label + " · last used"
           })
         }
-        var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
+        var selectedValue =
+          lastUsedValue || defaultValue || (options.length ? options[0].value : "")
         if (
           selectedValue &&
           !options.some(function (opt) {
