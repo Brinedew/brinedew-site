@@ -9258,9 +9258,10 @@ function generationRequestFirstPageOptions(env, url, rows) {
 // B-896: the picker's first page is the same for every player, so it lives on
 // the CDN (picker/v1/styles.json) and an open reads no D1 for it. Sized for a
 // viral day: 6,000 opens at 120 rows each was 720,000 reads; this job reads
-// 121 rows plus its styles' published portraits (0130): one row per style and
-// about two per blot, about 1,450 for the 661 blots of the 2026-10-17 first
-// page, four times an hour, about 140,000 a day, whatever the traffic. It writes only when
+// 121 rows plus one stored card per style (0144), about 360 rows four times an
+// hour, about 35,000 a day, whatever the traffic. Before 0144 it worked each
+// card out from every blot of its style: about 1,450 rows a run, 138,300 of
+// the database's 258,000 rows read on 2026-10-27 (B-1154). It writes only when
 // the bytes changed, the leaderboard's pattern (B-965).
 export async function publishRequestPickerObject(env) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
@@ -9418,7 +9419,9 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
   }
   // `scope=favorites`: the player's own styles only. The picker reads the first
   // page from the CDN (picker/v1/styles.json) and asks this only for favourites
-  // the page lacks: one index seek per favourite (B-896).
+  // the page lacks (B-896). Each favourite costs its vision rollup rows, its
+  // factory rollup rows (about six) and one stored card (0144), about 15 rows;
+  // before 0144 the card alone cost two rows per blot (B-1154).
   const favoritesOnly = url?.searchParams?.get("scope") === "favorites"
   const [favoriteRows, favoriteFactoryOptions, firstPage] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
