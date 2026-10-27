@@ -422,7 +422,10 @@ export default (() => {
               />
             ))}
             <style>{`html.icono-fonts-loading body, html.icono-route-pending body { visibility: hidden !important; }`}</style>
-            <style>{iconoplasmLazyFontFaces}</style>
+            {/* Preact escapes quotes in a text child, and a browser reads <style> as raw
+                text, so `<style>{css}</style>` shipped `font-family: &quot;Crimson Pro&quot;`
+                and the whole @font-face was dropped (B-1162). */}
+            <style dangerouslySetInnerHTML={{ __html: iconoplasmLazyFontFaces }} />
             <script dangerouslySetInnerHTML={{ __html: iconoplasmFontBootstrap }} />
           </>
         ) : (
