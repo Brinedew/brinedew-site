@@ -8182,30 +8182,28 @@
   }
 
   // B-1158: where today's visitors came from, what they did, and what it cost.
-  // The hourly request rollup (B-1157) writes a new static file each hour
-  // (about :20), so this costs no Worker request. Until this hour's file
-  // exists, the previous hour's is the latest.
+  // The request rollup (B-1157) writes a new static file each hour, started by
+  // the Worker at :23 (iconoplasm-request-rollup-dispatch.js), so this costs no
+  // Worker request. The newest file of the last few hours is the latest; one
+  // failed run only makes it an hour older.
   function renderChannelFunnel(container) {
     if (!container) return
-    var hour = function (hoursAgo) {
-      return (
+    var url = ""
+    var load = function (hoursAgo) {
+      var address =
         "https://img.brinedew.bio/ops/requests/v2/hours/" +
         new Date(Date.now() - hoursAgo * 3600000).toISOString().slice(0, 13) +
         ".json"
-      )
-    }
-    var url = hour(0)
-    var load = function (address) {
       return fetch(address).then(function (response) {
-        if (!response.ok) throw new Error("HTTP " + response.status)
+        if (!response.ok) {
+          if (hoursAgo < 5) return load(hoursAgo + 1)
+          throw new Error("HTTP " + response.status)
+        }
         url = address
         return response.json()
       })
     }
-    load(url)
-      .catch(function () {
-        return load(hour(1))
-      })
+    load(0)
       .then(function (day) {
         var channels = Array.isArray(day && day.channels) ? day.channels : []
         container.innerHTML = [
