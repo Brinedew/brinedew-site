@@ -4,7 +4,6 @@ import test from "node:test"
 import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
-  mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   listIconoplasmTestKv,
@@ -228,53 +227,13 @@ function completeCardCatalogArtifact(symbols = ["ERBB2", "INS"], version = "test
   }
 }
 
-function putCatalogResolveArtifact(
-  kvStore,
-  genes = [
-    {
-      s: "SOSTDC1",
-      n: "sclerostin domain containing 1",
-      u: "Q6X4U4",
-      c: "#6F8B4E",
-      tmh: false,
-      a: ["USAG1"],
-    },
-  ],
-  hash = "aliascatalog01",
-) {
-  kvStore.set(
-    `iconoplasm:hydrated-catalog-artifact:a5c1:${hash}-a5c1`,
-    JSON.stringify(mergePublishedPortraitRefsIntoArtifact({ schema_version: 4, genes }, [])),
-  )
-  kvStore.set(
-    "iconoplasm:catalog-manifest",
-    JSON.stringify({
-      current_hash: hash,
-      generated_at: "2026-05-21T00:00:00.000Z",
-      schema_version: 4,
-      canonical_key: "symbol",
-      gene_count: genes.length,
-    }),
-  )
-  kvStore.set(
-    `iconoplasm:catalog:${hash}`,
-    JSON.stringify({
-      schema_version: 4,
-      generated_at: "2026-05-21T00:00:00.000Z",
-      gene_count: genes.length,
-      genes,
-    }),
-  )
-}
-
-// B-898 Stage 1 (step B): mobile card manifest and the per-symbol card endpoint
-// read ONE stable gene object per symbol from Bunny Storage. Failure modes these tests cover, written before the handlers
+// B-898 Stage 1 (step B): the mobile card manifest
+// reads ONE stable gene object per symbol from Bunny Storage. Failure modes these tests cover, written before the handler
 // changed:
 //   1. Objects present: 200, complete VMs built from the objects, exactly one
 //      storage read per requested symbol, zero reads of the KV head
 //      (iconoplasm:gallery-version) or any card-catalog manifest/shard key.
-//   2. Object missing (storage 404): the symbol lands in `missing`; the
-//      per-symbol endpoint answers 404 after trying alias resolution.
+//   2. Object missing (storage 404): the symbol lands in `missing`.
 //   3. Storage error (5xx): 503 CARD_ARTIFACT_UNAVAILABLE, no-store, with the
 //      stable label as artifact_version.
 //   4. Symbol limit (40 per manifest request, B-983: under the free plan's 50 external
@@ -453,59 +412,6 @@ test("mobile card manifest returns complete VMs from the stable gene objects", a
   assert.equal(card.payload.molecular_weight_kda, 137.9)
   assert.equal(card.payload.primary_tissue, "ubiquitous")
   assert.equal(card.payload.essence.faction, "pro-growth")
-})
-
-test("mobile card symbol endpoint resolves aliases when the requested symbol has no stable object", async () => {
-  const kvStore = new Map()
-  putCatalogResolveArtifact(kvStore)
-  seedStableGeneObjects(["SOSTDC1"])
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/USAG1"),
-      buildEnv({ kvStore, db: null, cardArtifact: null }),
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "stable-gene-object")
-  assert.equal(payload?.card?.symbol, "SOSTDC1")
-  assert.equal(payload?.card?.payload?.symbol, "SOSTDC1")
-  assert.equal(payload?.snapshot_version, "stable-v3")
-  assert.equal(Object.hasOwn(payload, "payload"), false)
-  assert.deepEqual(payload?.missing, [])
-  // The alias miss costs one 404 read, the canonical hit one more; nothing else.
-  assert.deepEqual(stableStorage.reads, [
-    stableGeneObjectPath("USAG1"),
-    stableGeneObjectPath("SOSTDC1"),
-  ])
-})
-
-test("mobile card symbol endpoint answers 404 when neither the symbol nor an alias has a stable object", async () => {
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/NOPE1"),
-      buildEnv({ db: null, cardArtifact: null }),
-    )
-  const payload = await response.json()
-
-  assert.equal(response.status, 404)
-  assert.equal(payload.card, null)
-  assert.deepEqual(payload.missing, ["NOPE1"])
-  assert.deepEqual(stableStorage.reads, [stableGeneObjectPath("NOPE1")])
-})
-
-test("mobile card symbol endpoint fails loud with 503 no-store when storage errors", async () => {
-  stableStorage.restore()
-  stableStorage = installStableGeneStorage(new Map(), { status: 500 })
-  const response =
-    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
-      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/cards/ERBB2"),
-      buildEnv({ db: null, cardArtifact: null }),
-    )
-  assert.equal(response.status, 503)
-  assert.equal(response.headers.get("Cache-Control"), "no-store")
-  assert.equal(response.headers.get("X-Iconoplasm-Data-Source"), "artifact-unavailable")
-  assert.equal((await response.json()).code, "CARD_ARTIFACT_UNAVAILABLE")
 })
 
 test("mobile card manifest keeps its 40-symbol limit and reads at most one object per accepted symbol", async () => {

@@ -1649,7 +1649,7 @@ test("29: gene comments hide hidden ones, need a sign-in to write, and only the 
     "INSERT INTO icono_gene_comments (gene_symbol, user_id, username, body, status) VALUES ('A1BG', 'reader-3', 'hidden-user', 'This hidden prompt should never render.', 'hidden')",
   )
 
-  const read = await routeRequest(db, "GET", "/api/iconoplasm/comments/gene/A1BG", { user: {} })
+  const read = await routeRequest(db, "GET", "/api/iconoplasm/genes/A1BG/comments", { user: {} })
   assert.equal(read.status, 200)
   assert.deepEqual(
     read.payload.comments.map((comment) => comment.body),
@@ -1662,13 +1662,15 @@ test("29: gene comments hide hidden ones, need a sign-in to write, and only the 
   )
 
   const comment = { symbol: "A1BG", body: "Please add a lab stamp." }
-  const guest = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+  const guest = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
     body: comment,
     user: {},
   })
   assert.equal(guest.status, 401)
 
-  const written = await routeRequest(db, "POST", "/api/iconoplasm/comments", { body: comment })
+  const written = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
+    body: comment,
+  })
   assert.equal(written.status, 200, JSON.stringify(written.payload))
   const mine = db.rows(
     "SELECT id, user_id FROM icono_gene_comments WHERE body = 'Please add a lab stamp.'",
@@ -1725,12 +1727,12 @@ test("B-1101: a gene's public comments copy follows every post, edit and delete"
   const bodies = () => publicCopy().comments.map((comment) => comment.body)
   const commentsPath = "/api/iconoplasm/genes/A1BG/comments"
 
-  const posted = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+  const posted = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
     body: { symbol: "A1BG", body: "Please add a lab stamp." },
     bindings: bunny,
   })
   assert.equal(posted.status, 200, JSON.stringify(posted.payload))
-  const other = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+  const other = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
     body: { symbol: "A1BG", body: "Keep the pen." },
     user: { user_id: "reader-2", username: "other" },
     bindings: bunny,
@@ -1742,7 +1744,7 @@ test("B-1101: a gene's public comments copy follows every post, edit and delete"
   assert.equal(publicCopy().count, 2)
   const text = JSON.stringify(publicCopy())
   assert.doesNotMatch(text, /reader-1|reader-2|user_id|is_own|hidden/)
-  const guestApi = await routeRequest(db, "GET", "/api/iconoplasm/comments/gene/A1BG", {
+  const guestApi = await routeRequest(db, "GET", "/api/iconoplasm/genes/A1BG/comments", {
     user: {},
   })
   assert.deepEqual(
@@ -1794,7 +1796,7 @@ test("B-1101: a gene's public comments copy follows every post, edit and delete"
       body,
     )
   }
-  const pictured = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+  const pictured = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
     body: { symbol: "A1BG", body: "A comment that publishes the copy." },
     bindings: bunny,
   })
@@ -1819,7 +1821,7 @@ test("B-1101: a gene's public comments copy follows every post, edit and delete"
   const warn = console.warn
   console.warn = () => {}
   try {
-    const saved = await routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    const saved = await routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
       body: { symbol: "A1BG", body: "Written while storage is down." },
       bindings: bunny,
     })
@@ -1850,7 +1852,7 @@ test("B-1001: the public Discord copy follows the author's own edit and delete, 
   db.exec("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('A1BG', 'alpha-1-B')")
   const discord = { DISCORD_BOT_TOKEN: BOT_TOKEN, DISCORD_ICONOPLASM_CHANNEL_ID: CHANNEL_ID }
   const post = (body, user) =>
-    routeRequest(db, "POST", "/api/iconoplasm/comments", {
+    routeRequest(db, "POST", "/api/iconoplasm/genes/A1BG/comments", {
       body: { symbol: "A1BG", body },
       user,
       bindings: discord,

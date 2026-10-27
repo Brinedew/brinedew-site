@@ -110,7 +110,7 @@ rebuilds gene objects from D1 per request, because cold Cloudflare isolates mult
 D1 reads globally:
 
 1. `readStableGeneObjects(...)` reads `genes/v3/<SYMBOL>.json` from Bunny Storage, one read per requested symbol.
-2. `/api/iconoplasm/cards/:symbol`, the mobile cards, public media and the blot route project that one object.
+2. The mobile cards, public media and the blot route project that one object.
 3. The public edge proxy stays state-free and adds no symbol-only Cache API entry in front of those endpoints.
 
 The gene page marks candidates `is_current` from the published SHA of the
@@ -301,7 +301,7 @@ picks the change up on the next Actions publisher run.
 
 - write `icono_publish_state` without a publish event and a republish
 - hand-edit a stable gene object instead of republishing the gene
-- add a public D1 fallback to `/api/iconoplasm/cards/:symbol`
+- add a public D1 fallback to the mobile card routes
 - trust a frontend zero or candidate count as the source of truth
 - run broad full-catalog D1 reports before a symbol-scoped diagnosis
 - purge the entire Cloudflare zone or Bunny pull zone when one object is stale

@@ -191,7 +191,6 @@ test("B-742 reader recovery leaves voting and workstation routes behind the tran
   for (const [path, method] of [
     ["/api/iconoplasm/authority/generation-leases/claim", "POST"],
     ["/api/iconoplasm/votes/set", "POST"],
-    ["/api/iconoplasm/discoveries/encounter", "POST"],
   ]) {
     const response = await runtime.fetch(
       new Request(`https://iconoplasm.brinedew.bio${path}`, { method }),
