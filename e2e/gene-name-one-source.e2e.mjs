@@ -406,6 +406,15 @@ async function loadGenePage(
     homeOnlyShown: [...document.querySelectorAll("[data-icono-home-only]")].filter(
       (node) => !node.hidden,
     ).length,
+    // B-1162: the shell's inline @font-face rules, as the browser parsed them. A rule
+    // with HTML-escaped quotes is dropped, so it never shows up here.
+    inlineFontFaces: [...document.querySelectorAll("head style")]
+      .flatMap((node) => [...(node.sheet?.cssRules || [])])
+      .filter((rule) => rule instanceof CSSFontFaceRule)
+      .map(
+        (rule) =>
+          `${rule.style.getPropertyValue("font-family").replaceAll('"', "")} ${rule.style.getPropertyValue("font-style")}`,
+      ),
   }))
   await page.screenshot({ path: path.join(OUT, `gene-name-one-source-${symbol}.png`) })
   await context.close()
@@ -479,6 +488,10 @@ test("the tab title never changes while the gene card loads (real browser)", asy
     assert.equal(real.ogTitle, expected, "rendered og:title is the gene's")
     assert.ok(real.homeOnlyBlocks >= 2, "the shell's home-only heading and paragraph exist")
     assert.equal(real.homeOnlyShown, 0, "no home-only block is shown on a gene page")
+    assert.ok(
+      real.inlineFontFaces.includes("Crimson Pro italic"),
+      `the lazy italic face parses: ${JSON.stringify(real.inlineFontFaces)}`,
+    )
     assert.deepEqual(
       real.headings,
       [`${gene.symbol} — ${object.full_name}`],
