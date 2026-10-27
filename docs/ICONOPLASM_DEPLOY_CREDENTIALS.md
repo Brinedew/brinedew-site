@@ -62,6 +62,8 @@ B-517 stores user image-edit provider keys in D1 after encrypting them inside th
 
 Set this as a Worker secret on `geneguessr-api` in production and staging. Do not put the value in `wrangler*.toml`, GitHub Actions logs, localStorage, or committed documentation.
 
+Before a key is stored, the worker asks its provider whether the key works (B-1182), with one free read that makes no image: OpenAI and Gemini list models, Krea lists one job, Luma and fal look up a job that does not exist. Settings refuses the key, in the provider's own words, only when the provider answers 401, or for Gemini 400 "API key not valid". Any other answer, a timeout after 8 seconds, or a network error saves the key, so an outage at the provider never stops a reader from saving a real key.
+
 ## Local Cloudflare Credential
 
 On the laptop:
