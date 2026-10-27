@@ -1,30 +1,33 @@
 // B-1173: a first-time visitor finds genes on the Archive before installing
-// anything. The owner's essay lines sit over the fading card backs, with each
-// gene symbol marked the way the add-on marks it on other websites. Resting
-// the pointer on a symbol, focusing it or tapping it raises that gene's card,
-// and the find counts the same moment.
+// anything. One line per starter gene sits in a drawn browser window, each
+// symbol marked the way the add-on marks it on other websites. Resting the
+// pointer on a symbol, focusing it or tapping it turns that gene's card face
+// up in the Archive below, and the find counts the same moment. Under the
+// four cards, more card backs fade into the way to find the rest.
 
-// "Mnemonic portraits for 19,023 human genes", the oncogene-induced apoptosis
-// lines, word for word.
-export const HOME_PLAY_SYMBOLS = Object.freeze([
-  "MYC",
-  "HRAS",
-  "MDM2",
-  "BCL2",
-  "TP53",
-  "BAX",
-  "BBC3",
+// The signed-out Archive's four starters, one line each.
+// The owner asked for a sentence per gene on 2026-10-27 and approved these.
+export const HOME_STARTERS = Object.freeze([
+  Object.freeze({
+    symbol: "INS",
+    line: "INS is insulin: after a meal, it lets your cells take in sugar.",
+  }),
+  Object.freeze({
+    symbol: "RHO",
+    line: "RHO is rhodopsin, the pigment in your rods that catches dim light.",
+  }),
+  Object.freeze({
+    symbol: "PRL",
+    line: "PRL is prolactin, the pituitary hormone that starts the milk.",
+  }),
+  Object.freeze({
+    symbol: "CD4",
+    line: "CD4 marks helper T cells, and HIV uses it to get in.",
+  }),
 ])
-export const HOME_PLAY_ESSAY_URL =
-  "https://brinedew.bio/posts/Mnemonic-portraits-for-19023-human-genes"
-const ESSAY_TITLE = "Mnemonic portraits for 19,023 human genes"
-const QUOTE_LEAD = "Oncogene-induced apoptosis."
-const QUOTE =
-  "MYC, HRAS, MDM2, and BCL2 want to restart the mitotic cycle without consensus. " +
-  "TP53, BAX, and BBC3 would rather collapse the world than let that happen."
 
-// The first line of docs/getting-started.md, word for word: after a find, the
-// strip says what it was a sample of.
+// The first line of docs/getting-started.md, word for word: under the cards,
+// the strip says what it was a sample of.
 export const HOME_PLAY_DOCS_LINE =
   "Iconoplasm is a browser extension that highlights all the gene names on any web page."
 
@@ -34,9 +37,9 @@ export const HOME_PLAY_DOCS_LINE =
 const TOOLBAR_ICON = "/static/iconoplasm/icons/icon-512.png"
 
 // The add-on on two other sites: the store screenshots (iconoplasm-extension/
-// store-assets/screenshot-2 and -1), cut to the cards' 7:9. They sit in the
-// hidden after-find row, so they load only after a find. The files are cached
-// as immutable: bump ?v= when a picture changes.
+// store-assets/screenshot-2 and -1), cut to the cards' 7:9. They sit under
+// the cards and load lazily. The files are cached as immutable: bump ?v= when
+// a picture changes.
 const SITES = [
   {
     src: "/static/iconoplasm/play/wikipedia-homeobox.webp?v=1",
@@ -144,13 +147,12 @@ function glyphMarkup(name) {
 }
 
 // What follows a find, at most one button. `action` is
-//   { kind: "link", note, label, href, glyph?, sites? }  a store page or an
-//     example page, in a new tab;
+//   { kind: "link", note, label, href, glyph?, sites?, sameTab? }  a store
+//     page or an example page, in a new tab; with sameTab, the login here;
 //   { kind: "open", note, label, glyph?, sites? }  the caller shows the
 //     install steps when [data-icono-play-open] is pressed;
 //   { kind: "none", note, sites? }  this browser has no install path.
-// `sites` adds the add-on on Wikipedia and the UCSC Genome Browser. The guest
-// card on the Archive uses the same row.
+// `sites` adds the add-on on Wikipedia and the UCSC Genome Browser.
 export function homePlayActionMarkup(action) {
   let html = '<p class="icono-install-note">' + esc(action.note) + "</p>"
   if (action.sites) {
@@ -174,6 +176,13 @@ export function homePlayActionMarkup(action) {
       '<button type="button" class="icono-button icono-button--primary icono-install-link" data-icono-play-open>' +
       label +
       "</button>"
+  } else if (action.kind === "link" && action.sameTab) {
+    html +=
+      '<a class="icono-button icono-button--primary icono-install-link" href="' +
+      esc(action.href) +
+      '">' +
+      label +
+      "</a>"
   } else if (action.kind === "link") {
     html +=
       '<a class="icono-button icono-button--primary icono-install-link" href="' +
@@ -185,14 +194,14 @@ export function homePlayActionMarkup(action) {
   return html
 }
 
-// A browser's title bar over the essay lines: the page's address and, at the
+// A browser's title bar over the starter lines: the site's address and, at the
 // right, the add-on's icon. Drawn, so screen readers skip it.
-function windowBarMarkup() {
+function windowBarMarkup(address) {
   return (
     '<div class="icono-play-bar" aria-hidden="true">' +
     '<span class="icono-play-dots"><i></i><i></i><i></i></span>' +
     '<span class="icono-play-address">' +
-    esc(HOME_PLAY_ESSAY_URL.replace(/^https:\/\//, "")) +
+    esc(address) +
     "</span>" +
     '<img class="icono-play-addon" src="' +
     TOOLBAR_ICON +
@@ -201,82 +210,92 @@ function windowBarMarkup() {
   )
 }
 
-// genes: [{ symbol, name, color, portraitUrl }] in HOME_PLAY_SYMBOLS order.
-// cardMarkup(gene): the site's image-only card for the raised card.
+// The backs under the cards, fading into the next step: the Archive goes on,
+// face down, past what this browser found.
+const BACK_COUNT = 4
+
+// genes: [{ symbol, name, color, portraitUrl }] in HOME_STARTERS order.
+// found: the starters that this browser already found; they start face up.
+// extras: other genes found in this browser, the same shape, face up after
+//   the starters.
+// cardMarkup(gene): the site's image-only card for a face-up gene.
 // onCardMounted(element): marks the card's portrait loaded once it is.
-// onFind(symbol): stores the find and returns the reader's total so far.
-// onOpen(): shows the install steps under the strip.
+// onFind(symbol): stores the find and recounts the Archive's "Yours" tab.
+// onOpen(): shows the install steps under the next step.
 export function mountHomePlayStrip(container, options) {
   const doc = container.ownerDocument
   const win = doc.defaultView
   const genes = new Map(options.genes.map((gene) => [gene.symbol, gene]))
+  const found = new Set((options.found || []).filter((symbol) => genes.has(symbol)))
+  const extras = options.extras || []
   const hover = !!(win.matchMedia && win.matchMedia("(hover: hover)").matches)
 
-  let quote = esc(QUOTE)
-  for (const symbol of HOME_PLAY_SYMBOLS) {
+  const lines = HOME_STARTERS.map(({ symbol, line }) => {
     const gene = genes.get(symbol)
-    quote = quote.replace(
-      new RegExp("\\b" + symbol + "\\b"),
+    const pill =
       '<a class="icono-play-pill" href="/gene/' +
-        encodeURIComponent(symbol) +
-        '" data-icono-nav data-icono-play-symbol="' +
-        symbol +
-        '" data-ink="' +
-        homePlayPillInk(gene.color) +
-        '" aria-label="' +
-        esc(symbol + " · " + gene.name) +
-        '" style="--icono-play-gene:' +
-        esc(gene.color) +
-        '">' +
-        symbol +
-        "</a>",
-    )
-  }
-  const back = options.reverseFaceHtml
-  const slots = HOME_PLAY_SYMBOLS.map(
-    (symbol) =>
-      '<span class="icono-play-slot" data-icono-play-slot="' +
+      encodeURIComponent(symbol) +
+      '" data-icono-nav data-icono-play-symbol="' +
       symbol +
-      '"><span class="icono-play-slot-inner">' +
-      '<span class="icono-play-slot-face icono-play-slot-back">' +
-      back +
-      "</span>" +
-      '<span class="icono-play-slot-face icono-play-slot-front"><img alt="" decoding="async"></span>' +
-      "</span></span>",
-  ).join("")
+      '" data-ink="' +
+      homePlayPillInk(gene.color) +
+      '" aria-label="' +
+      esc(symbol + " · " + gene.name) +
+      '" style="--icono-play-gene:' +
+      esc(gene.color) +
+      '">' +
+      symbol +
+      "</a>"
+    return '<span class="icono-play-line">' + esc(line).replace(symbol, pill) + "</span>"
+  }).join("")
+  const back = options.reverseFaceHtml
+  const slot = (gene, faceUp) =>
+    '<div class="icono-play-slot' +
+    (faceUp ? " is-found" : "") +
+    '" data-icono-play-slot="' +
+    esc(gene.symbol) +
+    '" style="--icono-play-gene:' +
+    esc(gene.color) +
+    '"><div class="icono-play-slot-inner">' +
+    '<div class="icono-play-slot-face icono-play-slot-back" aria-hidden="true">' +
+    back +
+    "</div>" +
+    '<div class="icono-play-slot-face icono-play-slot-front">' +
+    (faceUp ? options.cardMarkup(gene) : "") +
+    "</div></div></div>"
+  let backs = ""
+  for (let i = 0; i < BACK_COUNT; i += 1) backs += '<div class="icono-play-back">' + back + "</div>"
 
   const root = doc.createElement("div")
   root.className = "icono-play"
   root.setAttribute("data-icono-home-play", "")
   root.innerHTML =
     '<section class="icono-card icono-guest-login-card icono-play-card">' +
-    '<div class="icono-home-auth-title icono-guest-login-card-title" role="heading" aria-level="2" aria-live="polite" data-icono-play-title>' +
+    '<div class="icono-home-auth-title icono-guest-login-card-title" role="heading" aria-level="2" data-icono-play-title>' +
     (hover ? "Hover" : "Tap") +
     " any gene symbol</div>" +
     '<div class="icono-play-window">' +
-    windowBarMarkup() +
-    '<blockquote class="icono-play-quote"><p><strong>' +
-    esc(QUOTE_LEAD) +
-    "</strong> " +
-    quote +
-    '</p><span class="icono-play-source">— <a href="' +
-    HOME_PLAY_ESSAY_URL +
-    '">' +
-    esc(ESSAY_TITLE) +
-    "</a></span></blockquote>" +
+    windowBarMarkup(win.location.host) +
+    '<p class="icono-play-quote">' +
+    lines +
+    "</p></div></section>" +
+    '<div class="icono-play-slots">' +
+    options.genes.map((gene) => slot(gene, found.has(gene.symbol))).join("") +
+    extras.map((gene) => slot(gene, true)).join("") +
     "</div>" +
-    '<div class="icono-play-slots" aria-hidden="true">' +
-    slots +
+    '<div class="icono-play-more">' +
+    '<div class="icono-play-backs" aria-hidden="true">' +
+    backs +
     "</div>" +
-    '<div class="icono-play-next" data-icono-play-next hidden>' +
+    '<section class="icono-card icono-guest-login-card icono-play-card icono-play-next-card">' +
+    '<div class="icono-play-next" data-icono-play-next>' +
     homePlayActionMarkup(options.action) +
-    "</div>" +
-    "</section>"
+    "</div></section></div>"
   container.insertBefore(root, container.firstChild)
+  for (const card of root.querySelectorAll(".icono-play-slot-front > *")) {
+    options.onCardMounted(card)
+  }
 
-  const card = root.querySelector(".icono-play-card")
-  const title = root.querySelector("[data-icono-play-title]")
-  const next = root.querySelector("[data-icono-play-next]")
   const openButton = root.querySelector("[data-icono-play-open]")
   // Once the install steps are open under the strip, the button has done its
   // job; the note and the two sites stay.
@@ -287,17 +306,11 @@ export function mountHomePlayStrip(container, options) {
     })
   }
 
-  // The raised card hangs from the page body: the guest stage clips whatever
-  // leaves it, and the card rises above the strip. It exists only while it is
-  // up, so it never outlives the Archive.
-  let raised = null
-  let current = ""
-  let hideTimer = 0
-  let removeTimer = 0
-  const found = new Set()
-
+  // The portraits load once the strip is on screen, so a card turns face up
+  // with its picture already there.
   function warmPortraits() {
     for (const gene of genes.values()) {
+      if (found.has(gene.symbol)) continue
       const img = new win.Image()
       img.decoding = "async"
       img.src = gene.portraitUrl
@@ -309,175 +322,65 @@ export function mountHomePlayStrip(container, options) {
       watcher.disconnect()
       warmPortraits()
     })
-    watcher.observe(card)
+    watcher.observe(root)
   } else {
     warmPortraits()
   }
 
-  function place(pill) {
-    const width = raised.offsetWidth
-    const height = raised.offsetHeight || (width * 4) / 3
-    const word = pill.getBoundingClientRect()
-    const strip = card.getBoundingClientRect()
-    const gap = 18
-    const viewportWidth = doc.documentElement.clientWidth
-    const column = Math.max(
-      8,
-      Math.min(viewportWidth - width - 8, word.left + word.width / 2 - width / 2),
-    )
-    // Above the strip in the word's column, the way the add-on puts its card
-    // above the word: over the word itself it would cover the counter as the
-    // counter changes. Without room above, beside the strip level with the
-    // word; failing both, above the word when that clears the counter, else
-    // below it.
-    const rightHalf = word.left + word.width / 2 > strip.left + strip.width / 2
-    const fitsRight = viewportWidth - strip.right - gap - 8 >= width
-    const fitsLeft = strip.left - gap - 8 >= width
-    const side = rightHalf
-      ? fitsRight
-        ? "right"
-        : fitsLeft
-          ? "left"
-          : ""
-      : fitsLeft
-        ? "left"
-        : fitsRight
-          ? "right"
-          : ""
-    let left = column
-    let top
-    let origin = "50% 100%"
-    if (strip.top - height - 12 >= 8) {
-      top = strip.top - height - 12
-    } else if (side) {
-      left = side === "right" ? strip.right + gap : strip.left - gap - width
-      top = Math.max(
-        8,
-        Math.min(win.innerHeight - height - 8, word.top + word.height / 2 - height / 2),
-      )
-      origin = side === "right" ? "0 50%" : "100% 50%"
-    } else {
-      const counter = title.getBoundingClientRect()
-      top =
-        word.top - height - 10 >= Math.max(8, counter.bottom + 8)
-          ? word.top - height - 10
-          : word.bottom + 10
-    }
-    raised.style.transformOrigin = origin
-    raised.style.left = left + win.scrollX + "px"
-    raised.style.top = top + win.scrollY + "px"
-  }
+  const slotOf = (symbol) => root.querySelector('[data-icono-play-slot="' + symbol + '"]')
+  // The card that the pointer, the focus or the last tap is on stands out in
+  // its gene's colour.
+  let lit = ""
 
-  // Lazy cards above the strip load after the tap and push the strip down,
-  // and the card settles its own height after it mounts. While the card is
-  // up, it is placed again whenever the page, the strip or the card resizes.
-  let follower = null
-  function follow(pill) {
-    if (follower) follower.disconnect()
-    follower = null
-    place(pill)
-    if (!("ResizeObserver" in win)) return
-    follower = new win.ResizeObserver(() => {
-      if (raised && current === pill.getAttribute("data-icono-play-symbol")) place(pill)
-    })
-    for (const element of [doc.body, card, raised]) follower.observe(element)
-  }
-
-  function onOutsidePointer(event) {
-    if (event.target.closest(".icono-play-pill, .icono-play-raised")) return
-    hide()
-  }
-  function onKey(event) {
-    if (event.key === "Escape") hide()
-  }
-
-  function show(pill) {
-    win.clearTimeout(hideTimer)
-    win.clearTimeout(removeTimer)
-    const symbol = pill.getAttribute("data-icono-play-symbol")
-    const gene = genes.get(symbol)
-    if (current !== symbol || !raised) {
-      if (raised) raised.remove()
-      const holder = doc.createElement("div")
-      holder.innerHTML = options.cardMarkup(gene)
-      raised = holder.firstElementChild
-      raised.classList.add("icono-play-raised")
-      // The symbol's own link names the gene and opens its page, so the
-      // picture stays out of the tab order and the accessibility tree.
-      raised.setAttribute("aria-hidden", "true")
-      for (const link of raised.querySelectorAll("a")) link.tabIndex = -1
-      raised.addEventListener("pointerenter", () => win.clearTimeout(hideTimer))
-      raised.addEventListener("pointerleave", (event) => {
-        if (event.pointerType === "mouse") hide()
-      })
-      doc.body.append(raised)
-      options.onCardMounted(raised)
-      current = symbol
-    }
-    follow(pill)
-    win.requestAnimationFrame(() => raised && raised.classList.add("is-up"))
-    // While the card is up, a tap elsewhere, Escape or Back puts it away.
-    doc.addEventListener("pointerdown", onOutsidePointer, true)
-    doc.addEventListener("keydown", onKey)
-    win.addEventListener("popstate", hide)
+  function light(symbol) {
+    if (lit !== symbol) unlight()
+    lit = symbol
+    slotOf(symbol).classList.add("is-lit")
     discover(symbol)
   }
 
-  function hide() {
-    win.clearTimeout(hideTimer)
-    doc.removeEventListener("pointerdown", onOutsidePointer, true)
-    doc.removeEventListener("keydown", onKey)
-    win.removeEventListener("popstate", hide)
-    if (follower) follower.disconnect()
-    follower = null
-    current = ""
-    if (!raised) return
-    const leaving = raised
-    leaving.classList.remove("is-up")
-    removeTimer = win.setTimeout(() => {
-      leaving.remove()
-      if (raised === leaving) raised = null
-    }, 120)
+  function unlight() {
+    if (lit) slotOf(lit).classList.remove("is-lit")
+    lit = ""
   }
 
   function discover(symbol) {
     if (found.has(symbol)) return
     found.add(symbol)
-    const slot = root.querySelector('[data-icono-play-slot="' + symbol + '"]')
-    slot.querySelector("img").src = genes.get(symbol).portraitUrl
-    slot.classList.add("is-found")
-    const total = Math.max(found.size, Number(options.onFind(symbol)) || 0)
-    title.textContent = "You discovered " + total + (total === 1 ? " gene" : " genes") + " so far"
-    next.hidden = false
+    const element = slotOf(symbol)
+    const front = element.querySelector(".icono-play-slot-front")
+    front.innerHTML = options.cardMarkup(genes.get(symbol))
+    options.onCardMounted(front.firstElementChild)
+    element.classList.add("is-found")
+    options.onFind(symbol)
   }
 
   for (const pill of root.querySelectorAll(".icono-play-pill")) {
+    const symbol = pill.getAttribute("data-icono-play-symbol")
     pill.addEventListener("pointerenter", (event) => {
-      if (event.pointerType === "mouse" || event.pointerType === "pen") show(pill)
+      if (event.pointerType === "mouse" || event.pointerType === "pen") light(symbol)
     })
     pill.addEventListener("pointerleave", (event) => {
-      // Long enough for the pointer to travel from the word up onto the card.
-      if (event.pointerType === "mouse") hideTimer = win.setTimeout(hide, 300)
+      if (event.pointerType === "mouse" && lit === symbol) unlight()
     })
     // Keyboard focus only: a tap focuses the link too (Chrome on Android), and
-    // that tap has to raise the card, not open the page.
+    // that tap has to turn the card, not open the page.
     pill.addEventListener("focus", () => {
-      if (pill.matches(":focus-visible")) show(pill)
+      if (pill.matches(":focus-visible")) light(symbol)
     })
-    // A tap raises the card; a second tap on the same symbol opens its page,
-    // as a click or Enter does once the card is up. The site's own link
+    pill.addEventListener("blur", () => {
+      if (lit === symbol && !pill.matches(":hover")) unlight()
+    })
+    // A tap turns the card; a second tap on the same symbol opens its page,
+    // as a click or Enter does once the card is lit. The site's own link
     // handler (data-icono-nav) does the opening, so the first tap stops here.
     pill.addEventListener("click", (event) => {
-      if (current === pill.getAttribute("data-icono-play-symbol")) return
+      if (lit === symbol) return
       event.preventDefault()
       event.stopPropagation()
-      show(pill)
+      light(symbol)
     })
   }
-  root.addEventListener("focusout", (event) => {
-    const to = event.relatedTarget
-    if (!root.contains(to) && !(raised && raised.contains(to))) hide()
-  })
 
   return root
 }
