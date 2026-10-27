@@ -193,6 +193,50 @@ GROUP BY channel, route ORDER BY rows_written DESC
 Page views on the static pages never reach the Worker; Cloudflare Web Analytics
 counts them (cookieless, for every visitor since 2026-10-22).
 
+### How fast pages load for real readers
+
+The same Web Analytics beacon records each real visitor's Core Web Vitals.
+Measure a reader-speed problem here first. Lighthouse's phone profile (1.6 Mbps,
+150 ms RTT, 4× CPU) is a stress test. On 2026-10-27 it said gene pages took
+5.7 s on a phone, while real readers saw a p75 of about 1.2 s. An agent then
+started building B-1162 from the lab number. Query through the dashboard's
+GraphQL endpoint (`https://dash.cloudflare.com/api/v4/graphql`, from the
+signed-in dashboard page). Times are in microseconds:
+
+```graphql
+query {
+  viewer {
+    accounts(filter: { accountTag: "c2f308188824cbf1651a0e999e3ec931" }) {
+      rumWebVitalsEventsAdaptiveGroups(
+        limit: 50
+        orderBy: [count_DESC]
+        filter: {
+          datetime_geq: "2026-10-23T12:00:00Z"
+          requestHost: "iconoplasm.brinedew.bio"
+          requestPath_like: "/gene/%"
+        }
+      ) {
+        count
+        dimensions {
+          deviceType
+        }
+        sum {
+          lcpTotal
+          lcpGood
+          lcpNeedsImprovement
+          lcpPoor
+        }
+        quantiles {
+          largestContentfulPaintP50
+          largestContentfulPaintP75
+          largestContentfulPaintP90
+        }
+      }
+    }
+  }
+}
+```
+
 ## Admission behavior
 
 The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-policy.js`):
