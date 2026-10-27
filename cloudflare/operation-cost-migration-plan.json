@@ -14,20 +14,5 @@
     "kv_deletes": 0,
     "kv_lists": 0
   },
-  "migrations": {
-    "iconoplasm/0144_style_cards.sql": {
-      "online": true,
-      "prediction": {
-        "rows_read": 220000,
-        "rows_written": 13500,
-        "requests": 1
-      },
-      "guards": [
-        {
-          "sql": "SELECT COUNT(*) AS blots FROM icono_style_published_portraits",
-          "max": 21000
-        }
-      ]
-    }
-  }
+  "migrations": {}
 }
