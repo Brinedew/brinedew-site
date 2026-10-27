@@ -221,8 +221,16 @@ export const ICONOPLASM_MOVED_PREFIXES = Object.freeze([
 // Static rules come before splats; the first matching line wins. Keep
 // /portraits/* out of Static Assets redirects: those canonical URLs must reach
 // the existing Bunny-backed Worker when a browser cannot reach the CDN.
+// B-1158: one link per place the site is posted, /from/reddit, /from/bsky. On
+// the free plan Cloudflare's analytics keep a request's path but not its query
+// string, so a ?ref= landing can't be counted and a /from/ one can (the daily
+// request rollup does). The 302 keeps every landing reaching the edge, and the
+// ?ref= it adds names the channel in the request record for what people do on
+// that page.
+export const ICONOPLASM_SHARE_LINK = "/from/:place /?ref=:place 302"
 export const ICONOPLASM_REDIRECTS = `${[
   ...ICONOPLASM_MOVED_PATHS.map(([from, to]) => `${from} ${to} 301`),
+  ICONOPLASM_SHARE_LINK,
   ...ICONOPLASM_MOVED_PREFIXES.map(([from, to]) => `${from}* ${to}:splat 301`),
 ].join("\n")}\n`
 
