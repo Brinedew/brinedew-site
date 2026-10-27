@@ -5,6 +5,7 @@ import {
   ICONOPLASM_MOVED_PATHS,
   ICONOPLASM_MOVED_PREFIXES,
   ICONOPLASM_REDIRECTS,
+  ICONOPLASM_SHARE_LINK,
   standaloneIconoplasmHtml,
   unservedIconoplasmLinks,
 } from "./prepare-iconoplasm-edge-assets.mjs"
@@ -137,11 +138,15 @@ test("every moved path is redirected once and rewritten in the pages", () => {
     )
   }
   // 3
-  const firstDynamic = lines.findIndex((line) => line.includes("*"))
-  assert.ok(lines.slice(firstDynamic).every((line) => line.includes("*")))
+  const dynamic = (line) => /[*:]/.test(line.split(" ")[0])
+  const firstDynamic = lines.findIndex(dynamic)
+  assert.ok(lines.slice(firstDynamic).every(dynamic))
   // 4
-  for (const line of lines)
+  for (const line of lines.filter((line) => line !== ICONOPLASM_SHARE_LINK))
     assert.match(line, /^\/[A-Za-z0-9._/-]*\*? (?:https:\/\/\S+|\/\S*) 301$/)
+  // 5. Share links are temporary (302), so each landing reaches the edge and
+  //    is counted, and come before the splats.
+  assert.ok(lines.indexOf(ICONOPLASM_SHARE_LINK) < lines.findIndex((line) => line.includes("*")))
 })
 
 // B-906: the footer the Quartz pages share with the main site links /about. This host has

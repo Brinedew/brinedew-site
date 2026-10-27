@@ -8173,13 +8173,68 @@
       )
     }
 
-    if (!sections.length) {
-      els.costTopRoutes.innerHTML =
-        '<div class="cost-empty-note">No baked route attribution or Cloudflare drilldown links are available yet.</div>'
-      return
-    }
+    els.costTopRoutes.innerHTML =
+      '<div id="cost-channel-funnel"></div>' +
+      (sections.length
+        ? sections.join("")
+        : '<div class="cost-empty-note">No baked route attribution or Cloudflare drilldown links are available yet.</div>')
+    renderChannelFunnel(document.getElementById("cost-channel-funnel"))
+  }
 
-    els.costTopRoutes.innerHTML = sections.join("")
+  // B-1158: where today's visitors came from, what they did, and what it cost.
+  // The hourly request rollup (B-1157) is a static file, so this costs no
+  // Worker request. The hour in the query skips the CDN's copy of the previous
+  // hour's file.
+  function renderChannelFunnel(container) {
+    if (!container) return
+    var now = new Date()
+    var date = now.toISOString().slice(0, 10)
+    var url =
+      "https://img.brinedew.bio/ops/requests/v1/" +
+      date +
+      ".json?h=" +
+      encodeURIComponent(now.toISOString().slice(0, 13))
+    fetch(url)
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status)
+        return response.json()
+      })
+      .then(function (day) {
+        var channels = Array.isArray(day && day.channels) ? day.channels : []
+        container.innerHTML = [
+          '<div class="cost-status-banner">',
+          "<strong>Channels today</strong>",
+          '<div class="small">Share links: https://iconoplasm.brinedew.bio/from/&lt;place&gt;. ',
+          '<a href="' + esc(url) + '" target="_blank" rel="noopener">Rollup</a> ',
+          esc(formatTimestampShort(day && day.generated_at)),
+          "</div>",
+          "</div>",
+          '<table class="cost-table">',
+          "<thead><tr><th>Place</th><th>Landings</th><th>People acting</th><th>Requests</th><th>D1 rows written</th></tr></thead>",
+          "<tbody>",
+          channels
+            .map(function (row) {
+              return [
+                "<tr>",
+                "<td><strong>" + esc(row.name) + "</strong></td>",
+                "<td>" + esc(compactMetricNumber(row.landings || 0)) + "</td>",
+                "<td>" + esc(compactMetricNumber(row.people || 0)) + "</td>",
+                "<td>" + esc(compactMetricNumber(row.requests || 0)) + "</td>",
+                "<td>" + esc(compactMetricNumber(row.rows_written || 0)) + "</td>",
+                "</tr>",
+              ].join("")
+            })
+            .join(""),
+          "</tbody>",
+          "</table>",
+        ].join("")
+      })
+      .catch(function (error) {
+        container.innerHTML =
+          '<div class="cost-empty-note">Channels today: ' +
+          esc(String(error.message || error)) +
+          "</div>"
+      })
   }
 
   // The current account meters come from one admin-initiated Cloudflare query.
