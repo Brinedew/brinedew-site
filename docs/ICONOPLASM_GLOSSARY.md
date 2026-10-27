@@ -80,8 +80,7 @@ or in the browser and renaming them would break readers or the extension:
 - The CSS class `icono-card` and the `data-icono-card-*` attributes sit on every
   gallery tile, image tiles included.
 - Public names that readers, the extension or stored data still use:
-  the `/api/iconoplasm/cards/<SYMBOL>` and `/api/public/v1/card-snapshots/`
-  routes, the `cards` and `card` keys of the mobile gallery responses, the
+  the `/api/public/v1/card-snapshots/` routes, the `cards` and `card` keys of the mobile gallery responses, the
   `card_snapshot_version` field, the `X-Iconoplasm-Card-Version` header, the
   `CARD_ARTIFACT_UNAVAILABLE` error code, and the `resolved_from` value
   `published_card_catalog_bulk` inside the stable gene object.

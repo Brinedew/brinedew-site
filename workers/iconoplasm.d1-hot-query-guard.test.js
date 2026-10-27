@@ -1,10 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
-import {
-  ICONOPLASM_ROUTE_CONTRACTS,
-  matchIconoplasmRouteContract,
-} from "./iconoplasm-route-contract.js"
+import { ICONOPLASM_ROUTE_CONTRACTS } from "./iconoplasm-route-contract.js"
 
 const source = readFileSync(
   new URL(
@@ -36,22 +33,7 @@ function DO_NOT_DELETE_THIS_GUARD__assertNeedleOrder(haystack, before, after, me
   assert.ok(beforeIndex < afterIndex, message)
 }
 
-test("DO NOT DELETE: discovery hover path is tombstoned and the compact batch route owns writes", () => {
-  const encounterRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    'if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST")',
-    'if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST")',
-  )
-  assert.match(
-    encounterRoute,
-    /LEGACY_DISCOVERY_WRITER_RETIRED/,
-    "the retired per-hover writer must stay a loud, write-free tombstone",
-  )
-  assert.doesNotMatch(
-    encounterRoute,
-    /recordDiscoveryEncounterAtomically\(|recordCompactDiscoveryEncounters\(|ICONOPLASM_DB\.prepare/,
-    "the retired per-hover route must not touch discovery storage",
-  )
-
+test("DO NOT DELETE: the compact batch route owns discovery writes", () => {
   const batchRoute = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
     'if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST")',
     'if (path === "/api/iconoplasm/discoveries/membership" && request.method === "GET")',
@@ -75,44 +57,6 @@ test("DO NOT DELETE: discovery hover path is tombstoned and the compact batch ro
     compactWriter,
     /recordCompactDiscoveryBatch\(db, \{/,
     "the compact recorder must go through the reviewed compact batch service",
-  )
-})
-
-test("DO NOT DELETE: per-symbol card endpoint stays KV-backed and version-barrier safe", () => {
-  const getContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "GET")
-  const headContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "HEAD")
-  const postContract = matchIconoplasmRouteContract("/api/iconoplasm/cards/TP53", "POST")
-  assert.equal(getContract?.route.id, "mobile_card_symbol")
-  assert.equal(getContract?.route.gatewayHandler, "mobile_card_symbol")
-  assert.equal(getContract?.methodAllowed, true)
-  assert.equal(headContract?.methodAllowed, true)
-  assert.equal(postContract?.methodAllowed, false)
-
-  const cardEndpoint = DO_NOT_DELETE_THIS_GUARD__sliceBetweenOrFailLoudly(
-    "async function handleMobileCardSymbol",
-    "// DO NOT DELETE: per-symbol card endpoint guard boundary.",
-  )
-  assert.match(cardEndpoint, /caches\.default/)
-  assert.match(cardEndpoint, /const symbol = normalizeSymbol\(symbolFromPath\)/)
-  // B-898 Stage 1 (step B): the endpoint reads ONE stable gene object per
-  // symbol from Bunny Storage. The guard no longer looks for the KV head or
-  // the card-catalog artifact reader; it now fails if either comes back, and
-  // still fails on any D1 composition below.
-  assert.match(cardEndpoint, /readStableGeneObject\(env, symbol\)/)
-  assert.doesNotMatch(
-    cardEndpoint,
-    /currentMobileCardSnapshotVersion\(|readPublishedCardCatalogArtifact\(/,
-    "the per-symbol card endpoint must not walk the retired KV head / manifest tree",
-  )
-  assert.doesNotMatch(
-    cardEndpoint,
-    /s-maxage=86400|stale-while-revalidate=604800/,
-    "unversioned /api/iconoplasm/cards/:symbol responses must not be externally cacheable outside KV_GALLERY_VERSION",
-  )
-  assert.doesNotMatch(
-    cardEndpoint,
-    /normalizedSymbol\(|geneRecord\(|getPublishedPortraitsForSymbols\(|ICONOPLASM_DB\.prepare/,
-    "critical per-symbol card endpoint must not fall back to D1 composition",
   )
 })
 

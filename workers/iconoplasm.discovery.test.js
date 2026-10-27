@@ -221,21 +221,6 @@ async function compactRowCount(env) {
   )
 }
 
-test("the retired per-hover encounter writer is a write-free 410", async () => {
-  const env = await buildEnv()
-  const response = await invoke(
-    post("/api/iconoplasm/discoveries/encounter", {
-      cookie: READER,
-      body: { symbol: "TP53", source: "extension_hover", trigger: "hover_dwell", dwell_ms: 900 },
-    }),
-    env,
-  )
-  assert.equal(response.status, 410)
-  const payload = await response.json()
-  assert.equal(payload.code, "LEGACY_DISCOVERY_WRITER_RETIRED")
-  assert.equal(await compactRowCount(env), 0)
-})
-
 test("signed-out batches are acknowledged without touching storage", async () => {
   const env = await buildEnv()
   const guestResponse = await invoke(
