@@ -4248,6 +4248,71 @@ async function getImageEditProviderRow(env, { userId, providerId }) {
     .first()
 }
 
+// B-1182: a key is checked with its provider before it is saved, so a typo or a
+// revoked key shows up in Settings, not when the reader presses Generate. Each
+// check is a free signed-in read that makes no image. Only a definite "this key
+// is not accepted" refuses the save; a slow or broken provider, or an endpoint
+// that answers anything else, saves the key as before. Measured with a fake key
+// on 2026-10-27: OpenAI 401, Gemini 400 "API key not valid", Krea 401, Luma 401,
+// fal 401 (fal answers 404 with no key at all, so the 401 is the key's).
+const IMAGE_EDIT_KEY_CHECK_TIMEOUT_MS = 8000
+const IMAGE_EDIT_KEY_CHECK_UNKNOWN_ID = "00000000-0000-0000-0000-000000000000"
+
+function imageEditProviderKeyCheckRequest(providerId, apiKey, endpointUrl) {
+  const row = { endpoint_url: endpointUrl }
+  const bearer = { Authorization: `Bearer ${apiKey}` }
+  if (providerId === "openai") return { url: `${openAiApiBaseUrl(row)}/models`, headers: bearer }
+  if (providerId === "gemini")
+    return {
+      url: `${geminiApiBaseUrl(row)}/models?pageSize=1`,
+      headers: { "x-goog-api-key": apiKey },
+    }
+  if (providerId === "krea") return { url: `${kreaApiBaseUrl(row)}/jobs?limit=1`, headers: bearer }
+  if (providerId === "luma")
+    return {
+      url: `${lumaApiBaseUrl(row)}/generations/${IMAGE_EDIT_KEY_CHECK_UNKNOWN_ID}`,
+      headers: bearer,
+    }
+  if (providerId === "fal")
+    return {
+      url: `${String(endpointUrl).replace(/\/+$/, "")}/fal-ai/flux-2/requests/${IMAGE_EDIT_KEY_CHECK_UNKNOWN_ID}/status`,
+      headers: { Authorization: `Key ${apiKey}` },
+    }
+  return null
+}
+
+async function imageEditProviderKeyRejection({ providerId, providerDef, apiKey, endpointUrl }) {
+  const check = imageEditProviderKeyCheckRequest(providerId, apiKey, endpointUrl)
+  if (!check) return ""
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort("key check timeout"),
+    IMAGE_EDIT_KEY_CHECK_TIMEOUT_MS,
+  )
+  let response
+  let raw = ""
+  try {
+    response = await fetch(check.url, { headers: check.headers, signal: controller.signal })
+    raw = await response.text()
+  } catch {
+    return ""
+  } finally {
+    clearTimeout(timeout)
+  }
+  let payload = null
+  try {
+    payload = raw ? JSON.parse(raw) : null
+  } catch {
+    payload = null
+  }
+  const geminiInvalid = response.status === 400 && /API_KEY_INVALID|API key not valid/i.test(raw)
+  // 403 is not a rejection: a valid key can get it (OpenAI answers 403 from an
+  // unsupported region), and a refused real key is worse than a late error.
+  if (response.status !== 401 && !geminiInvalid) return ""
+  const detail = typeof payload?.detail === "string" ? sanitizeText(payload.detail, 300) : ""
+  return `${providerDef.label}: ${detail || providerErrorMessage(payload, raw, response.status)}`
+}
+
 async function saveImageEditProviderKey(env, { userId, providerId, apiKey, endpointUrl, model }) {
   const normalizedProviderId = normalizeImageEditProviderId(providerId)
   const providerDef = imageEditProviderDefinition(normalizedProviderId)
@@ -4259,6 +4324,13 @@ async function saveImageEditProviderKey(env, { userId, providerId, apiKey, endpo
   // B-916: a retired or unknown model is saved as the provider's current default
   // (a stale tab must not fail to save a key), the same rule reads apply.
   const cleanModel = resolveImageEditProviderModel(model || "", providerDef)
+  const rejection = await imageEditProviderKeyRejection({
+    providerId: normalizedProviderId,
+    providerDef,
+    apiKey: cleanApiKey,
+    endpointUrl: cleanEndpointUrl,
+  })
+  if (rejection) return { ok: false, error: rejection }
   const encrypted = await encryptImageEditApiKey(env, {
     userId,
     providerId: normalizedProviderId,

@@ -1003,11 +1003,24 @@ async function openAiDefaultModel(env) {
     .default_model
 }
 
+// Saving a key first asks the provider whether it accepts the key (B-1182). That
+// check is a free read, so the provider stubs below accept it without counting it
+// as a provider request.
+function keyCheckAccepted(url, init) {
+  if (String(init.method || "GET").toUpperCase() !== "GET") return null
+  const isCheck =
+    /\/v1\/models$|\/v1beta\/models\?pageSize=1$|\/jobs\?limit=1$/.test(url) ||
+    url.includes("/00000000-0000-0000-0000-000000000000")
+  return isCheck ? new Response("{}", { status: 200 }) : null
+}
+
 function fakeOpenAiFetch(fetchCalls, env) {
   return async (input, init = {}) => {
     const url = String(input)
     const prose = factoryProseResponse(url)
     if (prose) return prose
+    const keyCheck = keyCheckAccepted(url, init)
+    if (keyCheck) return keyCheck
     fetchCalls.push({ url, init })
     if (url === "https://api.openai.com/v1/images/edits") {
       return new Response(JSON.stringify({ data: [{ b64_json: base64(EDITED_BYTES) }] }), {
@@ -1326,6 +1339,8 @@ function recordingProviderFetch(env, recorded) {
     const url = String(input)
     const prose = factoryProseResponse(url)
     if (prose) return prose
+    const keyCheck = keyCheckAccepted(url, init)
+    if (keyCheck) return keyCheck
     const method = String(init.method || "GET").toUpperCase()
     const create = (response) => {
       recorded.push({ url, method, headers: init.headers || {}, body: init.body })
@@ -1561,3 +1576,117 @@ test("every new, default and direct-provider flow has a golden body, and no gold
     }
   }
 })
+
+// B-1182: a key is checked with its provider when it is saved. Failure modes:
+//   1. a key the provider rejects is saved, and the reader finds out at Generate
+//   2. the refusal shows our words instead of the provider's
+//   3. a slow, broken or unreachable provider blocks a real key from being saved
+//   4. the check spends money (it must be a read that makes no image)
+// The rejection bodies are the ones each provider sent for a fake key on 2026-10-27.
+const KEY_CHECKS = [
+  {
+    provider_id: "openai",
+    url: "https://api.openai.com/v1/models",
+    header: ["authorization", "Bearer bad-key-12345"],
+    rejection: [401, { error: { message: "Incorrect API key provided: bad-key-12345." } }],
+    error: "OpenAI API: Incorrect API key provided: bad-key-12345.",
+  },
+  {
+    provider_id: "gemini",
+    url: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
+    header: ["x-goog-api-key", "bad-key-12345"],
+    rejection: [
+      400,
+      {
+        error: {
+          code: 400,
+          message: "API key not valid. Please pass a valid API key.",
+          status: "INVALID_ARGUMENT",
+          details: [{ reason: "API_KEY_INVALID" }],
+        },
+      },
+    ],
+    error: "Gemini API: API key not valid. Please pass a valid API key.",
+  },
+  {
+    provider_id: "krea",
+    url: "https://api.krea.ai/jobs?limit=1",
+    header: ["authorization", "Bearer bad-key-12345"],
+    rejection: [401, { message: "Unauthorized" }],
+    error: "Krea API: Unauthorized",
+  },
+  {
+    provider_id: "luma",
+    url: "https://agents.lumalabs.ai/v1/generations/00000000-0000-0000-0000-000000000000",
+    header: ["authorization", "Bearer bad-key-12345"],
+    rejection: [401, { detail: "Missing or invalid API key" }],
+    error: "Luma Uni API: Missing or invalid API key",
+  },
+  {
+    provider_id: "fal",
+    url: "https://queue.fal.run/fal-ai/flux-2/requests/00000000-0000-0000-0000-000000000000/status",
+    header: ["authorization", "Key bad-key-12345"],
+    rejection: [401, { detail: "Authentication is required" }],
+    error: "Fal.ai: Authentication is required",
+  },
+]
+
+function keyCheckFetch(answer, calls) {
+  return async (input, init = {}) => {
+    const url = String(input)
+    calls.push({ url, method: String(init.method || "GET").toUpperCase(), headers: init.headers })
+    return answer(url)
+  }
+}
+
+for (const check of KEY_CHECKS) {
+  test(`${check.provider_id}: a key is checked on save, refused in the provider's words, saved when accepted or unreachable`, async () => {
+    const originalFetch = globalThis.fetch
+    const db = new FakeDb()
+    const env = buildEnv(db)
+    const calls = []
+    const save = (apiKey) =>
+      workerRequest(env, "/api/iconoplasm/image-edit/providers", {
+        method: "POST",
+        body: { provider_id: check.provider_id, api_key: apiKey },
+      })
+    try {
+      // 1 and 2: the provider rejects the key, so nothing is stored.
+      const [status, body] = check.rejection
+      globalThis.fetch = keyCheckFetch(() => new Response(JSON.stringify(body), { status }), calls)
+      const refused = await save("bad-key-12345")
+      assert.equal(refused.status, 400)
+      assert.equal(refused.body.ok, false)
+      assert.equal(refused.body.error, check.error)
+      assert.equal(db.providerRows.size, 0, "a rejected key is not stored")
+      // 4: one free read, no image request.
+      assert.deepEqual(
+        calls.map((call) => [call.method, call.url]),
+        [["GET", check.url]],
+      )
+      const sentHeader = Object.entries(calls[0].headers).find(
+        ([name]) => name.toLowerCase() === check.header[0],
+      )
+      assert.equal(sentHeader?.[1], check.header[1])
+
+      // An accepted key (any answer that is not a rejection) is stored.
+      globalThis.fetch = keyCheckFetch(() => new Response("{}", { status: 404 }), [])
+      const accepted = await save("good-key-12345")
+      assert.equal(accepted.status, 200, JSON.stringify(accepted.body))
+      assert.equal(db.providerRows.size, 1)
+
+      // 3: a provider that is down or unreachable never blocks a save.
+      globalThis.fetch = keyCheckFetch(() => new Response("upstream down", { status: 503 }), [])
+      assert.equal((await save("good-key-12345")).status, 200)
+      // A 403 can come from a valid key (a region or project rule), so it saves too.
+      globalThis.fetch = keyCheckFetch(() => new Response("{}", { status: 403 }), [])
+      assert.equal((await save("good-key-12345")).status, 200)
+      globalThis.fetch = async () => {
+        throw new TypeError("network unreachable")
+      }
+      assert.equal((await save("good-key-12345")).status, 200)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+}
