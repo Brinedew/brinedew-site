@@ -167,8 +167,19 @@ request came from) and `country`.
 - **During a burst:** Workers Logs (dashboard → Workers → the internal stateful
   Worker → Logs), filtered on `service = iconoplasm`, shows the lines within
   seconds; kept 3 days, 200,000 events a day on the free plan.
-- **Afterwards:** not yet. The record also writes to Workers Analytics
-  Engine (dataset `iconoplasm_requests`, about three months) whenever the
+- **Afterwards:** one summary file per UTC day at
+  `https://img.brinedew.bio/ops/requests/v1/<YYYY-MM-DD>.json` (B-1157). The
+  hourly "Observe Cloudflare capacity" workflow runs
+  `scripts/roll-up-iconoplasm-request-record.mjs`, which asks Workers
+  Observability for the day's totals, then per route and per channel: requests,
+  people, D1 rows read and written, and server errors. Today's file is
+  rewritten every hour and says `"complete": false` until the day ends. The
+  files hold counts only, no actor hash, IP or user agent, and a channel that
+  isn't a plain slug is counted as `(other)`. A grouped query answers only 10
+  groups unless `parameters.limit` is set, and without it they were the 10
+  smallest routes; the script sets it to 1,000.
+- **Per request, beyond 3 days:** not kept. The record also writes to Workers
+  Analytics Engine (dataset `iconoplasm_requests`, about three months) whenever the
   `ICONOPLASM_REQUESTS` binding exists, but the binding is out of the toml:
   enabling Analytics Engine adds a (free) subscription, and Cloudflare refuses
   any subscription change while the account carries its unpaid April invoice
