@@ -8182,22 +8182,29 @@
   }
 
   // B-1158: where today's visitors came from, what they did, and what it cost.
-  // The hourly request rollup (B-1157) is a static file, so this costs no
-  // Worker request. The hour in the query skips the CDN's copy of the previous
-  // hour's file.
+  // The hourly request rollup (B-1157) writes a new static file each hour
+  // (about :20), so this costs no Worker request. Until this hour's file
+  // exists, the previous hour's is the latest.
   function renderChannelFunnel(container) {
     if (!container) return
-    var now = new Date()
-    var date = now.toISOString().slice(0, 10)
-    var url =
-      "https://img.brinedew.bio/ops/requests/v1/" +
-      date +
-      ".json?h=" +
-      encodeURIComponent(now.toISOString().slice(0, 13))
-    fetch(url)
-      .then(function (response) {
+    var hour = function (hoursAgo) {
+      return (
+        "https://img.brinedew.bio/ops/requests/v2/hours/" +
+        new Date(Date.now() - hoursAgo * 3600000).toISOString().slice(0, 13) +
+        ".json"
+      )
+    }
+    var url = hour(0)
+    var load = function (address) {
+      return fetch(address).then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status)
+        url = address
         return response.json()
+      })
+    }
+    load(url)
+      .catch(function () {
+        return load(hour(1))
       })
       .then(function (day) {
         var channels = Array.isArray(day && day.channels) ? day.channels : []

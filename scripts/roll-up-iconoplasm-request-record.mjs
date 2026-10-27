@@ -2,10 +2,11 @@
 // past Workers Logs' 3 days. Every hour, the "Observe Cloudflare capacity"
 // workflow runs this script. It asks Cloudflare's Workers Observability API to
 // sum yesterday's and today's record lines (people, requests, D1 rows read and
-// written, server errors) per route and per `?ref=` channel. Then it writes one
-// small JSON file per UTC day to Bunny Storage, at ops/requests/v1/<date>.json.
-// Today's file is rewritten every hour, and yesterday's gets its final hours
-// on the first runs after midnight.
+// written, server errors) per route and per `?ref=` channel. Then it writes
+// small JSON files to Bunny Storage. The CDN keeps a file for 30 days and
+// ignores query strings, so no file is rewritten with different counts:
+// ops/requests/v2/<date>.json once the day is over, and the day so far in a new
+// file each hour, ops/requests/v2/hours/<date>T<hour>.json.
 //
 // Each channel also gets its landings: requests for the share link
 // /from/<place> (B-1158), counted by Cloudflare's zone analytics, which keep a
@@ -21,7 +22,7 @@ import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
 
 const SCRIPT_NAME = "geneguessr-api" // the internal stateful Worker that writes the record
 const STORAGE = "https://storage.bunnycdn.com/iconoplasm-portraits"
-const PREFIX = "ops/requests/v1"
+const PREFIX = "ops/requests/v2"
 const DAY_MS = 86_400_000
 const CHANNEL = /^[A-Za-z0-9._-]{1,40}$/
 const ZONE = "brinedew.bio"
@@ -253,8 +254,8 @@ async function rollUpDay(date, now) {
   })
 }
 
-async function put(date, rollup) {
-  const response = await fetch(`${STORAGE}/${PREFIX}/${date}.json`, {
+async function put(name, rollup) {
+  const response = await fetch(`${STORAGE}/${PREFIX}/${name}.json`, {
     method: "PUT",
     headers: {
       AccessKey: need("ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD"),
@@ -263,17 +264,22 @@ async function put(date, rollup) {
     body: `${JSON.stringify(rollup)}\n`,
   })
   if (!response.ok)
-    throw new Error(`Bunny Storage PUT ${PREFIX}/${date}.json failed (${response.status})`)
+    throw new Error(`Bunny Storage PUT ${PREFIX}/${name}.json failed (${response.status})`)
 }
 
 async function main() {
   const now = Date.now()
   const today = new Date(now).toISOString().slice(0, 10)
   const yesterday = new Date(now - DAY_MS).toISOString().slice(0, 10)
-  for (const date of [yesterday, today]) {
+  // Yesterday is rewritten each hour with the same counts once Workers Logs
+  // holds its last minutes, so whichever copy the CDN keeps is the final one.
+  for (const [date, name] of [
+    [yesterday, yesterday],
+    [today, `hours/${new Date(now).toISOString().slice(0, 13)}`],
+  ]) {
     const rollup = await rollUpDay(date, now)
     if (process.argv.includes("--dry-run")) console.log(JSON.stringify(rollup, null, 2))
-    else await put(date, rollup)
+    else await put(name, rollup)
     console.log(
       `${date}: ${rollup.totals.requests} requests, ${rollup.totals.people} people, ${rollup.routes.length} routes, ${rollup.channels.length} channels${rollup.complete ? " (complete)" : ""}`,
     )

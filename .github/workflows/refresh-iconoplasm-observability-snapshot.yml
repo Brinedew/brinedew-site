@@ -79,8 +79,9 @@ jobs:
         run: node scripts/check-iconoplasm-d1-statement-burns.mjs
 
       # Workers Logs keeps the request record for 3 days. This keeps one
-      # summary file per UTC day on Bunny Storage (ops/requests/v1/<date>.json),
-      # so a burst can still be read a month later. No Worker, D1 or KV meter.
+      # summary file per UTC day on Bunny Storage (ops/requests/v2/<date>.json,
+      # and the day so far in v2/hours/<date>T<hour>.json), so a burst can still
+      # be read a month later. No Worker, D1 or KV meter.
       - name: Keep the day's request record past Workers Logs' 3 days
         if: ${{ !cancelled() && steps.node.outcome == 'success' }}
         env:
