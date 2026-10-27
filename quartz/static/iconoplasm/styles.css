@@ -512,23 +512,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-wrap: pretty;
 }
 
-.icono-hero .stat {
-  display: inline-block;
-  margin-top: 0.6rem;
-  padding: 0.25rem 0.75rem;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--darkgray);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--icono-radius-sm);
-  background: var(--ui-bg);
-}
-
-.icono-hero .stat[hidden] {
-  display: none;
-}
-
 .icono-home-auth {
   margin: 0 auto 1rem;
 }
@@ -651,6 +634,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-search--toolbar {
   max-width: none;
+  min-width: 0;
   margin: 0;
   flex: 1 1 30rem;
 }
@@ -678,8 +662,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-search-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--darkgray);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dark) 12%, transparent);
 }
 
 /* Live search dropdown */
@@ -2983,129 +2967,86 @@ img-comparison-slider.rendered [slot="second"] {
 }
 
 /* ───────── Gallery toolbar ───────── */
+/* GitHub's filter row: the search box and the Sort button share one height,
+   border and corner, and the button is filled a step off the page. */
 .icono-gallery-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0 auto 1.2rem;
-}
-
-/* B-457 #1: home toolbar actions used to be disjointed pills (Sort
-   select and Installed v0.4.x toggle) sitting at slightly
-   different heights with arbitrary 0.75rem gaps between them. Same failure
-   mode as the gene-page Edit-image / New-candidate split that B-472 fixed.
-   Consolidate into one bordered rail with hairline-separated segments — the
-   inner controls keep their semantics but lose redundant outer pill borders
-   so the eye reads ONE toolbar instead of three orphan widgets.
-
-   Mobile (<=600px) breakpoint already stacks these full-width, so we scope
-   the rail framing to wider viewports where horizontal alignment matters. */
-.icono-gallery-actions {
+  --icono-toolbar-height: 2.5rem;
   display: flex;
   align-items: stretch;
-  justify-content: flex-end;
-  gap: 0;
-  flex-wrap: wrap;
-  padding: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--dark) 12%, var(--ui-border) 88%);
-  border-radius: var(--icono-control-radius);
-  background: color-mix(in srgb, var(--light) 92%, white 8%);
+  gap: 0.5rem;
+  margin: 0 auto 0.25rem;
 }
 
-.icono-gallery-install {
+.icono-gallery-toolbar .icono-search-input {
+  height: var(--icono-toolbar-height);
+  min-height: 0;
+  padding: 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* The select lies over the button, clear, so the phone's own picker opens. */
+.icono-gallery-order {
+  position: relative;
+  flex: none;
   display: inline-flex;
   align-items: center;
-}
-
-/* Segment dividers: thin vertical hairline between rail children. Skipped
-   on the first visible child so we never render a leading divider. */
-.icono-gallery-actions > .icono-gallery-order {
-  padding-left: 0.65rem;
-  padding-right: 0.65rem;
-}
-.icono-gallery-actions > * + *:not([hidden]) {
-  border-left: 1px solid color-mix(in srgb, var(--dark) 10%, var(--ui-border) 90%);
-  margin-left: 0;
-  padding-left: 0.65rem;
-}
-
-/* Inside the rail, controls drop their own pill border + background so the
-   rail is the only frame. Focus/hover still reads via background tint. */
-.icono-gallery-actions .icono-gallery-order select {
-  border-color: transparent;
-  background: transparent;
-  min-height: 44px;
-}
-.icono-gallery-actions .icono-gallery-order select:hover {
-  background: color-mix(in srgb, var(--light) 60%, white 40%);
-}
-.icono-gallery-actions .icono-install-toggle {
-  border-color: transparent;
-  background: transparent;
-  min-height: 44px;
-}
-.icono-gallery-actions .icono-install-toggle:hover,
-.icono-gallery-actions .icono-install-toggle:focus-visible {
-  background: color-mix(in srgb, var(--light) 60%, white 40%);
-}
-.icono-install-toggle {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-height: 2.7rem;
-  padding: 0.55rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--dark) 18%, var(--ui-border) 82%);
+  gap: 0.5rem;
+  box-sizing: border-box;
+  height: var(--icono-toolbar-height);
+  padding: 0 2rem 0 0.75rem;
+  border: 1px solid var(--ui-border);
   border-radius: var(--icono-control-radius);
-  background: color-mix(in srgb, var(--light) 80%, white 20%);
-  color: var(--dark);
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    border-color 0.16s var(--icono-ease-out),
-    background-color 0.16s var(--icono-ease-out),
-    color 0.16s var(--icono-ease-out);
-}
-
-.icono-install-toggle:hover,
-.icono-install-toggle:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--ui-border) 68%);
-  background: color-mix(in srgb, var(--light) 70%, white 30%);
-}
-
-.icono-install-toggle-label {
-  font-size: 0.92rem;
-  line-height: 1;
-  font-weight: 500;
-  color: var(--dark);
-}
-
-.icono-install-toggle-meta,
-.icono-install-toggle-caret {
-  font-size: 0.78rem;
-  line-height: 1;
-  color: var(--secondary, var(--darkgray));
-}
-
-.icono-install-toggle-meta {
+  background: var(--lightgray);
+  color: var(--darkgray);
   font-family: "IBM Plex Mono", monospace;
-  letter-spacing: 0.01em;
-}
-
-.icono-install-toggle-caret {
+  font-size: 0.9rem;
   white-space: nowrap;
 }
 
-.icono-install-toggle--installed {
-  border-color: color-mix(in srgb, #4a7a5b 30%, var(--ui-border) 70%);
-  background: color-mix(in srgb, #eef5ef 70%, white 30%);
+.icono-gallery-order:hover {
+  border-color: var(--darkgray);
 }
 
-.icono-install-toggle--pending {
-  border-color: color-mix(in srgb, #8b6846 28%, var(--ui-border) 72%);
-  background: color-mix(in srgb, #f5eee5 72%, white 28%);
+.icono-gallery-order:has(select:focus-visible) {
+  outline: 2px solid var(--dark);
+  outline-offset: 2px;
+}
+
+.icono-gallery-order::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.8rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid var(--dark);
+  border-bottom: 1.5px solid var(--dark);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.icono-gallery-order-value {
+  color: var(--dark);
+}
+
+.icono-gallery-order select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.icono-gallery-order:has(select:disabled) {
+  opacity: 0.55;
+}
+
+/* The starter strip has nothing to sort. */
+.icono-page-main--play .icono-gallery-order {
+  display: none;
 }
 
 .icono-install-panel-host[hidden] {
@@ -3315,30 +3256,6 @@ img-comparison-slider.rendered [slot="second"] {
   color: var(--dark);
 }
 
-.icono-gallery-order {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  color: var(--secondary, var(--darkgray));
-  font-size: 0.92rem;
-  white-space: nowrap;
-}
-
-.icono-gallery-order select {
-  min-height: 2.8rem;
-  padding: 0.45rem 2rem 0.45rem 0.8rem;
-  font: inherit;
-  color: var(--dark);
-  background: var(--light);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--icono-control-radius);
-  outline: none;
-}
-
-.icono-gallery-order select:focus {
-  border-color: var(--accent);
-}
-
 .icono-toolbar-link {
   display: inline-flex;
   align-items: center;
@@ -3495,16 +3412,6 @@ img-comparison-slider.rendered [slot="second"] {
   font-weight: 520;
   line-height: 1.3;
   text-wrap: balance;
-}
-
-.icono-hero .stat {
-  min-width: 24ch;
-  text-align: center;
-  /* Source: C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Typography) +
-     C:\Users\Admin\.codex\skills\harden\SKILL.md (Dynamic Numeric Data).
-     Keep numerals tabular across stats, votes, and sidebar counters to prevent jitter when
-     values change or align side-by-side. */
-  font-variant-numeric: tabular-nums;
 }
 
 body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
@@ -4107,57 +4014,31 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   display: none !important;
 }
 
-/* The genes a signed-out reader found, over the fading card backs. Each one is
-   a small card of the whole portrait and opens its gene page. The frame is the
-   candidate strip's 7:9, so a 3:4 portrait loses about 3.5% from the bottom. */
-.icono-guest-discovery-thumbs {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0.4rem;
-  width: 100%;
-}
-
-.icono-guest-discovery-thumb {
-  display: block;
-  aspect-ratio: 7 / 9;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: var(--icono-radius-md);
-  background: var(--lightgray);
-}
-
-.icono-guest-discovery-thumb img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 0;
-}
-
-.icono-guest-discovery-thumb:hover {
-  border-color: var(--accent);
-}
-
-.icono-guest-discovery-thumb:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* "You discovered 20 genes so far" is 30 characters: one line in the card. */
-.icono-guest-discovery-card .icono-guest-login-card-title {
-  max-width: none;
-  text-wrap: balance;
-}
-
-.icono-guest-discovery-card .icono-play-next {
-  justify-self: stretch;
-}
-
 /* B-1173: a first-time visitor finds genes right here (home-play-strip.js).
-   The essay lines need a reading measure, so the column widens from one tile
-   to 38rem while the strip is in it. */
+   While the strip is up it is the signed-out Archive: the starters' feed and
+   its fading backs give way to the strip's own four cards. */
+.icono-page-main--play #icono-grid,
+.icono-page-main--play .icono-guest-continuation,
+.icono-page-main--play .icono-feed-skip,
+.icono-page-main--play .icono-feed-state {
+  display: none !important;
+}
+
+.icono-page-main--play .icono-post-feed-stage {
+  margin-top: 0;
+  overflow: visible;
+}
+
+.icono-page-main--play .icono-post-feed-stage::after {
+  content: none;
+}
+
+.icono-page-main--play .icono-post-feed-stage > .icono-home-auxiliary {
+  margin: 0 0 4rem;
+}
+
 .icono-home-auxiliary--play {
-  width: min(100%, 38rem);
+  width: 100%;
 }
 
 .icono-play-card.icono-guest-login-card {
@@ -4168,9 +4049,9 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   max-width: none;
 }
 
-/* The essay lines sit in a drawn browser window whose toolbar carries the
-   add-on's icon, so the strip reads as one page of many. The window controls
-   keep their usual colours in both themes. */
+/* The lines sit in a drawn browser window whose toolbar carries the add-on's
+   icon, so the strip reads as one page of many. The window controls keep
+   their usual colours in both themes. */
 .icono-play-window {
   --icono-play-dot-close: #e0605a;
   --icono-play-dot-minimize: #e9b44c;
@@ -4235,43 +4116,23 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   border-radius: 4px;
 }
 
+/* One reading size: the lines read at the card's own note size. */
 .icono-play-quote {
   margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.icono-play-window .icono-play-quote {
   padding: 0.6rem 0.8rem 0.7rem;
-}
-
-/* One reading size: the quote reads at the card's own note size. */
-.icono-play-quote p {
-  margin: 0;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.8rem;
   line-height: 1.75;
   color: var(--dark);
+}
+
+.icono-play-line {
+  display: block;
   text-wrap: pretty;
 }
 
-.icono-play-quote strong {
-  font-weight: 600;
-}
-
-.icono-play-source {
-  display: block;
-  margin-top: 0.35rem;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  color: var(--darkgray);
-}
-
-.icono-play-source a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
+.icono-play-line + .icono-play-line {
+  margin-top: 0.3rem;
 }
 
 /* The add-on's default pill (CANVAS_SHAPE_CONTRACTS.pill in
@@ -4301,11 +4162,11 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   color: rgb(24, 22, 20);
 }
 
-/* On the dark theme the ring is light: the add-on's dark ring lets the
-   near-black genes (MYC, MDM2, BCL2, TP53) vanish into a dark card. The ink
-   is light too. The add-on picks its ink for the solid gene colour, but the
-   fill is 72% opaque, and over this card it comes out darker: dark ink on BAX
-   and BBC3 measured APCA Lc 30 and 32, light ink Lc 73 and 71 (2026-10-24). */
+/* On the dark theme the ring is light, so a near-black gene's pill doesn't
+   vanish into a dark card. The ink is light too: the add-on picks its ink for
+   the solid gene colour, but the fill is 72% opaque and comes out darker over
+   this card (dark ink measured APCA Lc 30 to 32 on light genes, light ink
+   Lc 71 to 73, 2026-10-24). */
 html[saved-theme="dark"] .icono-play-pill {
   box-shadow: 0 0 0 0.045em rgba(249, 247, 242, 0.55);
 }
@@ -4315,21 +4176,34 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 }
 
 .icono-play-pill:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--dark);
   outline-offset: 0.2em;
 }
 
-.icono-play-slots {
+/* The Archive itself: the four starters face down, then what this browser
+   found, face up. A find turns its card over. */
+.icono-play-slots,
+.icono-play-backs {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.icono-play-slots {
+  margin-top: 1rem;
+}
+
+/* More finds than one page of cards: GitHub's "Load more…" under the list. */
+.icono-play-load {
+  display: flex;
+  margin: 0.75rem auto 0;
 }
 
 .icono-play-slot {
   position: relative;
-  display: block;
-  aspect-ratio: 7 / 9;
-  perspective: 600px;
+  aspect-ratio: 3 / 4;
+  perspective: 900px;
+  transition: transform 180ms ease;
 }
 
 .icono-play-slot-inner {
@@ -4347,38 +4221,92 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-md);
-  background: var(--lightgray);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-}
-
-.icono-play-slot-back {
-  border: 0;
-}
-
-.icono-play-slot-face .icono-card-reverse-face {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-/* The full-size card back's emblem has a 4.5rem floor, wider than a mini card. */
-.icono-play-slot-face .icono-card-reverse-face__mark {
-  width: 62%;
 }
 
 .icono-play-slot-front {
   transform: rotateY(180deg);
 }
 
-.icono-play-slot-front img {
-  display: block;
+.icono-play-slot-face .icono-card-reverse-face,
+.icono-play-back .icono-card-reverse-face {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* The full-size card back's emblem has a 4.5rem floor, wider than a small card. */
+.icono-play-slot-face .icono-card-reverse-face__mark,
+.icono-play-back .icono-card-reverse-face__mark {
+  width: 62%;
+}
+
+/* The face-up card is the Archive's own tile, filling its slot. Three
+   classes, to outrank the tile's own width in shared-card-label.css. */
+.icono-play-slot-front > .icono-card.icono-card--image-tile {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  max-inline-size: none;
   height: 100%;
-  object-fit: cover;
-  object-position: 50% 0;
+  margin: 0;
+}
+
+.icono-play-slot-front .icono-image-only-link,
+.icono-play-slot-front .icono-image-only-media-stage {
+  height: 100%;
+}
+
+.icono-play-slot .icono-image-only-symbol {
+  font-size: 1.35rem;
+}
+
+.icono-play-slot .icono-image-only-name {
+  font-size: 0.62rem;
+}
+
+/* The card that the pointer or the last tap is on stands out in its gene's
+   colour. */
+.icono-play-slot.is-lit {
+  transform: translateY(-4px);
+}
+
+.icono-play-slot.is-lit .icono-play-slot-face {
+  box-shadow:
+    0 0 0 2px var(--icono-play-gene),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* More backs fade out under the cards, into the way to find the rest. */
+.icono-play-more {
+  display: grid;
+  margin-top: 0.6rem;
+}
+
+.icono-play-more > * {
+  grid-area: 1 / 1;
+}
+
+.icono-play-backs {
+  align-self: start;
+  -webkit-mask-image: linear-gradient(#000, transparent 60%);
+  mask-image: linear-gradient(#000, transparent 60%);
+}
+
+.icono-play-back {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: var(--icono-radius-md);
+}
+
+.icono-play-card.icono-play-next-card {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+  margin-top: 3.5rem;
 }
 
 .icono-play-next {
@@ -4387,10 +4315,6 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem 1rem;
-}
-
-.icono-play-next[hidden] {
-  display: none;
 }
 
 .icono-play-next .icono-install-note {
@@ -4437,41 +4361,27 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   height: 1rem;
 }
 
-/* The raised card is the site's own image-only card, placed the way the
-   add-on places its card: it fades in over 60 ms. Three classes, to outrank
-   the tile's own 100% width in shared-card-label.css. */
-.icono-card.icono-card--image-tile.icono-play-raised {
-  position: absolute;
-  z-index: 50;
-  inline-size: min(290px, calc(100vw - 32px));
-  max-inline-size: none;
-  margin: 0;
-  opacity: 0;
-  transform: translateY(3px) scale(0.99);
-  transform-origin: 50% 100%;
-  transition:
-    opacity 60ms linear,
-    transform 60ms cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-  box-shadow:
-    0 0 0 1px rgba(74, 61, 49, 0.14),
-    0 8px 18px rgba(40, 32, 24, 0.1),
-    0 16px 34px rgba(40, 32, 24, 0.18);
-}
+@media (max-width: 600px) {
+  .icono-play-slots,
+  .icono-play-backs {
+    gap: 0.4rem;
+  }
 
-.icono-card.icono-card--image-tile.icono-play-raised.is-up {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
+  .icono-play-slot .icono-image-only-name {
+    display: none;
+  }
 
-@media (max-width: 640px) {
-  .icono-card.icono-card--image-tile.icono-play-raised {
-    inline-size: min(260px, calc(100vw - 32px));
+  .icono-play-slot .icono-image-only-symbol {
+    font-size: 1.05rem;
+  }
+
+  .icono-play-card.icono-play-next-card {
+    margin-top: 2.25rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .icono-play-slot,
   .icono-play-slot-inner {
     transition: none;
   }
@@ -4482,194 +4392,78 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   display: none !important;
 }
 
-.icono-collection-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) repeat(2, minmax(0, 0.8fr));
-  gap: 0.85rem;
+/* The collection's two tabs, drawn as GitHub draws a repository's: the
+   selected one underlined in the page's ink, the count in a grey pill. */
+.icono-collection-tabs {
+  position: relative;
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.25rem;
+  border-bottom: 1px solid var(--ui-border);
 }
 
-.icono-collection-summary--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.icono-collection-card {
-  display: grid;
-  gap: 0.45rem;
-  padding: 1rem 1rem 0.95rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
-  border-radius: var(--icono-radius-lg);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--light) 97%, #efe6d7 3%) 0%,
-    color-mix(in srgb, var(--light) 99%, #f5ede0 1%) 100%
-  );
-  box-shadow: 0 10px 24px rgba(27, 18, 11, 0.04);
-}
-
-.icono-collection-card--progress {
-  gap: 0.6rem;
-}
-
-.icono-collection-card--archive {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
-  gap: 0.58rem;
-  max-inline-size: 100%;
-  min-inline-size: 0;
-  padding-top: 0.82rem;
-  padding-bottom: 0.82rem;
-  overflow: hidden;
-}
-
-/* A first-time visitor has no count to show, so the switch stands alone as a
-   line under the search bar instead of in an otherwise empty box. */
-.icono-collection-card--switch-only {
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.icono-collection-card--switch-only .icono-collection-summary-row {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.icono-collection-card--switch-only .icono-collection-shared-toggle {
-  justify-content: flex-start;
-}
-
-.icono-collection-summary--skeleton {
-  min-height: 65px;
-  pointer-events: none;
-}
-
-.icono-collection-card--skeleton {
-  min-height: 0;
-}
-
-.icono-collection-copy {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: clamp(0.78rem, 2.8vw, 0.95rem);
-  line-height: 1.24;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
-  text-wrap: balance;
-}
-
-.icono-collection-summary-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.icono-collection-shared-toggle {
+.icono-collection-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.42rem;
-  min-width: max-content;
+  gap: 0.5rem;
+  margin-bottom: -1px;
+  padding: 0.6rem 0.65rem 0.7rem;
+  border: 0;
+  background: none;
+  color: var(--darkgray);
   font-family: "IBM Plex Mono", monospace;
-  font-size: clamp(0.72rem, 2.5vw, 0.84rem);
-  line-height: 1.2;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--secondary, var(--darkgray)) 86%, var(--dark) 14%);
+  font-size: 0.9rem;
   cursor: pointer;
-  user-select: none;
-  min-height: 44px;
 }
 
-.icono-collection-shared-toggle input {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.icono-collection-shared-toggle:has(input:disabled) {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.icono-collection-progress-inline {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  margin-top: 0;
-}
-
-.icono-collection-progress-inline .icono-collection-progress-track {
-  width: 100%;
-}
-
-@media (max-width: 680px) {
-  .icono-collection-summary-row {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .icono-collection-shared-toggle {
-    justify-content: flex-start;
-    min-width: 0;
-  }
-}
-
-.icono-collection-label {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--secondary, var(--darkgray));
-}
-
-.icono-collection-value {
-  font-size: clamp(1.45rem, 3vw, 2rem);
-  line-height: 1;
-  font-weight: 460;
-  letter-spacing: -0.05em;
-  color: color-mix(in oklch, var(--dark) 94%, var(--accent) 6%);
-}
-
-.icono-collection-stat {
-  font-size: 1.55rem;
-  line-height: 1;
-  font-weight: 520;
-  letter-spacing: -0.04em;
+.icono-collection-tab:hover,
+.icono-collection-tab[aria-selected="true"] {
   color: var(--dark);
 }
 
-.icono-collection-note,
-.icono-collection-progress-caption,
+.icono-collection-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0;
+  left: 0.4rem;
+  height: 2px;
+  background: var(--dark);
+}
+
+.icono-collection-tab:focus-visible {
+  outline: 2px solid var(--dark);
+  outline-offset: -2px;
+}
+
+.icono-collection-tab-count {
+  min-width: 1.25rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--lightgray);
+  color: var(--dark);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* How far the reader has got through the catalogue. */
+.icono-collection-tabs-progress {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--dark) 55%, transparent);
+  pointer-events: none;
+}
+
 .icono-empty-support {
   font-size: 0.9rem;
   line-height: 1.4;
   color: var(--secondary, var(--darkgray));
   text-wrap: pretty;
-}
-
-.icono-collection-progress-track {
-  position: relative;
-  overflow: hidden;
-  height: 9px;
-  border-radius: var(--icono-radius-pill);
-  background: color-mix(in srgb, var(--ui-border) 76%, white 24%);
-}
-
-.icono-collection-progress-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent) 58%, #c9a16a 42%) 0%,
-    color-mix(in srgb, var(--accent) 74%, #f0dcc0 26%) 100%
-  );
 }
 
 .icono-loading[hidden] {
@@ -4772,12 +4566,6 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 
 .icono-empty a:not(.icono-button) {
   color: var(--accent);
-}
-
-@media (max-width: 760px) {
-  .icono-collection-summary {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ───────── Gene detail page ───────── */
@@ -5616,21 +5404,6 @@ html[data-theme="dark"] .icono-card--brick {
 }
 
 /* ───────── Responsive ───────── */
-@media (max-width: 1180px) {
-  .icono-gallery-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .icono-gallery-actions {
-    justify-content: flex-start;
-  }
-
-  .icono-search--toolbar {
-    flex-basis: auto;
-  }
-}
-
 @media (max-width: 600px) {
   .icono-grid-sizer,
   .icono-card--masonry {
@@ -5658,11 +5431,6 @@ html[data-theme="dark"] .icono-card--brick {
   .icono-grid[data-layout="image-only-masonry"] .icono-grid-sizer,
   .icono-grid[data-layout="image-only-masonry"] .icono-gutter-sizer {
     display: none;
-  }
-
-  .icono-gallery-toolbar {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .icono-home-auth-card {
@@ -5711,39 +5479,6 @@ html[data-theme="dark"] .icono-card--brick {
     grid-template-columns: 1fr;
   }
 
-  .icono-gallery-actions {
-    justify-content: space-between;
-    /* Below 600px the rail dissolves: items stretch full-width and stack,
-       so the bordered container + vertical hairlines from the desktop rail
-       (B-457 #1) would render as crooked frames around stacked rows. Drop
-       the framing here and let the original full-width pills come back. */
-    border: 0;
-    background: transparent;
-    padding: 0;
-    gap: 0.5rem;
-  }
-
-  .icono-gallery-actions > * + *:not([hidden]) {
-    border-left: 0;
-    padding-left: 0;
-  }
-
-  .icono-gallery-actions .icono-gallery-order select,
-  .icono-gallery-actions .icono-install-toggle {
-    border-color: var(--ui-border);
-    background: var(--light);
-  }
-
-  .icono-gallery-install {
-    flex: 1 1 100%;
-    min-width: 0;
-  }
-
-  .icono-install-toggle {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .icono-install-tab {
     min-width: 0;
   }
@@ -5763,16 +5498,13 @@ html[data-theme="dark"] .icono-card--brick {
     text-align: left;
   }
 
-  .icono-search--toolbar {
-    flex-basis: auto;
-  }
-
+  /* On a phone the button says only "Sort", so the search box keeps the row. */
   .icono-gallery-order {
-    justify-content: space-between;
+    color: var(--dark);
   }
 
-  .icono-gallery-order select {
-    min-width: 9rem;
+  .icono-gallery-order-value {
+    display: none;
   }
 
   .icono-card--brick {
