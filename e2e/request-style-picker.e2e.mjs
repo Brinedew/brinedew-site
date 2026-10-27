@@ -15,9 +15,11 @@
 // 5. the dialog explains open requests in prose instead of marking the card
 //    ("2 requested", on its picture's corner) of a style already requested on
 //    this gene;
-// 6. on a phone, anything besides the view switch sits between the method
-//    switch and the first card, or the search is above the grid instead of
-//    docked below it (where it stays visible while the grid scrolls);
+// 6. on a phone, anything besides the view switch sits between the top of
+//    the dialog (the method switch, or the dialog header for a reader without
+//    an image API key) and the first card, or the search is above the grid
+//    instead of docked below it (where it stays visible while the grid
+//    scrolls);
 // 7. Request random is not at the bottom-right of the dialog;
 // 8. a tap on a style card (its picture or its number) does not request that
 //    style at once, as one specific order;
@@ -348,6 +350,9 @@ function measurePicker() {
     panel: box(panel),
     header: box(header),
     tabs: box(tabs),
+    // The lowest fixed chrome above the grid: the method switch for a key
+    // holder, the dialog header for everyone else (B-1181).
+    top: visible(tabs) ? box(tabs) : box(header),
     browse: box(browse),
     browseScrolls: browse ? browse.scrollHeight > browse.clientHeight : false,
     viewsInsideBrowse: views.length > 0 && views.every((v) => browse && browse.contains(v)),
@@ -427,7 +432,6 @@ function measurePicker() {
 async function openPicker(page) {
   await page.click("[data-icono-request-dialog-open]")
   await page.waitForSelector(`${DIALOG}[open]`)
-  await page.click("[data-icono-request-tab='free']")
   await page.waitForSelector("[data-icono-request-card]", { timeout: 15_000 })
   await page.evaluate(() => document.fonts.ready)
   await page.waitForTimeout(400) // dialog open animation
@@ -551,13 +555,13 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
           `${where}: requested badge`,
         )
 
-        // 6. Only the view switch sits between the method switch and the
-        // cards; on a phone the search is docked below the grid, in view.
+        // 6. Only the view switch sits between the top of the dialog and
+        // the cards; on a phone the search is docked below the grid, in view.
         assert.equal(first.viewsInsideBrowse, true, `${where}: views are outside the scroller`)
         assert.equal(first.tabsInsideBrowse, false, `${where}: tabs scroll away`)
         assert.ok(
-          first.browse.top - first.tabs.bottom < 20,
-          `${where}: ${Math.round(first.browse.top - first.tabs.bottom)} px of fixed chrome between the method switch and the grid`,
+          first.browse.top - first.top.bottom < 20,
+          `${where}: ${Math.round(first.browse.top - first.top.bottom)} px of fixed chrome between the top of the dialog and the grid`,
         )
         assert.ok(
           first.firstCard.top - first.viewSwitch.bottom < 24,
@@ -954,7 +958,6 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
     await page.click("[data-icono-request-dialog-open]")
     await page.waitForSelector(`${DIALOG}[open]`)
-    await page.click("[data-icono-request-tab='free']")
 
     // 16. After the retries the grid says what happened and offers a retry.
     await page.waitForSelector("[data-icono-request-retry]", { timeout: 15_000 })

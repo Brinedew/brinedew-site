@@ -1756,6 +1756,10 @@ img-comparison-slider.rendered [slot="second"] {
   background: color-mix(in srgb, var(--ui-border) 34%, var(--light) 66%);
 }
 
+.icono-request-tabs[hidden] {
+  display: none;
+}
+
 .icono-request-tab {
   appearance: none;
   min-height: 2.75rem;
