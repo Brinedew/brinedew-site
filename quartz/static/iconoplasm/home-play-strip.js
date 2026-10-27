@@ -210,10 +210,6 @@ function windowBarMarkup(address) {
   )
 }
 
-// The backs under the cards, fading into the next step: the Archive goes on,
-// face down.
-const BACK_COUNT = 4
-
 // The strip is always the four starters. Genes found elsewhere count in the
 // "Yours" tab but get no card here: the demo is four cards, not a collection.
 // genes: [{ symbol, name, color, portraitUrl }] in HOME_STARTERS order.
@@ -264,8 +260,6 @@ export function mountHomePlayStrip(container, options) {
     '<div class="icono-play-slot-face icono-play-slot-front">' +
     (faceUp ? options.cardMarkup(gene) : "") +
     "</div></div></div>"
-  let backs = ""
-  for (let i = 0; i < BACK_COUNT; i += 1) backs += '<div class="icono-play-back">' + back + "</div>"
 
   const root = doc.createElement("div")
   root.className = "icono-play"
@@ -283,14 +277,10 @@ export function mountHomePlayStrip(container, options) {
     '<div class="icono-play-slots">' +
     options.genes.map((gene) => slot(gene, found.has(gene.symbol))).join("") +
     "</div>" +
-    '<div class="icono-play-more">' +
-    '<div class="icono-play-backs" aria-hidden="true">' +
-    backs +
-    "</div>" +
     '<section class="icono-card icono-guest-login-card icono-play-card icono-play-next-card">' +
     '<div class="icono-play-next" data-icono-play-next>' +
     homePlayActionMarkup(options.action) +
-    "</div></section></div>"
+    "</div></section>"
   container.insertBefore(root, container.firstChild)
   for (const card of root.querySelectorAll(".icono-play-slot-front > *")) {
     options.onCardMounted(card)
