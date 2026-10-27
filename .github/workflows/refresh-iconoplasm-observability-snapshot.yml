@@ -1,6 +1,10 @@
 name: Observe Cloudflare capacity
 
 on:
+  # The Worker dispatches this every hour at :23 (B-1158); GitHub's schedule
+  # fired it only every 4 to 6 hours and stays as a backstop.
+  repository_dispatch:
+    types: [iconoplasm-request-rollup]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
