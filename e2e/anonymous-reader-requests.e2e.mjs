@@ -162,7 +162,9 @@ test("an anonymous reader on the home page and on a gene page sends the Worker n
                 },
               )
         await page.goto(`${HOST}${pagePath}`)
-        if (pagePath === "/") await page.waitForSelector("#icono-grid", { timeout: 45_000 })
+        // A signed-out reader's Archive is the starter strip (B-1173), not the feed.
+        if (pagePath === "/")
+          await page.waitForSelector("#icono-home-auxiliary:not([hidden]) > *", { timeout: 45_000 })
         else await geneObject
         // Lazy work (starter cards, deferred hydration, idle prefetch) starts after first paint.
         await page.waitForLoadState("networkidle")
