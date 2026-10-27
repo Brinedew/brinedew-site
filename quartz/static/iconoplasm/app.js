@@ -28,9 +28,8 @@ import {
 import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
-  homePlayActionMarkup,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=f5e527c35859efad"
+} from "./home-play-strip.js?v=a00d95ad5d196b75"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -3735,9 +3734,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // hovered with the add-on, gene pages opened here and symbols on the strip.
   // The merge at login moves them into the Archive. `genes` are those with a
   // portrait, which the strip shows face up: the strip is the guest's whole
-  // "Yours" view, so it shows every one.
-  function loadGuestDiscoveryShelf() {
-    return readExtensionGuestDiscoveries().then(function (extensionSymbols) {
+  // "Yours" view, so it shows every one. extensionSymbols: the add-on's
+  // finds, oldest first, or [] before the add-on has answered.
+  function loadGuestDiscoveryShelf(extensionSymbols) {
+    return Promise.resolve().then(function () {
       var visits = websiteGuestDiscoveries
         .listEntries()
         .sort(function (a, b) {
@@ -3747,8 +3747,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return entry.gene_symbol
         })
       var symbols = Array.from(new Set(extensionSymbols.slice().reverse().concat(visits)))
-      var fromExtension = extensionSymbols.length
-      if (!symbols.length) return { count: 0, symbols: [], genes: [], fromExtension: 0 }
+      if (!symbols.length) return { count: 0, symbols: [], genes: [] }
       // Every chunk reads the one catalogue that the starters already loaded,
       // so none is a request.
       var chunks = []
@@ -3765,7 +3764,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return {
           count: symbols.length,
           symbols: symbols,
-          fromExtension: fromExtension,
           genes: [].concat.apply([], parts).filter(function (record) {
             return !!rawPublishedPortraitUrl(record, "medium")
           }),
@@ -3880,9 +3878,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         portraitUrl: publishedPortraitUrl(record, "medium"),
       }
     }
-    // The shelf and the starters come from the catalogue that the Archive
-    // already loaded, so neither read is a request.
-    Promise.all([loadGuestDiscoveryShelf(), iconoplasmPublicationReader.genes(starters)])
+    var extrasOf = function (shelf) {
+      return shelf.genes
+        .filter(function (record) {
+          return starters.indexOf(normalizedSymbol(record.symbol)) < 0
+        })
+        .map(toGene)
+    }
+    var stale = function () {
+      return generation !== homePlayGeneration || !container.isConnected
+    }
+    // With the add-on, its finds already live in this browser, and logging
+    // in is what moves them to other devices: the Chrome store listing's
+    // "Connect with Discord to sync across devices."
+    var loginAction = {
+      kind: "link",
+      sameTab: true,
+      note: "Connect with Discord to sync across devices.",
+      label: "Log in with Discord",
+      href: voteLoginUrl(),
+    }
+    var have = new Set()
+    // The strip mounts with this browser's own finds as soon as the
+    // catalogue answers. The add-on can take 1.5 s to answer; its finds turn
+    // face up when they arrive. Every read is the catalogue that the Archive
+    // already loaded, so none is a request.
+    Promise.all([loadGuestDiscoveryShelf([]), iconoplasmPublicationReader.genes(starters)])
       .then(function (results) {
         var shelf = results[0]
         var bySymbol = new Map()
@@ -3896,37 +3917,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           }
           return toGene(record)
         })
-        var extras = shelf.genes
-          .filter(function (record) {
-            return starters.indexOf(normalizedSymbol(record.symbol)) < 0
-          })
-          .map(toGene)
-        if (generation !== homePlayGeneration || !container.isConnected) return
+        if (stale()) return
         if (currentUser) {
           setHomePlayLayout(container, false)
           appendHomeInstallCard(container)
           return
         }
-        var have = new Set(shelf.symbols)
-        // With the add-on, its finds already live in this browser, and
-        // logging in is what moves them to other devices: the Chrome store
-        // listing's "Connect with Discord to sync across devices."
-        var action =
-          iconoInstallState.installed && shelf.fromExtension
-            ? {
-                kind: "link",
-                sameTab: true,
-                note: "Connect with Discord to sync across devices.",
-                label: "Log in with Discord",
-                href: voteLoginUrl(),
-              }
-            : homePlayAction()
-        mountHomePlayStrip(container, {
+        shelf.symbols.forEach(function (symbol) {
+          have.add(symbol)
+        })
+        var strip = mountHomePlayStrip(container, {
           genes: genes,
           found: shelf.symbols,
-          extras: extras,
+          extras: extrasOf(shelf),
           reverseFaceHtml: buildReverseCardFaceMarkup(),
-          action: action,
+          action: homePlayAction(),
           cardMarkup: function (gene) {
             return (
               '<article class="icono-card icono-card--image-tile icono-card--variant-image-only" style="--icono-card-accent:' +
@@ -3954,16 +3959,40 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           },
         })
         onCount(have.size)
+        readExtensionGuestDiscoveries()
+          .then(function (extensionSymbols) {
+            if (!extensionSymbols.length || stale()) return
+            return loadGuestDiscoveryShelf(extensionSymbols).then(function (withAddOn) {
+              if (stale()) return
+              withAddOn.symbols.forEach(function (symbol) {
+                have.add(symbol)
+              })
+              strip.addFinds(withAddOn.symbols, extrasOf(withAddOn))
+              if (iconoInstallState.installed) strip.setAction(loginAction)
+              onCount(have.size)
+            })
+          })
+          .catch(function (error) {
+            console.warn(error)
+          })
       })
       .catch(function (error) {
         console.warn(error)
-        if (generation !== homePlayGeneration || !container.isConnected) return
+        if (stale()) return
         setHomePlayLayout(container, false)
         container.querySelectorAll("[data-icono-home-play]").forEach(function (strip) {
           strip.remove()
         })
         appendHomeInstallCard(container)
-        onCount(websiteGuestDiscoveries.listEntries().length)
+        // The reader's finds still count: this browser's and the add-on's.
+        readExtensionGuestDiscoveries().then(function (extensionSymbols) {
+          if (stale()) return
+          var symbols = new Set(extensionSymbols)
+          websiteGuestDiscoveries.listEntries().forEach(function (entry) {
+            symbols.add(entry.gene_symbol)
+          })
+          onCount(symbols.size)
+        })
       })
   }
 
