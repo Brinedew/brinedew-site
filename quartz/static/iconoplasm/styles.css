@@ -4193,12 +4193,6 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   margin-top: 1rem;
 }
 
-/* More finds than one page of cards: GitHub's "Load more…" under the list. */
-.icono-play-load {
-  display: flex;
-  margin: 0.75rem auto 0;
-}
-
 .icono-play-slot {
   position: relative;
   aspect-ratio: 3 / 4;
