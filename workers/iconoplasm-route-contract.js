@@ -218,24 +218,6 @@ const DECLARED_ROUTES = Object.freeze([
     rateLimit: null,
   }),
   contract({
-    id: "mobile_card_symbol",
-    match: pattern(/^\/api\/iconoplasm\/cards\/([^/]+)$/, ["symbol"]),
-    methods: GET,
-    auth: "first-party",
-    cache: "versioned-handler",
-    gatewayHandler: "mobile_card_symbol",
-    rateLimit: null,
-  }),
-  contract({
-    id: "public_gene_detail",
-    match: pattern(/^\/api\/public\/v1\/genes\/([^/]+)$/, ["symbol"]),
-    methods: GET,
-    auth: "denied-public-rich-route",
-    cache: "no-store",
-    gatewayHandler: "public_gene_denied",
-    rateLimit: null,
-  }),
-  contract({
     id: "public_resolve",
     match: exact(iconoplasmPublicApiPath("/resolve")),
     methods: POST,
@@ -296,26 +278,6 @@ const DECLARED_ROUTES = Object.freeze([
     auth: "public",
     cache: "immutable",
     gatewayHandler: "gene_blot_asset",
-    rateLimit: null,
-  }),
-  contract({
-    id: "votes_me",
-    match: exact("/api/iconoplasm/votes/me"),
-    methods: GET,
-    auth: "optional-user-session",
-    cache: "no-store",
-    gatewayHandler: "iconoplasm_api",
-    rateLimit: null,
-  }),
-  contract({
-    // Retired per-hover writer: always answers 410 without touching D1. Kept on
-    // the contract so installed clients stay on the rate-limit/budget map.
-    id: "discoveries_encounter",
-    match: exact("/api/iconoplasm/discoveries/encounter"),
-    methods: POST,
-    auth: "optional-user-session",
-    cache: "no-store",
-    gatewayHandler: "iconoplasm_api",
     rateLimit: null,
   }),
   contract({
@@ -663,18 +625,6 @@ const DECLARED_ROUTES = Object.freeze([
     auth: "optional-user-session",
   }),
   iconoplasmApiContract({
-    id: "gene_comments_legacy_write",
-    match: exact("/api/iconoplasm/comments"),
-    methods: POST,
-    auth: "authenticated-user",
-  }),
-  iconoplasmApiContract({
-    id: "gene_comments_legacy_read",
-    match: pattern(/^\/api\/iconoplasm\/comments\/gene\/([^/]+)$/, ["symbol"]),
-    methods: GET,
-    auth: "optional-user-session",
-  }),
-  iconoplasmApiContract({
     id: "gene_comments",
     match: pattern(/^\/api\/iconoplasm\/genes\/([^/]+)\/comments$/, ["symbol"]),
     methods: COMMENT_METHODS,
@@ -787,12 +737,6 @@ const DECLARED_ROUTES = Object.freeze([
     match: exact("/api/iconoplasm/candidates/copy"),
     methods: POST,
     auth: "authenticated-user",
-  }),
-  iconoplasmApiContract({
-    id: "artist_styles_search",
-    match: exact("/api/iconoplasm/artist-styles/search"),
-    methods: GET,
-    auth: "public",
   }),
   adminApiContract("admin_ingest", "/ingest", POST),
   adminApiContract("admin_overview", "/overview", GET),
@@ -938,7 +882,8 @@ const DECLARED_ROUTES = Object.freeze([
 //   extension    the browser extension, old builds included
 //   workstation  the Iconoplasm workstation app
 //   ops          a GitHub workflow, one of our scripts, or a runbook step run by hand
-//   outside      documented for outside developers or chatbots (the developers page, llms text)
+//   outside      documented for outside developers or chatbots (the developers page, llms text),
+//                or called by a client the per-request record shows but we cannot name
 //   none-known   nothing of ours calls it; kept only until the per-request record
 //                shows no outside client still does (B-1148), then deleted
 // A new route names its callers here; iconoplasm-route-contract.test.js fails
@@ -967,8 +912,6 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   public_card_snapshot_portrait_locator: ["extension"],
   public_gene_batch: ["workstation"],
   mobile_card_manifest: ["site", "ops"],
-  mobile_card_symbol: ["none-known"],
-  public_gene_detail: ["none-known"],
   public_resolve: ["site", "ops", "outside"],
   public_image_resolve: ["site", "outside"],
   public_media: ["outside"],
@@ -976,8 +919,6 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   gene_card_asset: ["site", "extension"],
   semantic_gene_blot: ["site", "ops", "outside"],
   gene_blot_asset: ["outside"],
-  votes_me: ["none-known"],
-  discoveries_encounter: ["none-known"],
   discoveries_batch: ["site", "extension", "ops"],
   discoveries_me: ["site"],
   discoveries_membership: ["extension"],
@@ -987,7 +928,8 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   gene_request_options: ["site"],
   emulsion_favorites: ["site"],
   emulsion_favorite_item: ["site"],
-  gene_request_state_gone: ["none-known"],
+  // 1 call 2026-10-24..27 per the request record; keeps answering 410.
+  gene_request_state_gone: ["outside"],
   gene_request_submit: ["site"],
   request_notifications: ["site"],
   request_notifications_read: ["site"],
@@ -1023,8 +965,6 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   admin_votes_vision_detail: ["site"],
   clans_overview: ["site"],
   clan_members: ["site"],
-  gene_comments_legacy_write: ["none-known"],
-  gene_comments_legacy_read: ["none-known"],
   gene_comments: ["site"],
   admin_factory_recipe: ["site", "workstation"],
   admin_factory_belts: ["site"],
@@ -1043,7 +983,6 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   candidate_generation_job: ["site"],
   candidate_generation_job_publish: ["site"],
   candidate_copy: ["site"],
-  artist_styles_search: ["none-known"],
   admin_ingest: ["workstation"],
   admin_overview: ["site", "workstation"],
   admin_coverage: ["site"],

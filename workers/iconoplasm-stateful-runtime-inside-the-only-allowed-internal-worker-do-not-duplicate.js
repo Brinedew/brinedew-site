@@ -11656,23 +11656,6 @@ function etagMatches(ifNoneMatchValue, etag) {
   return candidates.some((v) => normalize(v) === target)
 }
 
-function publicRichRouteDeniedPayload(url, routeKey) {
-  return {
-    error:
-      routeKey === "gene_batch"
-        ? "High-fanout batch reads are reserved for the Iconoplasm website UI and browser extension"
-        : "Rich per-gene detail is reserved for the Iconoplasm website UI",
-    code: "FIRST_PARTY_ONLY",
-    docs_url: "https://iconoplasm.brinedew.bio/developers",
-    recommended_public_api: {
-      metadata: publicUrl(url, "/metadata"),
-      catalog_manifest: publicUrl(url, "/catalog/manifest"),
-      resolve: publicUrl(url, "/resolve"),
-      images_resolve: publicUrl(url, "/images/resolve"),
-    },
-  }
-}
-
 function normalizeArtistBlacklistSubmissionInput(raw) {
   return sanitizeText(raw, 255).replace(/\s+/g, " ").trim()
 }
@@ -14295,58 +14278,6 @@ async function iconoExistingAssetsBatch(env, rawItems) {
     }
   } catch {}
   return out
-}
-
-async function searchArtistStyles(env, { query = "", limit = 50 } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  const cleanedLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit || "50"), 10) || 50))
-  const queryNorm = String(query || "")
-    .trim()
-    .toLowerCase()
-    .slice(0, 120)
-  const like = queryNorm ? `%${queryNorm}%` : ""
-  const { results } = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       lower(bl.artist_tag) AS artist_tag,
-       MAX(NULLIF(bl.artist_name, '')) AS artist_name,
-       0 AS total_count,
-       0 AS visible_count,
-       0 AS approved_count,
-       0 AS draft_count,
-       0 AS rejected_count,
-       0 AS live_count,
-       1 AS blacklisted,
-       MAX(NULLIF(bl.reason, '')) AS blacklist_reason,
-       MAX(NULLIF(bl.created_by, '')) AS blacklist_created_by,
-       MAX(NULLIF(bl.updated_at, '')) AS blacklist_updated_at
-     FROM icono_artist_style_blacklist bl
-     WHERE COALESCE(bl.artist_tag, '') <> ''
-       AND (? = '' OR lower(bl.artist_tag) LIKE ?)
-     GROUP BY lower(bl.artist_tag)
-     ORDER BY
-       blacklisted DESC,
-       artist_tag ASC
-     LIMIT ?`,
-  )
-    .bind(queryNorm, like, cleanedLimit)
-    .all()
-
-  return Array.isArray(results)
-    ? results.map((row) => ({
-        artist_tag: normalizeArtistTag(row?.artist_tag || "") || "",
-        artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-        total_count: Number(row?.total_count || 0),
-        visible_count: Number(row?.visible_count || 0),
-        approved_count: Number(row?.approved_count || 0),
-        draft_count: Number(row?.draft_count || 0),
-        rejected_count: Number(row?.rejected_count || 0),
-        live_count: Number(row?.live_count || 0),
-        blacklisted: Number(row?.blacklisted || 0) > 0,
-        blacklist_reason: sanitizeText(row?.blacklist_reason || "", 2000) || "",
-        blacklist_created_by: sanitizeText(row?.blacklist_created_by || "", 255) || "",
-        blacklist_updated_at: sanitizeText(row?.blacklist_updated_at || "", 64) || "",
-      }))
-    : []
 }
 
 async function fetchAdminRecentEvents(env, { limit = 40 } = {}) {
@@ -17760,138 +17691,6 @@ async function handleMobileCardManifest(request, env) {
   )
 }
 
-function mobileCardSymbolClientHeaders(snapshotVersion, extra = {}) {
-  return {
-    ...corsHeaders(),
-    "Content-Type": "application/json; charset=utf-8",
-    ...extra,
-    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0, s-maxage=0",
-    "CDN-Cache-Control": "no-store",
-    "Cloudflare-CDN-Cache-Control": "no-store",
-    Pragma: "no-cache",
-    Expires: "0",
-    "X-Iconoplasm-VM-Version": snapshotVersion,
-    "X-Iconoplasm-Data-Source": "stable-gene-object",
-    "X-Iconoplasm-Snapshot-State": "stable-gene-object",
-  }
-}
-
-// The Worker-side copy lives 300 s: the same bound the stable object's own
-// CDN Cache-Control (STABLE_GENE_OBJECT_CACHE_CONTROL) already accepts, so a
-// republished gene is never staler here than on the extension's path.
-function mobileCardSymbolCacheHeaders(snapshotVersion) {
-  return {
-    "Cache-Control": "public, max-age=300",
-    "X-Iconoplasm-VM-Version": snapshotVersion,
-    "X-Iconoplasm-Data-Source": "stable-gene-object",
-    "X-Iconoplasm-Snapshot-State": "stable-gene-object",
-  }
-}
-
-function mobileCardSymbolClientResponseFromCached(cached, snapshotVersion) {
-  return new Response(cached.body, {
-    status: cached.status,
-    statusText: cached.statusText,
-    headers: mobileCardSymbolClientHeaders(snapshotVersion),
-  })
-}
-
-async function mobileCardSymbolEdgeCacheKey(request, snapshotVersion, symbol) {
-  const source = new URL(request.url)
-  source.search = ""
-  source.hash = ""
-  source.pathname = `/api/iconoplasm/cards/${encodeURIComponent(symbol)}`
-  source.searchParams.set("v", snapshotVersion)
-  return new Request(source.toString(), { method: "GET" })
-}
-
-async function handleMobileCardSymbol(request, env, ctx, symbolFromPath) {
-  // `/api/iconoplasm/cards/:symbol` is the most visible logged-out read path.
-  // It resolves exactly one stable gene object (readStableGeneObject) and
-  // nothing else: no KV head, no manifest, no D1 composition. The cache key
-  // inside this stateful worker is bounded to 300 s (mobileCardSymbolCacheHeaders);
-  // the public edge proxy must not add another symbol-only cache in front of
-  // this or a canonical vote promotion can remain stale for logged-out users
-  // beyond the stable object's own TTL.
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return json({ error: "Method not allowed" }, 405, { "Cache-Control": "no-store" })
-  }
-  const symbol = normalizeSymbol(symbolFromPath)
-  if (!symbol) {
-    return json({ error: "Missing gene symbol" }, 400, { "Cache-Control": "no-store" })
-  }
-  const snapshotVersion = STABLE_GENE_OBJECT_SNAPSHOT_LABEL
-  const cache = typeof caches !== "undefined" && caches?.default ? caches.default : null
-  let resolvedSymbol = symbol
-  let cacheKey = await mobileCardSymbolEdgeCacheKey(request, snapshotVersion, resolvedSymbol)
-  let cached = cache ? await cache.match(cacheKey) : null
-  if (cached) return mobileCardSymbolClientResponseFromCached(cached, snapshotVersion)
-
-  const unavailable = (error) => {
-    console.error("Iconoplasm mobile card symbol stable object read failed:", String(error))
-    return json(stableGeneObjectUnavailablePayload(snapshotVersion), 503, {
-      "Cache-Control": "no-store",
-      "X-Iconoplasm-Data-Source": "artifact-unavailable",
-      "X-Iconoplasm-Snapshot-State": "card-artifact-unavailable",
-      "X-Iconoplasm-VM-Version": snapshotVersion,
-    })
-  }
-  let card = null
-  try {
-    card = stableGeneObjectCardVM(await readStableGeneObject(env, symbol))
-  } catch (error) {
-    return unavailable(error)
-  }
-  if (!card) {
-    const resolved = await resolvePublicIdentifier(env, symbolFromPath)
-    const canonicalSymbol = normalizeSymbol(resolved?.canonical_symbol || "")
-    if (resolved?.found && canonicalSymbol && canonicalSymbol !== resolvedSymbol) {
-      resolvedSymbol = canonicalSymbol
-      cacheKey = await mobileCardSymbolEdgeCacheKey(request, snapshotVersion, resolvedSymbol)
-      cached = cache ? await cache.match(cacheKey) : null
-      if (cached) return mobileCardSymbolClientResponseFromCached(cached, snapshotVersion)
-      try {
-        card = stableGeneObjectCardVM(await readStableGeneObject(env, resolvedSymbol))
-      } catch (error) {
-        return unavailable(error)
-      }
-    }
-  }
-  if (!card) {
-    return json(
-      {
-        schema: MOBILE_CARD_MANIFEST_SCHEMA,
-        snapshot_version: snapshotVersion,
-        data_source: "stable_gene_object",
-        card: null,
-        missing: [resolvedSymbol],
-      },
-      404,
-      mobileCardSymbolClientHeaders(snapshotVersion),
-    )
-  }
-
-  const payload = {
-    schema: MOBILE_CARD_MANIFEST_SCHEMA,
-    snapshot_version: snapshotVersion,
-    data_source: "stable_gene_object",
-    card,
-    missing: [],
-    diagnostics: stableGeneObjectDiagnostics(1, { d1_composed: 0, layout: MOBILE_CARD_LAYOUT }),
-  }
-  const response = json(payload, 200, mobileCardSymbolClientHeaders(snapshotVersion))
-  if (cache) {
-    ctx.waitUntil(
-      cache.put(cacheKey, json(payload, 200, mobileCardSymbolCacheHeaders(snapshotVersion))),
-    )
-  }
-  return response
-}
-
-// DO NOT DELETE: per-symbol card endpoint guard boundary.
-// The D1 hot-query guard intentionally slices only `handleMobileCardSymbol`;
-// helper functions below may call shared render utilities, but this endpoint
-// itself must stay KV-artifact backed and off D1 composition.
 async function handlePublicResolve(request, env) {
   const body = await parseJsonBody(request)
   // Accept every key /images/resolve does. An ignored key used to answer 200
@@ -18502,12 +18301,6 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     ),
   public_gene_batch: ({ request, env }) => handlePublicGeneBatch(request, env),
   mobile_card_manifest: ({ request, env }) => handleMobileCardManifest(request, env),
-  mobile_card_symbol: ({ match, request, env, ctx }) =>
-    handleMobileCardSymbol(request, env, ctx, decodeURIComponent(match.params.symbol || "")),
-  public_gene_denied: ({ request }) =>
-    json(publicRichRouteDeniedPayload(new URL(request.url), "gene_detail"), 403, {
-      "Cache-Control": "no-store",
-    }),
   public_resolve: ({ request, env }) => handlePublicResolve(request, env),
   public_image_resolve: ({ request, env }) => handlePublicImageResolve(request, env),
   public_media: ({ match, request, env }) =>
@@ -19114,56 +18907,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       done,
     )
     if (declaredApiResponse) return declaredApiResponse
-
-    if (path === "/api/iconoplasm/votes/me" && request.method === "GET") {
-      const sessionUser = await iconoplasmSessionUser(request, env)
-      if (!sessionUser?.user_id) {
-        return done(
-          "votes_me_guest",
-          json(
-            {
-              authenticated: false,
-              user: null,
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      return done(
-        "votes_me",
-        json(
-          {
-            authenticated: true,
-            user: {
-              id: sessionUser.user_id,
-              username: sessionUser.username || null,
-            },
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    // The per-hover personal writer is retired. The activated replacement is
-    // POST /api/iconoplasm/discoveries/batch with a client-durable queue. Older
-    // installed clients fall back to their local guest buffer on this 410 and
-    // converge through the idempotent merge route, so no encounter is lost.
-    if (path === "/api/iconoplasm/discoveries/encounter" && request.method === "POST") {
-      return done(
-        "discoveries_encounter_retired",
-        json(
-          {
-            ok: false,
-            code: "LEGACY_DISCOVERY_WRITER_RETIRED",
-            error: "This client must batch discoveries through /api/iconoplasm/discoveries/batch.",
-          },
-          410,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
 
     if (path === "/api/iconoplasm/discoveries/batch" && request.method === "POST") {
       if (!env.ICONOPLASM_DB) {
@@ -20841,18 +20584,14 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     {
-      const legacyReadMatch = path.match(/^\/api\/iconoplasm\/comments\/gene\/([^/]+)$/)
       const geneScopedMatch = path.match(/^\/api\/iconoplasm\/genes\/([^/]+)\/comments$/)
-      const isLegacyWrite = path === "/api/iconoplasm/comments" && request.method === "POST"
       const isGeneScopedComments =
-        (legacyReadMatch && (request.method === "GET" || request.method === "HEAD")) ||
-        (geneScopedMatch &&
-          (request.method === "GET" ||
-            request.method === "HEAD" ||
-            request.method === "POST" ||
-            request.method === "PATCH" ||
-            request.method === "DELETE")) ||
-        isLegacyWrite
+        geneScopedMatch &&
+        (request.method === "GET" ||
+          request.method === "HEAD" ||
+          request.method === "POST" ||
+          request.method === "PATCH" ||
+          request.method === "DELETE")
       if (isGeneScopedComments) {
         if (!env.ICONOPLASM_DB) {
           return done("gene_comments_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
@@ -20865,12 +20604,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             payload = null
           }
         }
-        const commentSymbol = normalizeSymbol(
-          decodeURIComponent(legacyReadMatch?.[1] || geneScopedMatch?.[1] || "") ||
-            payload?.symbol ||
-            payload?.gene_symbol ||
-            "",
-        )
+        const commentSymbol = normalizeSymbol(decodeURIComponent(geneScopedMatch[1]))
         if (!commentSymbol) {
           return done(
             "gene_comments_400",
@@ -22533,33 +22267,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           {
             ok: true,
             detail,
-          },
-          200,
-          { "Cache-Control": "no-store" },
-        ),
-      )
-    }
-
-    if (path === "/api/iconoplasm/artist-styles/search" && request.method === "GET") {
-      if (!env.ICONOPLASM_DB)
-        return done(
-          "artist_styles_search_500",
-          json({ error: "ICONOPLASM_DB binding missing" }, 500),
-        )
-      const query = String(url.searchParams.get("q") || "")
-      const limit = Math.max(
-        1,
-        Math.min(100, Number.parseInt(url.searchParams.get("limit") || "50", 10)),
-      )
-      const rows = await searchArtistStyles(env, { query, limit })
-      return done(
-        "artist_styles_search",
-        json(
-          {
-            ok: true,
-            query,
-            count: rows.length,
-            rows,
           },
           200,
           { "Cache-Control": "no-store" },
