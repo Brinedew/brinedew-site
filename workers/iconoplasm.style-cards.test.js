@@ -83,6 +83,10 @@ async function assertCards(db, label, { ignoreVotes = false } = {}) {
 
 const sha = (n) => `printf('%064x', ${n})`
 
+// A gene's other drawing, looked up first: a caretaker's switch names the
+// asset it picks, so the switch's receipt must not include finding it.
+let secondDrawing
+
 function priceOf(results) {
   return results.reduce(
     (sum, result) => ({
@@ -165,12 +169,21 @@ test("stored style cards equal their blots through every write that moves a port
       )
       .run()
 
+    secondDrawing = async (gene) =>
+      (
+        await db
+          .prepare(
+            "SELECT asset_sha256 FROM icono_portrait_assets WHERE gene_symbol = ? AND emulsion_id = 'A9-255'",
+          )
+          .bind(gene)
+          .first()
+      ).asset_sha256
+
     // The same caretaker switch on production's schema before 0144, so the
     // test can say exactly what 0144's triggers add to it.
     const switchBefore = await db
-      .prepare(
-        `UPDATE icono_publish_state SET current_asset_sha256 = (SELECT asset_sha256 FROM icono_portrait_assets WHERE gene_symbol = 'G3000' AND emulsion_id = 'A9-255') WHERE gene_symbol = 'G3000'`,
-      )
+      .prepare("UPDATE icono_publish_state SET current_asset_sha256 = ? WHERE gene_symbol = ?")
+      .bind(await secondDrawing("G3000"), "G3000")
       .run()
 
     const applied = await db.batch(
@@ -205,16 +218,14 @@ test("stored style cards equal their blots through every write that moves a port
 
     // A caretaker picks another drawing: the gene leaves its style for 255.
     const switched = await db
-      .prepare(
-        `UPDATE icono_publish_state SET current_asset_sha256 = (SELECT asset_sha256 FROM icono_portrait_assets WHERE gene_symbol = 'G4000' AND emulsion_id = 'A9-255') WHERE gene_symbol = 'G4000'`,
-      )
+      .prepare("UPDATE icono_publish_state SET current_asset_sha256 = ? WHERE gene_symbol = ?")
+      .bind(await secondDrawing("G4000"), "G4000")
       .run()
     await assertCards(db, "publish switch")
     // The largest style loses a blot and gets it back.
     const bigLeaves = await db
-      .prepare(
-        `UPDATE icono_publish_state SET current_asset_sha256 = (SELECT asset_sha256 FROM icono_portrait_assets WHERE gene_symbol = 'BIG7' AND emulsion_id = 'A9-255') WHERE gene_symbol = 'BIG7'`,
-      )
+      .prepare("UPDATE icono_publish_state SET current_asset_sha256 = ? WHERE gene_symbol = ?")
+      .bind(await secondDrawing("BIG7"), "BIG7")
       .run()
     await assertCards(db, "largest style loses a blot")
     await db
@@ -308,9 +319,8 @@ test("stored style cards equal their blots through every write that moves a port
     )
     assert.notEqual(beforeChange.shown[0].gene_symbol, "BIG40", "a vote alone re-ranks nothing")
     await db
-      .prepare(
-        `UPDATE icono_publish_state SET current_asset_sha256 = (SELECT asset_sha256 FROM icono_portrait_assets WHERE gene_symbol = 'BIG11' AND emulsion_id = 'A9-255') WHERE gene_symbol = 'BIG11'`,
-      )
+      .prepare("UPDATE icono_publish_state SET current_asset_sha256 = ? WHERE gene_symbol = ?")
+      .bind(await secondDrawing("BIG11"), "BIG11")
       .run()
     await assertCards(db, "the style's next change takes the votes in")
     const afterChange = styleCardBlots(
