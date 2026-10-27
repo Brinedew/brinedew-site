@@ -1587,8 +1587,17 @@ test("27: an image edit's publish is owner-only, names the step that failed, and
 
 // 28. A reader's own image-provider key is theirs: stored encrypted, never returned by any
 //     route, never visible to another account or a guest.
-test("28: a saved provider key is stored encrypted, never returned, and invisible to other accounts", async () => {
+test("28: a saved provider key is stored encrypted, never returned, and invisible to other accounts", async (t) => {
   const db = new SqliteD1()
+  // The save asks OpenAI whether it accepts the key (B-1182); this one does.
+  const original = globalThis.fetch
+  globalThis.fetch = (input, init) =>
+    String(input?.url || input) === "https://api.openai.com/v1/models"
+      ? Promise.resolve(new Response('{"data":[]}', { status: 200 }))
+      : original(input, init)
+  t.after(() => {
+    globalThis.fetch = original
+  })
   const bindings = {
     ICONOPLASM_IMAGE_EDIT_KEY_SECRET: "test-secret-with-more-than-32-bytes-for-aes",
   }
