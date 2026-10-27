@@ -127,7 +127,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     "iconoplasm-extension-guest-discoveries-merged"
   // Add-on versions before the bridge learned this never answer.
   var ICONO_EXTENSION_GUEST_DISCOVERIES_TIMEOUT_MS = 1500
-  var GUEST_DISCOVERY_CARD_THUMB_COUNT = 6
+  // publication-reader.js's genes() answers at most this many symbols a call.
+  var GUEST_DISCOVERY_CATALOGUE_CHUNK = 24
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   // "1" while this browser last saw an image API key on the reader's account,
@@ -2647,7 +2648,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return (
         '<button type="button" class="icono-collection-tab" role="tab" aria-selected="' +
         selected +
-        '" aria-controls="icono-grid" tabindex="' +
+        '" tabindex="' +
         (selected ? "0" : "-1") +
         '" data-icono-collection-tab="' +
         scope +
@@ -3732,8 +3733,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   // What a signed-out reader found in this browser, newest first: genes
   // hovered with the add-on, gene pages opened here and symbols on the strip.
-  // The merge at login moves them into the Archive. `genes` are the few with
-  // a portrait that the strip shows face up.
+  // The merge at login moves them into the Archive. `genes` are those with a
+  // portrait, which the strip shows face up: the strip is the guest's whole
+  // "Yours" view, so it shows every one.
   function loadGuestDiscoveryShelf() {
     return readExtensionGuestDiscoveries().then(function (extensionSymbols) {
       var visits = websiteGuestDiscoveries
@@ -3745,25 +3747,30 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return entry.gene_symbol
         })
       var symbols = Array.from(new Set(extensionSymbols.slice().reverse().concat(visits)))
-      if (!symbols.length) return { count: 0, symbols: [], genes: [] }
-      // A few spares stand in for genes that have no portrait yet. The catalogue
-      // is the one the starters already loaded, so this costs no request.
-      return iconoplasmPublicationReader
-        .genes(symbols.slice(0, GUEST_DISCOVERY_CARD_THUMB_COUNT * 4))
-        .catch(function () {
-          return []
-        })
-        .then(function (records) {
-          return {
-            count: symbols.length,
-            symbols: symbols,
-            genes: records
-              .filter(function (record) {
-                return !!rawPublishedPortraitUrl(record, "medium")
-              })
-              .slice(0, GUEST_DISCOVERY_CARD_THUMB_COUNT),
-          }
-        })
+      var fromExtension = extensionSymbols.length
+      if (!symbols.length) return { count: 0, symbols: [], genes: [], fromExtension: 0 }
+      // Every chunk reads the one catalogue that the starters already loaded,
+      // so none is a request.
+      var chunks = []
+      for (var i = 0; i < symbols.length; i += GUEST_DISCOVERY_CATALOGUE_CHUNK) {
+        chunks.push(
+          iconoplasmPublicationReader
+            .genes(symbols.slice(i, i + GUEST_DISCOVERY_CATALOGUE_CHUNK))
+            .catch(function () {
+              return []
+            }),
+        )
+      }
+      return Promise.all(chunks).then(function (parts) {
+        return {
+          count: symbols.length,
+          symbols: symbols,
+          fromExtension: fromExtension,
+          genes: [].concat.apply([], parts).filter(function (record) {
+            return !!rawPublishedPortraitUrl(record, "medium")
+          }),
+        }
+      })
     })
   }
 
@@ -3839,6 +3846,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // (B-1173), with the add-on or without it. What this browser already found
   // is face up. A catalogue that cannot draw the starters gets the install
   // card. onCount(n) gets the reader's finds for the "Yours" tab.
+  //
+  // The page takes the strip's layout before the shelf loads (the add-on can
+  // take 1.5 s to answer), so the starters' feed never shows and then jumps
+  // away. A tab switch clears the strip and bumps homePlayGeneration, so a
+  // load that was still running for the old tab mounts nothing.
+  var homePlayGeneration = 0
+
+  function setHomePlayLayout(container, on) {
+    container.classList.toggle("icono-home-auxiliary--play", on)
+    var main = document.getElementById("icono-main")
+    if (main) main.classList.toggle("icono-page-main--play", on)
+  }
+
   function appendHomePlayStripOrInstallCard(container, onCount) {
     if (!container) return
     if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
@@ -3847,6 +3867,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       appendHomeInstallCard(container)
       return
     }
+    var generation = ++homePlayGeneration
+    setHomePlayLayout(container, true)
     var starters = HOME_STARTERS.map(function (starter) {
       return starter.symbol
     })
@@ -3879,8 +3901,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             return starters.indexOf(normalizedSymbol(record.symbol)) < 0
           })
           .map(toGene)
-        if (!container.isConnected) return
+        if (generation !== homePlayGeneration || !container.isConnected) return
         if (currentUser) {
+          setHomePlayLayout(container, false)
           appendHomeInstallCard(container)
           return
         }
@@ -3889,7 +3912,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         // logging in is what moves them to other devices: the Chrome store
         // listing's "Connect with Discord to sync across devices."
         var action =
-          iconoInstallState.installed && extras.length
+          iconoInstallState.installed && shelf.fromExtension
             ? {
                 kind: "link",
                 sameTab: true,
@@ -3898,8 +3921,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 href: voteLoginUrl(),
               }
             : homePlayAction()
-        container.classList.add("icono-home-auxiliary--play")
-        document.getElementById("icono-main").classList.add("icono-page-main--play")
         mountHomePlayStrip(container, {
           genes: genes,
           found: shelf.symbols,
@@ -3936,7 +3957,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
       .catch(function (error) {
         console.warn(error)
-        if (container.isConnected) appendHomeInstallCard(container)
+        if (generation !== homePlayGeneration || !container.isConnected) return
+        setHomePlayLayout(container, false)
+        container.querySelectorAll("[data-icono-home-play]").forEach(function (strip) {
+          strip.remove()
+        })
+        appendHomeInstallCard(container)
+        onCount(websiteGuestDiscoveries.listEntries().length)
       })
   }
 
@@ -4132,9 +4159,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!host) return
     host.innerHTML = ""
     host.hidden = true
-    host.classList.remove("icono-home-auxiliary--play")
-    var main = document.getElementById("icono-main")
-    if (main) main.classList.remove("icono-page-main--play")
+    homePlayGeneration++
+    setHomePlayLayout(host, false)
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -9256,11 +9282,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // The "Yours" count: a signed-out reader's finds in this browser, which
     // the strip reports, or a signed-in reader's own collection, kept from the
     // last time it loaded, so it stays put while they look at everyone's.
+    // No number until it is the reader's own: a session cookie means the
+    // account may be about to load, and a guest's add-on finds arrive with
+    // the strip.
     function yoursCount() {
+      if (!hasResolvedAuthState && hasSharedSessionPresenceHint()) return null
       if (!currentUser && !galleryState.authenticated) {
         return typeof galleryState.guestDiscoveryCount === "number"
           ? galleryState.guestDiscoveryCount
-          : websiteGuestDiscoveries.listEntries().length
+          : null
       }
       if (galleryState.ready && !galleryState.sharedDiscoveries) {
         galleryState.personalCount = Math.max(
@@ -9325,6 +9355,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return
       }
       summaryEl.hidden = false
+      // The tabs are redrawn whenever a count changes; a reader moving
+      // between them with the arrow keys keeps the focus.
+      var focusedTab =
+        document.activeElement && summaryEl.contains(document.activeElement)
+          ? document.activeElement.getAttribute("data-icono-collection-tab")
+          : null
       summaryEl.innerHTML = buildCollectionTabsMarkup(galleryState, yoursCount())
       var tabs = summaryEl.querySelectorAll("[data-icono-collection-tab]")
       for (var t = 0; t < tabs.length; t++) {
@@ -9339,6 +9375,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           var current = event.currentTarget.getAttribute("data-icono-collection-tab")
           selectCollectionScope(current === "shared" ? "personal" : "shared", true)
         })
+      }
+      if (focusedTab) {
+        var refocus = summaryEl.querySelector('[data-icono-collection-tab="' + focusedTab + '"]')
+        if (refocus) refocus.focus({ preventScroll: true })
       }
       var hasItems = galleryState.discoveredCount > 0 || galleryState.discoveryEntries.length > 0
       emptyEl.hidden = !galleryState.ready || hasItems
