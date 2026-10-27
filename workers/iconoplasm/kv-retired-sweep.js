@@ -27,12 +27,15 @@
 // clears the backlog; afterwards each run lists and finds nothing.
 export const RETIRED_KV_SWEEP_DAILY_DELETES = 480
 
+// Largest values first. Every delete costs the same, but on 2026-10-27 the
+// namespace held 22.7 GB against the free plan's 1 GB: retired hydrated
+// snapshots are about 6 MB each, card-catalog keys and portrait lists about
+// 2 MB, phone cards 3 KB. The first five days went to phone cards and freed
+// 9 MB; in this order about 20 GB goes in the next 19 days.
 function retiredRules({ catalogArtifactVersionToken, portraitSnapshotSchemaVersion }) {
   const hydrated = "iconoplasm:hydrated-catalog-artifact:"
   const refs = "iconoplasm:published-portrait-refs:"
   return [
-    { prefix: "iconoplasm:mobile-card-vm:", retired: () => true },
-    { prefix: "iconoplasm:card-catalog", retired: () => true },
     {
       prefix: hydrated,
       retired: (name) => !name.startsWith(`${hydrated}${catalogArtifactVersionToken}:`),
@@ -41,6 +44,8 @@ function retiredRules({ catalogArtifactVersionToken, portraitSnapshotSchemaVersi
       prefix: refs,
       retired: (name) => !name.startsWith(`${refs}${portraitSnapshotSchemaVersion}-`),
     },
+    { prefix: "iconoplasm:card-catalog", retired: () => true },
+    { prefix: "iconoplasm:mobile-card-vm:", retired: () => true },
   ]
 }
 
@@ -58,13 +63,12 @@ export async function sweepRetiredIconoplasmKvKeys(
       if (deleted >= limit) return { deleted, lists, done: false }
       const page = await kv.list({ prefix: rule.prefix, cursor, limit: 1000 })
       lists += 1
-      const names = page.keys
-        .map((key) => key.name)
-        .filter(rule.retired)
-        .slice(0, limit - deleted)
+      const retired = page.keys.map((key) => key.name).filter(rule.retired)
+      const names = retired.slice(0, limit - deleted)
       for (let i = 0; i < names.length; i += 50)
         await Promise.all(names.slice(i, i + 50).map((name) => kv.delete(name)))
       deleted += names.length
+      if (names.length < retired.length) return { deleted, lists, done: false }
       cursor = page.list_complete ? undefined : page.cursor
     } while (cursor)
   }

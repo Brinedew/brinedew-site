@@ -51,6 +51,13 @@ test(
       const first = await sweepRetiredIconoplasmKvKeys(kv, VERSIONS, { limit: 40 })
       assert.equal(first.deleted, 40)
       assert.equal(first.done, false, "a day's share leaves the rest for tomorrow")
+      const afterFirst = (await kv.list()).keys.map((key) => key.name)
+      assert.ok(
+        !afterFirst.some((name) =>
+          /hydrated-catalog-artifact:(daba|a5:)|refs:v2|card-catalog/.test(name),
+        ),
+        "the large values go first: snapshots, portrait lists, then the card catalogue",
+      )
 
       const second = await sweepRetiredIconoplasmKvKeys(kv, VERSIONS, { limit: 40 })
       assert.equal(second.deleted, retired.length - 40)
