@@ -322,6 +322,7 @@ import {
 import { reconcileIconoplasmRecognitionPolicies } from "./iconoplasm-recognition-policy-reconciliation.js"
 import { archiveColdIconoplasmPublishEvents } from "./iconoplasm-publish-event-archive.js"
 import { dispatchIconoplasmCatalogPublication } from "./iconoplasm-catalog-dispatch.js"
+import { dispatchIconoplasmRequestRollup } from "./iconoplasm-request-rollup-dispatch.js"
 import {
   iconoplasmBackgroundJob,
   runIconoplasmBackgroundJob,
@@ -531,7 +532,9 @@ function buildContentSecurityPolicy(request) {
   const connectSrc = allowUnsafeEval
     ? "connect-src 'self' data: blob: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com"
     : allowIconoplasmShoelaceDataIcons
-      ? "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com"
+      ? // The admin cockpit reads the request rollup (B-1158) from our CDN, as
+        // the public pages (scripts/prepare-iconoplasm-edge-assets.mjs) do.
+        "connect-src 'self' data: https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://img.brinedew.bio https://iconoplasmportraits.b-cdn.net https://challenges.cloudflare.com https://cloudflareinsights.com"
       : "connect-src 'self' https://brinedew.bio https://geneguessr.brinedew.bio https://iconoplasm.brinedew.bio https://challenges.cloudflare.com https://cloudflareinsights.com"
   const frameAncestors = isSiteSettingsBridgeRequest(request)
     ? "frame-ancestors https://brinedew.bio https://*.brinedew.bio"
@@ -1777,9 +1780,17 @@ export default {
         // B-898: the quarter-hour catalog tick. One D1 row read and one KV read;
         // when the newest canonical publish event moved past the last dispatch
         // it sends one repository_dispatch so GitHub Actions rebuilds the
-        // stable catalog object and republishes the dirty genes.
+        // stable catalog object and republishes the dirty genes. Once an hour
+        // (minute 23) it also starts the request rollup (B-1158).
         gallery: async () => ({
           catalog_dispatch: await dispatchIconoplasmCatalogPublication(env).catch((error) => ({
+            dispatched: false,
+            reason: String(error?.message || error),
+          })),
+          request_rollup_dispatch: await dispatchIconoplasmRequestRollup(
+            env,
+            backgroundEvent.scheduledTime,
+          ).catch((error) => ({
             dispatched: false,
             reason: String(error?.message || error),
           })),
