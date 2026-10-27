@@ -29,7 +29,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=a00d95ad5d196b75"
+} from "./home-play-strip.js?v=ebaf2ef2e2201e98"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -126,8 +126,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     "iconoplasm-extension-guest-discoveries-merged"
   // Add-on versions before the bridge learned this never answer.
   var ICONO_EXTENSION_GUEST_DISCOVERIES_TIMEOUT_MS = 1500
-  // publication-reader.js's genes() answers at most this many symbols a call.
-  var GUEST_DISCOVERY_CATALOGUE_CHUNK = 24
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   // "1" while this browser last saw an image API key on the reader's account,
@@ -3730,46 +3728,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return card
   }
 
-  // What a signed-out reader found in this browser, newest first: genes
-  // hovered with the add-on, gene pages opened here and symbols on the strip.
-  // The merge at login moves them into the Archive. `genes` are those with a
-  // portrait, which the strip shows face up: the strip is the guest's whole
-  // "Yours" view, so it shows every one. extensionSymbols: the add-on's
-  // finds, oldest first, or [] before the add-on has answered.
-  function loadGuestDiscoveryShelf(extensionSymbols) {
-    return Promise.resolve().then(function () {
-      var visits = websiteGuestDiscoveries
-        .listEntries()
-        .sort(function (a, b) {
-          return Date.parse(b.last_encountered_at) - Date.parse(a.last_encountered_at)
-        })
-        .map(function (entry) {
-          return entry.gene_symbol
-        })
-      var symbols = Array.from(new Set(extensionSymbols.slice().reverse().concat(visits)))
-      if (!symbols.length) return { count: 0, symbols: [], genes: [] }
-      // Every chunk reads the one catalogue that the starters already loaded,
-      // so none is a request.
-      var chunks = []
-      for (var i = 0; i < symbols.length; i += GUEST_DISCOVERY_CATALOGUE_CHUNK) {
-        chunks.push(
-          iconoplasmPublicationReader
-            .genes(symbols.slice(i, i + GUEST_DISCOVERY_CATALOGUE_CHUNK))
-            .catch(function () {
-              return []
-            }),
-        )
-      }
-      return Promise.all(chunks).then(function (parts) {
-        return {
-          count: symbols.length,
-          symbols: symbols,
-          genes: [].concat.apply([], parts).filter(function (record) {
-            return !!rawPublishedPortraitUrl(record, "medium")
-          }),
-        }
-      })
+  // What a signed-out reader found in this browser: genes hovered with the
+  // add-on (extensionSymbols, or [] before the add-on has answered), gene
+  // pages opened here and symbols on the strip. The merge at login moves them
+  // into the Archive; until then they are the "Yours" count.
+  function guestDiscoverySymbols(extensionSymbols) {
+    var symbols = new Set(extensionSymbols)
+    websiteGuestDiscoveries.listEntries().forEach(function (entry) {
+      symbols.add(entry.gene_symbol)
     })
+    return Array.from(symbols)
   }
 
   // B-1173: the next step under the strip's cards. Install comes first: in the same browser the add-on keeps
@@ -3878,13 +3846,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         portraitUrl: publishedPortraitUrl(record, "medium"),
       }
     }
-    var extrasOf = function (shelf) {
-      return shelf.genes
-        .filter(function (record) {
-          return starters.indexOf(normalizedSymbol(record.symbol)) < 0
-        })
-        .map(toGene)
-    }
     var stale = function () {
       return generation !== homePlayGeneration || !container.isConnected
     }
@@ -3900,14 +3861,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     var have = new Set()
     // The strip mounts with this browser's own finds as soon as the
-    // catalogue answers. The add-on can take 1.5 s to answer; its finds turn
-    // face up when they arrive. Every read is the catalogue that the Archive
-    // already loaded, so none is a request.
-    Promise.all([loadGuestDiscoveryShelf([]), iconoplasmPublicationReader.genes(starters)])
-      .then(function (results) {
-        var shelf = results[0]
+    // catalogue answers (the one the Archive already loaded, so no request).
+    // The add-on can take 1.5 s to answer; its finds count, and turn a
+    // starter face up, when they arrive.
+    iconoplasmPublicationReader
+      .genes(starters)
+      .then(function (records) {
         var bySymbol = new Map()
-        results[1].forEach(function (record) {
+        records.forEach(function (record) {
           bySymbol.set(normalizedSymbol(record.symbol), record)
         })
         var genes = starters.map(function (symbol) {
@@ -3923,13 +3884,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           appendHomeInstallCard(container)
           return
         }
-        shelf.symbols.forEach(function (symbol) {
+        var found = guestDiscoverySymbols([])
+        found.forEach(function (symbol) {
           have.add(symbol)
         })
         var strip = mountHomePlayStrip(container, {
           genes: genes,
-          found: shelf.symbols,
-          extras: extrasOf(shelf),
+          found: found,
           reverseFaceHtml: buildReverseCardFaceMarkup(),
           action: homePlayAction(),
           cardMarkup: function (gene) {
@@ -3962,15 +3923,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         readExtensionGuestDiscoveries()
           .then(function (extensionSymbols) {
             if (!extensionSymbols.length || stale()) return
-            return loadGuestDiscoveryShelf(extensionSymbols).then(function (withAddOn) {
-              if (stale()) return
-              withAddOn.symbols.forEach(function (symbol) {
-                have.add(symbol)
-              })
-              strip.addFinds(withAddOn.symbols, extrasOf(withAddOn))
-              if (iconoInstallState.installed) strip.setAction(loginAction)
-              onCount(have.size)
+            extensionSymbols.forEach(function (symbol) {
+              have.add(symbol)
             })
+            strip.addFinds(extensionSymbols)
+            if (iconoInstallState.installed) strip.setAction(loginAction)
+            onCount(have.size)
           })
           .catch(function (error) {
             console.warn(error)
@@ -3986,12 +3944,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         appendHomeInstallCard(container)
         // The reader's finds still count: this browser's and the add-on's.
         readExtensionGuestDiscoveries().then(function (extensionSymbols) {
-          if (stale()) return
-          var symbols = new Set(extensionSymbols)
-          websiteGuestDiscoveries.listEntries().forEach(function (entry) {
-            symbols.add(entry.gene_symbol)
-          })
-          onCount(symbols.size)
+          if (!stale()) onCount(guestDiscoverySymbols(extensionSymbols).length)
         })
       })
   }

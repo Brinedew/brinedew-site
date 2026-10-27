@@ -28,9 +28,10 @@
 // 8. the first tap on a phone opens the gene page (it must turn the card);
 //    the second tap, or a desktop click, doesn't open it;
 // 9. the strip asks the Worker anything (it must cost nothing per reader);
-// 10. a returning guest's finds are not face up in the strip, or are counted
-//    wrong; a guest whose add-on found genes gets the login without its
-//    reason (syncing across devices), or an install button besides.
+// 10. the strip shows more than the four starters (a returning guest's other
+//    finds get a card), a starter found before is not face up, the finds are
+//    counted wrong; a guest whose add-on found genes gets the login without
+//    its reason (syncing across devices), or an install button besides.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/home-play-strip*.
@@ -500,25 +501,24 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await context.close()
     })
 
-    await t.test("a reader whose add-on found genes sees them and the login", async () => {
+    await t.test("a reader whose add-on found genes sees them counted and the login", async () => {
       const { context, page } = await openArchive(
         browser,
         origin,
         { ...DESKTOP, userAgent: UA.chrome },
-        { addOn: ["TP53", "BRCA1"] },
+        { addOn: ["TP53", "RHO"] },
       )
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
       // The strip mounts with this browser's finds; the add-on's arrive when
       // it answers, with the login.
       await page.waitForFunction(
-        () =>
-          document.querySelectorAll(".icono-play-slot.is-found").length === 2 &&
-          /Log in/.test(document.querySelector("[data-icono-play-next]").textContent),
+        () => /Log in/.test(document.querySelector("[data-icono-play-next]").textContent),
         null,
         { timeout: 5_000 },
       )
-      // 10. The add-on's finds are face up after the four starters.
-      assert.deepEqual((await faceUp(page)).sort(), ["BRCA1", "TP53"])
+      // 10. Four cards, the add-on's starter face up; TP53 counts but gets no card.
+      assert.equal(await page.$$eval(".icono-play-slot", (slots) => slots.length), 4)
+      assert.deepEqual(await faceUp(page), ["RHO"])
       assert.equal(await yours(page), "2")
       assert.equal(await nextNote(page), "Connect with Discord to sync across devices.")
       const found = await buttons(page)
@@ -535,7 +535,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await context.close()
     })
 
-    await t.test("a returning guest finds their genes face up", async () => {
+    await t.test("a returning guest finds their starter face up and the rest counted", async () => {
       const now = new Date().toISOString()
       const entry = (gene_symbol) => ({
         gene_symbol,
@@ -550,8 +550,9 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       )
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
       // 10. A starter found before is face up in its place; a gene page opened
-      // here follows the starters.
-      assert.deepEqual(await faceUp(page), ["RHO", "TP53"])
+      // here counts, with no card of its own.
+      assert.equal(await page.$$eval(".icono-play-slot", (slots) => slots.length), 4)
+      assert.deepEqual(await faceUp(page), ["RHO"])
       assert.equal(await yours(page), "2")
       assert.deepEqual(
         (await buttons(page)).map((button) => [button.text, button.glyph]),
