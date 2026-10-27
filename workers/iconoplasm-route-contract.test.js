@@ -30,9 +30,7 @@ const PATTERN_EXAMPLES = Object.freeze({
   public_catalog_dump: "/api/public/v1/dumps/catalog.abc123.jsonl",
   public_card_snapshot_gene: "/api/public/v1/card-snapshots/card-v1/genes/TP53",
   public_card_snapshot_portrait_locator: "/api/public/v1/card-snapshots/card-v1/portraits/TP53",
-  mobile_card_symbol: "/api/iconoplasm/cards/TP53",
   semantic_gene_blot: "/blot/TP53.webp",
-  public_gene_detail: "/api/public/v1/genes/TP53",
   gene_request_summary: "/api/iconoplasm/requests/gene/TP53/summary",
   gene_request_state_gone: "/api/iconoplasm/requests/gene/TP53",
   emulsion_favorite_item: "/api/iconoplasm/emulsion-favorites/A1-255",
@@ -68,7 +66,6 @@ const PATTERN_EXAMPLES = Object.freeze({
   authority_generation_lease_fail:
     "/api/iconoplasm/authority/generation-leases/generation_lease_0001/fail",
   clan_members: "/api/iconoplasm/clans/Kinase/members",
-  gene_comments_legacy_read: "/api/iconoplasm/comments/gene/TP53",
   gene_comments: "/api/iconoplasm/genes/TP53/comments",
   image_edit_job: "/api/iconoplasm/image-edit/jobs/job-1",
   image_edit_job_publish: "/api/iconoplasm/image-edit/jobs/job-1/publish",

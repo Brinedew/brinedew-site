@@ -265,20 +265,6 @@ export async function handleRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNot
     return missingTheOnlyAllowedStatefulWorkerResponse()
   }
 
-  // ICONOPLASM CANONICAL PORTRAIT PUBLISH CONTRACT.
-  // Search terms: PRL split-brain, public edge card cache, current portrait,
-  // logged-out stale card, KV_GALLERY_VERSION.
-  //
-  // Do not cache `/api/iconoplasm/cards/:symbol` in this public edge worker.
-  // This worker intentionally has no KV binding, so it cannot include the live
-  // KV_GALLERY_VERSION barrier in a cache key. A symbol-only edge cache is the
-  // wrong architecture: after a vote promotes a new canonical portrait and the
-  // stateful worker publishes a new card artifact, logged-out users can still
-  // receive the old symbol-only edge response until that cache expires or an
-  // operator purges it by hand. The internal stateful worker already has the
-  // version-aware cache key because it can read the barrier. Keep this proxy
-  // state-free and let the stateful worker own public card freshness.
-
   const body =
     request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer()
 

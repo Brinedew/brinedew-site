@@ -225,11 +225,6 @@ test("DO NOT DELETE: shared public workers proxy while Iconoplasm routes directl
     "public edge must not symbol-cache card artifacts because it cannot key them by KV_GALLERY_VERSION",
   )
   assert.match(
-    publicEdge,
-    /PRL split-brain[\s\S]*KV_GALLERY_VERSION[\s\S]*stateful worker own public card freshness/,
-    "public edge code comments should make the canonical portrait cache boundary searchable",
-  )
-  assert.match(
     benchmarkEdge,
     /handleBenchmarkRequestByProxyingToTheOnlyAllowedStatefulWorkerDoNotDuplicate/,
     "benchmark edge worker should also proxy through the one allowed stateful worker",

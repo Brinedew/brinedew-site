@@ -527,23 +527,6 @@ test("catalog hydration emits only schema-5 inspectable portrait assets", () => 
   assert.equal("p" in hydrated.genes[1], false)
 })
 
-test("the public per-gene API refuses third-party callers and points them at the metadata endpoint", async () => {
-  const response = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/A1BG"),
-    buildEnv({ KV: buildPublishedCardReadKv() }),
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 403)
-  assert.equal(payload?.code, "FIRST_PARTY_ONLY")
-  assert.match(String(payload?.error || ""), /website ui/i)
-  assert.equal(
-    payload?.recommended_public_api?.metadata,
-    "https://iconoplasm.brinedew.bio/api/public/v1/metadata",
-  )
-})
-
 test("public media exposes only the canonical gene blot", async (t) => {
   const { env, storageReads, kvReads } = stableReaderEnv(t, {
     objects: stableA1bgObjects(),

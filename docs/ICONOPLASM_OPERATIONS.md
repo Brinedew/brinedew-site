@@ -149,26 +149,26 @@ The authority relationship is:
 - The stable gene object `genes/v3/<SYMBOL>.json` owns the public portrait.
   Read it from Bunny. It is rewritten in place; its `published_at` is the
   version that public responses report.
-- `/api/iconoplasm/cards/:symbol`, the gene-page lead and
+- The gene-page lead and
   metadata, public media, signed-in and anonymous galleries,
   extension cards, and the print copy must all project that
   object's portrait.
-- The shared public edge worker must not add a symbol-only Cache API entry in front of `/api/iconoplasm/cards/:symbol`. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
+- The shared public edge worker must not add a symbol-only Cache API entry in front of the mobile card routes. Iconoplasm's custom hostname routes directly to the asset-first stateful worker; shared-host requests cross the proxy, which has no storage binding. The stateful worker owns the card read in both cases.
 
 There is no signed-in or gene-detail fallback. A missing or incomplete stable
 object fails closed and uncached instead of selecting the D1 leader.
 
 ### diagnose one symbol
 
-Compare the public card and public-media projections:
+Compare the stable gene object and public-media projections:
 
 ```powershell
 @'
 const symbol = "PRL";
 const endpoints = [
   {
-    surface: "card",
-    url: `https://iconoplasm.brinedew.bio/api/iconoplasm/cards/${symbol}`,
+    surface: "stable-object",
+    url: `https://iconoplasm.brinedew.bio/api/public/v1/stable-genes/${symbol}.json`,
   },
   {
     surface: "public-media",
@@ -189,6 +189,7 @@ for (const endpoint of endpoints) {
     portraitSource: res.headers.get("x-iconoplasm-portrait-source"),
     version:
       res.headers.get("x-iconoplasm-card-version") ||
+      payload?.published_at ||
       payload?.card_snapshot_version ||
       payload?.diagnostics?.artifact_version ||
       null,
