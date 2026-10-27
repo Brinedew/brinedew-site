@@ -9,19 +9,18 @@ import { normalizeFavoriteEmulsionFamilyId } from "../iconoplasm-emulsion-favori
 // at most four; a gene's portrait belongs to one style, so no gene can show on
 // two cards.
 //
-// Rows read per page: one json_each value per style, then one row and one
-// vote-summary seek per blot of the styles on it, measured on D1 in
-// iconoplasm.style-published-portraits.test.js. The ranking happens here, not
-// in SQL: D1 bills every pass a window function makes over its rows, which
-// tripled this read when it ranked in the statement.
+// Migration 0144 stores each card (icono_style_cards): its blot count and its
+// four pictures, kept equal to the blots by triggers on the same writes. A
+// card costs one row and one json_each value to read, whatever the size of
+// its style (B-1154, 2026-10-27). Working it out on read cost two rows per
+// blot: about 1,450 rows for the picker job's 120 styles every 15 minutes, and
+// about 1,160 for a reader with 26 favourite styles. The pictures keep the
+// order of the upvotes they had when the style last changed (see 0144).
 export const STYLE_CARD_PORTRAIT_LIMIT = 4
 
-export const STYLE_PUBLISHED_PORTRAITS_SQL = `SELECT m.style_slot, m.gene_symbol, m.asset_sha256,
-    COALESCE(v.upvotes, 0) AS upvotes
+export const STYLE_CARDS_SQL = `SELECT c.style_slot, c.blot_count, c.portraits_json
   FROM json_each(?) j
-  JOIN icono_style_published_portraits m ON m.style_slot = j.value
-  LEFT JOIN icono_vote_asset_summary v
-    ON v.gene_symbol = m.gene_symbol AND v.asset_sha256 = m.asset_sha256`
+  JOIN icono_style_cards c ON c.style_slot = j.value`
 
 // Most upvoted first; ties break on the asset hash, so the order is stable.
 function byVotes(a, b) {
@@ -31,10 +30,21 @@ function byVotes(a, b) {
   )
 }
 
-// One style's blots: the whole count, and the pictures it shows.
-export function styleCardBlots(rows) {
-  const ranked = [...rows].sort(byVotes)
-  return { count: ranked.length, shown: ranked.slice(0, STYLE_CARD_PORTRAIT_LIMIT) }
+// One stored card: the whole count, and the pictures it shows. The stored
+// [gene_symbol, asset_sha256, upvotes] triples come in no promised order.
+export function styleCardBlots(row) {
+  let triples = []
+  try {
+    triples = JSON.parse(row?.portraits_json || "[]")
+  } catch {
+    triples = []
+  }
+  const shown = (Array.isArray(triples) ? triples : [])
+    .filter((triple) => Array.isArray(triple) && triple[0] && triple[1])
+    .map(([gene_symbol, asset_sha256, upvotes]) => ({ gene_symbol, asset_sha256, upvotes }))
+    .sort(byVotes)
+    .slice(0, STYLE_CARD_PORTRAIT_LIMIT)
+  return { count: Number(row?.blot_count) || 0, shown }
 }
 
 export function styleSlotOfOption(option) {
@@ -58,30 +68,21 @@ export async function attachStylePublishedPortraits(db, options, portraitUrl) {
     return true
   })
   const slots = Array.from(seen)
-  const rowsBySlot = new Map()
-  if (db && slots.length) {
-    const response = await db
-      .prepare(STYLE_PUBLISHED_PORTRAITS_SQL)
-      .bind(JSON.stringify(slots))
-      .all()
-    for (const row of response?.results || []) {
-      const slot = Number(row.style_slot)
-      if (!rowsBySlot.has(slot)) rowsBySlot.set(slot, [])
-      rowsBySlot.get(slot).push(row)
-    }
-  }
   const blots = new Map()
-  for (const [slot, rows] of rowsBySlot) {
-    const { count, shown } = styleCardBlots(rows)
-    blots.set(slot, {
-      count,
-      portraits: shown.map((row) => ({
-        gene_symbol: row.gene_symbol,
-        asset_sha256: row.asset_sha256,
-        is_current: true,
-        medium_url: typeof portraitUrl === "function" ? portraitUrl(row.asset_sha256) : "",
-      })),
-    })
+  if (db && slots.length) {
+    const response = await db.prepare(STYLE_CARDS_SQL).bind(JSON.stringify(slots)).all()
+    for (const row of response?.results || []) {
+      const { count, shown } = styleCardBlots(row)
+      blots.set(Number(row.style_slot), {
+        count,
+        portraits: shown.map((portrait) => ({
+          gene_symbol: portrait.gene_symbol,
+          asset_sha256: portrait.asset_sha256,
+          is_current: true,
+          medium_url: typeof portraitUrl === "function" ? portraitUrl(portrait.asset_sha256) : "",
+        })),
+      })
+    }
   }
   return list.map((option) => {
     const entry = blots.get(styleSlotOfOption(option))
