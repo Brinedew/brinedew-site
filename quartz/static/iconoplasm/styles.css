@@ -4180,10 +4180,9 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   outline-offset: 0.2em;
 }
 
-/* The Archive itself: the four starters face down, then what this browser
-   found, face up. A find turns its card over. */
-.icono-play-slots,
-.icono-play-backs {
+/* The Archive itself: the four starters, face down until found. A find
+   turns its card over. */
+.icono-play-slots {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
@@ -4224,16 +4223,14 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   transform: rotateY(180deg);
 }
 
-.icono-play-slot-face .icono-card-reverse-face,
-.icono-play-back .icono-card-reverse-face {
+.icono-play-slot-face .icono-card-reverse-face {
   position: absolute;
   inset: 0;
   border-radius: inherit;
 }
 
 /* The full-size card back's emblem has a 4.5rem floor, wider than a small card. */
-.icono-play-slot-face .icono-card-reverse-face__mark,
-.icono-play-back .icono-card-reverse-face__mark {
+.icono-play-slot-face .icono-card-reverse-face__mark {
   width: 62%;
 }
 
@@ -4273,34 +4270,8 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
     0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
-/* More backs fade out under the cards, into the way to find the rest. */
-.icono-play-more {
-  display: grid;
-  margin-top: 0.6rem;
-}
-
-.icono-play-more > * {
-  grid-area: 1 / 1;
-}
-
-.icono-play-backs {
-  align-self: start;
-  -webkit-mask-image: linear-gradient(#000, transparent 60%);
-  mask-image: linear-gradient(#000, transparent 60%);
-}
-
-.icono-play-back {
-  position: relative;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border-radius: var(--icono-radius-md);
-}
-
 .icono-play-card.icono-play-next-card {
-  position: relative;
-  z-index: 1;
-  align-self: start;
-  margin-top: 3.5rem;
+  margin-top: 1rem;
 }
 
 .icono-play-next {
@@ -4356,8 +4327,7 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 }
 
 @media (max-width: 600px) {
-  .icono-play-slots,
-  .icono-play-backs {
+  .icono-play-slots {
     gap: 0.4rem;
   }
 
@@ -4367,10 +4337,6 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 
   .icono-play-slot .icono-image-only-symbol {
     font-size: 1.05rem;
-  }
-
-  .icono-play-card.icono-play-next-card {
-    margin-top: 2.25rem;
   }
 }
 

@@ -29,7 +29,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=ebaf2ef2e2201e98"
+} from "./home-play-strip.js?v=5da2a5e3c3ec1e14"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
