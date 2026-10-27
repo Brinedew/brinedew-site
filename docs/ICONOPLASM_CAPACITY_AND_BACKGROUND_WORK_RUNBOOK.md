@@ -171,8 +171,11 @@ request came from) and `country`.
   `https://img.brinedew.bio/ops/requests/v2/<YYYY-MM-DD>.json` (B-1157), and
   the day so far in a new file each hour at
   `.../ops/requests/v2/hours/<YYYY-MM-DD>T<HH>.json`, which says
-  `"complete": false`. The hourly "Observe Cloudflare capacity" workflow runs
-  `scripts/roll-up-iconoplasm-request-record.mjs`, which asks Workers
+  `"complete": false`. The "Observe Cloudflare capacity" workflow runs
+  `scripts/roll-up-iconoplasm-request-record.mjs` every hour: the Worker
+  dispatches it at :23 (`workers/iconoplasm-request-rollup-dispatch.js`),
+  because GitHub's own hourly schedule fired only every 4 to 6 hours. The
+  script asks Workers
   Observability for the day's totals, then per route and per channel: requests,
   people, D1 rows read and written, and server errors. No file is rewritten with
   different counts, because the CDN keeps each file for 30 days and ignores a
