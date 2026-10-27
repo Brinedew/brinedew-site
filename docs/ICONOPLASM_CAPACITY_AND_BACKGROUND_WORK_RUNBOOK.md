@@ -167,13 +167,21 @@ request came from) and `country`.
 - **During a burst:** Workers Logs (dashboard → Workers → the internal stateful
   Worker → Logs), filtered on `service = iconoplasm`, shows the lines within
   seconds; kept 3 days, 200,000 events a day on the free plan.
-- **Afterwards:** one summary file per UTC day at
-  `https://img.brinedew.bio/ops/requests/v1/<YYYY-MM-DD>.json` (B-1157). The
-  hourly "Observe Cloudflare capacity" workflow runs
+- **Afterwards:** one summary file per finished UTC day at
+  `https://img.brinedew.bio/ops/requests/v2/<YYYY-MM-DD>.json` (B-1157), and
+  the day so far in a new file each hour at
+  `.../ops/requests/v2/hours/<YYYY-MM-DD>T<HH>.json`, which says
+  `"complete": false`. The hourly "Observe Cloudflare capacity" workflow runs
   `scripts/roll-up-iconoplasm-request-record.mjs`, which asks Workers
   Observability for the day's totals, then per route and per channel: requests,
-  people, D1 rows read and written, and server errors. Today's file is
-  rewritten every hour and says `"complete": false` until the day ends. The
+  people, D1 rows read and written, and server errors. No file is rewritten with
+  different counts, because the CDN keeps each file for 30 days and ignores a
+  cache-busting query (the v1 files, rewritten hourly, served the first hour's
+  counts all day). Each channel also has its landings: visits to a share link
+  `https://iconoplasm.brinedew.bio/from/<place>`, which the site answers with a
+  302 to `/?ref=<place>` (B-1158), counted from the zone's request analytics, so
+  a place counts visitors even when they do nothing that calls the Worker. The
+  cockpit's "Channels today" table reads the latest hourly file. The
   files hold counts only, no actor hash, IP or user agent, and a channel that
   isn't a plain slug is counted as `(other)`. A grouped query answers only 10
   groups unless `parameters.limit` is set, and without it they were the 10

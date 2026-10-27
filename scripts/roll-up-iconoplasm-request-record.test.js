@@ -39,7 +39,7 @@ function calculations(rows, key) {
   }
 }
 
-const day = (channels = [["", 3779, 123, 44240, 4575]]) =>
+const day = (channels = [["", 3779, 123, 44240, 4575]], landings = []) =>
   dayRollup({
     date: "2026-10-26",
     generatedAt: "2026-10-27T14:00:00.000Z",
@@ -47,6 +47,7 @@ const day = (channels = [["", 3779, 123, 44240, 4575]]) =>
     totals: calculations([[null, 3779, 123, 44240, 4575]]),
     routes: calculations(ROUTES_2026_10_26, "route"),
     channels: calculations(channels, "channel"),
+    landings,
     errors: {
       calculations: [
         {
@@ -94,7 +95,14 @@ test("a real day rolls up into totals and routes, largest first", () => {
     1,
   )
   assert.deepEqual(rollup.channels, [
-    { name: "(none)", requests: 3779, people: 123, rows_read: 44240, rows_written: 4575 },
+    {
+      name: "(none)",
+      landings: 0,
+      requests: 3779,
+      people: 123,
+      rows_read: 44240,
+      rows_written: 4575,
+    },
   ])
 })
 
@@ -111,10 +119,37 @@ test("a channel that isn't a plain slug is counted, not published", () => {
   )
   assert.deepEqual(rollup.channels[2], {
     name: "(other)",
+    landings: 0,
     requests: 19,
     people: 2,
     rows_read: 40,
     rows_written: 5,
   })
   assert.doesNotMatch(JSON.stringify(rollup), /script|555/)
+})
+
+// B-1158: landings on /from/<place> come from zone analytics, in its own shape.
+test("share-link landings join their channel, even with no actions yet", () => {
+  const landing = (path, count) => ({ count, dimensions: { clientRequestPath: path } })
+  const rollup = day(
+    [
+      ["", 3700, 120, 44000, 4500],
+      ["reddit", 60, 9, 200, 70],
+    ],
+    [
+      landing("/from/reddit", 412),
+      landing("/from/reddit/", 3),
+      landing("/from/bsky", 95),
+      landing("/from/%zz%3Cscript%3E", 2),
+    ],
+  )
+  assert.deepEqual(
+    rollup.channels.map(({ name, landings, requests }) => [name, landings, requests]),
+    [
+      ["reddit", 415, 60],
+      ["bsky", 95, 0],
+      ["(other)", 2, 0],
+      ["(none)", 0, 3700],
+    ],
+  )
 })
