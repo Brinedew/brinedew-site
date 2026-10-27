@@ -44,6 +44,8 @@ import { HOST, HttpStatus, OUT, launchChrome, routeProduction, startSite } from 
 
 const CDN_HOST = "img.brinedew.bio"
 const STORE_KEY = "iconoplasm.website-guest-discoveries.v1"
+// The "Everyone's" tab's feed, which is the Worker's to answer.
+const SHARED_FEED = "/api/iconoplasm/account-gallery-window"
 const UA = {
   chrome:
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
@@ -213,7 +215,11 @@ const header = (page) =>
     return {
       search: box(document.getElementById("icono-q")),
       sort: sort.checkVisibility() ? box(sort) : null,
-      sortText: sort.checkVisibility() ? sort.innerText.replace(/\s+/g, " ").trim() : "",
+      // What the button shows: its label, and the choice where there is room.
+      sortText: [...sort.querySelectorAll("span")]
+        .filter((span) => span.checkVisibility())
+        .map((span) => span.textContent.trim())
+        .join(" "),
       tabs: [...document.querySelectorAll(".icono-collection-tab")].map(
         (tab) =>
           tab.innerText.replace(/\s+/g, " ").trim() +
@@ -320,8 +326,12 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.doesNotMatch(await steps.textContent(), /Log in/, "the steps ask for a login")
       await shot(page, "desktop-steps")
 
+      // 9. Nothing reached the Worker while the strip was up.
+      assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
+
       // 4. Everyone's shows the shared Archive with its Sort; back again, the
-      // finds are still face up.
+      // finds are still face up. The shared feed is the one read of the
+      // Worker, and the strip that comes back adds none.
       await page.click('[data-icono-collection-tab="shared"]')
       await page.waitForSelector("[data-icono-home-play]", { state: "detached", timeout: 5_000 })
       const shared = await header(page)
@@ -338,8 +348,11 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await page.click(pill("PRL"))
       await page.waitForURL(/\/gene\/PRL$/, { timeout: 20_000 })
 
-      // 9. Nothing reached the Worker.
-      assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
+      assert.deepEqual(
+        api.filter((path) => path !== SHARED_FEED),
+        [],
+        `the strip asked the Worker: ${api.join(", ")}`,
+      )
       report.desktop = { header: top, shared, buttons: found, bar, api }
       await context.close()
     })
@@ -375,6 +388,8 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.equal(await yours(page), "1")
       await page.waitForTimeout(700)
       await shot(page, "phone-card")
+
+      assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
 
       // 3. Back on the shared Archive, the phone's Sort button leaves the
       // search box most of the row.
@@ -413,7 +428,11 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.equal(new URL(page.url()).pathname, "/")
       await page.tap(pill("RHO"))
       await page.waitForURL(/\/gene\/RHO$/, { timeout: 20_000 })
-      assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
+      assert.deepEqual(
+        api.filter((path) => path !== SHARED_FEED),
+        [],
+        `the strip asked the Worker: ${api.join(", ")}`,
+      )
       report.android = { header: shared, buttons: found }
       await context.close()
     })
@@ -489,6 +508,15 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         { addOn: ["TP53", "BRCA1"] },
       )
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+      // The strip mounts with this browser's finds; the add-on's arrive when
+      // it answers, with the login.
+      await page.waitForFunction(
+        () =>
+          document.querySelectorAll(".icono-play-slot.is-found").length === 2 &&
+          /Log in/.test(document.querySelector("[data-icono-play-next]").textContent),
+        null,
+        { timeout: 5_000 },
+      )
       // 10. The add-on's finds are face up after the four starters.
       assert.deepEqual((await faceUp(page)).sort(), ["BRCA1", "TP53"])
       assert.equal(await yours(page), "2")
