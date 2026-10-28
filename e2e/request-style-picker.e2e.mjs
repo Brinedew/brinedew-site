@@ -516,13 +516,16 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         )
         assert.equal(new Set(shownGenes).size, shownGenes.length, `${where}: ${shownGenes}`)
         assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
+        let checkedFiles = 0
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
           // 28. Each picture sits on its blurred placeholder.
           assert.ok(image.placeholder, `${where}: no placeholder under ${image.src}`)
-          // 29. One device pixel per CSS pixel here, so a cell narrower than
-          // the small file loads the small one, unless the page already had
-          // the medium.
+          // 29. One device pixel per CSS pixel here, so a loaded cell narrower
+          // than the small file shows the small one, unless the page already
+          // had the medium. (Lower rows may not have started loading yet.)
+          if (!image.loaded) continue
+          checkedFiles += 1
           if (image.width <= 192 && !fetchedBeforeOpen.has(image.currentSrc)) {
             assert.match(
               image.currentSrc,
@@ -533,6 +536,7 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
             )
           }
         }
+        assert.ok(checkedFiles > 0, `${where}: no picture had loaded`)
         // 29, for everything in the picker (the deck's covers too): a medium
         // fetched after it opened is for a cell wider than the small file.
         for (const url of portraitRequests.slice(requestsBeforeOpen)) {
