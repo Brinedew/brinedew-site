@@ -24,8 +24,9 @@ const KEY_PATTERN =
   /^portraits\/v1\/([0-9a-f]{2})\/([0-9a-f]{64})\/(full|medium|small|thumb)\.webp$/
 
 /** The job's own image keys: its three result keys that are the canonical keys of its hash.
- * result_r2_key_thumb names the small file; a job from before 2026-10-28 names the square
- * thumb.webp that the small file replaced. */
+ * result_r2_key_thumb names the small file. A job from before 2026-10-28 names the square
+ * thumb.webp instead; that day every square was deleted and every folder got a small.webp
+ * (B-1186), so its small file is the one still public. */
 export function deletableJobImageKeys(job) {
   const sha = String(job?.sha || "")
   const keys = new Set()
@@ -41,7 +42,7 @@ export function deletableJobImageKeys(job) {
       match[1] === sha.slice(0, 2) &&
       renditions.includes(match[3])
     ) {
-      keys.add(match[0])
+      keys.add(match[3] === "thumb" ? match[0].replace(/thumb\.webp$/, "small.webp") : match[0])
     }
   }
   return [...keys]

@@ -461,10 +461,11 @@ export function createIconoplasmApp({
   )
 
   /**
-   * The placeholders of portraits registered before they had one, from the
-   * workstation's backfill (scripts/backfill_portrait_small_files.py in
-   * Iconoplasm). One statement; each changed placeholder rewrites its row and
-   * the style card that shows it (migration 0145), nothing else.
+   * Sets portraits' placeholders: the workstation's backfill
+   * (scripts/backfill_portrait_small_files.py in Iconoplasm) sends them for
+   * portraits registered before they had one. One statement; a placeholder
+   * that differs from the stored one rewrites its row and the style card that
+   * shows it (migration 0145), and an equal one writes nothing.
    */
   app.post(
     "/api/iconoplasm/admin/portraits/placeholders",

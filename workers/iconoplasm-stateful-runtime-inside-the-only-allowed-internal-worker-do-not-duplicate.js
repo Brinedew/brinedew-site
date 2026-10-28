@@ -16290,7 +16290,7 @@ async function removePortraitAssetAndQueueLocalRemoval(
     asset_sha256: assetShaNorm,
     candidate_image_id: optionalInt(candidateImageId ?? existing?.candidate_image_id) ?? null,
     unpublished_current: isCurrent,
-    deleted_r2_keys: keys.length,
+    deleted_r2_keys: keys.size,
     queued_local_removal: queuedRemoval || null,
     auto_promote: autoPromote,
   }
@@ -23772,7 +23772,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             symbol,
             asset_sha256: asset,
             unpublished_current: isCurrent,
-            deleted_r2_keys: keys.length,
+            deleted_r2_keys: keys.size,
           }),
         )
       }

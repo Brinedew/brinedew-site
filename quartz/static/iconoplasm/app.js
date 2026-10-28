@@ -5924,9 +5924,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function markRequestPreviewLoaded(event) {
     var img = event.target
     if (!img || img.tagName !== "IMG" || !img.closest(".icono-request-card-cell")) return
-    if (img.currentSrc) loadedPreviewUrls.add(img.currentSrc)
-    loadedPreviewUrls.add(img.src)
+    loadedPreviewUrls.add(img.currentSrc || img.src)
     img.classList.add("is-loaded")
+  }
+
+  // A browser that fails the file it picked from srcset does not try src, so
+  // a missing small file falls back to the medium here. If that fails too,
+  // the cell keeps its blurred placeholder.
+  function retryRequestPreviewWithoutSrcset(event) {
+    var img = event.target
+    if (!img || img.tagName !== "IMG" || !img.closest(".icono-request-card-cell")) return
+    if (!img.hasAttribute("srcset")) return
+    img.removeAttribute("srcset")
+    img.removeAttribute("sizes")
   }
 
   function renderRequestOptionPreviewStripMarkup(option) {
@@ -8247,7 +8257,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var columns =
           String(getComputedStyle(results).gridTemplateColumns || "")
             .split(" ")
-            .filter(Boolean).length || 1
+            .filter(function (track) {
+              return /px$/.test(track)
+            }).length || 1
         var html = filteredOptions
           .map(function (option, index) {
             return renderRequestStyleCardMarkup(option, styleQueuedCount(option), index < columns)
@@ -8562,6 +8574,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       // "load" does not bubble, so the grid listens in the capture phase.
       results.addEventListener("load", markRequestPreviewLoaded, true)
+      results.addEventListener("error", retryRequestPreviewWithoutSrcset, true)
       results.addEventListener("click", function (event) {
         if (event.target.closest("[data-icono-request-retry]")) {
           results.innerHTML = ""

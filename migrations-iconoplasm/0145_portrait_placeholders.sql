@@ -73,7 +73,8 @@ END;
 -- A placeholder that arrives after its portrait (the backfill, or a portrait
 -- edited on the site, which has none) refreshes the one card that shows it:
 -- one card row written per placeholder, and none for a portrait that no card
--- shows.
+-- shows. Like any other change to the style, the rebuild ranks its pictures
+-- by today's votes, so the card may swap a picture it showed.
 CREATE TRIGGER trg_icono_style_cards_placeholder
 AFTER UPDATE OF placeholder ON icono_portrait_assets
 WHEN OLD.placeholder IS NOT NEW.placeholder

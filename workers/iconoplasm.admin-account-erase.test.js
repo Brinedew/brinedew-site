@@ -799,6 +799,29 @@ test("a failed storage delete leaves the job row, and the next request finishes 
   }
 })
 
+test("a job from before the small file named the square thumb; erasure deletes the small file that replaced it", async () => {
+  const world = await erasedWorld()
+  const env = routeEnv(world.env)
+  const hash = "e".repeat(64)
+  const [full, medium, small] = renditionKeys(hash)
+  const square = small.replace(/small\.webp$/, "thumb.webp")
+  world.iconoplasm.database
+    .prepare(
+      `INSERT INTO icono_image_edit_jobs
+         (id, user_id, provider_id, source_gene_symbol, source_asset_sha256, status,
+          result_asset_sha256, result_r2_key_full, result_r2_key_medium, result_r2_key_thumb)
+       VALUES ('edit-alice-legacy', ?, 'openai', 'TP53', ?, 'succeeded', ?, ?, ?, ?)`,
+    )
+    .run(ERASED_USER, "b".repeat(64), hash, full, medium, square)
+  for (const key of [full, medium, small]) world.network.storeObject(key)
+
+  await eraseToCompletion(env, world)
+
+  for (const key of [full, medium, small]) {
+    assert.equal(world.network.objects.has(key), false, `${key} is still public`)
+  }
+})
+
 test("a person with many stored images takes several requests, each within the external-call bound", async () => {
   const world = await erasedWorld()
   const env = routeEnv(world.env)
