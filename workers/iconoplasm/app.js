@@ -58,9 +58,14 @@ const symbolSchema = z
   .string()
   .check(z.trim(), z.toUpperCase(), z.regex(/^[A-Z0-9][A-Z0-9-]{0,63}$/))
 
+// A portrait's ThumbHash in base64 (about 25 bytes): the style picker decodes it
+// into a blurred copy of the portrait while the file loads (migration 0145).
+const placeholderSchema = z.string().check(z.trim(), z.regex(/^[A-Za-z0-9+/]{16,96}={0,2}$/))
+
 const portraitSchema = z.object({
   symbol: symbolSchema,
   asset_sha256: sha256,
+  placeholder: z.nullish(placeholderSchema),
   width: positiveInt,
   height: positiveInt,
   bytes: z.nullish(positiveInt),
@@ -122,21 +127,41 @@ const FACTORY_VALUES = Object.values(FACTORY_COLUMNS)
 // the SELECT's WHERE keeps an upsert from parsing as a join). Building one
 // Drizzle statement per row cost 10-27 ms of CPU for 192 rows, past the free
 // plan's allowance: a 96-portrait call was killed at 60 ms on 2026-10-09.
+// A re-registration without a placeholder keeps the one the row has.
 const PORTRAIT_UPSERT_SQL = `INSERT INTO icono_portrait_assets (
     gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
-    mime, status, autopick_eligible, is_legacy, ${FACTORY_VALUES.join(", ")}, created_by, created_at)
+    mime, status, autopick_eligible, is_legacy, ${FACTORY_VALUES.join(", ")}, placeholder,
+    created_by, created_at)
   SELECT json_extract(value, '$.gene_symbol'), json_extract(value, '$.asset_sha256'),
     json_extract(value, '$.r2_key_full'), json_extract(value, '$.r2_key_medium'),
     json_extract(value, '$.r2_key_thumb'), 'image/webp', 'draft', 1, 0,
     ${FACTORY_VALUES.map((column) => `json_extract(value, '$.${column}')`).join(", ")},
-    json_extract(value, '$.created_by'), CURRENT_TIMESTAMP
+    json_extract(value, '$.placeholder'), json_extract(value, '$.created_by'), CURRENT_TIMESTAMP
   FROM json_each(?) WHERE true
   ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET
-    ${FACTORY_VALUES.map((column) => `${column} = excluded.${column}`).join(", ")}, is_legacy = 0
+    ${FACTORY_VALUES.map((column) => `${column} = excluded.${column}`).join(", ")}, is_legacy = 0,
+    placeholder = COALESCE(excluded.placeholder, icono_portrait_assets.placeholder)
   WHERE ${[
     ...FACTORY_VALUES.map((column) => `icono_portrait_assets.${column} IS NOT excluded.${column}`),
     "icono_portrait_assets.is_legacy IS NOT 0",
+    "(excluded.placeholder IS NOT NULL AND icono_portrait_assets.placeholder IS NOT excluded.placeholder)",
   ].join(" OR ")}`
+// Placeholders for portraits registered before they had one (the backfill):
+// only rows whose placeholder changes are written.
+const PLACEHOLDER_UPDATE_SQL = `UPDATE icono_portrait_assets SET placeholder = sent.placeholder
+  FROM (SELECT json_extract(value, '$.symbol') AS symbol,
+               json_extract(value, '$.asset_sha256') AS asset_sha256,
+               json_extract(value, '$.placeholder') AS placeholder
+          FROM json_each(?)) AS sent
+  WHERE icono_portrait_assets.gene_symbol = sent.symbol
+    AND icono_portrait_assets.asset_sha256 = sent.asset_sha256
+    AND icono_portrait_assets.placeholder IS NOT sent.placeholder`
+export const PLACEHOLDERS_MAX = 500
+const placeholdersSchema = z.object({
+  placeholders: z
+    .array(z.object({ symbol: symbolSchema, asset_sha256: sha256, placeholder: placeholderSchema }))
+    .check(z.minLength(1), z.maxLength(PLACEHOLDERS_MAX)),
+})
 const CANDIDATE_ADDED_SQL = `INSERT INTO icono_publish_events
     (gene_symbol, to_asset_sha256, action, actor, reason)
   SELECT json_extract(value, '$.symbol'), json_extract(value, '$.asset_sha256'),
@@ -149,7 +174,8 @@ function portraitRow(portrait, createdBy) {
     asset_sha256: portrait.asset_sha256,
     r2_key_full: portraitKey(portrait.asset_sha256, "full"),
     r2_key_medium: portraitKey(portrait.asset_sha256, "medium"),
-    r2_key_thumb: portraitKey(portrait.asset_sha256, "thumb"),
+    r2_key_thumb: portraitKey(portrait.asset_sha256, "small"),
+    placeholder: portrait.placeholder ?? null,
     width: portrait.width,
     height: portrait.height,
     bytes: portrait.bytes ?? null,
@@ -350,7 +376,7 @@ export function createIconoplasmApp({
 
   /**
    * The factory registers portraits it has already uploaded to the CDN
-   * (portraits/v1/<sha>/{full,medium,thumb}.webp), then each touched gene's
+   * (portraits/v1/<sha>/{full,medium,small}.webp), then each touched gene's
    * gene object is rebuilt. Two D1 reads (which genes the catalogue carries, which
    * portraits exist), one D1 batch for the rows and a `candidate_added` event
    * per new portrait (the catalogue builder follows those), then one gene object
@@ -430,6 +456,34 @@ export function createIconoplasmApp({
         registered: portraits.length,
         added: added.length,
         genes,
+      })
+    },
+  )
+
+  /**
+   * The placeholders of portraits registered before they had one, from the
+   * workstation's backfill (scripts/backfill_portrait_small_files.py in
+   * Iconoplasm). One statement; each changed placeholder rewrites its row and
+   * the style card that shows it (migration 0145), nothing else.
+   */
+  app.post(
+    "/api/iconoplasm/admin/portraits/placeholders",
+    factoryAuth,
+    outsideMaintenance,
+    zValidator("json", placeholdersSchema),
+    shedBatchWork(
+      () => "sheddable_plus",
+      (c) => ({ price: priceOf("placeholder", c.req.valid("json").placeholders.length) }),
+    ),
+    async (c) => {
+      const { placeholders } = c.req.valid("json")
+      const result = await c.env.ICONOPLASM_DB.prepare(PLACEHOLDER_UPDATE_SQL)
+        .bind(JSON.stringify(placeholders))
+        .run()
+      return c.json({
+        ok: true,
+        sent: placeholders.length,
+        changed: Number(result?.meta?.changes || 0),
       })
     },
   )

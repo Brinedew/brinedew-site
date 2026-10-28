@@ -38,7 +38,7 @@ import {
   templateSymbols,
   templateThumbnail,
 } from "./diagram-templates.js?v=220602dd298fbe51"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=2033cc31cb7f0de1"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=ba142878e1fba542"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.

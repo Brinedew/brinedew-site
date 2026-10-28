@@ -1993,12 +1993,13 @@ async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catal
 }
 
 // Canonical storage key for a portrait rendition.
-// rendition: 'full' (<=1MP, gene page hero), 'medium' (512px long edge, extension/grid), 'thumb' (256x256 crop)
+// rendition: 'full' (<=1MP, gene page hero), 'medium' (384x512, extension and
+// pages), 'small' (192x256, the grids). Every rendition is 3:4 like the portrait.
 function portraitStorageKey(sha256, rendition) {
   return `portraits/v1/${sha256.slice(0, 2)}/${sha256}/${rendition}.webp`
 }
 
-function adminPortraitUrl(base, assetSha256, rendition = "thumb") {
+function adminPortraitUrl(base, assetSha256, rendition = "small") {
   const sha = normalizeSha256(assetSha256)
   if (!sha) return null
   return joinUrl(base, portraitStorageKey(sha, rendition))
@@ -2008,7 +2009,7 @@ function portraitAssetRef(base, assetSha256) {
   const assetSha = normalizeSha256(assetSha256)
   if (!assetSha) return null
   const renditions = {}
-  for (const rendition of ["full", "medium", "thumb"]) {
+  for (const rendition of ["full", "medium", "small"]) {
     const path = portraitStorageKey(assetSha, rendition)
     renditions[rendition] = {
       path,
@@ -2028,7 +2029,7 @@ function portraitAssetUrl(asset, preferred = "medium") {
     renditions?.[preferred]?.canonical_url ||
     renditions?.medium?.canonical_url ||
     renditions?.full?.canonical_url ||
-    renditions?.thumb?.canonical_url ||
+    renditions?.small?.canonical_url ||
     null
   )
 }
@@ -2455,8 +2456,8 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
         }),
         width: optionalInt(row?.fulfilled_asset_width),
         height: optionalInt(row?.fulfilled_asset_height),
-        thumb_url: portraitBaseUrl
-          ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "thumb")
+        small_url: portraitBaseUrl
+          ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "small")
           : "",
         medium_url: portraitBaseUrl
           ? adminPortraitUrl(portraitBaseUrl, fulfilledAssetSha, "medium")
@@ -4967,7 +4968,7 @@ async function diagnosticMatrixRunPayload(env, url, runId = "") {
       fulfilled_vision_id: sanitizeVoteVisionId(row?.fulfilled_vision_id || "") || "",
       note: sanitizeText(row?.fulfillment_note || "", 1000) || "",
       updated_at: sanitizeText(row?.updated_at || "", 64) || "",
-      thumb_url: assetSha ? adminPortraitUrl(base, assetSha, "thumb") : "",
+      small_url: assetSha ? adminPortraitUrl(base, assetSha, "small") : "",
       full_url: assetSha ? adminPortraitUrl(base, assetSha, "full") : "",
     }
   })
@@ -5411,7 +5412,6 @@ async function sourceImageEditAssetRow(env, { symbol, assetSha256 }) {
        pa.asset_sha256,
        pa.r2_key_full,
        pa.r2_key_medium,
-       pa.r2_key_thumb,
        pa.mime,
        pa.width,
        pa.height,
@@ -6999,11 +6999,11 @@ function providerOutputExtension(contentType) {
 }
 
 // Render the provider's output bytes into the three canonical portrait
-// renditions (full, medium, thumb) in a single pipeline that touches the
+// renditions (full, medium, small) in a single pipeline that touches the
 // public Worker edge transform exactly once per non-WebP source and exactly
 // twice for WebP sources. The previous implementation made 3–5 round-trips
 // through the transform for the same WebP bytes (normalize-tmp + full PUT +
-// medium transform + thumb transform + 2 rendition PUTs). This merged form
+// medium transform + small transform + 2 rendition PUTs). This merged form
 // keeps the worker-edge subrequest cost to a constant per request regardless
 // of provider output format, which is what keeps the synchronous Krea edit
 // path under the 50-subrequest Worker cap on slow models.
@@ -7016,29 +7016,30 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
   const keys = {
     full: portraitStorageKey(assetSha, "full"),
     medium: portraitStorageKey(assetSha, "medium"),
-    thumb: portraitStorageKey(assetSha, "thumb"),
+    small: portraitStorageKey(assetSha, "small"),
   }
 
   if (isWebpContentType(sourceContentType)) {
     // WebP in, WebP out for all three renditions. The full is the provider
-    // bytes as-is; the medium and thumb are produced by fetching the full
+    // bytes as-is; the medium and small are produced by fetching the full
     // back through the public Worker edge Image Resizing transform. This
     // matches the previous writeImageEditRenditions contract (full size
-    // is the source dimensions; medium is 512w; thumb is 256x256 cover).
+    // is the source dimensions; medium fits 384x512; small is 192x256 cover).
     await putPortraitStorageObject(env, keys.full, sourceBytes, {
       contentType: "image/webp",
       cacheControl: "public, max-age=31536000, immutable",
       customMetadata: { asset_sha256: assetSha, rendition: "full", source: "image_edit" },
     })
     const fullUrl = joinUrl(url?.origin || portraitBase(url, env), keys.full)
-    const [mediumBytes, thumbBytes] = await Promise.all([
+    const [mediumBytes, smallBytes] = await Promise.all([
       fetchImageEditRendition(fullUrl, {
-        width: 512,
+        width: 384,
+        height: 512,
         fit: "scale-down",
         format: "webp",
       }),
       fetchImageEditRendition(fullUrl, {
-        width: 256,
+        width: 192,
         height: 256,
         fit: "cover",
         gravity: "center",
@@ -7051,10 +7052,10 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
         cacheControl: "public, max-age=31536000, immutable",
         customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
       }),
-      putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+      putPortraitStorageObject(env, keys.small, smallBytes, {
         contentType: "image/webp",
         cacheControl: "public, max-age=31536000, immutable",
-        customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
+        customMetadata: { asset_sha256: assetSha, rendition: "small", source: "image_edit" },
       }),
     ])
     return { keys, bytes: sourceBytes.byteLength }
@@ -7077,15 +7078,16 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
   })
   const tempUrl = joinUrl(url?.origin || portraitBase(url, env), tempKey)
   try {
-    const [fullBytes, mediumBytes, thumbBytes] = await Promise.all([
+    const [fullBytes, mediumBytes, smallBytes] = await Promise.all([
       fetchImageEditRendition(tempUrl, { fit: "scale-down", format: "webp" }),
       fetchImageEditRendition(tempUrl, {
-        width: 512,
+        width: 384,
+        height: 512,
         fit: "scale-down",
         format: "webp",
       }),
       fetchImageEditRendition(tempUrl, {
-        width: 256,
+        width: 192,
         height: 256,
         fit: "cover",
         gravity: "center",
@@ -7104,10 +7106,10 @@ async function writeImageEditRenditions(env, url, { assetSha256, bytes, contentT
         cacheControl: "public, max-age=31536000, immutable",
         customMetadata: { asset_sha256: assetSha, rendition: "medium", source: "image_edit" },
       }),
-      putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+      putPortraitStorageObject(env, keys.small, smallBytes, {
         contentType: "image/webp",
         cacheControl: "public, max-age=31536000, immutable",
-        customMetadata: { asset_sha256: assetSha, rendition: "thumb", source: "image_edit" },
+        customMetadata: { asset_sha256: assetSha, rendition: "small", source: "image_edit" },
       }),
     ])
     return { keys, bytes: fullBytes.byteLength }
@@ -7185,7 +7187,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       assetSha,
       String(job.result_r2_key_full || portraitStorageKey(assetSha, "full")),
       String(job.result_r2_key_medium || portraitStorageKey(assetSha, "medium")),
-      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "thumb")),
+      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "small")),
       sanitizeText(job.result_mime || "", 80) || "image/webp",
       optionalInt(job.result_width),
       optionalInt(job.result_height),
@@ -8077,7 +8079,7 @@ async function publishCandidateGenerationAsset(env, job, userId) {
       assetSha,
       String(job.result_r2_key_full || portraitStorageKey(assetSha, "full")),
       String(job.result_r2_key_medium || portraitStorageKey(assetSha, "medium")),
-      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "thumb")),
+      String(job.result_r2_key_thumb || portraitStorageKey(assetSha, "small")),
       sanitizeText(job.result_mime || "", 80) || "image/webp",
       optionalInt(job.result_width),
       optionalInt(job.result_height),
@@ -9275,7 +9277,7 @@ export async function publishRequestPickerObject(env) {
     request_options: await attachStylePublishedPortraits(
       env.ICONOPLASM_DB,
       generationRequestFirstPageOptions(env, url, firstPage.rows),
-      (sha) => adminPortraitUrl(portraitBase(url, env), sha, "medium"),
+      (sha, rendition) => adminPortraitUrl(portraitBase(url, env), sha, rendition),
     ),
     next_cursor: firstPage.nextCursor,
   }
@@ -9306,8 +9308,10 @@ async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
   const page = await readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)
   return {
     ...page,
-    options: await attachStylePublishedPortraits(env.ICONOPLASM_DB, page.options, (sha) =>
-      adminPortraitUrl(portraitBase(url, env), sha, "medium"),
+    options: await attachStylePublishedPortraits(
+      env.ICONOPLASM_DB,
+      page.options,
+      (sha, rendition) => adminPortraitUrl(portraitBase(url, env), sha, rendition),
     ),
   }
 }
@@ -12320,7 +12324,7 @@ const ICONO_STORAGE_AUDIT_SEED_SYMBOL_BATCH = 200
 // costs three storage HEADs plus the queue bookkeeping around it, so keep a
 // single pass intentionally small and make progress across repeated clicks.
 const ICONO_STORAGE_AUDIT_SAFE_INSPECTION_BATCH = 8
-// Each asset probes full + medium + thumb. Two assets at a time keeps the
+// Each asset probes full + medium + small. Two assets at a time keeps the
 // Worker on the documented six-open-connections ceiling instead of pointlessly
 // stampeding Bunny/Cloudflare with eighteen parallel HEADs.
 const ICONO_STORAGE_AUDIT_INSPECT_CONCURRENCY = 2
@@ -12351,7 +12355,7 @@ function parseAdminAssetMissingRenditions(rawValue) {
                   .trim()
                   .toLowerCase(),
               )
-              .filter((value) => ["full", "medium", "thumb"].includes(value)),
+              .filter((value) => ["full", "medium", "small"].includes(value)),
           ),
         )
       : []
@@ -13419,20 +13423,20 @@ async function inspectAdminAssetStorageRows(
       const keys = {
         full: portraitStorageKey(assetSha, "full"),
         medium: portraitStorageKey(assetSha, "medium"),
-        thumb: portraitStorageKey(assetSha, "thumb"),
+        small: portraitStorageKey(assetSha, "small"),
       }
-      const [fullHead, mediumHead, thumbHead] = await Promise.all([
+      const [fullHead, mediumHead, smallHead] = await Promise.all([
         headPortraitStorageObject(env, keys.full),
         headPortraitStorageObject(env, keys.medium),
-        headPortraitStorageObject(env, keys.thumb),
+        headPortraitStorageObject(env, keys.small),
       ])
 
       const missingRenditions = []
       if (!fullHead) missingRenditions.push("full")
       if (!mediumHead) missingRenditions.push("medium")
-      if (!thumbHead) missingRenditions.push("thumb")
+      if (!smallHead) missingRenditions.push("small")
 
-      const regionalDivergence = [fullHead, mediumHead, thumbHead].some((head) =>
+      const regionalDivergence = [fullHead, mediumHead, smallHead].some((head) =>
         Boolean(head?.regionalDivergence),
       )
 
@@ -13452,7 +13456,7 @@ async function inspectAdminAssetStorageRows(
         rendition_sources: {
           full: fullHead?.source || "missing",
           medium: mediumHead?.source || "missing",
-          thumb: thumbHead?.source || "missing",
+          small: smallHead?.source || "missing",
         },
       }
     } catch (error) {
@@ -14008,7 +14012,7 @@ function portraitStateFromPublishedGeneObject(geneObject, base) {
       status: "missing",
       hero_url: null,
       medium_url: null,
-      thumb_url: null,
+      small_url: null,
       width: null,
       height: null,
       asset_sha256: null,
@@ -14021,7 +14025,7 @@ function portraitStateFromPublishedGeneObject(geneObject, base) {
     status: "published",
     hero_url: adminPortraitUrl(base, assetSha256, "full"),
     medium_url: adminPortraitUrl(base, assetSha256, "medium"),
-    thumb_url: adminPortraitUrl(base, assetSha256, "thumb"),
+    small_url: adminPortraitUrl(base, assetSha256, "small"),
     width: optionalInt(portrait.width),
     height: optionalInt(portrait.height),
     asset_sha256: assetSha256,
@@ -15609,7 +15613,7 @@ async function fetchAdminGallery(
         image_upvotes: Number(row?.upvotes || 0),
         image_downvotes: Number(row?.downvotes || 0),
         image_score: Number(row?.score || 0),
-        thumb_url: adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
+        small_url: adminPortraitUrl(base, row?.asset_sha256 || "", "small"),
         medium_url: adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
         full_url: adminPortraitUrl(base, row?.asset_sha256 || "", "full"),
         updated_at: sanitizeText(row?.created_at || "", 64) || "",
@@ -15720,7 +15724,7 @@ async function fetchAdminGallery(
       live_downvotes: Number(row?.live_downvotes || 0),
       live_score: Number(row?.live_score || 0),
       live_status: sanitizeText(row?.live_status || "", 32) || "",
-      live_thumb_url: adminPortraitUrl(base, row?.live_sha || "", "thumb"),
+      live_small_url: adminPortraitUrl(base, row?.live_sha || "", "small"),
       live_medium_url: adminPortraitUrl(base, row?.live_sha || "", "medium"),
       leader_sha: normalizeSha256(row?.leader_sha || "") || null,
       leader_vision_id: sanitizeText(row?.leader_vision_id || "", 255) || "",
@@ -15729,7 +15733,7 @@ async function fetchAdminGallery(
       leader_upvotes: Number(row?.leader_upvotes || 0),
       leader_downvotes: Number(row?.leader_downvotes || 0),
       leader_score: Number(row?.leader_score || 0),
-      leader_thumb_url: adminPortraitUrl(base, row?.leader_sha || "", "thumb"),
+      leader_small_url: adminPortraitUrl(base, row?.leader_sha || "", "small"),
       leader_medium_url: adminPortraitUrl(base, row?.leader_sha || "", "medium"),
       has_mismatch: Number(row?.has_mismatch || 0) > 0,
       current_asset_missing: Number(row?.has_mismatch || 0) > 0,
@@ -15835,7 +15839,7 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
       created_at: sanitizeText(row?.created_at || "", 64) || "",
       full_url: adminPortraitUrl(base, row?.asset_sha256 || "", "full"),
       medium_url: adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
-      thumb_url: adminPortraitUrl(base, row?.asset_sha256 || "", "thumb"),
+      small_url: adminPortraitUrl(base, row?.asset_sha256 || "", "small"),
     }),
   )
 
@@ -15855,9 +15859,9 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
       actor: sanitizeText(row?.actor || "", 255) || "",
       reason: sanitizeText(row?.reason || "", 2000) || "",
       created_at: sanitizeText(row?.created_at || "", 64) || "",
-      thumb_url:
-        adminPortraitUrl(base, row?.to_asset_sha256 || "", "thumb") ||
-        adminPortraitUrl(base, row?.from_asset_sha256 || "", "thumb"),
+      small_url:
+        adminPortraitUrl(base, row?.to_asset_sha256 || "", "small") ||
+        adminPortraitUrl(base, row?.from_asset_sha256 || "", "small"),
     })),
   }
 }
@@ -15914,7 +15918,7 @@ function mapAdminVisionAssetRow(base, row) {
     // one the rest of the platform publishes from asset_sha256.
     hero_url: adminPortraitUrl(base, assetSha, "full"),
     medium_url: adminPortraitUrl(base, assetSha, "medium"),
-    thumb_url: adminPortraitUrl(base, assetSha, "thumb"),
+    small_url: adminPortraitUrl(base, assetSha, "small"),
     is_current: Number(row?.is_current || 0) > 0,
     is_stale: Number(row?.is_stale || 0) > 0,
     is_legacy: Number(row?.is_legacy || 0) > 0,
@@ -16255,9 +16259,18 @@ async function removePortraitAssetAndQueueLocalRemoval(
     .bind(symbolNorm, assetShaNorm, null, actorNorm, reasonNorm)
     .run()
 
-  const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
+  // r2_key_thumb names the retired square thumb on rows from before
+  // 2026-10-28, so the small file goes by its sha.
+  const keys = new Set(
+    [
+      existing?.r2_key_full,
+      existing?.r2_key_medium,
+      existing?.r2_key_thumb,
+      portraitStorageKey(assetShaNorm, "small"),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  )
   for (const key of keys) {
     await deletePortraitStorageObject(env, key)
   }
@@ -16958,7 +16971,7 @@ function publicGeneSearchEntry(url, env, symbol, gene, match) {
 
 function portraitCdnUrl(env, asset, preferred) {
   const renditions = asset?.renditions || {}
-  const path = [preferred, "medium", "full", "thumb"]
+  const path = [preferred, "medium", "full", "small"]
     .map((size) => renditions?.[size]?.path)
     .find(Boolean)
   return path ? iconoplasmCdnUrl(env, path) : portraitAssetUrl(asset, preferred)
@@ -17303,11 +17316,11 @@ function publishedPortraitLocatorFromProjection(projection, snapshotVersion) {
   const assetSha = normalizeSha256(portrait?.asset_sha256 || "")
   if (!symbol || portrait?.status !== "published" || !assetSha) return null
   const mediumUrl = String(
-    portrait.medium_url || portrait.hero_url || portrait.thumb_url || "",
+    portrait.medium_url || portrait.hero_url || portrait.small_url || "",
   ).trim()
   const fullUrl = String(portrait.hero_url || mediumUrl).trim()
-  const thumbUrl = String(portrait.thumb_url || mediumUrl).trim()
-  if (!mediumUrl || !fullUrl || !thumbUrl) return null
+  const smallUrl = String(portrait.small_url || mediumUrl).trim()
+  if (!mediumUrl || !fullUrl || !smallUrl) return null
   return {
     schema_version: 1,
     snapshot_version: snapshotVersion,
@@ -17317,7 +17330,7 @@ function publishedPortraitLocatorFromProjection(projection, snapshotVersion) {
       asset_sha256: assetSha,
       medium_url: mediumUrl,
       hero_url: fullUrl,
-      thumb_url: thumbUrl,
+      small_url: smallUrl,
       width: optionalInt(portrait.width),
       height: optionalInt(portrait.height),
     },
@@ -17463,9 +17476,9 @@ function buildMobileCardVMFromGeneRecord(
     display_color: normalizeHexColor(record?.color || "") || "#888",
     portrait: {
       status: portraitStatus === "pending" ? "missing" : portraitStatus,
-      url: portrait.medium_url || portrait.hero_url || portrait.thumb_url || null,
-      full_url: portrait.hero_url || portrait.medium_url || portrait.thumb_url || null,
-      thumb_url: portrait.thumb_url || null,
+      url: portrait.medium_url || portrait.hero_url || portrait.small_url || null,
+      full_url: portrait.hero_url || portrait.medium_url || portrait.small_url || null,
+      small_url: portrait.small_url || null,
       width: optionalInt(portrait.width),
       height: optionalInt(portrait.height),
       asset_sha256: normalizeSha256(portrait.asset_sha256 || "") || null,
@@ -20391,7 +20404,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       )
       // Scalability: a long-time player can have ~10k discoveries spanning
       // hundreds of clans. Keep the per-clan true count, but only ship a small
-      // preview of member portraits per clan (thumb + symbol only) so the payload
+      // preview of member portraits per clan (portrait + symbol only) so the payload
       // stays bounded (hundreds of KB, not multi-MB) regardless of collection size.
       // Single-clan proteins are more characteristic of a clan than proteins
       // shared across many clans, so they lead the card preview; multi-clan
@@ -20404,8 +20417,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const clanPortraitBase = portraitBase(url, env)
       // The card shows a 2x2 grid (four tiles) per page; the overview only needs
       // the first page, so cap previews at 4. Later pages load via the members
-      // endpoint. Members use the medium portrait (true portrait aspect, ~398x512)
-      // NOT the thumb variant (a 256x256 square center-crop) so tiles are uncropped.
+      // endpoint. Members use the medium portrait (384x512): a tile is about 104
+      // to 150 px wide, more than the small file covers on a 2x screen.
       const PREVIEW_CAP = 4
       for (const row of discoveryRows) {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
@@ -20901,10 +20914,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           json({ ok: false, error: "Source portrait not found" }, 404),
         )
       }
-      const sourceKey =
-        String(sourceRow.r2_key_full || "") ||
-        String(sourceRow.r2_key_medium || "") ||
-        String(sourceRow.r2_key_thumb || "")
+      const sourceKey = String(sourceRow.r2_key_full || "") || String(sourceRow.r2_key_medium || "")
       if (!sourceKey) {
         return done(
           "image_edit_jobs_409",
@@ -20972,10 +20982,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           sanitizeText(providerResult?.contentType || "", 80) || "image/webp"
         // writeImageEditRenditions now handles non-WebP provider output by
         // normalizing through the public Worker edge Image Resizing transform
-        // in the same pipeline that produces the medium and thumb renditions,
+        // in the same pipeline that produces the medium and small renditions,
         // so we no longer fail-fast on non-WebP. The merged function takes
         // the original bytes and content type and produces the full + medium
-        // + thumb WebP renditions itself.
+        // + small WebP renditions itself.
         const resultSha = await sha256HexBytes(resultBytes)
         if (resultSha === assetSha) throw new Error("Provider returned an unchanged image")
         const resultDimensions = webpDimensions(resultBytes) || {
@@ -20996,7 +21006,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           result_asset_sha256: resultSha,
           result_r2_key_full: renditions.keys.full,
           result_r2_key_medium: renditions.keys.medium,
-          result_r2_key_thumb: renditions.keys.thumb,
+          result_r2_key_thumb: renditions.keys.small,
           result_mime: "image/webp",
           result_width: optionalInt(resultDimensions.width),
           result_height: optionalInt(resultDimensions.height),
@@ -21493,7 +21503,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           sanitizeText(providerResult?.contentType || "", 80) || "image/webp"
         // writeImageEditRenditions now handles non-WebP provider output by
         // normalizing through the public Worker edge Image Resizing transform
-        // in the same pipeline that produces the medium and thumb renditions.
+        // in the same pipeline that produces the medium and small renditions.
         const resultSha = await sha256HexBytes(resultBytes)
         const resultDimensions = webpDimensions(resultBytes) || {
           width: ICONOPLASM_PORTRAIT_REQUEST_WIDTH,
@@ -21509,7 +21519,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           result_asset_sha256: resultSha,
           result_r2_key_full: renditions.keys.full,
           result_r2_key_medium: renditions.keys.medium,
-          result_r2_key_thumb: renditions.keys.thumb,
+          result_r2_key_thumb: renditions.keys.small,
           result_mime: "image/webp",
           result_width: optionalInt(resultDimensions.width),
           result_height: optionalInt(resultDimensions.height),
@@ -22554,9 +22564,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         actor: sanitizeText(row?.actor || "", 255) || "",
         reason: sanitizeText(row?.reason || "", 2000) || "",
         created_at: sanitizeText(row?.created_at || "", 64) || "",
-        thumb_url:
-          adminPortraitUrl(base, row?.to_asset_sha256 || "", "thumb") ||
-          adminPortraitUrl(base, row?.from_asset_sha256 || "", "thumb"),
+        small_url:
+          adminPortraitUrl(base, row?.to_asset_sha256 || "", "small") ||
+          adminPortraitUrl(base, row?.from_asset_sha256 || "", "small"),
       }))
 
       return done(
@@ -22715,7 +22725,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 created_at: sanitizeText(row?.current_created_at || "", 64) || "",
                 hero_url: adminPortraitUrl(base, currentResolvedAssetSha, "full"),
                 medium_url: adminPortraitUrl(base, currentResolvedAssetSha, "medium"),
-                thumb_url: adminPortraitUrl(base, currentResolvedAssetSha, "thumb"),
+                small_url: adminPortraitUrl(base, currentResolvedAssetSha, "small"),
               }
             : null,
 
@@ -22734,7 +22744,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 created_at: sanitizeText(row?.leader_created_at || "", 64) || "",
                 hero_url: adminPortraitUrl(base, leaderAssetSha, "full"),
                 medium_url: adminPortraitUrl(base, leaderAssetSha, "medium"),
-                thumb_url: adminPortraitUrl(base, leaderAssetSha, "thumb"),
+                small_url: adminPortraitUrl(base, leaderAssetSha, "small"),
               }
             : null,
         }
@@ -22886,7 +22896,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         return !coerceBoolean(item?.remote_known, false)
       }).length
       // B-437 / live GUI sync hardening: each binary item can fan out into
-      // full/medium/thumb portrait PUTs. Cloudflare Workers allow only a small
+      // full/medium/small portrait PUTs. Cloudflare Workers allow only a small
       // number of simultaneous outgoing connections per request, so keep one
       // request to at most two binary assets and let the workstation feed more
       // Worker invocations concurrently instead.
@@ -22910,7 +22920,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           const keys = {
             full: portraitStorageKey(assetSha, "full"),
             medium: portraitStorageKey(assetSha, "medium"),
-            thumb: portraitStorageKey(assetSha, "thumb"),
+            small: portraitStorageKey(assetSha, "small"),
           }
           const verifyStorage = coerceBoolean(
             item?.verify_storage ?? item?.verifyStorage,
@@ -22937,37 +22947,37 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           let exists = {
             full: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
             medium: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
-            thumb: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
+            small: !forceUpload && !isNewAsset && storedRenditionsPresent && !verifyStorage,
           }
           let fullPayload = null
           let mediumPayload = null
-          let thumbPayload = null
+          let smallPayload = null
           let fullBytes = null
           let mediumBytes = null
-          let thumbBytes = null
+          let smallBytes = null
           let uploadedAny = false
           if (!forceUpload && !isNewAsset && (!storedRenditionsPresent || verifyStorage)) {
             // Brand-new assets cannot already exist in portrait storage under
             // this sha-key contract. Skipping pointless HEAD probes here keeps
             // bulk backfills under the Worker subrequest ceiling.
-            const [headFull, headMedium, headThumb] = await Promise.all([
+            const [headFull, headMedium, headSmall] = await Promise.all([
               headPortraitStorageObject(env, keys.full),
               headPortraitStorageObject(env, keys.medium),
-              headPortraitStorageObject(env, keys.thumb),
+              headPortraitStorageObject(env, keys.small),
             ])
             exists = {
               full: Boolean(headFull),
               medium: Boolean(headMedium),
-              thumb: Boolean(headThumb),
+              small: Boolean(headSmall),
             }
           }
-          if (!exists.full || !exists.medium || !exists.thumb) {
+          if (!exists.full || !exists.medium || !exists.small) {
             fullPayload = extractRenditionPayload(item, "full")
             mediumPayload = extractRenditionPayload(item, "medium")
-            thumbPayload = extractRenditionPayload(item, "thumb")
+            smallPayload = extractRenditionPayload(item, "small")
             fullBytes = extractRenditionBytes(fullPayload)
             mediumBytes = extractRenditionBytes(mediumPayload)
-            thumbBytes = extractRenditionBytes(thumbPayload)
+            smallBytes = extractRenditionBytes(smallPayload)
           }
 
           if (!dryRun) {
@@ -23005,15 +23015,15 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 }),
               )
             }
-            if (!exists.thumb) {
-              if (!thumbBytes) throw new Error("Missing thumb rendition payload for new upload")
+            if (!exists.small) {
+              if (!smallBytes) throw new Error("Missing small rendition payload for new upload")
               uploadTasks.push(
-                putPortraitStorageObject(env, keys.thumb, thumbBytes, {
+                putPortraitStorageObject(env, keys.small, smallBytes, {
                   contentType: "image/webp",
                   customMetadata: {
                     gene_symbol: symbol,
                     asset_sha256: assetSha,
-                    rendition: "thumb",
+                    rendition: "small",
                   },
                 }),
               )
@@ -23123,7 +23133,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 assetSha,
                 keys.full,
                 keys.medium,
-                keys.thumb,
+                keys.small,
                 width,
                 height,
                 bytes,
@@ -23211,9 +23221,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                   ? "would_upload"
                   : "uploaded"
                 : "missing_payload",
-            thumb: exists.thumb
+            small: exists.small
               ? "skipped_existing"
-              : thumbBytes
+              : smallBytes
                 ? dryRun
                   ? "would_upload"
                   : "uploaded"
@@ -23249,7 +23259,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               essence: essenceResult,
               hero_url: joinUrl(base, keys.full),
               medium_url: joinUrl(base, keys.medium),
-              thumb_url: joinUrl(base, keys.thumb),
+              small_url: joinUrl(base, keys.small),
               r2_keys: keys,
             },
           }
@@ -23735,9 +23745,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .bind(symbol, asset, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
 
-        const keys = [existing?.r2_key_full, existing?.r2_key_medium, existing?.r2_key_thumb]
-          .map((value) => String(value || "").trim())
-          .filter(Boolean)
+        // r2_key_thumb names the retired square thumb on rows from before
+        // 2026-10-28, so the small file goes by its sha.
+        const keys = new Set(
+          [
+            existing?.r2_key_full,
+            existing?.r2_key_medium,
+            existing?.r2_key_thumb,
+            normalizeSha256(asset) ? portraitStorageKey(normalizeSha256(asset), "small") : "",
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+        )
         for (const key of keys) {
           await deletePortraitStorageObject(env, key)
         }

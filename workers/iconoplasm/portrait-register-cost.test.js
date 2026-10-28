@@ -130,6 +130,47 @@ test(
         again.rows_written <= ADMISSION_COST.rows_written,
         `an unchanged portrait writes only its admission row, not ${again.rows_written}`,
       )
+
+      // A placeholder (migration 0145) rides on the registration. Sending it
+      // writes the row once; a later registration without one keeps it, and
+      // writes nothing more.
+      const placeholder = "1QcSHQRnh493V4dIh4eXh1h4kJUI"
+      const placeholderOf = async (n) =>
+        (
+          await db
+            .prepare(
+              "SELECT placeholder FROM icono_portrait_assets WHERE gene_symbol = 'TP53' AND asset_sha256 = ?",
+            )
+            .bind(sha(n))
+            .first()
+        )?.placeholder
+      await register([{ ...portrait("TP53", 101), placeholder }])
+      assert.equal(await placeholderOf(101), placeholder)
+      const withoutIt = await register([portrait("TP53", 101)])
+      assert.equal(await placeholderOf(101), placeholder, "a registration without one keeps it")
+      assert.ok(withoutIt.rows_written <= ADMISSION_COST.rows_written)
+
+      // The backfill route: one row per changed placeholder (no card shows
+      // these portraits), and none for one that is already there.
+      const backfill = async (placeholders) => {
+        const response = await app.request(
+          "/api/iconoplasm/admin/portraits/placeholders",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+            body: JSON.stringify({ placeholders }),
+          },
+          { ICONOPLASM_DB: counted, ICONOPLASM_ADMIN_TOKEN: TOKEN },
+        )
+        assert.equal(response.status, 200, await response.clone().text())
+        return response.json()
+      }
+      const filled = await backfill([
+        { symbol: "TP53", asset_sha256: sha(1), placeholder },
+        { symbol: "TP53", asset_sha256: sha(101), placeholder },
+      ])
+      assert.deepEqual(filled, { ok: true, sent: 2, changed: 1 })
+      assert.equal(await placeholderOf(1), placeholder)
     } finally {
       await runtime.dispose()
     }

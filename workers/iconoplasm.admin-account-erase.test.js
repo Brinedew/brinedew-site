@@ -810,7 +810,7 @@ test("a person with many stored images takes several requests, each within the e
   )
   for (let index = 1; index <= 30; index += 1) {
     const hash = String(index).padStart(4, "0").repeat(16)
-    const [full, medium, thumb] = renditionKeys(hash)
+    const [full, medium, small] = renditionKeys(hash)
     insertJob.run(
       `edit-alice-bulk-${index}`,
       ERASED_USER,
@@ -818,9 +818,9 @@ test("a person with many stored images takes several requests, each within the e
       hash,
       full,
       medium,
-      thumb,
+      small,
     )
-    for (const key of [full, medium, thumb]) world.network.storeObject(key)
+    for (const key of [full, medium, small]) world.network.storeObject(key)
   }
 
   const requests = await eraseToCompletion(env, world, {}, 16)

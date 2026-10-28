@@ -157,8 +157,7 @@ export async function digestPage(day, lookUp = lookUpGene) {
         : c.shas
       return {
         symbol: c.symbol,
-        // "thumb" is a 256x256 square; the 3:4 frames would cut a quarter off
-        // each side of it. "medium" is the whole 3:4 portrait.
+        // "medium" (384x512) is sharp in the digest's 800 px wide picture.
         portraits: shas.map((sha) => portraitUrl(sha, "medium")),
       }
     }),

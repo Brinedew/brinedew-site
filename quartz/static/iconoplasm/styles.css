@@ -2057,9 +2057,18 @@ img-comparison-slider.rendered [slot="second"] {
   background: var(--light);
 }
 
-.icono-request-card-art.is-mosaic-2 img,
-.icono-request-card-art.is-mosaic-3 img:first-child {
+.icono-request-card-art.is-mosaic-2 .icono-request-card-cell,
+.icono-request-card-art.is-mosaic-3 .icono-request-card-cell:first-child {
   grid-row: 1 / span 2;
+}
+
+/* Each picture sits on its blurred placeholder (a decoded ThumbHash, painted
+   by the app) and fades in over it when the file arrives. */
+.icono-request-card-cell {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  background: center / cover no-repeat;
 }
 
 .icono-request-card-art img {
@@ -2068,6 +2077,18 @@ img-comparison-slider.rendered [slot="second"] {
   height: 100%;
   min-height: 0;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.22s var(--icono-ease-out);
+}
+
+.icono-request-card-art img.is-loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-request-card-art img {
+    transition: none;
+  }
 }
 
 .icono-request-card-empty {

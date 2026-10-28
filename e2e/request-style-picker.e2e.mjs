@@ -6,7 +6,8 @@
 //
 // Ways this picker can fail, written before the code, each asserted below at
 // 1280 and 400 px in light and dark:
-// 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop;
+// 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop
+//    (retired 2026-10-28);
 // 2. anything artist-shaped reaches the page: the search offers artists, a
 //    card shows an artist label, or typing an artist name finds a style;
 // 3. "Request all favorites" is not a shared `.icono-button`, or it is not at
@@ -64,7 +65,12 @@
 //     told;
 // 26. the server's refresh after the clicks disagrees with the deck;
 // 27. a card's number or caption is cut off, "N requested" leaves its picture,
-//     or the footer's three controls leave one row at 360 px.
+//     or the footer's three controls leave one row at 360 px;
+// 28. a picture is a blank cell while its file loads: no blurred copy of
+//     itself (its ThumbHash placeholder) under it (owner, 2026-10-28: "a lot
+//     of white squares");
+// 29. a grid cell downloads the 384 px medium file where the 192 px small one
+//     covers it.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -115,6 +121,9 @@ function previewAssets(slot) {
       asset_sha256: sha,
       is_current: true,
       medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
+      small_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/small.webp`,
+      // A real ThumbHash, from the workstation's encoder on a 3:4 test image.
+      placeholder: "mygGJQxgh3GHaIhXiHeIh6GACfeI",
     }
   })
 }
@@ -297,8 +306,7 @@ async function routePortraits(context) {
     const url = route.request().url()
     let hash = 0
     for (const ch of url) hash = (hash * 31 + ch.charCodeAt(0)) % 360
-    const square = url.includes("/thumb.webp")
-    const [w, h] = square ? [256, 256] : [384, 512]
+    const [w, h] = url.includes("/small.webp") ? [192, 256] : [384, 512]
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="hsl(${hash} 45% 42%)"/><circle cx="${w / 2}" cy="${h * 0.38}" r="${w / 5}" fill="hsl(${(hash + 40) % 360} 60% 72%)"/></svg>`
     return route.fulfill({ status: 200, contentType: "image/svg+xml", body: svg })
   })
@@ -378,6 +386,10 @@ function measurePicker() {
     images: images.map((img) => ({
       card: img.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
       src: img.getAttribute("src") || "",
+      currentSrc: img.currentSrc || "",
+      placeholder: getComputedStyle(img.parentElement).backgroundImage.startsWith(
+        'url("data:image/png',
+      ),
       ratio: img.getBoundingClientRect().width / img.getBoundingClientRect().height,
     })),
     queuedBadges: [...dialog.querySelectorAll("[data-icono-request-queued]")]
@@ -493,6 +505,15 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
+          // 28. Each picture sits on its blurred placeholder.
+          assert.ok(image.placeholder, `${where}: no placeholder under ${image.src}`)
+          // 29. At these sizes (one device pixel per CSS pixel) every cell is
+          // narrower than the small file.
+          assert.match(
+            image.currentSrc,
+            /small\.webp$/,
+            `${where}: cell loaded ${image.currentSrc}`,
+          )
         }
         for (const label of new Set(first.images.map((image) => image.card))) {
           const tiles = first.images.filter((image) => image.card === label)

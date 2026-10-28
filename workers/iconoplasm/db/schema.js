@@ -16,6 +16,9 @@ export const portraitAssets = sqliteTable(
     assetSha256: text("asset_sha256").notNull(),
     keyFull: text("r2_key_full").notNull(),
     keyMedium: text("r2_key_medium"),
+    // The small (192x256) rendition's key since 2026-10-28; older rows name the
+    // retired square thumb.webp. Nothing reads it to find a file: every key is
+    // portraits/v1/<aa>/<sha>/<rendition>.webp.
     keyThumb: text("r2_key_thumb").notNull(),
     mime: text("mime").notNull().default("image/webp"),
     width: integer("width"),

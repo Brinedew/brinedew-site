@@ -634,7 +634,7 @@
     const portrait =
       detail && detail.portrait && typeof detail.portrait === "object" ? detail.portrait : null
     return String(
-      (portrait && (portrait.medium_url || portrait.hero_url || portrait.thumb_url)) || "",
+      (portrait && (portrait.medium_url || portrait.hero_url || portrait.small_url)) || "",
     ).trim()
   }
 
