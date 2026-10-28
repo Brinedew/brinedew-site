@@ -23,8 +23,10 @@
 //    login button;
 // 7. Firefox gets anything but its add-on store, an Android phone anything
 //    but the Firefox steps; Safari or an iPhone, which have no install path,
-//    get a button at all; a reader who has the add-on gets anything but a
-//    page to try it on;
+//    get a button at all; a reader who has the add-on is not told first that
+//    the page knows it (2026-10-28: they got two screenshots and a button
+//    named after an article, and asked why), or can't open the two pages
+//    from the windows and their named links;
 // 8. the first tap on a phone opens the gene page (it must turn the card);
 //    the second tap, or a desktop click, doesn't open it;
 // 9. the strip asks the Worker anything (it must cost nothing per reader);
@@ -187,9 +189,10 @@ const buttons = (page, scope = "[data-icono-play-next]") =>
       })),
   )
 const nextNote = (page) => page.textContent("[data-icono-play-next] .icono-install-note")
-// The two other sites, drawn and loaded.
+// The two other sites, drawn and loaded, each in a browser window with its
+// address.
 const siteImages = (page) =>
-  page.$$eval("[data-icono-play-next] .icono-play-site img", (images) =>
+  page.$$eval("[data-icono-play-next] .icono-play-site .icono-play-window > img", (images) =>
     images
       .filter((image) => image.checkVisibility())
       .map((image) => ({ alt: image.alt, loaded: image.complete && image.naturalWidth > 0 })),
@@ -198,6 +201,20 @@ const SITE_ALTS = [
   "Wikipedia's Homeobox article with Iconoplasm installed",
   "The UCSC Genome Browser with Iconoplasm installed",
 ]
+const siteAddresses = (page) =>
+  page.$$eval("[data-icono-play-next] .icono-play-site .icono-play-address", (nodes) =>
+    nodes.map((node) => node.textContent),
+  )
+// For a reader with the add-on, each window and the page's name under it are
+// one link.
+const siteLinks = (page) =>
+  page.$$eval("[data-icono-play-next] a.icono-play-site", (links) =>
+    links.map((link) => [
+      link.querySelector(".icono-play-site-label").textContent.replace("↗", "").trim(),
+      link.getAttribute("href"),
+      link.getAttribute("target"),
+    ]),
+  )
 // The drawn window: the site's address and the add-on's toolbar icon.
 const windowBar = (page) =>
   page.$eval(".icono-play-bar", (bar) => ({
@@ -294,7 +311,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       )
       await page.waitForFunction(
         () =>
-          [...document.querySelectorAll(".icono-play-site img")].every(
+          [...document.querySelectorAll(".icono-play-site .icono-play-window > img")].every(
             (image) => image.complete && image.naturalWidth > 0,
           ),
         null,
@@ -479,11 +496,40 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
       await page.hover(pill("RHO"))
       assert.equal(await yours(page), "1")
-      assert.equal(await nextNote(page), "Open any page that names human genes.")
-      const found = await buttons(page)
-      assert.deepEqual(
-        found.map((button) => [button.text, button.href, button.target]),
-        [["Wikipedia's Homeobox article", "https://en.wikipedia.org/wiki/Homeobox", "_blank"]],
+      assert.equal(
+        await page.textContent("[data-icono-play-next] .icono-play-installed"),
+        "Iconoplasm is already installed in this browser.",
+        "the page didn't say first that it knows the reader has the add-on",
+      )
+      assert.equal(await nextNote(page), "Open any page that names human genes, like these two:")
+      const found = await siteLinks(page)
+      assert.deepEqual(found, [
+        ["Wikipedia's Homeobox article", "https://en.wikipedia.org/wiki/Homeobox", "_blank"],
+        [
+          "RHO in the UCSC Genome Browser",
+          "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=RHO",
+          "_blank",
+        ],
+      ])
+      assert.equal(
+        await page.$$eval(
+          "[data-icono-play-next] button, [data-icono-play-next] a.icono-button",
+          (n) => n.length,
+        ),
+        0,
+        "a reader with the add-on got an install or login button",
+      )
+      assert.deepEqual(await siteAddresses(page), ["en.wikipedia.org", "genome.ucsc.edu"])
+      await page.$eval("[data-icono-play-next]", (element) =>
+        element.scrollIntoView({ block: "center", behavior: "instant" }),
+      )
+      await page.waitForFunction(
+        () =>
+          [...document.querySelectorAll(".icono-play-site .icono-play-window > img")].every(
+            (image) => image.complete && image.naturalWidth > 0,
+          ),
+        null,
+        { timeout: 10_000 },
       )
       assert.deepEqual(
         (await siteImages(page)).map((image) => image.alt),
