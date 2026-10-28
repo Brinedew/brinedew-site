@@ -362,7 +362,7 @@ and Read Message History in the channel. Three outcomes to know:
 
 **Stored result images (B-993).** The portrait storage sits behind a public pull zone, and an
 unpublished job's three renditions
-(`portraits/v1/<sha[:2]>/<sha>/{full,medium,thumb}.webp`, content-addressed) answer to anyone who
+(`portraits/v1/<sha[:2]>/<sha>/{full,medium,small}.webp`, content-addressed) answer to anyone who
 has the URL. The erasure deletes them from Bunny before it deletes the job row
 (`workers/iconoplasm/account-erasure/job-result-images.js`), so a failed delete leaves the row and
 the next request repeats it. Two guards keep a published portrait safe: only a key that is exactly

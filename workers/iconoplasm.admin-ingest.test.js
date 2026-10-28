@@ -266,7 +266,7 @@ test("normal external-storage ingest does not run read-after-write retries per r
           renditions: {
             full: { base64, width: 1024, height: 1024 },
             medium: { base64, width: 512, height: 512 },
-            thumb: { base64, width: 256, height: 256 },
+            small: { base64, width: 192, height: 256 },
           },
         },
       ],
@@ -346,7 +346,7 @@ test("admin ingest proxy forwards POST bodies without cloning them into text fir
           renditions: {
             full: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
             medium: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
-            thumb: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
+            small: { base64: "QUJDRA==", width: 2, height: 2, bytes: 4 },
           },
         },
       ],

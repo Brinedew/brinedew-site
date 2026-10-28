@@ -159,7 +159,7 @@ test("admin ingest verify_storage reuploads missing portrait blobs for existing 
           renditions: {
             full: { base64, width: 1024, height: 1024, bytes: renditionBytes.length },
             medium: { base64, width: 512, height: 512, bytes: renditionBytes.length },
-            thumb: { base64, width: 256, height: 256, bytes: renditionBytes.length },
+            small: { base64, width: 192, height: 256, bytes: renditionBytes.length },
           },
         },
       ],
@@ -178,7 +178,7 @@ test("admin ingest verify_storage reuploads missing portrait blobs for existing 
   assert.deepEqual(payload?.results?.[0]?.uploads, {
     full: "uploaded",
     medium: "uploaded",
-    thumb: "uploaded",
+    small: "uploaded",
   })
   assert.equal(env.gatewayDb.auditRows.length, 1)
   assert.equal(env.gatewayDb.auditRows[0]?.is_current, 1)
@@ -208,7 +208,7 @@ test("admin ingest force_upload overwrites existing portrait blobs without stora
           renditions: {
             full: { base64, width: 1024, height: 1024, bytes: renditionBytes.length },
             medium: { base64, width: 512, height: 512, bytes: renditionBytes.length },
-            thumb: { base64, width: 256, height: 256, bytes: renditionBytes.length },
+            small: { base64, width: 192, height: 256, bytes: renditionBytes.length },
           },
         },
       ],
@@ -226,7 +226,7 @@ test("admin ingest force_upload overwrites existing portrait blobs without stora
   assert.deepEqual(payload?.results?.[0]?.uploads, {
     full: "uploaded",
     medium: "uploaded",
-    thumb: "uploaded",
+    small: "uploaded",
   })
   assert.equal(env.gatewayDb.auditRows.length, 1)
   assert.equal(env.gatewayDb.auditRows[0]?.is_current, 1)

@@ -182,7 +182,7 @@ Each line:
 | `n` | Full gene name. |
 | `u` | UniProt accession, when there is one. |
 | `c` | The character's signature colour (hex). |
-| `p` | The unlabelled portrait: `renditions.full`, `.medium`, `.thumb`. Each has a `cdn_url` (download from here) and a `canonical_url` on our domain. |
+| `p` | The unlabelled portrait: `renditions.full` (1536 × 2048), `.medium` (384 × 512) and `.small` (192 × 256). Each has a `cdn_url` (download from here) and a `canonical_url` on our domain. |
 
 The file is immutable: a given URL never changes, and a new release gets a new URL. Metadata also tells you `gene_count`, `released_at` and the release hash, so you can tell whether you already have the latest.
 

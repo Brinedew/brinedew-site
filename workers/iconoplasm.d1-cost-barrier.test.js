@@ -324,7 +324,7 @@ function completeMobileCard(symbol, version) {
       status: "published",
       url: portraitUrl,
       full_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/full.webp`,
-      thumb_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/thumb.webp`,
+      small_url: `https://iconoplasmportraits.b-cdn.net/portraits/${normalized}/small.webp`,
       width: 384,
       height: 512,
       asset_sha256: portraitAssetSha256,

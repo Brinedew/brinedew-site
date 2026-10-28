@@ -12,6 +12,7 @@ import {
 import { createRequestInbox } from "./request-inbox.js?v=264272694ec49176"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=155a9d5dde12e030"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
+import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
 import {
   createEmulsionFavoriteStore,
   normalizeEmulsionFamilyId,
@@ -58,7 +59,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=2033cc31cb7f0de1"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=ba142878e1fba542"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -323,9 +324,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=ed32b5a55ea4f859"),
+      import("./caretaker-manifestations.js?v=adee4da610e8d36d"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
-      import("./caretaker-candidate-sources.js?v=4b8d0da229b29318"),
+      import("./caretaker-candidate-sources.js?v=073c623f3c0abe35"),
     ]).then(function (modules) {
       var candidateSourceLinks = modules[2].createCandidateSourceLinks()
       var supervoteControls = modules[1].createCaretakerSupervoteControls({
@@ -615,7 +616,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     renderCooldown: renderCaretakerClaimCooldown,
     portraitUrl: function (symbol) {
       return fetchGeneDetail(symbol).then(function (detail) {
-        return detail ? publishedPortraitUrl(detail, "thumb") : ""
+        return detail ? publishedPortraitUrl(detail, "small") : ""
       })
     },
   })
@@ -1265,16 +1266,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!isPublished) return ""
     var heroUrl = String((portrait && portrait.hero_url) || flatHeroUrl).trim()
     var mediumUrl = String((portrait && portrait.medium_url) || flatMediumUrl).trim()
-    var thumbUrl = String((portrait && portrait.thumb_url) || "").trim()
-    if (preferredSize === "medium") return mediumUrl || thumbUrl || heroUrl
-    if (preferredSize === "thumb") return thumbUrl || mediumUrl || heroUrl
-    return heroUrl || mediumUrl || thumbUrl
+    var smallUrl = String((portrait && portrait.small_url) || "").trim()
+    if (preferredSize === "medium") return mediumUrl || smallUrl || heroUrl
+    if (preferredSize === "small") return smallUrl || mediumUrl || heroUrl
+    return heroUrl || mediumUrl || smallUrl
   }
 
   function portraitAssetRefUrl(asset, preferredSize) {
     var renditions = (asset && asset.renditions) || {}
     var preferred = renditions[preferredSize] || null
-    var fallback = renditions.medium || renditions.full || renditions.thumb || null
+    var fallback = renditions.medium || renditions.full || renditions.small || null
     return String(
       (preferred && preferred.canonical_url) || (fallback && fallback.canonical_url) || "",
     ).trim()
@@ -1288,10 +1289,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var item = candidate || {}
     var fullUrl = String(item.full_url || "").trim()
     var mediumUrl = String(item.medium_url || "").trim()
-    var thumbUrl = String(item.thumb_url || "").trim()
-    if (preferredSize === "medium") return mediumUrl || thumbUrl || fullUrl
-    if (preferredSize === "thumb") return thumbUrl || mediumUrl || fullUrl
-    return fullUrl || mediumUrl || thumbUrl
+    var smallUrl = String(item.small_url || "").trim()
+    if (preferredSize === "medium") return mediumUrl || smallUrl || fullUrl
+    if (preferredSize === "small") return smallUrl || mediumUrl || fullUrl
+    return fullUrl || mediumUrl || smallUrl
   }
 
   function candidatePortraitUrl(candidate, preferredSize) {
@@ -5845,11 +5846,105 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function rawRequestOptionPreviewUrl(asset) {
     var item = asset || {}
-    return String(item.medium_url || item.thumb_url || "").trim()
+    return String(item.medium_url || "").trim()
   }
 
   function requestOptionPreviewUrl(asset) {
     return portraitDelivery.resolve(rawRequestOptionPreviewUrl(asset))
+  }
+
+  // For pictures that never show wider than the 192 px small file.
+  function requestOptionSmallPreviewUrl(asset) {
+    return (
+      portraitDelivery.resolve(String((asset && asset.small_url) || "").trim()) ||
+      requestOptionPreviewUrl(asset)
+    )
+  }
+
+  // A portrait's ThumbHash (about 25 bytes, base64) decodes to a blurred copy
+  // of itself, which shows until the file arrives. The decode is cached
+  // because the grid redraws its cards whenever a page of styles arrives.
+  var previewPlaceholderUrls = new Map()
+  function previewPlaceholderUrl(hash) {
+    var key = String(hash || "")
+    if (!key) return ""
+    if (previewPlaceholderUrls.has(key)) return previewPlaceholderUrls.get(key)
+    var url = ""
+    try {
+      var bytes = Uint8Array.from(atob(key), function (c) {
+        return c.charCodeAt(0)
+      })
+      url = thumbHashToDataURL(bytes)
+    } catch (error) {
+      url = ""
+    }
+    previewPlaceholderUrls.set(key, url)
+    return url
+  }
+
+  // Files that have arrived once show at once on a redraw, without the fade.
+  var loadedPreviewUrls = new Set()
+
+  // One picture on a style card. The browser picks the 192-wide small file
+  // or the 384-wide medium one by the cell's real width (sizes="auto"; the
+  // rest of the list is for browsers without it). A mosaic cell is half the
+  // card. A style list published before small_url existed gets the medium
+  // alone.
+  function renderRequestPreviewCellMarkup(asset, inMosaic, firstRow) {
+    var medium = requestOptionPreviewUrl(asset)
+    if (!medium) return ""
+    var small = portraitDelivery.resolve(String((asset && asset.small_url) || "").trim())
+    var loaded = loadedPreviewUrls.has(medium) || (small && loadedPreviewUrls.has(small))
+    var placeholder = String((asset && asset.placeholder) || "")
+    return (
+      '<span class="icono-request-card-cell"' +
+      (placeholder && !loaded ? ' data-icono-placeholder="' + esc(placeholder) + '"' : "") +
+      '><img src="' +
+      esc(medium) +
+      '"' +
+      (small
+        ? ' srcset="' +
+          esc(small) +
+          " 192w, " +
+          esc(medium) +
+          ' 384w" sizes="auto, ' +
+          (inMosaic ? "(max-width: 899px) 23vw, 6.5rem" : "(max-width: 899px) 46vw, 13rem") +
+          '"'
+        : "") +
+      ' alt="" loading="lazy" decoding="async"' +
+      (firstRow ? ' fetchpriority="high"' : "") +
+      (loaded ? ' class="is-loaded"' : "") +
+      "></span>"
+    )
+  }
+
+  // The placeholders are painted after the cards are in the page: written
+  // into the markup, 400 decoded pictures would make the HTML a megabyte.
+  function paintRequestPreviewPlaceholders(root) {
+    var cells = root.querySelectorAll("[data-icono-placeholder]")
+    for (var i = 0; i < cells.length; i++) {
+      var url = previewPlaceholderUrl(cells[i].getAttribute("data-icono-placeholder"))
+      cells[i].removeAttribute("data-icono-placeholder")
+      if (url) cells[i].style.setProperty("--icono-placeholder", 'url("' + url + '")')
+    }
+  }
+
+  function markRequestPreviewLoaded(event) {
+    var img = event.target
+    if (!img || img.tagName !== "IMG" || !img.closest(".icono-request-card-cell")) return
+    loadedPreviewUrls.add(img.currentSrc || img.src)
+    img.classList.add("is-loaded")
+  }
+
+  // A browser that fails the file it picked from srcset does not try src, so
+  // a missing small file falls back to the medium here. If that fails too,
+  // the cell keeps its blurred placeholder.
+  function retryRequestPreviewWithoutSrcset(event) {
+    var img = event.target
+    if (!img || img.tagName !== "IMG" || !img.closest(".icono-request-card-cell")) return
+    if (!img.hasAttribute("srcset")) return
+    img.removeAttribute("srcset")
+    img.removeAttribute("sizes")
   }
 
   function renderRequestOptionPreviewStripMarkup(option) {
@@ -5863,7 +5958,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html = '<span class="icono-request-option-strip">'
     for (var i = 0; i < previews.length && i < 5; i++) {
       var asset = previews[i] || {}
-      var url = requestOptionPreviewUrl(asset)
+      var url = requestOptionSmallPreviewUrl(asset)
       if (!url) continue
       html +=
         '<span class="icono-request-option-thumb' +
@@ -6025,7 +6120,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // the favorite star right after it (as on the gene page's "Emulsion 21329
   // ☆") and the blot count. The star is never nested in the button; a click
   // anywhere else on the card requests it.
-  function renderRequestStyleCardMarkup(option, requestedCount) {
+  function renderRequestStyleCardMarkup(option, requestedCount, firstRow) {
     var item = option || {}
     var visionId = String(item.vision_id || "").trim()
     var label = requestOptionPrimaryLabel(item)
@@ -6035,13 +6130,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // 3:4: one fills the card, three put one beside a stack of two 3:4 halves,
     // four make a 2x2.
     var shown = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
-      .map(requestOptionPreviewUrl)
-      .filter(Boolean)
+      .filter(requestOptionPreviewUrl)
       .slice(0, 4)
     var art = shown.length
       ? shown
-          .map(function (url) {
-            return '<img src="' + esc(url) + '" alt="" loading="lazy" decoding="async">'
+          .map(function (asset) {
+            return renderRequestPreviewCellMarkup(asset, shown.length > 1, firstRow)
           })
           .join("")
       : '<span class="icono-request-card-empty">' +
@@ -8165,9 +8259,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (!requestView) requestView = emulsionFavorites.ids().length ? "favorites" : "all"
         filteredOptions = styleGridOptions(renderQuery, loadedOptions)
         rememberRequestOptions(filteredOptions)
+        // The first row is what the reader sees first, so its files go first.
+        var columns =
+          String(getComputedStyle(results).gridTemplateColumns || "")
+            .split(" ")
+            .filter(function (track) {
+              return /px$/.test(track)
+            }).length || 1
         var html = filteredOptions
-          .map(function (option) {
-            return renderRequestStyleCardMarkup(option, styleQueuedCount(option))
+          .map(function (option, index) {
+            return renderRequestStyleCardMarkup(option, styleQueuedCount(option), index < columns)
           })
           .join("")
         if (!html) {
@@ -8181,6 +8282,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             "</p>"
         }
         results.innerHTML = html
+        paintRequestPreviewPlaceholders(results)
         results.removeAttribute("aria-busy")
         paintRequestViews()
         paintRequestFooter()
@@ -8189,7 +8291,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function requestOptionFirstPreview(option) {
         return (Array.isArray(option && option.preview_assets) ? option.preview_assets : [])
-          .map(requestOptionPreviewUrl)
+          .map(requestOptionSmallPreviewUrl)
           .filter(Boolean)[0]
       }
 
@@ -8476,6 +8578,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           void renderResultsList()
         })
       }
+      // "load" does not bubble, so the grid listens in the capture phase.
+      results.addEventListener("load", markRequestPreviewLoaded, true)
+      results.addEventListener("error", retryRequestPreviewWithoutSrcset, true)
       results.addEventListener("click", function (event) {
         if (event.target.closest("[data-icono-request-retry]")) {
           results.innerHTML = ""
@@ -9947,7 +10052,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           : !!discovered && !discovered.has(normalizedSymbol(g.symbol))
       var portraitUrl = undiscovered
         ? ""
-        : publishedPortraitUrl(g, "thumb") || publishedPortraitUrl(g, "medium")
+        : publishedPortraitUrl(g, "small") || publishedPortraitUrl(g, "medium")
       var mediaHtml = undiscovered
         ? '<span class="icono-search-result-media icono-search-result-media--undiscovered" style="--icono-search-gene-color:' +
           esc(g.color) +
@@ -11886,12 +11991,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // (.icono-card--variant-image-only / .icono-image-only-*) so the portrait fitting,
   // the gene name (bottom-left) + symbol (bottom-right) caption, and the container-
   // query type scaling all match the archive cards instead of being reinvented.
-  // The medium portrait variant is used (the thumb variant is a 256x256 square crop).
+  // The medium portrait is used: a tile can be wider than the small file covers.
   function renderClanMemberTileMarkup(member) {
     var item = member || {}
     var symbol = String(item.symbol || "")
     var fullName = String(item.full_name || "").trim() || symbol
-    var photo = candidatePortraitUrl(item, "medium") || candidatePortraitUrl(item, "thumb")
+    var photo = candidatePortraitUrl(item, "medium") || candidatePortraitUrl(item, "small")
     return (
       '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-clan-tile" role="listitem">' +
       buildImageOnlyGeneLinkMarkup(
@@ -12462,9 +12567,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<a class="icono-caretaker-gene" href="/gene/' +
         encodeURIComponent(gene.symbol) +
         '" data-icono-nav>' +
-        (gene.thumb_url
+        (gene.small_url
           ? '<img src="' +
-            esc(gene.thumb_url) +
+            esc(gene.small_url) +
             '" alt="" width="48" height="64" loading="lazy" decoding="async">'
           : '<span class="icono-caretaker-gene-blank" aria-hidden="true"></span>') +
         '<span class="icono-caretaker-gene-text"><strong>' +
@@ -12581,7 +12686,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=4893a9a309a70414").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=d6adfa805f05f730").then(
         function (module) {
           diagramStudio = module
           return module

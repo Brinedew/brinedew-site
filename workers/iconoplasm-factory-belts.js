@@ -69,7 +69,7 @@ export async function readFactoryBelts({ db, pipelines, visions, active, portrai
       outputs: (assetsByRecipe.get(recipe.code) || []).map((asset) => ({
         ...asset,
         full_url: portraitUrl(asset.asset_sha256, "full"),
-        thumb_url: portraitUrl(asset.asset_sha256, "medium"),
+        medium_url: portraitUrl(asset.asset_sha256, "medium"),
       })),
     }))
     .filter((belt) => belt.outputs.length || belt.open_count || belt.active || belt.recommended)

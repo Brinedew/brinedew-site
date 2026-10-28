@@ -43,7 +43,7 @@ test("bind writes the image-host URL into each attribute", async () => {
   assert.equal(attributes.get("src"), "https://img.brinedew.bio/portraits/v1/aa/asset/medium.webp")
   assert.equal(attributes.has("srcset"), false)
   assert.equal(
-    await portraitDelivery.ensure("/portraits/v1/bb/asset/thumb.webp"),
-    "https://img.brinedew.bio/portraits/v1/bb/asset/thumb.webp",
+    await portraitDelivery.ensure("/portraits/v1/bb/asset/small.webp"),
+    "https://img.brinedew.bio/portraits/v1/bb/asset/small.webp",
   )
 })

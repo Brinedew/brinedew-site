@@ -16,6 +16,9 @@ import { normalizeFavoriteEmulsionFamilyId } from "../iconoplasm-emulsion-favori
 // blot: about 1,450 rows for the picker job's 120 styles every 15 minutes, and
 // about 1,160 for a reader with 26 favourite styles. The pictures keep the
 // order of the upvotes they had when the style last changed (see 0144).
+//
+// Migration 0145 adds each picture's placeholder, a base64 ThumbHash that the
+// picker decodes into a blurred copy of the portrait while its file loads.
 export const STYLE_CARD_PORTRAIT_LIMIT = 4
 
 export const STYLE_CARDS_SQL = `SELECT c.style_slot, c.blot_count, c.portraits_json
@@ -31,7 +34,8 @@ function byVotes(a, b) {
 }
 
 // One stored card: the whole count, and the pictures it shows. The stored
-// [gene_symbol, asset_sha256, upvotes] triples come in no promised order.
+// [gene_symbol, asset_sha256, upvotes, placeholder] entries come in no
+// promised order.
 export function styleCardBlots(row) {
   let triples = []
   try {
@@ -41,7 +45,12 @@ export function styleCardBlots(row) {
   }
   const shown = (Array.isArray(triples) ? triples : [])
     .filter((triple) => Array.isArray(triple) && triple[0] && triple[1])
-    .map(([gene_symbol, asset_sha256, upvotes]) => ({ gene_symbol, asset_sha256, upvotes }))
+    .map(([gene_symbol, asset_sha256, upvotes, placeholder]) => ({
+      gene_symbol,
+      asset_sha256,
+      upvotes,
+      placeholder: typeof placeholder === "string" && placeholder ? placeholder : null,
+    }))
     .sort(byVotes)
     .slice(0, STYLE_CARD_PORTRAIT_LIMIT)
   return { count: Number(row?.blot_count) || 0, shown }
@@ -79,7 +88,9 @@ export async function attachStylePublishedPortraits(db, options, portraitUrl) {
           gene_symbol: portrait.gene_symbol,
           asset_sha256: portrait.asset_sha256,
           is_current: true,
-          medium_url: typeof portraitUrl === "function" ? portraitUrl(portrait.asset_sha256) : "",
+          medium_url: portraitUrl(portrait.asset_sha256, "medium"),
+          small_url: portraitUrl(portrait.asset_sha256, "small"),
+          placeholder: portrait.placeholder,
         })),
       })
     }

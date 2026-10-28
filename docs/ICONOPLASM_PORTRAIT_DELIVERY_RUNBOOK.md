@@ -6,7 +6,11 @@ extension, edit modal, request inbox, or server-generated message.
 ## Asset identity
 
 A portrait is identified by `asset_sha256`. Every rendition is content-addressed
-under `portraits/v1/<prefix>/<sha>/<rendition>.webp`.
+under `portraits/v1/<prefix>/<sha>/<rendition>.webp`, and every one is 3:4 like
+the portrait: `full` (1536x2048), `medium` (384x512) and `small` (192x256, for
+grids such as the style picker). Portraits published since 2026-10-28 also
+carry a `placeholder`, a ThumbHash of about 25 bytes in base64 that the style
+picker decodes into a blurred copy of the portrait while the file loads.
 
 Public APIs return `PortraitAssetRefV1`:
 
@@ -23,9 +27,9 @@ Public APIs return `PortraitAssetRefV1`:
       "path": "portraits/v1/.../medium.webp",
       "canonical_url": "https://iconoplasm.brinedew.bio/portraits/v1/.../medium.webp"
     },
-    "thumb": {
-      "path": "portraits/v1/.../thumb.webp",
-      "canonical_url": "https://iconoplasm.brinedew.bio/portraits/v1/.../thumb.webp"
+    "small": {
+      "path": "portraits/v1/.../small.webp",
+      "canonical_url": "https://iconoplasm.brinedew.bio/portraits/v1/.../small.webp"
     }
   }
 }

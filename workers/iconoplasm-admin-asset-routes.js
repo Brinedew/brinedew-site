@@ -156,7 +156,7 @@ export function createIconoplasmAdminAssetHandlers(services) {
       image_score: Number(row?.image_score || 0),
       hero_url: adminPortraitUrl(base, row?.asset_sha256, "full"),
       medium_url: adminPortraitUrl(base, row?.asset_sha256, "medium"),
-      thumb_url: adminPortraitUrl(base, row?.asset_sha256, "thumb"),
+      small_url: adminPortraitUrl(base, row?.asset_sha256, "small"),
     }))
     return done("admin_assets", json({ assets, count: assets.length }, 200, NO_STORE))
   }
