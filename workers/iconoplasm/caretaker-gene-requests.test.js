@@ -698,7 +698,7 @@ test("11: each message goes out once, and one that stopped being true is dropped
         {
           description: String.raw`I \*study\* \[Notch\](https://x.test) glycosylation.`,
           thumbnail: {
-            url: `https://iconoplasm.brinedew.bio/portraits/v1/ab/${wee1Portrait}/thumb.webp`,
+            url: `https://iconoplasm.brinedew.bio/portraits/v1/ab/${wee1Portrait}/small.webp`,
           },
         },
       ],

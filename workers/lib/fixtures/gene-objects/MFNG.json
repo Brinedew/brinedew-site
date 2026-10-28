@@ -46,7 +46,7 @@
     "sample_number": 0,
     "sample_text_hash": null,
     "status": "published",
-    "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/22/22c4706c7a46b1ddacf70abb1c14177c0c7d2d1b77dafd4a3447a0facbb2bbbc/thumb.webp",
+    "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/22/22c4706c7a46b1ddacf70abb1c14177c0c7d2d1b77dafd4a3447a0facbb2bbbc/small.webp",
     "vision_id": "anima-v1-21006",
     "width": 1536
   },
@@ -73,7 +73,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "approved",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/22/22c4706c7a46b1ddacf70abb1c14177c0c7d2d1b77dafd4a3447a0facbb2bbbc/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/22/22c4706c7a46b1ddacf70abb1c14177c0c7d2d1b77dafd4a3447a0facbb2bbbc/small.webp",
       "vision_id": "anima-v1-21006",
       "weighted_score": 1,
       "width": 1536
@@ -100,7 +100,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/2a/2a6da0f0e4c1f5822ef7989fcc999bb06f4a2a115fedc96a9a606a83eb4647d8/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/2a/2a6da0f0e4c1f5822ef7989fcc999bb06f4a2a115fedc96a9a606a83eb4647d8/small.webp",
       "vision_id": "anima-v1-21006",
       "weighted_score": 0,
       "width": 1536
@@ -127,7 +127,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/e7/e76e372f458e3ab8d0046ce2ffe410cc6c6df8547ef08fff3f2591df607f1551/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/e7/e76e372f458e3ab8d0046ce2ffe410cc6c6df8547ef08fff3f2591df607f1551/small.webp",
       "vision_id": "anima-v1-21404",
       "weighted_score": 0,
       "width": 1536
@@ -154,7 +154,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/b5/b5d31f5be4ea288488b406936e25785a5c1a3040f35394b0cf88a6fb1ffad233/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/b5/b5d31f5be4ea288488b406936e25785a5c1a3040f35394b0cf88a6fb1ffad233/small.webp",
       "vision_id": "anima-v1-1184",
       "weighted_score": 0,
       "width": 1536
@@ -181,7 +181,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/74/7468f3e14fa4d5d0275c3514da56290e0d9612460fd62e3e3f51c8a15f74b2ab/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/74/7468f3e14fa4d5d0275c3514da56290e0d9612460fd62e3e3f51c8a15f74b2ab/small.webp",
       "vision_id": "anima-v1-2561",
       "weighted_score": 0,
       "width": 1536
@@ -208,7 +208,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/f9/f9ed421fe8d793639937f24f26e57e4ef235a9fed64097c787ead459975a2375/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/f9/f9ed421fe8d793639937f24f26e57e4ef235a9fed64097c787ead459975a2375/small.webp",
       "vision_id": "anima-v1-20910",
       "weighted_score": 0,
       "width": 1536
@@ -235,7 +235,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/34/346fd1ce387571c78d966cd5f58279904aba24eb8cc1036213245dd128418f05/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/34/346fd1ce387571c78d966cd5f58279904aba24eb8cc1036213245dd128418f05/small.webp",
       "vision_id": "anima-v1-22811",
       "weighted_score": 0,
       "width": 1536
@@ -262,7 +262,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/74/74b3ef5a742299bf0bed637afb756ec70aef5d834ad769183aa80aeeee8c44c8/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/74/74b3ef5a742299bf0bed637afb756ec70aef5d834ad769183aa80aeeee8c44c8/small.webp",
       "vision_id": "anima-v1-20128",
       "weighted_score": 0,
       "width": 1536
@@ -289,7 +289,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "approved",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/aa/aa8980310fb783733c297c9a4052daace16cd7d0592530843ee385a76a323eb0/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/aa/aa8980310fb783733c297c9a4052daace16cd7d0592530843ee385a76a323eb0/small.webp",
       "vision_id": "anima-v1-22811",
       "weighted_score": 0,
       "width": 1536
@@ -316,7 +316,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/b6/b658fd9a210d3827f76e0ebad467d7607063bb34e2fc681825ff57846c6920de/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/b6/b658fd9a210d3827f76e0ebad467d7607063bb34e2fc681825ff57846c6920de/small.webp",
       "vision_id": "anima-v1-20910",
       "weighted_score": 0,
       "width": 1536
@@ -343,7 +343,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/ce/ce4a393f8858b16d01a40ae7c8411c2c60b5cfd8349ae4a51226b2a6c06e25a3/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/ce/ce4a393f8858b16d01a40ae7c8411c2c60b5cfd8349ae4a51226b2a6c06e25a3/small.webp",
       "vision_id": "anima-v1-20128",
       "weighted_score": 0,
       "width": 1536
@@ -370,7 +370,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/f1/f13264debabdebd87ecf884694e1ee95854d94e4121b8f6e646df0f682e79259/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/f1/f13264debabdebd87ecf884694e1ee95854d94e4121b8f6e646df0f682e79259/small.webp",
       "vision_id": "anima-v1-2561",
       "weighted_score": 0,
       "width": 1536
@@ -397,7 +397,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/40/403cc927d24c896acc1349087eb4bb9caba27881f434c97d20ef09574cb325b5/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/40/403cc927d24c896acc1349087eb4bb9caba27881f434c97d20ef09574cb325b5/small.webp",
       "vision_id": "anima-v1-1184",
       "weighted_score": 0,
       "width": 1536
@@ -424,7 +424,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/4a/4aec52a2b24e0955c9d9d2ed2a7580635de2b63abcb63485ede0564fb8fecaee/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/4a/4aec52a2b24e0955c9d9d2ed2a7580635de2b63abcb63485ede0564fb8fecaee/small.webp",
       "vision_id": "anima-v1-21404",
       "weighted_score": 0,
       "width": 1536
@@ -451,7 +451,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "approved",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/db/db57c34a073ba6b693ab0d92480971b32fc1e770df11b35f08ac36bfb3492244/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/db/db57c34a073ba6b693ab0d92480971b32fc1e770df11b35f08ac36bfb3492244/small.webp",
       "vision_id": "anima-v1-20910",
       "weighted_score": 0,
       "width": 1536
@@ -478,7 +478,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/37/376d0a8bdd0008caa6dadfd951ac6d2c4c6de8d183bad53792ae125215f76e7b/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/37/376d0a8bdd0008caa6dadfd951ac6d2c4c6de8d183bad53792ae125215f76e7b/small.webp",
       "vision_id": "anima-v1-2561",
       "weighted_score": 0,
       "width": 1536
@@ -505,7 +505,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/e1/e1d59c2ed9f93e450d4981140e92b184717c170ac3d097be831d6113b429fad2/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/e1/e1d59c2ed9f93e450d4981140e92b184717c170ac3d097be831d6113b429fad2/small.webp",
       "vision_id": "anima-v1-20128",
       "weighted_score": 0,
       "width": 1536
@@ -532,7 +532,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/89/89be421bf54059eb7c8c752b4a26861256f53c01f65e700231281647c2cb7c8d/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/89/89be421bf54059eb7c8c752b4a26861256f53c01f65e700231281647c2cb7c8d/small.webp",
       "vision_id": "anima-v1-1184",
       "weighted_score": 0,
       "width": 1536
@@ -559,7 +559,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/af/af783c5f65ee0e3a65617eb9a9314e9ca6bf7be4e17f3ffebf66b88d23177b0e/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/af/af783c5f65ee0e3a65617eb9a9314e9ca6bf7be4e17f3ffebf66b88d23177b0e/small.webp",
       "vision_id": "anima-v1-21006",
       "weighted_score": 0,
       "width": 1536
@@ -586,7 +586,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/19/1959e63e23a392a4ca96639139be5b86a1fb42efe62c740ef85fc50d8fbe2563/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/19/1959e63e23a392a4ca96639139be5b86a1fb42efe62c740ef85fc50d8fbe2563/small.webp",
       "vision_id": "anima-v1-21404",
       "weighted_score": 0,
       "width": 1536
@@ -613,7 +613,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/b7/b7c9dd618aa8980ac2caefc56f0f8c4440b0b10d3a691284848ed9244e2bae38/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/b7/b7c9dd618aa8980ac2caefc56f0f8c4440b0b10d3a691284848ed9244e2bae38/small.webp",
       "vision_id": "anima-v1-22811",
       "weighted_score": 0,
       "width": 1536
@@ -640,7 +640,7 @@
       "sample_number": 1,
       "sample_text_hash": "83579213a9411ad289a598672abacfee70accb8ea3660fb9331af3e6f7108d80",
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/1b/1b7a5b77efdd52cc56d37d1c5dc18e1288bfbd41a440d5bbf667594e8f08f87f/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/1b/1b7a5b77efdd52cc56d37d1c5dc18e1288bfbd41a440d5bbf667594e8f08f87f/small.webp",
       "vision_id": "anima-v1-25612",
       "weighted_score": 0,
       "width": 768
@@ -667,7 +667,7 @@
       "sample_number": 1,
       "sample_text_hash": "83579213a9411ad289a598672abacfee70accb8ea3660fb9331af3e6f7108d80",
       "status": "approved",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/4a/4a5aadcd160ec99122fc212c1ef216b9e372b0b32fa50ead1d56077bfe2ae0d8/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/4a/4a5aadcd160ec99122fc212c1ef216b9e372b0b32fa50ead1d56077bfe2ae0d8/small.webp",
       "vision_id": "anima-v1-2943",
       "weighted_score": 0,
       "width": 768

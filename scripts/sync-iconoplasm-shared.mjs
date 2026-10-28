@@ -387,6 +387,7 @@ if (!extensionOnly) {
     "generated/anima-emulsion-slot-contract.js",
     "generated/blot-painter.js",
     "vendor/img-comparison-slider.js",
+    "vendor/thumbhash.js",
     "vendor/masonry.pkgd.min.js",
     "vendor/imagesloaded.pkgd.min.js",
   ]) {

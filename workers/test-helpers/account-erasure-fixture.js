@@ -34,7 +34,7 @@ export const IMAGE = { candidate: sha("1"), edit: sha("2"), oddKey: sha("3"), bo
 
 /** The three renditions the portrait storage keeps for one image hash. */
 export function renditionKeys(hash) {
-  return ["full", "medium", "thumb"].map(
+  return ["full", "medium", "small"].map(
     (rendition) => `portraits/v1/${hash.slice(0, 2)}/${hash}/${rendition}.webp`,
   )
 }
