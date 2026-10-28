@@ -5918,13 +5918,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // The placeholders are painted after the cards are in the page: written
-  // into the markup, 400 decoded pictures would make the HTML a megabyte.
-  function paintRequestPreviewPlaceholders(root) {
-    var cells = root.querySelectorAll("[data-icono-placeholder]")
+  // The placeholders are painted after the cards are in the page: each decoded
+  // picture is a 4 KB address, too big to write into the markup. A cell whose
+  // file has already arrived needs none.
+  function paintRequestPreviewPlaceholders(cells) {
     for (var i = 0; i < cells.length; i++) {
-      var url = previewPlaceholderUrl(cells[i].getAttribute("data-icono-placeholder"))
+      var hash = cells[i].getAttribute("data-icono-placeholder")
       cells[i].removeAttribute("data-icono-placeholder")
+      var img = cells[i].querySelector("img")
+      if (img && img.classList.contains("is-loaded")) continue
+      var url = previewPlaceholderUrl(hash)
       if (url) cells[i].style.setProperty("--icono-placeholder", 'url("' + url + '")')
     }
   }
@@ -8282,11 +8285,45 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             "</p>"
         }
         results.innerHTML = html
-        paintRequestPreviewPlaceholders(results)
+        watchRequestPreviewPlaceholders()
         results.removeAttribute("aria-busy")
         paintRequestViews()
         paintRequestFooter()
         maybeLoadMoreRequestOptions()
+      }
+
+      // Placeholders are decoded only for the cards near the part of the grid
+      // on screen, one screen ahead of the reader's scroll. Decoding a whole
+      // page's 435 at once froze the dialog for half a second on a laptop and
+      // over two seconds at phone speed (2026-10-28). A card decoded before
+      // paints at once, so a redraw does not blank the cards in view.
+      var placeholderWatcher = null
+      function watchRequestPreviewPlaceholders() {
+        if (!placeholderWatcher) {
+          placeholderWatcher = new IntersectionObserver(
+            function (entries) {
+              for (var i = 0; i < entries.length; i++) {
+                if (!entries[i].isIntersecting) continue
+                placeholderWatcher.unobserve(entries[i].target)
+                paintRequestPreviewPlaceholders(
+                  entries[i].target.querySelectorAll("[data-icono-placeholder]"),
+                )
+              }
+            },
+            { root: browse, rootMargin: "100% 0px" },
+          )
+        }
+        placeholderWatcher.disconnect()
+        var cards = results.querySelectorAll("[data-icono-request-card]")
+        for (var i = 0; i < cards.length; i++) {
+          var cells = cards[i].querySelectorAll("[data-icono-placeholder]")
+          if (!cells.length) continue
+          if (previewPlaceholderUrls.has(cells[0].getAttribute("data-icono-placeholder"))) {
+            paintRequestPreviewPlaceholders(cells)
+          } else {
+            placeholderWatcher.observe(cards[i])
+          }
+        }
       }
 
       function requestOptionFirstPreview(option) {

@@ -2021,6 +2021,16 @@ img-comparison-slider.rendered [slot="second"] {
   cursor: pointer;
 }
 
+/* The browser skips styling, laying out and drawing the cards that are off
+   screen; at phone speed the first frame with cards came about a second
+   sooner (2026-10-28). It also clips each card's drawing to the card, so the
+   margin keeps the focus ring, which sits 4px outside the picture. */
+.icono-request-dialog .icono-request-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 15rem;
+  overflow-clip-margin: 6px;
+}
+
 .icono-request-card-toggle {
   position: relative;
   appearance: none;
