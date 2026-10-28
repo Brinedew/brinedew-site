@@ -433,35 +433,25 @@
           title: "New candidates",
           count: () =>
             `${d.candidates.reduce((a, c) => a + c.portraits.length, 0).toLocaleString("en")} portraits on ${d.candidates.length.toLocaleString("en")} genes`,
-          // Each step makes the tallest thing give way first, as the fit loop
-          // does between sections. While a gene runs past one row, the genes
-          // with the most new portraits show fewer and put the rest in a deck.
-          // Once every gene fits one row, portraits get smaller, and each gene
-          // shows one row of them. At the smallest size, every gene shows
-          // fewer, down to one deck each. Whole genes go to "+N more" only
-          // after that (the cap loop below), because readers would rather see
-          // more genes than more portraits of one gene.
-          levels: (() => {
-            const top = Math.max(1, ...d.candidates.map((c) => c.portraits.length))
-            const levels = [{ max: Infinity, cols: 6, k: Infinity }]
-            let k = top
-            while (k > 6) {
-              k = Math.max(6, Math.floor(k * 0.8))
-              levels.push({ max: Infinity, cols: 6, k })
-            }
-            for (const cols of [8, 11, 14]) {
-              k = Math.min(cols, top)
-              levels.push({ max: Infinity, cols, k })
-            }
-            // At the smallest size, a row holds a whole number of genes when every
-            // gene shows k portraits, so no columns sit empty at the end of rows.
-            while (k > 1) {
-              k = Math.max(1, Math.floor(k * 0.8))
-              const cols = [14, 13, 15, 12, 16].find((c) => c % k === 0) || 14
-              levels.push({ max: Infinity, cols, k })
-            }
-            return levels
-          })(),
+          // A member asks "which genes got new candidates, and what do they look
+          // like?", not "show me every portrait". So a gene shows at most three
+          // (k), the third a deck when it has more, and two genes share a row;
+          // the gene page holds the rest. The 7,800 px budget is a ceiling for a
+          // heavy day, never a reason to show more of one gene (owner,
+          // 2026-10-28: "dozens of rows of characters no one cares about for a
+          // single gene"). On a heavy day portraits get smaller with three per
+          // gene, then each gene shows two, then one deck. Whole genes go to
+          // "+N more" only after that (the cap loop below): readers would rather
+          // see more genes than more portraits of one gene. Every row width is a
+          // multiple of k, so rows of full groups leave no empty columns.
+          levels: [
+            { max: Infinity, cols: 6, k: 3 },
+            { max: Infinity, cols: 9, k: 3 },
+            { max: Infinity, cols: 12, k: 3 },
+            { max: Infinity, cols: 15, k: 3 },
+            { max: Infinity, cols: 14, k: 2 },
+            { max: Infinity, cols: 14, k: 1 },
+          ],
           render(l, items, rest) {
             const gap = Math.round(84 / l.cols)
             const tile = (736 - (l.cols - 1) * gap) / l.cols
@@ -528,8 +518,7 @@
       }
       draw()
       const log = []
-      // Enough rounds to walk every level of every section; candidates can have dozens.
-      for (let i = 0; i < 200 && document.body.scrollHeight > BUDGET; i++) {
+      for (let i = 0; i < 20 && document.body.scrollHeight > BUDGET; i++) {
         const heights = sections
           .filter((s) => s.items.length && s.level < s.levels.length - 1)
           .map((s) => [s, main.querySelector(`[data-key=${s.key}]`).offsetHeight])

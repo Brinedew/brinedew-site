@@ -29,12 +29,12 @@ Sections appear only when they have something in them, in this order:
 3. **Lore.** The gene's blot, the caretaker's avatar and name, and the first lines of the text.
    Only lore switched to "Show on the gene page" at the end of the day appears. Hidden drafts never do.
 4. **Comments.** Avatar, name, "on SYMBOL", the comment's first lines, and the gene's blot.
-5. **New candidates.** Every gene is a group on one shared grid, labelled with its symbol (and
-   its full name when the group is wide enough), so every portrait is the same size. A group
-   shows as many of the gene's new portraits as the space allows. When it holds more than it
-   shows, its last spot is a deck: the face portrait with up to two more behind it and an ink
-   tab saying how many the deck hides ("+11"). A new candidate that won the same day comes first
-   in its group, so it matches its pair under Canonical portrait updates.
+5. **New candidates.** A member wants to know which genes got new candidates and what they look
+   like, not every portrait; the gene page has the rest. So each gene shows at most three new
+   portraits, and two genes share a row, labelled with the symbol and full name. When a gene
+   has more, its third spot is a deck: the face portrait with up to two more behind it and an
+   ink tab saying how many the deck hides ("+12"). A new candidate that won the same day comes
+   first, so it matches its pair under Canonical portrait updates.
 
 Everything is settled by comparing each gene at 00:00 UTC with 24:00 UTC, not by replaying
 events:
@@ -55,13 +55,11 @@ images above about 10 MB; the worst case so far is 3.6 MB.
   count. While the strip is too tall, the tallest section steps one level denser.
 - Once every section is at its densest, the tallest section shows 20% fewer items each round. The
   rest become a teal "+ N more" line.
-- New candidates step the same way, the tallest thing first. At six portraits a row, every new
-  portrait shows. While a gene runs past one row, the genes with the most new portraits show 20%
-  fewer and deck the rest, down to one row each. Then portraits get smaller (8, 11, 14 a row), each
-  gene showing one row. At the smallest size every gene shows 20% fewer, down to one deck each,
-  with the row width picked so a whole number of genes fills it. Whole genes go to "+ N more"
-  only after that: members would rather see more genes than more portraits of one gene (owner,
-  2026-10-28).
+- New candidates get denser by showing more genes in a row, never more portraits of one gene:
+  three per gene at 6, 9, 12 and then 15 portraits a row, then two per gene, then one deck per
+  gene, 14 a row. Whole genes go to "+ N more" only after that, because members would rather see
+  more genes than more portraits of one gene (owner, 2026-10-28). The 7,800 px budget is a
+  ceiling for a heavy day, not room to fill on a normal one.
 - The text links at most k genes per section line and counts the rest. k shrinks until the
   message fits Discord's 2,000 characters.
 - A day with nothing in any section posts nothing: no picture and no text, and the next post
@@ -83,16 +81,17 @@ At 100× the strip shows:
 - 20 of 600 comments, one line each;
 - 286 of 10,400 genes with new candidates.
 
-Measured on 2026-10-28 for the candidate decks, on the real 27 October day (14 updates, 1
-caretaker, 95 new portraits on 12 genes) and that day multiplied:
+Measured on 2026-10-28 for New candidates, on the real 27 October day (14 updates, 1 caretaker,
+95 new portraits on 12 genes) and that day changed:
 
-| Day                   | Strip (px) | WebP   | Candidates shown                        |
-| --------------------- | ---------- | ------ | --------------------------------------- |
-| quiet (2 genes)       | 1,932      | 0.3 MB | all 9 portraits                         |
-| normal (27 Oct)       | 10,374     | 2.2 MB | all 95 portraits                        |
-| 10× (120 genes)       | 14,860     | 4.0 MB | every gene, 3 portraits and a deck each |
-| 100× (1,200 genes)    | 15,418     | 3.9 MB | 491 genes as one deck each, + 709 more  |
-| one gene with 300 new | 14,666     | 3.4 MB | that gene 76 and a deck; others all     |
+| Day                                 | Strip (px) | WebP   | Candidates shown                         |
+| ----------------------------------- | ---------- | ------ | ---------------------------------------- |
+| quiet (H2AX and SOX11)              | 1,528      | 0.2 MB | both genes, 3 portraits each             |
+| normal (27 Oct)                     | 5,672      | 1.2 MB | all 12 genes in 6 rows                   |
+| mixed (120 genes, most with 1 or 2) | 9,926      | 2.4 MB | all 120 genes, 9 portraits a row         |
+| 10× (120 genes)                     | 12,516     | 3.4 MB | all 120 genes, 4 genes a row             |
+| 100× (1,200 genes)                  | 15,418     | 3.9 MB | 491 genes as one deck each, + 709 more   |
+| one gene with 300 new               | 6,078      | 1.3 MB | that gene as 2 portraits and a +297 deck |
 
 ## The mistakes
 
@@ -138,8 +137,8 @@ list. 16–20 are the ones the owner left for the agent to find.
     - cream paper and ink.
 17. **A fence of the agent's own.** "No names in the picture, because erasure can't rewrite it."
     Nobody asked for it, and it cost the digest its people.
-18. **Every candidate given the same weight.** Genes with many new portraits take more room, up
-    to the point where the strip runs out of it.
+18. **Every candidate given the same weight.** A gene with many new portraits shows it in the
+    count on its deck ("+12"), not in extra rows.
 19. **The text repeating the picture in other words.** The text exists for links. Keep it to gene
     links per section.
 20. **Fake data in a mock.** Invented usernames, comments from different months presented as one
@@ -164,8 +163,13 @@ list. 16–20 are the ones the owner left for the agent to find.
     portraits were dropped with no "+ N more" line. The update pair also drew the gene's blot as
     of the next morning, which can be a later winner. The winner now comes first, the update draws
     the winner itself, and every hidden portrait sits in a deck with its count.
-28. **Fences of the agent's own in the candidates rule.** "Three or more new portraits get a
-    strip", "two rows per strip", "six strips". None came from a reader; the space decides now.
+28. **Numbers with no reader behind them.** "Three or more new portraits get a strip", "two rows
+    per strip", "six strips". The fix is a number that has a reader's reason, not no number.
+29. **Treating the height budget as room to fill (2026-10-28).** The first fix for 27 and 28 let
+    "the space decide" how many portraits a gene showed. On a normal day POLA1 filled three full
+    rows, and a 300-portrait day became a wall of one gene. The owner: "dozens of rows of
+    characters no one cares about for a single gene". The default comes from the reader's
+    question (three per gene); the budget only bounds the heavy day.
 
 ## Where it lives
 
