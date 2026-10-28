@@ -73,7 +73,13 @@
 //     covers it (a medium the page had already fetched before the picker
 //     opened is fine: the browser reuses it rather than fetch the small);
 // 30. the placeholder still lies under a picture that has loaded, where a
-//     cell of fractional width shows it as a coloured line down one edge.
+//     cell of fractional width shows it as a coloured line down one edge;
+// 31. the picker decodes placeholders for cards far below the view: decoding
+//     a whole page's 435 at once froze the dialog for half a second on a
+//     laptop and over two seconds at phone speed (2026-10-28);
+// 32. a keyboard-focused card's ring is cut off: the grid skips drawing the
+//     cards off screen (content-visibility), which clips each card's drawing
+//     to the card, and the ring sits outside the picture.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -125,8 +131,11 @@ function previewAssets(slot) {
       is_current: true,
       medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
       small_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/small.webp`,
-      // A real ThumbHash, from the workstation's encoder on a 3:4 test image.
-      placeholder: "mygGJQxgh3GHaIhXiHeIh6GACfeI",
+      // A real ThumbHash, from the workstation's encoder on a 3:4 test image,
+      // with its last three bytes (colour detail) set per picture, so a
+      // decode cached for one card is never another card's (31).
+      placeholder:
+        "mygGJQxgh3GHaIhXiHeIh6GA" + Buffer.from([slot & 255, slot >> 8, i]).toString("base64"),
     }
   })
 }
@@ -398,6 +407,12 @@ function measurePicker() {
         getComputedStyle(img.parentElement, "::before").backgroundImage !== "none" &&
         getComputedStyle(img.parentElement, "::before").opacity !== "0",
       loaded: img.complete && img.naturalWidth > 0,
+      // How far the picture's top is below the grid's visible part, in
+      // heights of that part; 0 or less is in view.
+      screensBelow: browse
+        ? (img.getBoundingClientRect().top - browse.getBoundingClientRect().bottom) /
+          browse.getBoundingClientRect().height
+        : 0,
       width: img.getBoundingClientRect().width,
       sizes: img.getAttribute("sizes") || "",
       ratio: img.getBoundingClientRect().width / img.getBoundingClientRect().height,
@@ -517,10 +532,20 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         assert.equal(new Set(shownGenes).size, shownGenes.length, `${where}: ${shownGenes}`)
         assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
         let checkedFiles = 0
+        let placeholdersInView = 0
+        let farBelow = 0
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
-          // 28. Each picture sits on its blurred placeholder.
-          assert.ok(image.placeholder, `${where}: no placeholder under ${image.src}`)
+          if (image.screensBelow <= 0) {
+            // 28. Each picture in view sits on its blurred placeholder, unless
+            // its file arrived before the placeholder was needed.
+            assert.ok(image.placeholder || image.loaded, `${where}: blank cell ${image.src}`)
+            if (image.placeholder) placeholdersInView += 1
+          } else if (image.screensBelow > 1.5) {
+            // 31. Cards more than a screen ahead of the scroll are not decoded.
+            farBelow += 1
+            assert.equal(image.placeholder, false, `${where}: decoded far below ${image.src}`)
+          }
           // 29. One device pixel per CSS pixel here, so a loaded cell narrower
           // than the small file shows the small one, unless the page already
           // had the medium. (Lower rows may not have started loading yet.)
@@ -537,6 +562,9 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
           }
         }
         assert.ok(checkedFiles > 0, `${where}: no picture had loaded`)
+        assert.ok(placeholdersInView > 0, `${where}: no picture in view has a placeholder`)
+        // The phone's two columns put cards far below the view, so 31 is tested.
+        if (size === "phone") assert.ok(farBelow > 0, `${where}: no card far below the view`)
         // 29, for everything in the picker (the deck's covers too): a medium
         // fetched after it opened is for a cell wider than the small file.
         for (const url of portraitRequests.slice(requestsBeforeOpen)) {
@@ -928,6 +956,24 @@ test("random and style requests share one deck that survives every detour", asyn
       assert.equal(q.count, "7", `${where}: count after the double click and Enter`)
       assert.equal(q.chips["1184"], "1 requested", `${where}: the double click requested twice`)
       assert.equal(q.focus, "anima-v1-21006", `${where}: Enter moved the focus off the card`)
+      // 32. Each card is drawn clipped to itself (content-visibility), so its
+      // clip margin must hold the focus ring drawn outside its picture.
+      const ring = await page.evaluate(() => {
+        const toggle = document.activeElement
+        const art = getComputedStyle(toggle.querySelector(".icono-request-card-art"))
+        const box = getComputedStyle(toggle.closest("[data-icono-request-card]"))
+        return {
+          focusVisible: toggle.matches(":focus-visible"),
+          ring: parseFloat(art.outlineOffset) + parseFloat(art.outlineWidth),
+          margin:
+            box.contentVisibility === "visible" ? 1e9 : parseFloat(box.overflowClipMargin) || 0,
+        }
+      })
+      assert.ok(ring.focusVisible, `${where}: the focused card shows no ring`)
+      assert.ok(
+        ring.margin >= ring.ring,
+        `${where}: a ${ring.ring}px ring clipped at ${ring.margin}px`,
+      )
 
       // 3. The second random click was refused (25): it leaves the deck, and
       // the reader is told; the server's refresh agrees with the deck (26).
