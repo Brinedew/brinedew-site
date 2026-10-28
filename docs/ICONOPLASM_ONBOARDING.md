@@ -146,15 +146,22 @@ There is a starter trio, `ICONOPLASM_STARTER_GENE_SYMBOLS` in the stateful runti
 
 ### signed-out visitors
 
-Guests see the starter genes (`GUEST_STARTER_GENES` in
-`quartz/static/iconoplasm/app.js`: the trio plus `CD4`) as a lightweight
-introduction to the shelf idea.
-Opening any dossier adds that gene to a compact browser-local shelf capable of
-retaining the full 19,023-gene catalog. Signed-out browsing does not post a
-discovery request. Each authenticated page session merges at most 200
-pending visits into the personal shelf; only the successful batch is removed
-locally. Starter genes do not join that merge unless the guest actually opens
-their dossiers.
+A guest's "Your discoveries" tab is the genes they found in this browser,
+newest first, as the same gallery a signed-in reader gets: the genes the add-on
+recorded while they were signed out (its site bridge answers the Archive),
+dossiers opened here, and symbols found on the Archive's starter strip. Those
+last two go to a compact browser-local shelf that can hold the full
+19,023-gene catalog. Signed-out browsing posts no discovery request. Once a
+guest has a find, "Log in to save" takes Sort's place (Sort does nothing on
+a guest's own list). Each authenticated page session merges at most 200
+pending finds into the personal shelf; only the successful batch is removed
+locally. The gallery reads the add-on again when the reader comes back to
+the tab.
+
+The starter strip (`home-play-strip.js`: the trio plus `CD4`) stays above that
+gallery until the guest has found all four starters, add-on or not (owner,
+2026-10-28); a starter found before shows face up. A guest with no finds sees
+the strip alone.
 
 ### signed-in users
 
@@ -168,12 +175,12 @@ Do **not** fix that by painting different text in the browser while leaving the 
 
 When the homepage loads, check this table first.
 
-| situation                            | expected route                                          |
-| ------------------------------------ | ------------------------------------------------------- |
-| signed out                           | no account route; local starter + visited-dossier shelf |
-| signed in, normal user               | `/api/iconoplasm/discoveries/me`                        |
-| signed in, admin, classic toggle off | `/api/iconoplasm/discoveries/me`                        |
-| signed in, admin, classic toggle on  | `catalog/v3/index.json` (CDN)                           |
+| situation                            | expected route                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| signed out                           | no account route; add-on finds + local shelf, starter strip until all four are found |
+| signed in, normal user               | `/api/iconoplasm/discoveries/me`                                                     |
+| signed in, admin, classic toggle off | `/api/iconoplasm/discoveries/me`                                                     |
+| signed in, admin, classic toggle on  | `catalog/v3/index.json` (CDN)                                                        |
 
 If the wrong route is firing, you are debugging the wrong problem.
 
