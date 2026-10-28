@@ -4049,10 +4049,12 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   max-width: none;
 }
 
-/* The lines sit in a drawn browser window whose toolbar carries the add-on's
-   icon, so the strip reads as one page of many. The window controls keep
-   their usual colours in both themes. */
+/* The lines, and each site's picture under the cards, sit in the same drawn
+   browser window whose toolbar carries the add-on's icon, so the three read
+   as one browser on three sites. The window controls keep their usual
+   colours in both themes. */
 .icono-play-window {
+  display: block;
   --icono-play-dot-close: #e0605a;
   --icono-play-dot-minimize: #e9b44c;
   --icono-play-dot-zoom: #7cbf7a;
@@ -4287,8 +4289,43 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
   margin: 0;
 }
 
+/* One ink for every line that a reader reads in the strip: the next step's
+   sentence matches the starter lines above it (it was the install card's
+   dimmer note ink, lightness 0.70 against the lines' 0.85 on the dark
+   theme, 2026-10-28). */
+.icono-play-next .icono-install-note,
+.icono-play-installed {
+  color: var(--dark);
+}
+
+/* A reader who has the add-on: first, that this page knows it. The check
+   sits in the line, so a wrapped sentence wraps under it. */
+.icono-play-installed {
+  flex: 1 1 100%;
+  margin: 0;
+  line-height: 1.5;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* The check is the install card's installed green (.icono-install-panel--
+   installed), lifted on the dark theme so it reads on the dark card. */
+.icono-play-check {
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.45rem;
+  vertical-align: -0.2em;
+  color: #4a7a5b;
+}
+
+html[saved-theme="dark"] .icono-play-check {
+  color: #7cbf8f;
+}
+
 /* The add-on on Wikipedia and the UCSC Genome Browser, cut to the cards'
-   7:9 so they read as two more cards. */
+   7:9, each in its browser window. For a reader with the add-on, the window
+   and the page's name under it are one link. */
 .icono-play-sites {
   flex: 1 1 100%;
   display: grid;
@@ -4297,27 +4334,59 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 }
 
 .icono-play-site {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
   margin: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
-.icono-play-site img {
+.icono-play-site .icono-play-window > img {
   display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 7 / 9;
   object-fit: cover;
   object-position: 0 0;
-  border: 1px solid var(--gray);
-  border-radius: 4px;
   background: var(--lightgray);
 }
 
-.icono-play-site figcaption {
-  margin-top: 0.3rem;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  color: var(--darkgray);
+a.icono-play-site .icono-play-window {
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease;
+}
+
+a.icono-play-site:hover .icono-play-window {
+  transform: translateY(-2px);
+  border-color: var(--darkgray);
+}
+
+a.icono-play-site:hover .icono-play-site-label {
+  border-color: color-mix(in srgb, var(--ui-border) 35%, var(--dark) 65%);
+  background: color-mix(in srgb, var(--dark) 7%, transparent);
+  color: var(--dark);
+}
+
+a.icono-play-site:focus-visible {
+  outline: none;
+}
+
+a.icono-play-site:focus-visible .icono-play-site-label {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icono-play-site-label {
+  justify-self: stretch;
+  min-width: 0;
+  height: auto;
+  padding-block: 0.55rem;
+  line-height: 1.35;
   text-align: center;
+  white-space: normal;
 }
 
 .icono-play-glyph {
@@ -4337,6 +4406,28 @@ html[saved-theme="dark"] .icono-play-pill[data-ink] {
 
   .icono-play-slot .icono-image-only-symbol {
     font-size: 1.05rem;
+  }
+
+  /* Two windows side by side leave about 170 px each: the address keeps
+     the room that the window controls would take. */
+  .icono-play-site .icono-play-dots {
+    display: none;
+  }
+
+  .icono-play-site .icono-play-bar {
+    gap: 0.35rem;
+    padding-inline: 0.35rem;
+  }
+
+  .icono-play-site .icono-play-address {
+    padding-inline: 0.45rem;
+    font-size: 0.66rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a.icono-play-site .icono-play-window {
+    transition: none;
   }
 }
 

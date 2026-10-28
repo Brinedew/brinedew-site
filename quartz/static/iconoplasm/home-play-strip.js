@@ -37,21 +37,31 @@ export const HOME_PLAY_DOCS_LINE =
 const TOOLBAR_ICON = "/static/iconoplasm/icons/icon-512.png"
 
 // The add-on on two other sites: the store screenshots (iconoplasm-extension/
-// store-assets/screenshot-2 and -1), cut to the cards' 7:9. They sit under
-// the cards and load lazily. The files are cached as immutable: bump ?v= when
-// a picture changes.
+// store-assets/screenshot-2 and -1), cut to the cards' 7:9. Each sits in the
+// same drawn browser window as the starter lines, with the page's real
+// address, so the three windows read as one browser on three sites. They sit
+// under the cards and load lazily. The files are cached as immutable: bump
+// ?v= when a picture changes.
 const SITES = [
   {
     src: "/static/iconoplasm/play/wikipedia-homeobox.webp?v=1",
     alt: "Wikipedia's Homeobox article with Iconoplasm installed",
-    caption: "Wikipedia",
+    address: "en.wikipedia.org",
+    href: "https://en.wikipedia.org/wiki/Homeobox",
+    label: "Wikipedia's Homeobox article",
   },
   {
     src: "/static/iconoplasm/play/ucsc-rho.webp?v=1",
     alt: "The UCSC Genome Browser with Iconoplasm installed",
-    caption: "UCSC Genome Browser",
+    address: "genome.ucsc.edu",
+    href: "https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&position=RHO",
+    label: "RHO in the UCSC Genome Browser",
   },
 ]
+
+// Lucide's check (ISC), for the installed badge.
+const CHECK =
+  '<svg class="icono-play-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>'
 
 // The browser's mark on its install button, as Language Reactor puts Chrome's
 // on its own. Chrome, Firefox and Brave are Simple Icons (CC0); Edge is
@@ -148,26 +158,50 @@ function glyphMarkup(name) {
 
 // What follows a find, at most one button. `action` is
 //   { kind: "link", note, label, href, glyph?, sites?, sameTab? }  a store
-//     page or an example page, in a new tab; with sameTab, the login here;
+//     page, in a new tab; with sameTab, the login here;
 //   { kind: "open", note, label, glyph?, sites? }  the caller shows the
 //     install steps when [data-icono-play-open] is pressed;
-//   { kind: "none", note, sites? }  this browser has no install path.
+//   { kind: "none", note, sites?, installed? }  no button: this browser has
+//     no install path, or the add-on is already here.
 // `sites` adds the add-on on Wikipedia and the UCSC Genome Browser.
+// `installed: true` is a reader whose browser has the add-on. The first thing
+// they wonder is whether this page knows that, so the first line says so in
+// a full sentence (the owner's words,
+// 2026-10-28: "you already have add-on installed, so go test it on these
+// pages"; a bare "Installed v0.5.11" left them asking "installed what?").
+// Their two windows are then links, each with its page named under the
+// picture: they will see the same there.
 export function homePlayActionMarkup(action) {
-  let html = '<p class="icono-install-note">' + esc(action.note) + "</p>"
+  let html = ""
+  if (action.installed) {
+    html +=
+      '<p class="icono-play-installed">' +
+      CHECK +
+      "Iconoplasm is already installed in this browser.</p>"
+  }
+  html += '<p class="icono-install-note">' + esc(action.note) + "</p>"
   if (action.sites) {
     html +=
       '<div class="icono-play-sites">' +
-      SITES.map(
-        (site) =>
-          '<figure class="icono-play-site"><img src="' +
+      SITES.map((site) => {
+        const picture =
+          '<span class="icono-play-window">' +
+          windowBarMarkup(site.address) +
+          '<img src="' +
           esc(site.src) +
           '" alt="' +
           esc(site.alt) +
-          '" width="560" height="720" loading="lazy" decoding="async"><figcaption>' +
-          esc(site.caption) +
-          "</figcaption></figure>",
-      ).join("") +
+          '" width="560" height="720" loading="lazy" decoding="async"></span>'
+        return action.installed
+          ? '<a class="icono-play-site" href="' +
+              esc(site.href) +
+              '" target="_blank" rel="noopener noreferrer">' +
+              picture +
+              '<span class="icono-button icono-play-site-label"><span>' +
+              esc(site.label) +
+              '</span><span aria-hidden="true">↗</span></span></a>'
+          : '<div class="icono-play-site">' + picture + "</div>"
+      }).join("") +
       "</div>"
   }
   const label = glyphMarkup(action.glyph) + "<span>" + esc(action.label) + "</span>"
@@ -194,11 +228,12 @@ export function homePlayActionMarkup(action) {
   return html
 }
 
-// A browser's title bar over the starter lines: the site's address and, at the
-// right, the add-on's icon. Drawn, so screen readers skip it.
+// A browser's title bar over the starter lines and over each site's picture:
+// the site's address and, at the right, the add-on's icon. Drawn, so screen
+// readers skip it.
 function windowBarMarkup(address) {
   return (
-    '<div class="icono-play-bar" aria-hidden="true">' +
+    '<span class="icono-play-bar" aria-hidden="true">' +
     '<span class="icono-play-dots"><i></i><i></i><i></i></span>' +
     '<span class="icono-play-address">' +
     esc(address) +
@@ -206,7 +241,7 @@ function windowBarMarkup(address) {
     '<img class="icono-play-addon" src="' +
     TOOLBAR_ICON +
     '" alt="" width="22" height="22" decoding="async">' +
-    "</div>"
+    "</span>"
   )
 }
 

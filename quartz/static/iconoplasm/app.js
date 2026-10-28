@@ -29,7 +29,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=5da2a5e3c3ec1e14"
+} from "./home-play-strip.js?v=6b8334590bf1c6e1"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -3749,18 +3749,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   //     strip, so nothing downloads until the reader presses the download
   //     button inside them.
   //   Safari and iPhone: no install path, so what it is and where it works.
-  //   The add-on already here: a page to try it on, docs step 2's Homeobox,
-  //     whose picture is the first of the two.
+  //   The add-on already here: first a sentence saying the page knows it,
+  //     then docs step 2's line and the two pages to try it on. Before 2026-10-28 this reader got the
+  //     pictures and a button named after an article, with nothing saying the
+  //     page knew they had it; the owner: "It just shows a screenshot on your
+  //     face".
   function homePlayAction() {
     var browser = detectInstallBrowser()
     var release = iconoInstallState.release || {}
     if (iconoInstallState.installed) {
       return {
-        kind: "link",
-        note: "Open any page that names human genes.",
-        label: "Wikipedia's Homeobox article",
-        href: "https://en.wikipedia.org/wiki/Homeobox",
+        kind: "none",
+        note: "Open any page that names human genes, like these two:",
         sites: true,
+        installed: true,
       }
     }
     if (browser.platform === "ios") {
