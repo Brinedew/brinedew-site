@@ -229,16 +229,54 @@
         font: 400 var(--t, 21px)/1.45 "Special Elite";
       }
 
-      /* New candidates */
-      .strip {
+      /* New candidates. Every gene is a group on one shared grid, so every
+         portrait is the same size. A group takes as many columns as it shows
+         portraits; when it holds more than it shows, its last spot is a deck. */
+      .genes {
         display: grid;
-        gap: 10px;
-        margin-bottom: 22px;
+        grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+        grid-auto-flow: row dense;
+        gap: 20px var(--colgap);
       }
-      .strip .line {
-        display: flex;
-        gap: 12px;
-        align-items: baseline;
+      .gene {
+        display: grid;
+        grid-template-columns: subgrid;
+        row-gap: var(--colgap);
+        align-content: start;
+      }
+      .gene .label {
+        grid-column: 1 / -1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1;
+      }
+      .gene .label .name {
+        margin-left: 0.5em;
+      }
+      /* A deck: the face card in front, up to two more of the gene's new
+         portraits behind it, and an ink tab with how many the deck hides. */
+      .deck {
+        position: relative;
+        aspect-ratio: 3 / 4;
+      }
+      .deck > .frame {
+        position: absolute;
+        left: calc(var(--i) * var(--o));
+        bottom: calc(var(--i) * var(--o));
+        width: calc(100% - 2 * var(--o));
+      }
+      .deck > .frame.back {
+        filter: brightness(0.82);
+      }
+      .deck b {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        padding: 0.15em 0.35em;
+        background: var(--ink);
+        color: var(--paper);
+        font: 500 var(--t, 14px)/1 "Plex Mono";
       }
       .single b {
         display: block;
@@ -287,7 +325,7 @@
               items
                 .map(
                   (u) =>
-                    `<div class="update"><div class="pair" style="--arrow:${l.af}px"><img class="frame" src="${u.from}"><svg viewBox="0 0 10 14" aria-hidden="true"><path d="M0 0L10 7L0 14Z"/></svg><img class="frame" src="${blot(u.symbol)}"></div>` +
+                    `<div class="update"><div class="pair" style="--arrow:${l.af}px"><img class="frame" src="${u.from}"><svg viewBox="0 0 10 14" aria-hidden="true"><path d="M0 0L10 7L0 14Z"/></svg><img class="frame" src="${u.to}"></div>` +
                     `<div class="label"><span class="sym" style="--s:${l.s}px">${u.symbol}</span>${l.n ? `<span class="name" style="--n:${l.n}px">${esc(nm(u.symbol))}</span>` : ""}</div></div>`,
                 )
                 .join("") +
@@ -395,29 +433,62 @@
           title: "New candidates",
           count: () =>
             `${d.candidates.reduce((a, c) => a + c.portraits.length, 0).toLocaleString("en")} portraits on ${d.candidates.length.toLocaleString("en")} genes`,
-          levels: [
-            { max: 60, strips: 6, cols: 5, s: 17 },
-            { max: 180, strips: 4, cols: 7, s: 13 },
-            { max: 400, strips: 3, cols: 10, s: 10 },
-            { max: 700, strips: 3, stripCols: 8, cols: 14, s: 0 },
-          ],
+          // Every gene shows every new portrait while the strip has room, with
+          // smaller portraits first. After that, each gene shows fewer, the
+          // rest in a deck, down to one deck per gene. Whole genes go to
+          // "+N more" only after that (the cap loop below): readers would
+          // rather see more genes than more portraits of one gene.
+          levels: (() => {
+            const levels = [6, 8, 11, 14].map((cols) => ({ max: Infinity, cols, k: Infinity }))
+            let k = Math.max(1, ...d.candidates.map((c) => c.portraits.length))
+            while (k > 1) {
+              k = Math.max(1, Math.floor(k * 0.8))
+              levels.push({ max: Infinity, cols: 14, k })
+            }
+            return levels
+          })(),
           render(l, items, rest) {
-            const strips = items.filter((c) => c.portraits.length >= 3).slice(0, l.strips)
-            const singles = items
-              .filter((c) => !strips.includes(c))
-              .map((c) => ({ symbol: c.symbol, p: c.portraits[0], n: c.portraits.length }))
+            const gap = { 6: 14, 8: 12, 11: 8, 14: 6 }[l.cols]
+            const tile = (736 - (l.cols - 1) * gap) / l.cols
+            const o = Math.max(2, Math.round(tile * 0.05))
+            const s = Math.round(Math.min(22, Math.max(10, tile * 0.17)))
+            const deck = (c, spots) => {
+              const hidden = c.portraits.length - spots
+              const behind = c.portraits.slice(spots, spots + 2).reverse()
+              return (
+                `<div class="deck" style="--o:${o}px">` +
+                behind
+                  .map(
+                    (p, j) =>
+                      `<img class="frame back" style="--i:${behind.length - j}" src="${p}">`,
+                  )
+                  .join("") +
+                `<img class="frame" style="--i:0" src="${c.portraits[spots - 1]}">` +
+                `<b style="--t:${Math.max(9, Math.round(tile * 0.13))}px">+${hidden}</b></div>`
+              )
+            }
             return (
-              strips
-                .map(
-                  (c) =>
-                    `<div class="strip"><div class="line"><span class="sym">${c.symbol}</span><span class="name">${esc(nm(c.symbol))}</span><span class="note">${c.portraits.length} new</span></div>` +
-                    `<div class="grid" style="--cols:${l.stripCols || l.cols + 1};--gap:8px;--colgap:8px">${c.portraits
-                      .slice(0, (l.stripCols || l.cols + 1) * 2)
-                      .map((p) => `<img class="frame" src="${p}">`)
-                      .join("")}</div></div>`,
-                )
+              `<div class="genes" style="--cols:${l.cols};--colgap:${gap}px">` +
+              items
+                .map((c) => {
+                  const spots = Math.min(c.portraits.length, l.k)
+                  const span = Math.min(spots, l.cols)
+                  const width = span * tile + (span - 1) * gap
+                  const faces = c.portraits.slice(0, spots < c.portraits.length ? spots - 1 : spots)
+                  return (
+                    `<div class="gene" style="grid-column:span ${span}">` +
+                    `<div class="label"><span class="sym" style="--s:${s}px">${c.symbol}</span>` +
+                    (width >= 300 && nm(c.symbol)
+                      ? `<span class="name" style="--n:${Math.round(s * 0.8)}px">${esc(nm(c.symbol))}</span>`
+                      : "") +
+                    `</div>` +
+                    faces.map((p) => `<img class="frame" src="${p}">`).join("") +
+                    (spots < c.portraits.length ? deck(c, spots) : "") +
+                    `</div>`
+                  )
+                })
                 .join("") +
-              `<div class="grid" style="--cols:${l.cols};--gap:${l.s ? 12 : 6}px;--colgap:${l.s ? 10 : 6}px">${singles.map((c) => `<div class="single"><img class="frame" src="${c.p}">${l.s ? `<b style="--s:${l.s}px">${c.symbol}</b>` : ""}</div>`).join("")}</div>` +
+              `</div>` +
               more(rest, "genes with new candidates")
             )
           },
@@ -442,7 +513,8 @@
       }
       draw()
       const log = []
-      for (let i = 0; i < 20 && document.body.scrollHeight > BUDGET; i++) {
+      // Enough rounds to walk every level of every section; candidates can have dozens.
+      for (let i = 0; i < 200 && document.body.scrollHeight > BUDGET; i++) {
         const heights = sections
           .filter((s) => s.items.length && s.level < s.levels.length - 1)
           .map((s) => [s, main.querySelector(`[data-key=${s.key}]`).offsetHeight])
