@@ -81,13 +81,14 @@ async function mapLimit(items, limit, fn) {
   return out
 }
 
-// A gene's full name, and its blot when one is drawn for the current portrait;
-// otherwise the current portrait itself, so a fresh winner never shows blank.
+// A gene's full name, its current portrait, and its blot when one is drawn for
+// that portrait; otherwise the current portrait itself, so a fresh winner never
+// shows blank.
 async function lookUpGene(symbol) {
   const response = await fetch(`${CDN}/genes/v3/${encodeURIComponent(symbol)}.json`, {
     signal: AbortSignal.timeout(20_000),
   }).catch(() => null)
-  if (!response?.ok) return { symbol, name: "", blot: "" }
+  if (!response?.ok) return { symbol, name: "", blot: "", sha: "" }
   const gene = await response.json().catch(() => ({}))
   const key = iconoplasmBlotObjectKey(symbol, iconoplasmBlotFingerprint(gene))
   const blot = key ? `${CDN}/${key}` : ""
@@ -100,6 +101,7 @@ async function lookUpGene(symbol) {
     symbol,
     name: String(gene?.full_name || ""),
     blot: drawn ? blot : /^[a-f0-9]{64}$/.test(sha) ? portraitUrl(sha, "medium") : "",
+    sha,
   }
 }
 
@@ -121,10 +123,19 @@ export async function digestPage(day, lookUp = lookUpGene) {
     ...first(day.caretakers),
     ...first(day.lore),
     ...first(day.comments),
-    ...first(day.candidates.filter((c) => c.shas.length >= 3)),
+    ...first(day.candidates),
   ]
   const genes = await mapLimit([...new Set(shown)], 16, lookUp)
+  const now = new Map(genes.map((g) => [g.symbol, g]))
   const who = (x) => ({ name: x.username, avatar: x.avatar })
+  // The portrait that won during the day. The job runs hours after midnight,
+  // so the gene's portrait by then may be a later winner; its blot stands in
+  // only when it is the same portrait.
+  const won = (symbol, sha) => {
+    const gene = now.get(symbol)
+    return gene?.sha === sha && gene.blot ? gene.blot : portraitUrl(sha, "medium")
+  }
+  const winners = new Map(day.updates.map((u) => [u.symbol, u.to_sha]))
   return {
     date: longDate(day.day),
     names: Object.fromEntries(genes.map((g) => [g.symbol, g.name])),
@@ -132,16 +143,25 @@ export async function digestPage(day, lookUp = lookUpGene) {
     updates: day.updates.map((u) => ({
       symbol: u.symbol,
       from: portraitUrl(u.from_sha, "medium"),
+      to: won(u.symbol, u.to_sha),
     })),
     caretakers: day.caretakers.map((c) => ({ symbol: c.symbol, who: who(c), from: c.from_symbol })),
     lore: day.lore.map((l) => ({ symbol: l.symbol, who: who(l), text: l.text })),
     comments: day.comments.map((c) => ({ symbol: c.symbol, who: who(c), text: c.text })),
-    candidates: day.candidates.map((c) => ({
-      symbol: c.symbol,
-      // "thumb" is a 256x256 square; the strip's 3:4 frames would cut a quarter
-      // off each side of it. "medium" is the whole 3:4 portrait.
-      portraits: c.shas.map((sha) => portraitUrl(sha, "medium")),
-    })),
+    // A new candidate that became the canonical portrait the same day comes
+    // first, so it matches its pair under Canonical portrait updates.
+    candidates: day.candidates.map((c) => {
+      const winner = winners.get(c.symbol)
+      const shas = c.shas.includes(winner)
+        ? [winner, ...c.shas.filter((sha) => sha !== winner)]
+        : c.shas
+      return {
+        symbol: c.symbol,
+        // "thumb" is a 256x256 square; the 3:4 frames would cut a quarter off
+        // each side of it. "medium" is the whole 3:4 portrait.
+        portraits: shas.map((sha) => portraitUrl(sha, "medium")),
+      }
+    }),
   }
 }
 
@@ -233,6 +253,8 @@ async function main() {
     textChars: content.length,
   }
   if (args.dryRun) {
+    // The site's day as it came, so a strip can be redrawn from real data.
+    writeFileSync(path.join(args.out, `iconoplasm-${args.day}-day.json`), JSON.stringify(day))
     writeFileSync(path.join(args.out, `iconoplasm-${args.day}.webp`), webp)
     writeFileSync(path.join(args.out, `iconoplasm-${args.day}.md`), content)
     return console.log(JSON.stringify({ ...report, dry_run: true, out: args.out }))
