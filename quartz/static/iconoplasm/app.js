@@ -5917,7 +5917,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     for (var i = 0; i < cells.length; i++) {
       var url = previewPlaceholderUrl(cells[i].getAttribute("data-icono-placeholder"))
       cells[i].removeAttribute("data-icono-placeholder")
-      if (url) cells[i].style.backgroundImage = 'url("' + url + '")'
+      if (url) cells[i].style.setProperty("--icono-placeholder", 'url("' + url + '")')
     }
   }
 

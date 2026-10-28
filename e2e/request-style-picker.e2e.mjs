@@ -70,7 +70,10 @@
 //     itself (its ThumbHash placeholder) under it (owner, 2026-10-28: "a lot
 //     of white squares");
 // 29. a grid cell downloads the 384 px medium file where the 192 px small one
-//     covers it.
+//     covers it (a medium the page had already fetched before the picker
+//     opened is fine: the browser reuses it rather than fetch the small);
+// 30. the placeholder still lies under a picture that has loaded, where a
+//     cell of fractional width shows it as a coloured line down one edge.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -301,9 +304,10 @@ async function routePicker(context, reachable) {
   )
 }
 
-async function routePortraits(context) {
+async function routePortraits(context, requested = []) {
   await context.route(/\/portraits\/.+\.webp(\?.*)?$/, (route) => {
     const url = route.request().url()
+    requested.push(url)
     let hash = 0
     for (const ch of url) hash = (hash * 31 + ch.charCodeAt(0)) % 360
     const [w, h] = url.includes("/small.webp") ? [192, 256] : [384, 512]
@@ -387,9 +391,15 @@ function measurePicker() {
       card: img.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
       src: img.getAttribute("src") || "",
       currentSrc: img.currentSrc || "",
-      placeholder: getComputedStyle(img.parentElement).backgroundImage.startsWith(
+      placeholder: getComputedStyle(img.parentElement, "::before").backgroundImage.startsWith(
         'url("data:image/png',
       ),
+      placeholderShown:
+        getComputedStyle(img.parentElement, "::before").backgroundImage !== "none" &&
+        getComputedStyle(img.parentElement, "::before").opacity !== "0",
+      loaded: img.complete && img.naturalWidth > 0,
+      width: img.getBoundingClientRect().width,
+      sizes: img.getAttribute("sizes") || "",
       ratio: img.getBoundingClientRect().width / img.getBoundingClientRect().height,
     })),
     queuedBadges: [...dialog.querySelectorAll("[data-icono-request-queued]")]
@@ -474,10 +484,12 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         const api = createApi(posts, { failFirst: cdn ? 0 : 1, randomDelay: RANDOM_DELAY })
         await routeProduction(context, origin, api)
         await routePicker(context, cdn)
-        await routePortraits(context)
+        const portraitRequests = []
+        await routePortraits(context, portraitRequests)
         const page = await context.newPage()
         await page.goto(`${HOST}/gene/TP53`)
         await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
+        const fetchedBeforeOpen = new Set(portraitRequests)
         await openPicker(page)
         await page.screenshot({ path: shot("open") })
 
@@ -507,13 +519,24 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
           // 28. Each picture sits on its blurred placeholder.
           assert.ok(image.placeholder, `${where}: no placeholder under ${image.src}`)
-          // 29. At these sizes (one device pixel per CSS pixel) every cell is
-          // narrower than the small file.
-          assert.match(
-            image.currentSrc,
-            /small\.webp$/,
-            `${where}: cell loaded ${image.currentSrc}`,
-          )
+          // 29. One device pixel per CSS pixel here, so a cell narrower than
+          // the small file loads the small one, unless the page already had
+          // the medium.
+          if (image.width <= 192 && !fetchedBeforeOpen.has(image.currentSrc)) {
+            assert.match(
+              image.currentSrc,
+              /small\.webp$/,
+              `${where}: a ${Math.round(image.width)} px cell loaded ${image.currentSrc} ` +
+                `(sizes "${image.sizes}"; ${fetchedBeforeOpen.size} portrait files fetched ` +
+                `before the picker opened)`,
+            )
+          }
+        }
+        // 30. Once a picture has faded in, its placeholder is gone from under it.
+        await page.waitForTimeout(600)
+        for (const image of (await page.evaluate(measurePicker)).images) {
+          if (!image.loaded) continue
+          assert.equal(image.placeholderShown, false, `${where}: placeholder under ${image.src}`)
         }
         for (const label of new Set(first.images.map((image) => image.card))) {
           const tiles = first.images.filter((image) => image.card === label)

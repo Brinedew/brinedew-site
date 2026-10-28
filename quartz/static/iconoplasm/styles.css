@@ -2062,16 +2062,31 @@ img-comparison-slider.rendered [slot="second"] {
   grid-row: 1 / span 2;
 }
 
-/* Each picture sits on its blurred placeholder (a decoded ThumbHash, painted
-   by the app) and fades in over it when the file arrives. */
+/* Each picture sits on its blurred placeholder (a decoded ThumbHash that the
+   app sets as --icono-placeholder) and fades in over it when the file
+   arrives. The placeholder then hides: a cell of fractional width leaves its
+   last pixel column to whatever lies under the picture. */
 .icono-request-card-cell {
+  position: relative;
   display: block;
   min-width: 0;
   min-height: 0;
-  background: center / cover no-repeat;
+}
+
+.icono-request-card-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--icono-placeholder, none) center / cover no-repeat;
+  transition: opacity 0s linear 0.22s;
+}
+
+.icono-request-card-cell:has(> img.is-loaded)::before {
+  opacity: 0;
 }
 
 .icono-request-card-art img {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -2086,6 +2101,7 @@ img-comparison-slider.rendered [slot="second"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .icono-request-card-cell::before,
   .icono-request-card-art img {
     transition: none;
   }
