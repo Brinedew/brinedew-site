@@ -433,22 +433,37 @@
           title: "New candidates",
           count: () =>
             `${d.candidates.reduce((a, c) => a + c.portraits.length, 0).toLocaleString("en")} portraits on ${d.candidates.length.toLocaleString("en")} genes`,
-          // Every gene shows every new portrait while the strip has room, with
-          // smaller portraits first. After that, each gene shows fewer, the
-          // rest in a deck, down to one deck per gene. Whole genes go to
-          // "+N more" only after that (the cap loop below): readers would
-          // rather see more genes than more portraits of one gene.
+          // Each step makes the tallest thing give way first, as the fit loop
+          // does between sections. While a gene runs past one row, the genes
+          // with the most new portraits show fewer and put the rest in a deck.
+          // Once every gene fits one row, portraits get smaller, and each gene
+          // shows one row of them. At the smallest size, every gene shows
+          // fewer, down to one deck each. Whole genes go to "+N more" only
+          // after that (the cap loop below), because readers would rather see
+          // more genes than more portraits of one gene.
           levels: (() => {
-            const levels = [6, 8, 11, 14].map((cols) => ({ max: Infinity, cols, k: Infinity }))
-            let k = Math.max(1, ...d.candidates.map((c) => c.portraits.length))
+            const top = Math.max(1, ...d.candidates.map((c) => c.portraits.length))
+            const levels = [{ max: Infinity, cols: 6, k: Infinity }]
+            let k = top
+            while (k > 6) {
+              k = Math.max(6, Math.floor(k * 0.8))
+              levels.push({ max: Infinity, cols: 6, k })
+            }
+            for (const cols of [8, 11, 14]) {
+              k = Math.min(cols, top)
+              levels.push({ max: Infinity, cols, k })
+            }
+            // At the smallest size, a row holds a whole number of genes when every
+            // gene shows k portraits, so no columns sit empty at the end of rows.
             while (k > 1) {
               k = Math.max(1, Math.floor(k * 0.8))
-              levels.push({ max: Infinity, cols: 14, k })
+              const cols = [14, 13, 15, 12, 16].find((c) => c % k === 0) || 14
+              levels.push({ max: Infinity, cols, k })
             }
             return levels
           })(),
           render(l, items, rest) {
-            const gap = { 6: 14, 8: 12, 11: 8, 14: 6 }[l.cols]
+            const gap = Math.round(84 / l.cols)
             const tile = (736 - (l.cols - 1) * gap) / l.cols
             const o = Math.max(2, Math.round(tile * 0.05))
             const s = Math.round(Math.min(22, Math.max(10, tile * 0.17)))
