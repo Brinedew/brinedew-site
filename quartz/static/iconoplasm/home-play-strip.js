@@ -157,8 +157,8 @@ function glyphMarkup(name) {
 }
 
 // What follows a find, at most one button. `action` is
-//   { kind: "link", note, label, href, glyph?, sites?, sameTab? }  a store
-//     page, in a new tab; with sameTab, the login here;
+//   { kind: "link", note, label, href, glyph?, sites? }  a store page, in a
+//     new tab;
 //   { kind: "open", note, label, glyph?, sites? }  the caller shows the
 //     install steps when [data-icono-play-open] is pressed;
 //   { kind: "none", note, sites?, installed? }  no button: this browser has
@@ -210,13 +210,6 @@ export function homePlayActionMarkup(action) {
       '<button type="button" class="icono-button icono-button--primary icono-install-link" data-icono-play-open>' +
       label +
       "</button>"
-  } else if (action.kind === "link" && action.sameTab) {
-    html +=
-      '<a class="icono-button icono-button--primary icono-install-link" href="' +
-      esc(action.href) +
-      '">' +
-      label +
-      "</a>"
   } else if (action.kind === "link") {
     html +=
       '<a class="icono-button icono-button--primary icono-install-link" href="' +
@@ -245,16 +238,15 @@ function windowBarMarkup(address) {
   )
 }
 
-// The strip is always the four starters. Genes found elsewhere count in the
-// "Yours" tab but get no card here: the demo is four cards, not a collection.
+// The strip is always the four starters. Genes found elsewhere are in the
+// reader's gallery under the strip: the demo is four cards, not a collection.
 // genes: [{ symbol, name, color, portraitUrl }] in HOME_STARTERS order.
 // found: the starters that this browser already found; they start face up.
 // cardMarkup(gene): the site's image-only card for a face-up gene.
 // onCardMounted(element): marks the card's portrait loaded once it is.
-// onFind(symbol): stores the find and recounts the Archive's "Yours" tab.
+// onFind(symbol): stores the find and recounts the "Your discoveries" tab.
 // onOpen(): shows the install steps under the next step.
-// Returns { root, addFinds(symbols), setAction(action) } for finds and a next
-// step that arrive after the strip is on screen (the add-on's).
+// Returns the strip's root element.
 export function mountHomePlayStrip(container, options) {
   const doc = container.ownerDocument
   const win = doc.defaultView
@@ -321,19 +313,15 @@ export function mountHomePlayStrip(container, options) {
     options.onCardMounted(card)
   }
 
-  const next = root.querySelector("[data-icono-play-next]")
-  function wireAction() {
-    const openButton = next.querySelector("[data-icono-play-open]")
-    // Once the install steps are open under the strip, the button has done
-    // its job; the note and the two sites stay.
-    if (openButton) {
-      openButton.addEventListener("click", () => {
-        openButton.remove()
-        options.onOpen()
-      })
-    }
+  // Once the install steps are open under the strip, the button has done its
+  // job; the note and the two sites stay.
+  const openButton = root.querySelector("[data-icono-play-next] [data-icono-play-open]")
+  if (openButton) {
+    openButton.addEventListener("click", () => {
+      openButton.remove()
+      options.onOpen()
+    })
   }
-  wireAction()
 
   // The portraits load once the strip is on screen, so a card turns face up
   // with its picture already there.
@@ -373,18 +361,14 @@ export function mountHomePlayStrip(container, options) {
     lit = ""
   }
 
-  function turn(symbol) {
+  function discover(symbol) {
+    if (found.has(symbol)) return
     found.add(symbol)
     const element = slotOf(symbol)
     const front = element.querySelector(".icono-play-slot-front")
     front.innerHTML = options.cardMarkup(genes.get(symbol))
     options.onCardMounted(front.firstElementChild)
     element.classList.add("is-found")
-  }
-
-  function discover(symbol) {
-    if (found.has(symbol)) return
-    turn(symbol)
     options.onFind(symbol)
   }
 
@@ -415,18 +399,5 @@ export function mountHomePlayStrip(container, options) {
     })
   }
 
-  return {
-    root,
-    // Starters that this browser already found: they turn without counting
-    // again.
-    addFinds(symbols) {
-      for (const symbol of symbols || []) {
-        if (genes.has(symbol) && !found.has(symbol)) turn(symbol)
-      }
-    },
-    setAction(action) {
-      next.innerHTML = homePlayActionMarkup(action)
-      wireAction()
-    },
-  }
+  return root
 }

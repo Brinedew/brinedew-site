@@ -1,12 +1,12 @@
 import {
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-contract.js?v=2bf13ee5e7e6c96d"
+} from "./guest-discovery-contract.js?v=f7765c894d9d6380"
 
 export {
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-contract.js?v=2bf13ee5e7e6c96d"
+} from "./guest-discovery-contract.js?v=f7765c894d9d6380"
 
 export const WEBSITE_GUEST_DISCOVERY_STORAGE_KEY = "iconoplasm.website-guest-discoveries.v1"
 
