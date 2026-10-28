@@ -617,7 +617,14 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         await page.textContent("[data-icono-play-next] .icono-play-installed"),
         "Iconoplasm is already installed in this browser.",
       )
-      assert.deepEqual(await buttons(page), [], "the strip has a button besides the login")
+      assert.equal(
+        await page.$$eval(
+          "[data-icono-play-next] button, [data-icono-play-next] a.icono-button",
+          (n) => n.length,
+        ),
+        0,
+        "the strip has a button besides the login",
+      )
       assert.equal(await page.$("[data-icono-home-install-card]"), null, "an install card too")
       // 9. The gallery reads the published catalogue, never the Worker.
       assert.deepEqual(api, [], `the gallery asked the Worker: ${api.join(", ")}`)
