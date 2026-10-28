@@ -76,11 +76,11 @@ The front page of [iconoplasm.brinedew.bio](https://iconoplasm.brinedew.bio) is 
 
 ![[iconoplasm-start-archive.webp|The Archive before you log in]]
 
-1. The number on the **Yours** tab shows how many genes you have found. Rest your cursor on it to see that number out of all 19,381.
-2. To see discoveries of others, open the **Everyone's** tab.
+1. The number on the **Your discoveries** tab shows how many genes you have found. Rest your cursor on it to see that number out of all 19,381.
+2. To see discoveries of others, open the **Global discoveries** tab.
 3. You get four starter genes that you probably already know: INS, RHO, PRL and CD4. Rest your cursor on a symbol, or tap it on a phone, and its card turns over below. Click a card to open its gene page.
 
-To build your own collection, click **Discord Login** in the top-right corner. From then on, each gene that you rest your cursor on for about a second, on any web page or PDF, joins your Archive. The genes that you hovered before you logged in join it too.
+The genes that you find before you log in show under **Your discoveries**, but only in this browser. To keep them, click **Log in to save** beside the search box, or **Discord Login** in the top-right corner. From then on, each gene that you rest your cursor on for about a second, on any web page or PDF, joins your Archive. The genes that you hovered before you logged in join it too.
 
 ## 5. Open a gene page
 
