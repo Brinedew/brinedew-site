@@ -5853,6 +5853,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return portraitDelivery.resolve(rawRequestOptionPreviewUrl(asset))
   }
 
+  // For pictures that never show wider than the 192 px small file.
+  function requestOptionSmallPreviewUrl(asset) {
+    return (
+      portraitDelivery.resolve(String((asset && asset.small_url) || "").trim()) ||
+      requestOptionPreviewUrl(asset)
+    )
+  }
+
   // A portrait's ThumbHash (about 25 bytes, base64) decodes to a blurred copy
   // of itself, which shows until the file arrives. The decode is cached
   // because the grid redraws its cards whenever a page of styles arrives.
@@ -5950,9 +5958,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var html = '<span class="icono-request-option-strip">'
     for (var i = 0; i < previews.length && i < 5; i++) {
       var asset = previews[i] || {}
-      var url =
-        portraitDelivery.resolve(String(asset.small_url || "").trim()) ||
-        requestOptionPreviewUrl(asset)
+      var url = requestOptionSmallPreviewUrl(asset)
       if (!url) continue
       html +=
         '<span class="icono-request-option-thumb' +
@@ -8285,7 +8291,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       function requestOptionFirstPreview(option) {
         return (Array.isArray(option && option.preview_assets) ? option.preview_assets : [])
-          .map(requestOptionPreviewUrl)
+          .map(requestOptionSmallPreviewUrl)
           .filter(Boolean)[0]
       }
 

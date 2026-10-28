@@ -490,6 +490,7 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         await page.goto(`${HOST}/gene/TP53`)
         await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
         const fetchedBeforeOpen = new Set(portraitRequests)
+        const requestsBeforeOpen = portraitRequests.length
         await openPicker(page)
         await page.screenshot({ path: shot("open") })
 
@@ -531,6 +532,14 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
                 `before the picker opened)`,
             )
           }
+        }
+        // 29, for everything in the picker (the deck's covers too): a medium
+        // fetched after it opened is for a cell wider than the small file.
+        for (const url of portraitRequests.slice(requestsBeforeOpen)) {
+          if (!/medium\.webp/.test(url)) continue
+          const sha = (/[0-9a-f]{64}/.exec(url) || [""])[0]
+          const wide = first.images.some((image) => image.src.includes(sha) && image.width > 192)
+          assert.ok(wide, `${where}: fetched ${url} for no cell wider than 192 px`)
         }
         // 30. Once a picture has faded in, its placeholder is gone from under it.
         await page.waitForTimeout(600)
