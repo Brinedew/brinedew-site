@@ -79,7 +79,11 @@
 //     laptop and over two seconds at phone speed (2026-10-28);
 // 32. a keyboard-focused card's ring is cut off: the grid skips drawing the
 //     cards off screen (content-visibility), which clips each card's drawing
-//     to the card, and the ring sits outside the picture.
+//     to the card, and the ring sits outside the picture;
+// 33. the cells in view are blank when the cards appear: Chrome delivers an
+//     IntersectionObserver's first report as a low-priority task, which on the
+//     live page came 1.1 s after the cards (2026-10-28), so the cards in view
+//     cannot wait for it.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -466,12 +470,28 @@ function measurePicker() {
   }
 }
 
+// Returns how many cells in view were blank (no placeholder, no picture)
+// when the first card appeared (33).
 async function openPicker(page) {
   await page.click("[data-icono-request-dialog-open]")
   await page.waitForSelector(`${DIALOG}[open]`)
   await page.waitForSelector("[data-icono-request-card]", { timeout: 15_000 })
+  const blankAtFirstSight = await page.evaluate(() => {
+    const view = document.querySelector("[data-icono-request-browse]").getBoundingClientRect()
+    return [...document.querySelectorAll("[data-icono-request-results] .icono-request-card-cell")]
+      .filter((cell) => {
+        const box = cell.getBoundingClientRect()
+        return box.top < view.bottom && box.bottom > view.top
+      })
+      .filter(
+        (cell) =>
+          !cell.style.getPropertyValue("--icono-placeholder") &&
+          !cell.querySelector("img.is-loaded"),
+      ).length
+  })
   await page.evaluate(() => document.fonts.ready)
   await page.waitForTimeout(400) // dialog open animation
+  return blankAtFirstSight
 }
 
 const card = (slot) => `[data-icono-request-card='${slot}'] [data-icono-request-option]`
@@ -506,11 +526,13 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
         const fetchedBeforeOpen = new Set(portraitRequests)
         const requestsBeforeOpen = portraitRequests.length
-        await openPicker(page)
+        const blankAtFirstSight = await openPicker(page)
         await page.screenshot({ path: shot("open") })
 
         const first = await page.evaluate(measurePicker)
-        report.push({ where, moment: "open", ...first })
+        report.push({ where, moment: "open", blankAtFirstSight, ...first })
+        // 33. The cells in view have their placeholders when the cards appear.
+        assert.equal(blankAtFirstSight, 0, `${where}: blank cells in view as the cards appeared`)
 
         if (cdn) {
           assert.equal(api.optionsCalls(), 0, `${where}: the Worker was asked for the list`)

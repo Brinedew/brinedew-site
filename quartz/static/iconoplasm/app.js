@@ -8295,8 +8295,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // Placeholders are decoded only for the cards near the part of the grid
       // on screen, one screen ahead of the reader's scroll. Decoding a whole
       // page's 435 at once froze the dialog for half a second on a laptop and
-      // over two seconds at phone speed (2026-10-28). A card decoded before
-      // paints at once, so a redraw does not blank the cards in view.
+      // over two seconds at phone speed (2026-10-28). The cards in view, and
+      // any decoded before, are painted with the grid: Chrome delivers an
+      // observer's first report as a low-priority task, which on the live page
+      // came 1.1 s after the cards, and left every cell in view blank till
+      // then. Every card's position is read before any is painted, so the
+      // layout is worked out once.
       var placeholderWatcher = null
       function watchRequestPreviewPlaceholders() {
         if (!placeholderWatcher) {
@@ -8314,16 +8318,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           )
         }
         placeholderWatcher.disconnect()
+        var view = browse ? browse.getBoundingClientRect() : null
         var cards = results.querySelectorAll("[data-icono-request-card]")
+        var paintNow = []
         for (var i = 0; i < cards.length; i++) {
           var cells = cards[i].querySelectorAll("[data-icono-placeholder]")
           if (!cells.length) continue
-          if (previewPlaceholderUrls.has(cells[0].getAttribute("data-icono-placeholder"))) {
-            paintRequestPreviewPlaceholders(cells)
+          var box = view ? cards[i].getBoundingClientRect() : null
+          if (
+            previewPlaceholderUrls.has(cells[0].getAttribute("data-icono-placeholder")) ||
+            (box && box.top < view.bottom && box.bottom > view.top)
+          ) {
+            paintNow.push(cells)
           } else {
             placeholderWatcher.observe(cards[i])
           }
         }
+        for (var j = 0; j < paintNow.length; j++) paintRequestPreviewPlaceholders(paintNow[j])
       }
 
       function requestOptionFirstPreview(option) {

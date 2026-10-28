@@ -6,9 +6,16 @@ import test from "node:test"
 import { rebuildGenerationRequestFactoryOptionRollupsBatch } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
+// The seed takes most of this test's time: it puts 10,000 portraits in one
+// style, and the style-card triggers rebuild that style's card for every
+// published row, about 2 ms each here. Seeding and the sparse phase's delete
+// took 70 s on a laptop and over 120 s on a CI runner (2026-10-28), while the
+// queries under test take under 0.2 s. The largest real style had 42
+// portraits on the 2026-10-26 copy, so the triggers cost production nothing
+// like this; the limit only has to leave a slow runner room.
 test(
   "factory totals, previews and ranking share one source read beside unrelated growth",
-  { timeout: 120000 },
+  { timeout: 300000 },
   async (t) => {
     const require = createRequire(import.meta.url)
     const { Miniflare, convertV4MiniflareOptions } = createRequire(
