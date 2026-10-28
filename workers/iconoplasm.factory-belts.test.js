@@ -185,7 +185,7 @@ function browserFixture() {
     height: 1152,
     created_at: "2026-08-27 12:00:00",
     full_url: "/full-a",
-    thumb_url: "/thumb-a",
+    medium_url: "/thumb-a",
     status: "draft",
   }
   let next = {
@@ -250,7 +250,7 @@ test("background updates do not shuffle output images and hidden tabs stop polli
   controller.mount()
   await settle()
   assert.equal(timers.size, 1)
-  next.belts[0].outputs[0].thumb_url = "/thumb-b"
+  next.belts[0].outputs[0].medium_url = "/thumb-b"
   const callback = [...timers.values()][0]
   timers.clear()
   callback()
@@ -283,7 +283,7 @@ test("returning to an idle belt rechecks freshness and pins are local-only", asy
   )
   document.hidden = true
   document.dispatchEvent(new window.Event("visibilitychange"))
-  next.belts[0].outputs[0].thumb_url = "/new-idle-output"
+  next.belts[0].outputs[0].medium_url = "/new-idle-output"
   document.hidden = false
   document.dispatchEvent(new window.Event("visibilitychange"))
   await settle()
@@ -300,7 +300,7 @@ test("manual refresh defers replacement while the shared viewer is open", async 
   const lightbox = document.createElement("div")
   lightbox.className = "pswp"
   document.body.append(lightbox)
-  next.belts[0].outputs[0].thumb_url = "/new-output"
+  next.belts[0].outputs[0].medium_url = "/new-output"
   await controller.refresh()
   document.getElementById("factory-belts-updates").click()
   assert.equal(document.querySelector("#factory-belts img").getAttribute("src"), "/thumb-a")

@@ -263,7 +263,7 @@ function portraitStripMarkup(shas, escapeHtml) {
       .map(
         (sha) =>
           '<img src="' +
-          escapeHtml(portraitUrl(sha, "thumb")) +
+          escapeHtml(portraitUrl(sha, "small")) +
           '" alt="" loading="lazy" decoding="async" width="34" height="34">',
       )
       .join("") +

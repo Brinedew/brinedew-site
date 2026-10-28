@@ -12,6 +12,9 @@ import {
 
 const MIGRATIONS = new URL("../migrations-iconoplasm/", import.meta.url)
 const MIGRATION = "0144_style_cards.sql"
+// 0145 gives each card picture its placeholder (a ThumbHash) and refreshes the
+// card that shows a portrait whose placeholder arrives late.
+const PLACEHOLDER_MIGRATION = "0145_portrait_placeholders.sql"
 const require = createRequire(import.meta.url)
 
 // The production schema just before 0144, with every trigger it carries.
@@ -29,15 +32,19 @@ function schemaBefore0144() {
 }
 
 // What every card must equal: the style's whole set of blots, and its four
-// most upvoted, worked out from scratch the way the worker did before 0144.
+// most upvoted with their placeholders, worked out from scratch the way the
+// worker did before 0144.
 async function truth(db) {
   const rows = (
     await db
       .prepare(
-        `SELECT m.style_slot, m.gene_symbol, m.asset_sha256, COALESCE(v.upvotes, 0) AS upvotes
+        `SELECT m.style_slot, m.gene_symbol, m.asset_sha256, COALESCE(v.upvotes, 0) AS upvotes,
+           a.placeholder
          FROM icono_style_published_portraits m
          LEFT JOIN icono_vote_asset_summary v
-           ON v.gene_symbol = m.gene_symbol AND v.asset_sha256 = m.asset_sha256`,
+           ON v.gene_symbol = m.gene_symbol AND v.asset_sha256 = m.asset_sha256
+         LEFT JOIN icono_portrait_assets a
+           ON a.gene_symbol = m.gene_symbol AND a.asset_sha256 = m.asset_sha256`,
       )
       .all()
   ).results
@@ -55,7 +62,12 @@ async function truth(db) {
           (a.asset_sha256 < b.asset_sha256 ? -1 : a.asset_sha256 > b.asset_sha256 ? 1 : 0),
       )
       .slice(0, 4)
-      .map(({ gene_symbol, asset_sha256, upvotes }) => ({ gene_symbol, asset_sha256, upvotes }))
+      .map(({ gene_symbol, asset_sha256, upvotes, placeholder }) => ({
+        gene_symbol,
+        asset_sha256,
+        upvotes,
+        placeholder: placeholder || null,
+      }))
     cards.set(slot, { count: blots.length, shown })
   }
   return cards
@@ -190,6 +202,11 @@ test("stored style cards equal their blots through every write that moves a port
       migrationStatements(MIGRATIONS, MIGRATION).map((sql) => db.prepare(sql)),
     )
     const price = priceOf(applied)
+    const placeholderMigration = priceOf(
+      await db.batch(
+        migrationStatements(MIGRATIONS, PLACEHOLDER_MIGRATION).map((sql) => db.prepare(sql)),
+      ),
+    )
     await assertCards(db, "backfill")
     const blots = await db
       .prepare(
@@ -213,6 +230,17 @@ test("stored style cards equal their blots through every write that moves a port
       assert.ok(
         price.rows_written <= prediction.rows_written,
         `backfill wrote ${price.rows_written}`,
+      )
+    }
+    const placeholderPrediction = plan.migrations[`iconoplasm/${PLACEHOLDER_MIGRATION}`]?.prediction
+    if (placeholderPrediction) {
+      assert.ok(
+        placeholderMigration.rows_read <= placeholderPrediction.rows_read,
+        `0145 read ${placeholderMigration.rows_read}`,
+      )
+      assert.ok(
+        placeholderMigration.rows_written <= placeholderPrediction.rows_written,
+        `0145 wrote ${placeholderMigration.rows_written}`,
       )
     }
 
@@ -328,6 +356,33 @@ test("stored style cards equal their blots through every write that moves a port
     )
     assert.equal(afterChange.shown[0].gene_symbol, "BIG40")
 
+    // A placeholder that arrives after its portrait refreshes the card that
+    // shows it, for one card row; one for a portrait no card shows writes
+    // only the asset row.
+    const shownOn777 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 777").first(),
+    ).shown[0]
+    const late = await db
+      .prepare(
+        "UPDATE icono_portrait_assets SET placeholder = 'k0cNHYKZiHeIeHiId3h3h4eH' WHERE gene_symbol = ? AND asset_sha256 = ?",
+      )
+      .bind(shownOn777.gene_symbol, shownOn777.asset_sha256)
+      .run()
+    await assertCards(db, "a late placeholder")
+    assert.equal(
+      styleCardBlots(
+        await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 777").first(),
+      ).shown.find((p) => p.asset_sha256 === shownOn777.asset_sha256).placeholder,
+      "k0cNHYKZiHeIeHiId3h3h4eH",
+    )
+    assert.equal(late.meta.rows_written, 2, `a late placeholder wrote ${late.meta.rows_written}`)
+    const unseen = await db
+      .prepare(
+        `UPDATE icono_portrait_assets SET placeholder = 'k0cNHYKZiHeIeHiId3h3h4eH' WHERE gene_symbol = 'G6000' AND asset_sha256 = ${sha(900003)}`,
+      )
+      .run()
+    assert.equal(unseen.meta.rows_written, 1, "a drawing no card shows writes only itself")
+
     // The worker's attach: one card per style number, a style with no blots
     // gets none, and the pictures carry their portrait URLs.
     const cards = await attachStylePublishedPortraits(
@@ -338,7 +393,7 @@ test("stored style cards equal their blots through every write that moves a port
         { emulsion_family_id: "0-31261" },
         { emulsion_family_id: "0-99999" },
       ],
-      (asset) => `https://portraits.test/${asset}/medium.webp`,
+      (asset, rendition) => `https://portraits.test/${asset}/${rendition}.webp`,
     )
     assert.equal(cards.length, 3, "a style shows once")
     assert.equal(cards[0].canonical_count, (await truth(db)).get(777).count)
@@ -348,6 +403,7 @@ test("stored style cards equal their blots through every write that moves a port
     assert.ok(
       cards[0].preview_assets[0].medium_url.endsWith(`${(700040).toString(16)}/medium.webp`),
     )
+    assert.ok(cards[0].preview_assets[0].small_url.endsWith(`${(700040).toString(16)}/small.webp`))
     assert.equal(cards[1].canonical_count, 0)
     assert.deepEqual(cards[1].preview_assets, [])
     assert.equal(cards[2].canonical_count, 0)
@@ -375,6 +431,8 @@ test("stored style cards equal their blots through every write that moves a port
       "style cards receipts",
       JSON.stringify({
         migration: price,
+        placeholderMigration,
+        latePlaceholder: late.meta,
         blots,
         switch: [switchBefore.meta, switched.meta],
         bigLeaves: bigLeaves.meta,

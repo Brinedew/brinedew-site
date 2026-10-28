@@ -91,7 +91,7 @@
                   '" aria-label="Open ' +
                   esc(alt) +
                   '"><img src="' +
-                  esc(asset.thumb_url) +
+                  esc(asset.medium_url) +
                   '" alt="' +
                   esc(alt) +
                   '" loading="lazy" decoding="async"></button>' +

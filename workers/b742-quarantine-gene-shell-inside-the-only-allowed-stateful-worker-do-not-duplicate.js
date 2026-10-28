@@ -35,7 +35,7 @@ async function serveReaderRecoveryRoute(request, env, ctx, url) {
   if (url.hostname !== ICONOPLASM_HOST || !readerRecoveryEnabled(env)) return null
   if (request.method !== "GET" && request.method !== "HEAD") return null
   const portraitMatch =
-    /^\/portraits\/v1\/([a-f0-9]{2})\/([a-f0-9]{64})\/(?:full|medium|thumb)\.webp$/.exec(
+    /^\/portraits\/v1\/([a-f0-9]{2})\/([a-f0-9]{64})\/(?:full|medium|small)\.webp$/.exec(
       url.pathname,
     )
   const portrait = portraitMatch && portraitMatch[1] === portraitMatch[2].slice(0, 2)

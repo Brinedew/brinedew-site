@@ -50,7 +50,7 @@
     "sample_number": 0,
     "sample_text_hash": null,
     "status": "published",
-    "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/90/902c27126682460def82f70bce61e14655b2965820a48dd12242d1c8362fc12e/thumb.webp",
+    "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/90/902c27126682460def82f70bce61e14655b2965820a48dd12242d1c8362fc12e/small.webp",
     "vision_id": "anima-v1-23013",
     "width": 768
   },
@@ -77,7 +77,7 @@
       "sample_number": 0,
       "sample_text_hash": null,
       "status": "approved",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/90/902c27126682460def82f70bce61e14655b2965820a48dd12242d1c8362fc12e/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/90/902c27126682460def82f70bce61e14655b2965820a48dd12242d1c8362fc12e/small.webp",
       "vision_id": "anima-v1-23013",
       "weighted_score": 1,
       "width": 768
@@ -104,7 +104,7 @@
       "sample_number": 1,
       "sample_text_hash": "28f194661bd9d6bd76f95da1bf64903d531b2032308f9dec842dd0198d181b1a",
       "status": "draft",
-      "thumb_url": "https://iconoplasm.brinedew.bio/portraits/v1/54/5459a9b2792de021ddcf292bb4916d5462c5f43477d13e80e8c627d8cd536649/thumb.webp",
+      "small_url": "https://iconoplasm.brinedew.bio/portraits/v1/54/5459a9b2792de021ddcf292bb4916d5462c5f43477d13e80e8c627d8cd536649/small.webp",
       "vision_id": "anima-v1-23307",
       "weighted_score": 0,
       "width": 882

@@ -462,7 +462,7 @@ async function geneRequestMessage(db, accounts, row) {
     ...(/^[0-9a-f]{64}$/.test(sha)
       ? {
           thumbnail: {
-            url: `${GENE_PAGE_ORIGIN}/portraits/v1/${sha.slice(0, 2)}/${sha}/thumb.webp`,
+            url: `${GENE_PAGE_ORIGIN}/portraits/v1/${sha.slice(0, 2)}/${sha}/small.webp`,
           },
         }
       : {}),

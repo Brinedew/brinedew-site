@@ -77,7 +77,7 @@ function withImmutableMedia(record) {
     ...projected,
     portrait: {
       ...portrait,
-      thumb_url: `${prefix}/thumb.webp`,
+      small_url: `${prefix}/small.webp`,
       medium_url: `${prefix}/medium.webp`,
       hero_url: `${prefix}/full.webp`,
     },
@@ -250,7 +250,7 @@ export function createIconoplasmPublicationReader(options = {}) {
         ? {
             status: "published",
             asset_sha256: sha,
-            thumb_url: `${prefix}/thumb.webp`,
+            small_url: `${prefix}/small.webp`,
             medium_url: `${prefix}/medium.webp`,
             hero_url: `${prefix}/full.webp`,
           }
@@ -488,7 +488,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     return stable.entries.map((entry) => ({
       symbol: entry.symbol,
       full_name: entry.full_name,
-      thumb_url: entry.portrait ? entry.portrait.thumb_url : "",
+      small_url: entry.portrait ? entry.portrait.small_url : "",
     }))
   }
 

@@ -226,8 +226,8 @@ test("admin assets list derives portrait URLs from asset sha instead of copied k
     `https://iconoplasm.brinedew.bio/portraits/v1/${"c".repeat(2)}/${"c".repeat(64)}/medium.webp`,
   )
   assert.equal(
-    payload?.assets?.[0]?.thumb_url,
-    `https://iconoplasm.brinedew.bio/portraits/v1/${"c".repeat(2)}/${"c".repeat(64)}/thumb.webp`,
+    payload?.assets?.[0]?.small_url,
+    `https://iconoplasm.brinedew.bio/portraits/v1/${"c".repeat(2)}/${"c".repeat(64)}/small.webp`,
   )
 })
 
@@ -381,7 +381,7 @@ test("admin asset repair scope falls back to unverified published portraits when
           created_at: "2026-04-19T00:00:00Z",
           audit_state: "broken",
           status: "completed",
-          missing_renditions_json: JSON.stringify(["full", "medium", "thumb"]),
+          missing_renditions_json: JSON.stringify(["full", "medium", "small"]),
           last_audited_at: "2026-04-20T00:00:00Z",
           attempts: 0,
         },
@@ -458,7 +458,7 @@ test("admin asset repair scope falls back to unverified published portraits when
           is_current: 1,
           created_at: "2026-04-19T00:00:00Z",
           last_audited_at: "2026-04-20T00:00:00Z",
-          missing_renditions_json: JSON.stringify(["full", "medium", "thumb"]),
+          missing_renditions_json: JSON.stringify(["full", "medium", "small"]),
           audit_state: "broken",
         },
         {
@@ -504,7 +504,7 @@ test("admin asset repair scope falls back to unverified published portraits when
   assert.equal(payload?.count, 2)
   assert.equal(payload?.assets?.[0]?.symbol, "TP53")
   assert.equal(payload?.assets?.[0]?.asset_sha256, missingSha)
-  assert.deepEqual(payload?.assets?.[0]?.missing_renditions, ["full", "medium", "thumb"])
+  assert.deepEqual(payload?.assets?.[0]?.missing_renditions, ["full", "medium", "small"])
   assert.equal(payload?.assets?.[1]?.symbol, "EGFR")
   assert.equal(payload?.assets?.[1]?.asset_sha256, healthySha)
   assert.deepEqual(payload?.assets?.[1]?.missing_renditions, [])

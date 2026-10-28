@@ -171,7 +171,7 @@ test("each row shows the first four portraits drawn from it and how many more", 
   assert.equal(view.rows[0].thumbs.length, 4)
   assert.equal(
     view.rows[0].thumbs[0],
-    `https://img.brinedew.bio/portraits/v1/00/${sha(201)}/thumb.webp`,
+    `https://img.brinedew.bio/portraits/v1/00/${sha(201)}/small.webp`,
   )
   assert.equal(view.rows[0].text.includes("+16"), true, view.rows[0].text)
   assert.equal(view.rows.at(-1).thumbs.length, 0, "the Original made none here")

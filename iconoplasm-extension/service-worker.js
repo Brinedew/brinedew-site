@@ -963,7 +963,7 @@ async function fetchPortraitBytes(resolvedUrl, cacheKey, signal) {
       // uncached so the next request can recover as soon as the CDN/object is healthy.
       rememberPortraitDataUrl(cacheKey, dataUrl)
       if (
-        /^\/portraits\/v1\/[a-f0-9]{2}\/[a-f0-9]{64}\/(medium|thumb|full)\.webp$/.test(cacheKey)
+        /^\/portraits\/v1\/[a-f0-9]{2}\/[a-f0-9]{64}\/(medium|small|full)\.webp$/.test(cacheKey)
       ) {
         void portraitByteCache.put(`${HOST}${cacheKey}`, buffer, contentType)
       }

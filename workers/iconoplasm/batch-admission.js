@@ -51,6 +51,11 @@ export const BATCH_PRICES = Object.freeze({
   text_page: Object.freeze({ rows_written: 0, rows_read: 450 }),
   // The supervote move: one statement over every open role (38 on 2026-10-10).
   supervote_move: Object.freeze({ rows_written: 200, rows_read: 400 }),
+  // A portrait's placeholder arriving late: its row, and the style card that
+  // shows it (migration 0145). Measured on a copy of production's shape: 2
+  // written, 164 read for a picture in the largest style (42 blots); a style
+  // has 1.5 blots on average, so most cost about a tenth of that.
+  placeholder: Object.freeze({ rows_written: 2, rows_read: 40 }),
 })
 
 // The admission's own cost: this minute's row rewritten, and the few minutes

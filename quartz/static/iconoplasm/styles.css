@@ -2057,17 +2057,54 @@ img-comparison-slider.rendered [slot="second"] {
   background: var(--light);
 }
 
-.icono-request-card-art.is-mosaic-2 img,
-.icono-request-card-art.is-mosaic-3 img:first-child {
+.icono-request-card-art.is-mosaic-2 .icono-request-card-cell,
+.icono-request-card-art.is-mosaic-3 .icono-request-card-cell:first-child {
   grid-row: 1 / span 2;
 }
 
+/* Each picture sits on its blurred placeholder (a decoded ThumbHash that the
+   app sets as --icono-placeholder) and fades in over it when the file
+   arrives. The placeholder then hides: a cell of fractional width leaves its
+   last pixel column to whatever lies under the picture. */
+.icono-request-card-cell {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+}
+
+.icono-request-card-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--icono-placeholder, none) center / cover no-repeat;
+  transition: opacity 0s linear 0.22s;
+}
+
+.icono-request-card-cell:has(> img.is-loaded)::before {
+  opacity: 0;
+}
+
 .icono-request-card-art img {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.22s var(--icono-ease-out);
+}
+
+.icono-request-card-art img.is-loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icono-request-card-cell::before,
+  .icono-request-card-art img {
+    transition: none;
+  }
 }
 
 .icono-request-card-empty {

@@ -1,7 +1,7 @@
 // B-993: the result images of unpublished generation and edit jobs.
 //
 // A job that produced an image has written three renditions to the portrait storage under
-// content-addressed keys (`portraits/v1/<sha[:2]>/<sha>/{full,medium,thumb}.webp`). The pull zone in
+// content-addressed keys (`portraits/v1/<sha[:2]>/<sha>/{full,medium,small}.webp`). The pull zone in
 // front of that storage is public, so the image answers to anyone who has its URL until the object
 // is deleted. Erasing the job row alone leaves the objects behind, unreferenced and still public.
 //
@@ -20,20 +20,29 @@
 // 30 day cache time ends, and a purge right after a delete can refill the edge from a storage
 // replica that has not yet caught up (the replication lag measured on 2026-10-02), so none is sent.
 
-const KEY_PATTERN = /^portraits\/v1\/([0-9a-f]{2})\/([0-9a-f]{64})\/(full|medium|thumb)\.webp$/
+const KEY_PATTERN =
+  /^portraits\/v1\/([0-9a-f]{2})\/([0-9a-f]{64})\/(full|medium|small|thumb)\.webp$/
 
-/** The job's own image keys: its three result keys that are the canonical keys of its hash. */
+/** The job's own image keys: its three result keys that are the canonical keys of its hash.
+ * result_r2_key_thumb names the small file. A job from before 2026-10-28 names the square
+ * thumb.webp instead; that day every square was deleted and every folder got a small.webp
+ * (B-1186), so its small file is the one still public. */
 export function deletableJobImageKeys(job) {
   const sha = String(job?.sha || "")
   const keys = new Set()
-  for (const [rendition, key] of [
-    ["full", job?.full_key],
-    ["medium", job?.medium_key],
-    ["thumb", job?.thumb_key],
+  for (const [renditions, key] of [
+    [["full"], job?.full_key],
+    [["medium"], job?.medium_key],
+    [["small", "thumb"], job?.thumb_key],
   ]) {
     const match = KEY_PATTERN.exec(String(key || ""))
-    if (match && match[2] === sha && match[1] === sha.slice(0, 2) && match[3] === rendition) {
-      keys.add(match[0])
+    if (
+      match &&
+      match[2] === sha &&
+      match[1] === sha.slice(0, 2) &&
+      renditions.includes(match[3])
+    ) {
+      keys.add(match[3] === "thumb" ? match[0].replace(/thumb\.webp$/, "small.webp") : match[0])
     }
   }
   return [...keys]

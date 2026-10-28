@@ -599,7 +599,7 @@
     var html = [
       thumb(asset.hero_url, "full"),
       thumb(asset.medium_url, "medium"),
-      thumb(asset.thumb_url, "thumb"),
+      thumb(asset.small_url, "small"),
     ]
       .filter(Boolean)
       .join("")
@@ -765,9 +765,9 @@
     return [
       '<article class="overview-event">',
       '<div class="overview-thumb">',
-      evt.thumb_url
+      evt.small_url
         ? '<img src="' +
-          esc(evt.thumb_url) +
+          esc(evt.small_url) +
           '" alt="Portrait thumbnail" loading="lazy" width="40" height="40" />'
         : "",
       "</div>",
@@ -798,9 +798,9 @@
       '<article class="activity-card">',
       '<div class="activity-accent ' + activityAccent(evt.action) + '"></div>',
       '<div class="activity-thumb">',
-      evt.thumb_url
+      evt.small_url
         ? '<img src="' +
-          esc(evt.thumb_url) +
+          esc(evt.small_url) +
           '" alt="Event thumbnail" loading="lazy" width="36" height="36" />'
         : "",
       "</div>",
@@ -869,7 +869,7 @@
     if (!result || !result.asset_sha256) {
       return '<div class="small">Awaiting result</div>'
     }
-    var imageUrl = result.thumb_url || result.medium_url || result.full_url || ""
+    var imageUrl = result.small_url || result.medium_url || result.full_url || ""
     var fullUrl = result.full_url || result.medium_url || imageUrl
     return [
       '<a class="request-result-link" href="' +
@@ -894,7 +894,7 @@
   function requestResultDetailMarkup(row) {
     var result = row && row.fulfilled_asset
     if (!result || !result.asset_sha256) return ""
-    var imageUrl = result.medium_url || result.thumb_url || result.full_url || ""
+    var imageUrl = result.medium_url || result.small_url || result.full_url || ""
     var fullUrl = result.full_url || imageUrl
     return [
       '<section class="request-result-panel">',
@@ -8611,7 +8611,7 @@
     ;[currentIndex, currentIndex - 1, currentIndex + 1].forEach(function (index) {
       if (index < 0 || index >= assets.length) return
       var asset = assets[index]
-      preloadImage(asset && (asset.medium_url || asset.hero_url || asset.thumb_url))
+      preloadImage(asset && (asset.medium_url || asset.hero_url || asset.small_url))
     })
   }
 
@@ -8721,7 +8721,7 @@
   }
 
   function renderVisionPreviewButton(visionId, asset, active) {
-    if (!asset || !asset.thumb_url) return ""
+    if (!asset || !asset.small_url) return ""
     var label = String(asset.gene_symbol || "gene")
     var titleParts = [label]
     if (asset.artist_name || asset.artist_tag)
@@ -8734,7 +8734,7 @@
       ' data-vision-asset="' + esc(asset.asset_sha256 || "") + '"',
       ' title="' + esc(titleParts.join(" · ")) + '">',
       '<img src="' +
-        esc(asset.thumb_url) +
+        esc(asset.small_url) +
         '" alt="' +
         esc(label + " preview") +
         '" loading="lazy" />',
@@ -9367,9 +9367,9 @@
     return [
       '<article class="event-row">',
       '<div class="event-thumb">',
-      evt.thumb_url
+      evt.small_url
         ? '<img src="' +
-          esc(evt.thumb_url) +
+          esc(evt.small_url) +
           '" alt="Event thumbnail" loading="lazy" width="64" height="64" />'
         : "",
       "</div>",
@@ -9419,7 +9419,7 @@
 
   function renderLiveCard(a) {
     var imageUrl =
-      a.live_thumb_url || a.leader_thumb_url || a.live_medium_url || a.leader_medium_url || ""
+      a.live_small_url || a.leader_small_url || a.live_medium_url || a.leader_medium_url || ""
     var badges = []
     if (a.live_sha) badges.push('<span class="badge-pill badge-live">Canonical</span>')
     if (a.admin_override)
@@ -9490,9 +9490,9 @@
         esc(a.gene_symbol || "") +
         '">',
       '<div class="gallery-media">',
-      a.thumb_url
+      a.small_url
         ? '<img src="' +
-          esc(a.thumb_url) +
+          esc(a.small_url) +
           '" alt="Candidate portrait for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
@@ -9540,9 +9540,9 @@
       '<div class="gallery-media-split">',
       '<div class="gallery-media-panel">',
       '<div class="gallery-media-image">',
-      a.live_thumb_url
+      a.live_small_url
         ? '<img src="' +
-          esc(a.live_thumb_url) +
+          esc(a.live_small_url) +
           '" alt="Current portrait for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
@@ -9552,9 +9552,9 @@
       "</div>",
       '<div class="gallery-media-panel">',
       '<div class="gallery-media-image">',
-      a.leader_thumb_url
+      a.leader_small_url
         ? '<img src="' +
-          esc(a.leader_thumb_url) +
+          esc(a.leader_small_url) +
           '" alt="Vote winner for ' +
           esc(a.gene_symbol || "") +
           '" loading="lazy" width="160" height="160" />'
@@ -9685,9 +9685,9 @@
                   esc(candidate.asset_sha256 || "") +
                   '">',
                 '<div class="candidate-thumb">',
-                candidate.thumb_url
+                candidate.small_url
                   ? '<img src="' +
-                    esc(candidate.thumb_url) +
+                    esc(candidate.small_url) +
                     '" alt="Candidate portrait" loading="lazy" width="64" height="64" />'
                   : "",
                 "</div>",

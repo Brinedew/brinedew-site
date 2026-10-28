@@ -421,7 +421,7 @@ function buildPublishedCardReadKv({
       status: "published",
       hero_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/full.webp`,
       medium_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/medium.webp`,
-      thumb_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/thumb.webp`,
+      small_url: `https://iconoplasm.brinedew.bio/portraits/v1/${portraitSha.slice(0, 2)}/${portraitSha}/small.webp`,
       asset_sha256: portraitSha,
       width: 384,
       height: 512,

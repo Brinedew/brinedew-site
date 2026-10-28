@@ -529,8 +529,8 @@ test("last-used model is remembered without reordering the providers list, but o
         headers: { "Content-Type": "image/webp" },
       })
     }
-    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
-    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 384) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 192) return new Response("small-webp-bytes", { status: 200 })
     throw new Error(`Unexpected fetch ${url}`)
   }
 
@@ -734,7 +734,7 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
     if (url === "https://krea.example/slow-result.png") {
       // Non-WebP return so the merged normalize+writeImageEditRenditions
       // path runs and we exercise the (was-3-subrequest) tmp round-trip
-      // saving. The merged pipeline produces full/medium/thumb WebP in
+      // saving. The merged pipeline produces full/medium/small WebP in
       // one normalize + one transform pass.
       return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
         status: 200,
@@ -742,7 +742,7 @@ test("synchronous Krea edit stays under the 50-subrequest Worker cap on a slow m
       })
     }
     if (init?.cf?.image?.format === "webp") {
-      // Both the full normalize and the medium/thumb transforms come
+      // Both the full normalize and the medium/small transforms come
       // through the worker-edge Image Resizing transform; return WebP
       // bytes regardless of width to keep the test cheap.
       return new Response(EDITED_BYTES, {
@@ -1028,8 +1028,8 @@ function fakeOpenAiFetch(fetchCalls, env) {
         headers: { "Content-Type": "application/json" },
       })
     }
-    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
-    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 384) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 192) return new Response("small-webp-bytes", { status: 200 })
     throw new Error(`Unexpected fetch ${url}`)
   }
 }
@@ -1413,8 +1413,8 @@ function recordingProviderFetch(env, recorded) {
         headers: { "Content-Type": "image/webp" },
       })
     }
-    if (init?.cf?.image?.width === 512) return new Response("medium-webp-bytes", { status: 200 })
-    if (init?.cf?.image?.width === 256) return new Response("thumb-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 384) return new Response("medium-webp-bytes", { status: 200 })
+    if (init?.cf?.image?.width === 192) return new Response("small-webp-bytes", { status: 200 })
     throw new Error(`Unexpected fetch ${method} ${url}`)
   }
 }

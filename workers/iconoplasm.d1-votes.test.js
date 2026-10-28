@@ -787,7 +787,7 @@ test("7: an upload that keeps the winner leaves a publication-affecting event, a
     asset_sha256: asset,
     full: png,
     medium: png,
-    thumb: png,
+    small: png,
     vision_id: "anima-v1-2",
     sample_label: `S${sampleNumber}`,
     sample_number: sampleNumber,
@@ -1954,6 +1954,7 @@ test("30: the request picker lists at most 120 styles, published portraits only,
       assert.match(preview.gene_symbol, new RegExp(`^S${n}X`), "only the style's published")
       assert.equal(preview.is_current, true)
       assert.match(String(preview.medium_url || ""), /medium\.webp$/)
+      assert.match(String(preview.small_url || ""), /small\.webp$/)
       assert.equal("thumb_url" in preview, false)
       assert.equal("preview_rank" in preview, false)
     }

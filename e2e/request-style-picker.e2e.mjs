@@ -6,7 +6,8 @@
 //
 // Ways this picker can fail, written before the code, each asserted below at
 // 1280 and 400 px in light and dark:
-// 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop;
+// 1. a card or a preview is not 3:4, or a preview uses the square `thumb` crop
+//    (retired 2026-10-28);
 // 2. anything artist-shaped reaches the page: the search offers artists, a
 //    card shows an artist label, or typing an artist name finds a style;
 // 3. "Request all favorites" is not a shared `.icono-button`, or it is not at
@@ -64,7 +65,15 @@
 //     told;
 // 26. the server's refresh after the clicks disagrees with the deck;
 // 27. a card's number or caption is cut off, "N requested" leaves its picture,
-//     or the footer's three controls leave one row at 360 px.
+//     or the footer's three controls leave one row at 360 px;
+// 28. a picture is a blank cell while its file loads: no blurred copy of
+//     itself (its ThumbHash placeholder) under it (owner, 2026-10-28: "a lot
+//     of white squares");
+// 29. a grid cell downloads the 384 px medium file where the 192 px small one
+//     covers it (a medium the page had already fetched before the picker
+//     opened is fine: the browser reuses it rather than fetch the small);
+// 30. the placeholder still lies under a picture that has loaded, where a
+//     cell of fractional width shows it as a coloured line down one edge.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measurements land in artifacts/e2e/.
@@ -115,6 +124,9 @@ function previewAssets(slot) {
       asset_sha256: sha,
       is_current: true,
       medium_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/medium.webp`,
+      small_url: `${HOST}/portraits/v1/${sha.slice(0, 2)}/${sha}/small.webp`,
+      // A real ThumbHash, from the workstation's encoder on a 3:4 test image.
+      placeholder: "mygGJQxgh3GHaIhXiHeIh6GACfeI",
     }
   })
 }
@@ -292,13 +304,13 @@ async function routePicker(context, reachable) {
   )
 }
 
-async function routePortraits(context) {
+async function routePortraits(context, requested = []) {
   await context.route(/\/portraits\/.+\.webp(\?.*)?$/, (route) => {
     const url = route.request().url()
+    requested.push(url)
     let hash = 0
     for (const ch of url) hash = (hash * 31 + ch.charCodeAt(0)) % 360
-    const square = url.includes("/thumb.webp")
-    const [w, h] = square ? [256, 256] : [384, 512]
+    const [w, h] = url.includes("/small.webp") ? [192, 256] : [384, 512]
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="hsl(${hash} 45% 42%)"/><circle cx="${w / 2}" cy="${h * 0.38}" r="${w / 5}" fill="hsl(${(hash + 40) % 360} 60% 72%)"/></svg>`
     return route.fulfill({ status: 200, contentType: "image/svg+xml", body: svg })
   })
@@ -378,6 +390,16 @@ function measurePicker() {
     images: images.map((img) => ({
       card: img.closest("[data-icono-request-card]")?.getAttribute("data-icono-request-card"),
       src: img.getAttribute("src") || "",
+      currentSrc: img.currentSrc || "",
+      placeholder: getComputedStyle(img.parentElement, "::before").backgroundImage.startsWith(
+        'url("data:image/png',
+      ),
+      placeholderShown:
+        getComputedStyle(img.parentElement, "::before").backgroundImage !== "none" &&
+        getComputedStyle(img.parentElement, "::before").opacity !== "0",
+      loaded: img.complete && img.naturalWidth > 0,
+      width: img.getBoundingClientRect().width,
+      sizes: img.getAttribute("sizes") || "",
       ratio: img.getBoundingClientRect().width / img.getBoundingClientRect().height,
     })),
     queuedBadges: [...dialog.querySelectorAll("[data-icono-request-queued]")]
@@ -462,10 +484,13 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         const api = createApi(posts, { failFirst: cdn ? 0 : 1, randomDelay: RANDOM_DELAY })
         await routeProduction(context, origin, api)
         await routePicker(context, cdn)
-        await routePortraits(context)
+        const portraitRequests = []
+        await routePortraits(context, portraitRequests)
         const page = await context.newPage()
         await page.goto(`${HOST}/gene/TP53`)
         await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
+        const fetchedBeforeOpen = new Set(portraitRequests)
+        const requestsBeforeOpen = portraitRequests.length
         await openPicker(page)
         await page.screenshot({ path: shot("open") })
 
@@ -491,8 +516,40 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         )
         assert.equal(new Set(shownGenes).size, shownGenes.length, `${where}: ${shownGenes}`)
         assert.ok(!shownGenes.includes(undefined), `${where}: unknown preview src`)
+        let checkedFiles = 0
         for (const image of first.images) {
           assert.equal(/thumb\.webp/.test(image.src), false, `${where}: square thumb ${image.src}`)
+          // 28. Each picture sits on its blurred placeholder.
+          assert.ok(image.placeholder, `${where}: no placeholder under ${image.src}`)
+          // 29. One device pixel per CSS pixel here, so a loaded cell narrower
+          // than the small file shows the small one, unless the page already
+          // had the medium. (Lower rows may not have started loading yet.)
+          if (!image.loaded) continue
+          checkedFiles += 1
+          if (image.width <= 192 && !fetchedBeforeOpen.has(image.currentSrc)) {
+            assert.match(
+              image.currentSrc,
+              /small\.webp$/,
+              `${where}: a ${Math.round(image.width)} px cell loaded ${image.currentSrc} ` +
+                `(sizes "${image.sizes}"; ${fetchedBeforeOpen.size} portrait files fetched ` +
+                `before the picker opened)`,
+            )
+          }
+        }
+        assert.ok(checkedFiles > 0, `${where}: no picture had loaded`)
+        // 29, for everything in the picker (the deck's covers too): a medium
+        // fetched after it opened is for a cell wider than the small file.
+        for (const url of portraitRequests.slice(requestsBeforeOpen)) {
+          if (!/medium\.webp/.test(url)) continue
+          const sha = (/[0-9a-f]{64}/.exec(url) || [""])[0]
+          const wide = first.images.some((image) => image.src.includes(sha) && image.width > 192)
+          assert.ok(wide, `${where}: fetched ${url} for no cell wider than 192 px`)
+        }
+        // 30. Once a picture has faded in, its placeholder is gone from under it.
+        await page.waitForTimeout(600)
+        for (const image of (await page.evaluate(measurePicker)).images) {
+          if (!image.loaded) continue
+          assert.equal(image.placeholderShown, false, `${where}: placeholder under ${image.src}`)
         }
         for (const label of new Set(first.images.map((image) => image.card))) {
           const tiles = first.images.filter((image) => image.card === label)

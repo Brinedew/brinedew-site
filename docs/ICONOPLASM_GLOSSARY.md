@@ -9,7 +9,7 @@ text overlay equals blot".
 
 **Portrait.** A generated character image of a gene, with no text on it. It is
 identified by its `asset_sha256` and stored as three renditions
-(`portraits/v1/<sha2>/<sha>/{thumb,medium,full}.webp`). Everything a person
+(`portraits/v1/<sha2>/<sha>/{small,medium,full}.webp`, all 3:4). Everything a person
 generates, edits, copies, votes on, rejects or publishes is a portrait.
 
 - A gene's **candidate portraits** are every portrait in its pool: the
