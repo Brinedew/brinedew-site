@@ -8,13 +8,13 @@
 //    finds gets no strip (it hid the strip from the owner's private window on
 //    2026-10-24);
 // 2. hovering (desktop) or tapping (phone) a symbol doesn't turn that gene's
-//    card face up, turns another, or the "Yours" tab waits for anything: it
-//    must read 1 the moment the card turns;
+//    card face up, turns another, or the "Your discoveries" tab waits for
+//    anything: it must read 1 the moment the card turns;
 // 3. the Archive's header is not one row of search and Sort with two tabs
 //    under it, a phone's Sort button squeezes the search box, or the strip
 //    offers a Sort that has nothing to sort;
-// 4. the find is not stored in this browser, or a visit to "Everyone's" and
-//    back loses it;
+// 4. the find is not stored in this browser, or a visit to "Global
+//    discoveries" and back loses it;
 // 5. more than one button follows the cards, the strip never says that it is
 //    a sample of a browser extension, or the add-on on other sites (the two
 //    screenshots) is missing, for a reader with the add-on too;
@@ -30,10 +30,19 @@
 // 8. the first tap on a phone opens the gene page (it must turn the card);
 //    the second tap, or a desktop click, doesn't open it;
 // 9. the strip asks the Worker anything (it must cost nothing per reader);
-// 10. the strip shows more than the four starters (a returning guest's other
-//    finds get a card), a starter found before is not face up, the finds are
-//    counted wrong; a guest whose add-on found genes gets the login without
-//    its reason (syncing across devices), or an install button besides.
+// 10. the strip shows more than the four starters, a starter found before is
+//    not face up, or the finds are counted wrong;
+// 11. a guest's finds (the add-on's, gene pages, the strip's) are not their
+//    gallery under the strip, newest first, as a signed-in reader's are
+//    (owner, 2026-10-28: "Now I have apparently discovered five genes, yet
+//    ... I see only four starters");
+// 12. the strip goes before all four starters are found, or stays after
+//    (owner, 2026-10-28: omit it "only if the user already discovered all
+//    the four starters", add-on or not);
+// 13. a guest with a find has no "Log in to save" in Sort's place, one with
+//    none has it, or the strip carries a login of its own;
+// 14. a guest who comes back from another tab with new finds doesn't see
+//    them until a reload.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/home-play-strip*.
@@ -47,7 +56,7 @@ import { HOST, HttpStatus, OUT, launchChrome, routeProduction, startSite } from 
 
 const CDN_HOST = "img.brinedew.bio"
 const STORE_KEY = "iconoplasm.website-guest-discoveries.v1"
-// The "Everyone's" tab's feed, which is the Worker's to answer.
+// The "Global discoveries" tab's feed, which is the Worker's to answer.
 const SHARED_FEED = "/api/iconoplasm/account-gallery-window"
 const UA = {
   chrome:
@@ -102,9 +111,11 @@ function cdnObject(pathname) {
 }
 
 // The add-on's site bridge (iconoplasm-extension/site-bridge.js) marks the
-// page at document start and answers the Archive's request for the genes it
-// found while the reader was signed out.
+// page at document start and answers each of the Archive's requests with the
+// genes it has found so far while the reader was signed out (oldest first).
+// A test finds more by changing window.__iconoAddOnFinds.
 function addOnBridge(symbols) {
+  window.__iconoAddOnFinds = symbols
   // An init script can run before <html> exists; document_start runs after.
   const mark = () =>
     document.documentElement.setAttribute("data-iconoplasm-extension-installed", "true")
@@ -119,7 +130,7 @@ function addOnBridge(symbols) {
   window.addEventListener("iconoplasm-extension-guest-discoveries-request", () => {
     window.dispatchEvent(
       new CustomEvent("iconoplasm-extension-guest-discoveries", {
-        detail: JSON.stringify(symbols),
+        detail: JSON.stringify(window.__iconoAddOnFinds),
       }),
     )
   })
@@ -160,11 +171,23 @@ async function openArchive(browser, origin, options, { seed = null, addOn = null
     }
   })
   await page.goto(`${HOST}/`)
-  await page.waitForSelector("#icono-home-auxiliary:not([hidden]) > *", { timeout: 45_000 })
+  await page.waitForSelector("[data-icono-home-play], #icono-home-auxiliary:not([hidden]) > *", {
+    timeout: 45_000,
+  })
   return { context, page, api, downloads, sites }
 }
 
 const pill = (symbol) => `[data-icono-play-symbol="${symbol}"]`
+// The reader's gallery under the strip, in order: the genes its cards open.
+const gallery = (page) =>
+  page.$$eval("#icono-grid a.icono-image-only-link", (links) => [
+    ...new Set(links.map((link) => link.getAttribute("href").replace("/gene/", ""))),
+  ])
+// "Log in to save" in Sort's place, and where it goes.
+const login = (page) =>
+  page.$eval("#icono-guest-login", (link) =>
+    link.checkVisibility() ? { text: link.textContent, href: link.getAttribute("href") } : null,
+  )
 const title = (page) => page.textContent("[data-icono-play-title]")
 const yours = (page) => page.textContent(".icono-collection-tab-count")
 // The cards in the strip that are face up, and the one that stands out.
@@ -279,7 +302,9 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       const top = await header(page)
       assert.equal(top.feed, false, "the starters' feed shows beside the strip")
       assert.equal(top.sort, null, "the strip offers a Sort")
-      assert.deepEqual(top.tabs, ["Yours 0*", "Everyone’s"])
+      assert.deepEqual(top.tabs, ["Your discoveries 0*", "Global discoveries"])
+      // 13. Nothing found yet, nothing to save.
+      assert.equal(await login(page), null, "a login with nothing to save")
       await shot(page, "desktop-rest")
 
       // 2. The card turns and the count changes the moment the pointer arrives.
@@ -293,8 +318,9 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.deepEqual(await faceUp(page), ["INS"])
       assert.deepEqual(await lit(page), ["INS"])
       assert.equal(await yours(page), "1")
-      // 4. Stored here.
+      // 4. Stored here. 13. Now there is something to save.
       assert.deepEqual(await storedSymbols(page), ["INS"])
+      assert.equal((await login(page))?.text, "Log in to save")
       await page.waitForTimeout(700)
       await shot(page, "desktop-card")
       await page.mouse.move(5, 5)
@@ -347,24 +373,39 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       // 9. Nothing reached the Worker while the strip was up.
       assert.deepEqual(api, [], `the strip asked the Worker: ${api.join(", ")}`)
 
-      // 4. Everyone's shows the shared Archive with its Sort; back again, the
-      // finds are still face up. The shared feed is the one read of the
-      // Worker, and the strip that comes back adds none.
-      await page.click('[data-icono-collection-tab="shared"]')
-      await page.waitForSelector("[data-icono-home-play]", { state: "detached", timeout: 5_000 })
-      const shared = await header(page)
-      assert.deepEqual(shared.tabs, ["Yours 4", "Everyone’s*"])
-      assert.ok(shared.sort, "Everyone's has no Sort")
-      assert.equal(shared.sort.height, shared.search.height, "Sort and search differ in height")
-      assert.equal(shared.sort.top, shared.search.top, "Sort and search are not one row")
-      await page.click('[data-icono-collection-tab="personal"]')
-      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
-      assert.deepEqual(await faceUp(page), ["INS", "RHO", "PRL", "CD4"])
-
       // 8. A click on a symbol whose card is lit opens its page, in the app.
       await page.hover(pill("PRL"))
       await page.click(pill("PRL"))
       await page.waitForURL(/\/gene\/PRL$/, { timeout: 20_000 })
+
+      // 4. 12. Back on the Archive with all four starters found: no strip, the
+      // four as the reader's gallery, newest first, with the login.
+      const again = await context.newPage()
+      await again.goto(`${HOST}/`)
+      await again.waitForSelector("#icono-grid a.icono-image-only-link", { timeout: 45_000 })
+      assert.equal(await again.$("[data-icono-home-play]"), null, "the strip after all four")
+      assert.deepEqual(await gallery(again), ["CD4", "PRL", "RHO", "INS"])
+      assert.equal(await yours(again), "4")
+      assert.equal((await login(again))?.text, "Log in to save")
+      await shot(again, "desktop-all-starters")
+
+      // Global discoveries shows the shared Archive with its Sort and no
+      // login; it is the one read of the Worker.
+      await again.click('[data-icono-collection-tab="shared"]')
+      await again.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-icono-collection-tab="shared"]')
+            .getAttribute("aria-selected") === "true",
+        null,
+        { timeout: 5_000 },
+      )
+      const shared = await header(again)
+      assert.deepEqual(shared.tabs, ["Your discoveries 4", "Global discoveries*"])
+      assert.ok(shared.sort, "Global discoveries has no Sort")
+      assert.equal(shared.sort.height, shared.search.height, "Sort and search differ in height")
+      assert.equal(shared.sort.top, shared.search.top, "Sort and search are not one row")
+      assert.equal(await login(again), null, "a login in Sort's place on the global tab")
 
       assert.deepEqual(
         api.filter((path) => path !== SHARED_FEED),
@@ -547,74 +588,118 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await context.close()
     })
 
-    await t.test("a reader whose add-on found genes sees them counted and the login", async () => {
-      const { context, page } = await openArchive(
+    await t.test("a guest whose add-on found genes sees them under the strip", async () => {
+      const { context, page, api } = await openArchive(
         browser,
         origin,
         { ...DESKTOP, userAgent: UA.chrome },
         { addOn: ["TP53", "RHO"] },
       )
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
-      // The strip mounts with this browser's finds; the add-on's arrive when
-      // it answers, with the login.
-      await page.waitForFunction(
-        () => /Log in/.test(document.querySelector("[data-icono-play-next]").textContent),
-        null,
-        { timeout: 5_000 },
-      )
-      // 10. Four cards, the add-on's starter face up; TP53 counts but gets no card.
+      await page.waitForSelector("#icono-grid a.icono-image-only-link", { timeout: 20_000 })
+      // 11. Their finds are their gallery, newest first, under the strip.
+      // 12. A starter is still missing, so the strip stays, its found one up.
+      assert.deepEqual(await gallery(page), ["RHO", "TP53"])
       assert.equal(await page.$$eval(".icono-play-slot", (slots) => slots.length), 4)
       assert.deepEqual(await faceUp(page), ["RHO"])
       assert.equal(await yours(page), "2")
-      assert.equal(await nextNote(page), "Connect with Discord to sync across devices.")
-      const found = await buttons(page)
-      assert.deepEqual(
-        found.map((button) => [button.text, button.target]),
-        [["Log in with Discord", ""]],
+      const order = await page.evaluate(() => ({
+        strip: document.querySelector("[data-icono-home-play]").getBoundingClientRect().top,
+        grid: document.getElementById("icono-grid").getBoundingClientRect().top,
+      }))
+      assert.ok(order.strip < order.grid, "the strip is not over the reader's gallery")
+      // 13. The login is in Sort's place, the strip has none of its own.
+      const saved = await login(page)
+      assert.equal(saved?.text, "Log in to save")
+      assert.match(saved.href, /\/api\/auth\/login\?return_to=/)
+      assert.equal((await header(page)).sort, null, "a Sort over the reader's own finds")
+      assert.equal(
+        await page.textContent("[data-icono-play-next] .icono-play-installed"),
+        "Iconoplasm is already installed in this browser.",
       )
+      assert.deepEqual(await buttons(page), [], "the strip has a button besides the login")
       assert.equal(await page.$("[data-icono-home-install-card]"), null, "an install card too")
-      await (
-        await page.$("#icono-home-auxiliary")
-      ).screenshot({
-        path: path.join(OUT, "home-play-strip-addon-guest.png"),
+      // 9. The gallery reads the published catalogue, never the Worker.
+      assert.deepEqual(api, [], `the gallery asked the Worker: ${api.join(", ")}`)
+      await shot(page, "addon-guest")
+
+      // 14. The reader finds KRAS in another tab and comes back.
+      await page.evaluate(() => {
+        window.__iconoAddOnFinds = ["TP53", "RHO", "KRAS"]
+        document.dispatchEvent(new Event("visibilitychange"))
       })
+      await page.waitForFunction(
+        () => document.querySelector(".icono-collection-tab-count")?.textContent === "3",
+        null,
+        { timeout: 10_000 },
+      )
+      await page.waitForSelector('#icono-grid a.icono-image-only-link[href="/gene/KRAS"]', {
+        timeout: 20_000,
+      })
+      assert.deepEqual(await gallery(page), ["KRAS", "RHO", "TP53"])
       await context.close()
     })
 
-    await t.test("a returning guest finds their starter face up and the rest counted", async () => {
-      const now = new Date().toISOString()
-      const entry = (gene_symbol) => ({
-        gene_symbol,
-        first_discovered_at: now,
-        last_encountered_at: now,
-      })
+    await t.test("a guest with all four starters and more: no strip, their gallery", async () => {
       const { context, page } = await openArchive(
         browser,
         origin,
         { ...DESKTOP, userAgent: UA.chrome },
-        { seed: [entry("RHO"), entry("TP53")] },
+        { addOn: ["INS", "RHO", "PRL", "CD4", "EGFR"] },
       )
-      await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
-      // 10. A starter found before is face up in its place; a gene page opened
-      // here counts, with no card of its own.
-      assert.equal(await page.$$eval(".icono-play-slot", (slots) => slots.length), 4)
-      assert.deepEqual(await faceUp(page), ["RHO"])
-      assert.equal(await yours(page), "2")
-      assert.deepEqual(
-        (await buttons(page)).map((button) => [button.text, button.glyph]),
-        [["Install for Chrome", true]],
+      await page.waitForSelector("#icono-grid a.icono-image-only-link", { timeout: 20_000 })
+      // 12. Every starter is found, add-on or not: the strip goes.
+      assert.equal(await page.$("[data-icono-home-play]"), null, "the strip after all four")
+      assert.deepEqual(await gallery(page), ["EGFR", "CD4", "PRL", "RHO", "INS"])
+      assert.equal(await yours(page), "5")
+      assert.equal((await login(page))?.text, "Log in to save")
+      // The add-on's next step follows the gallery.
+      assert.ok(
+        await page.$("#icono-home-auxiliary [data-icono-home-install-card]"),
+        "no next step after the gallery",
       )
-      await page.hover(pill("INS"))
-      assert.equal(await yours(page), "3")
-      await page.mouse.move(5, 5)
-      await page.waitForTimeout(700)
-      await (
-        await page.$("#icono-home-auxiliary")
-      ).screenshot({
-        path: path.join(OUT, "home-play-strip-returning-guest.png"),
-      })
       await context.close()
     })
+
+    await t.test(
+      "a returning guest finds their starter face up and the rest in their gallery",
+      async () => {
+        const now = new Date().toISOString()
+        const entry = (gene_symbol) => ({
+          gene_symbol,
+          first_discovered_at: now,
+          last_encountered_at: now,
+        })
+        const { context, page } = await openArchive(
+          browser,
+          origin,
+          { ...DESKTOP, userAgent: UA.chrome },
+          { seed: [entry("RHO"), entry("TP53")] },
+        )
+        await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
+        await page.waitForSelector("#icono-grid a.icono-image-only-link", { timeout: 20_000 })
+        // 10. 11. A starter found before is face up in its place; a gene page
+        // opened here is in the gallery under the strip.
+        assert.equal(await page.$$eval(".icono-play-slot", (slots) => slots.length), 4)
+        assert.deepEqual(await faceUp(page), ["RHO"])
+        assert.deepEqual(await gallery(page), ["TP53", "RHO"])
+        assert.equal(await yours(page), "2")
+        assert.deepEqual(
+          (await buttons(page)).map((button) => [button.text, button.glyph]),
+          [["Install for Chrome", true]],
+        )
+        await page.hover(pill("INS"))
+        assert.equal(await yours(page), "3")
+        await page.mouse.move(5, 5)
+        await page.waitForTimeout(700)
+        await (
+          await page.$("#icono-home-lead")
+        ).screenshot({
+          path: path.join(OUT, "home-play-strip-returning-guest.png"),
+        })
+        await context.close()
+      },
+    )
   } finally {
     writeFileSync(path.join(OUT, "home-play-strip.json"), JSON.stringify(report, null, 2))
     server.close()

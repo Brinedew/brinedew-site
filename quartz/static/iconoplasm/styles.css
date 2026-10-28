@@ -3044,8 +3044,42 @@ img-comparison-slider.rendered [slot="second"] {
   opacity: 0.55;
 }
 
-/* The starter strip has nothing to sort. */
-.icono-page-main--play .icono-gallery-order {
+/* A signed-out reader's tab has nothing to sort: the strip, or their own
+   finds newest first. Once they have found a gene, the login that keeps it
+   takes Sort's place, in its box. */
+.icono-page-main--play .icono-gallery-order,
+.icono-page-main--guest .icono-gallery-order {
+  display: none;
+}
+
+.icono-gallery-login {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--icono-toolbar-height);
+  padding: 0 0.75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--icono-control-radius);
+  background: var(--lightgray);
+  color: var(--dark);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.icono-gallery-login:hover {
+  border-color: var(--darkgray);
+  color: var(--dark);
+}
+
+.icono-gallery-login:focus-visible {
+  outline: 2px solid var(--dark);
+  outline-offset: 2px;
+}
+
+.icono-gallery-login[hidden] {
   display: none;
 }
 
@@ -4041,6 +4075,15 @@ body[data-slug^="apps/iconoplasm"] .brd-sidebar-row-value,
   width: 100%;
 }
 
+/* Over the reader's own gallery: the strip, then their cards. */
+.icono-home-lead {
+  margin: 0 0 2rem;
+}
+
+.icono-page-main--lead-pending #icono-grid {
+  visibility: hidden;
+}
+
 .icono-play-card.icono-guest-login-card {
   justify-items: stretch;
 }
@@ -4445,12 +4488,20 @@ a.icono-play-site:focus-visible .icono-play-site-label {
 
 /* The collection's two tabs, drawn as GitHub draws a repository's: the
    selected one underlined in the page's ink, the count in a grey pill. */
-.icono-collection-tabs {
-  position: relative;
+/* The two tabs, and at the row's end the meter of how far the reader has got
+   through the catalogue. */
+.icono-collection-bar {
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 1rem;
   margin: 0 0 1.25rem;
   border-bottom: 1px solid var(--ui-border);
+}
+
+.icono-collection-tabs {
+  display: flex;
+  flex: none;
+  gap: 0.25rem;
 }
 
 .icono-collection-tab {
@@ -4460,6 +4511,7 @@ a.icono-play-site:focus-visible .icono-play-site-label {
   gap: 0.5rem;
   margin-bottom: -1px;
   padding: 0.6rem 0.65rem 0.7rem;
+  white-space: nowrap;
   border: 0;
   background: none;
   color: var(--darkgray);
@@ -4501,13 +4553,50 @@ a.icono-play-site:focus-visible .icono-play-site-label {
 }
 
 /* How far the reader has got through the catalogue. */
-.icono-collection-tabs-progress {
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  height: 1px;
+.icono-collection-meter {
+  flex: none;
+  width: 7.5rem;
+  height: 0.3rem;
+  margin-left: auto;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--lightgray);
+}
+
+.icono-collection-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
   background: color-mix(in srgb, var(--dark) 55%, transparent);
-  pointer-events: none;
+}
+
+/* On a phone the two tabs fill the row, and the count already says it. */
+@media (max-width: 600px) {
+  .icono-collection-meter {
+    display: none;
+  }
+
+  .icono-collection-tabs {
+    flex: 1 1 auto;
+    gap: 0;
+  }
+
+  .icono-collection-tab {
+    padding-inline: 0.45rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .icono-collection-tab {
+    gap: 0.3rem;
+    padding-inline: 0.35rem;
+    font-size: 0.75rem;
+  }
+
+  .icono-collection-tab-count {
+    padding: 0 0.35rem;
+  }
 }
 
 .icono-empty-support {

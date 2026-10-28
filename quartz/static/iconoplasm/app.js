@@ -24,12 +24,12 @@ import {
   normalizeWebsiteGuestDiscoveries,
   WEBSITE_GUEST_DISCOVERY_MAX_ENTRIES,
   WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE,
-} from "./guest-discovery-store.js?v=df8a5536754a5b3d"
+} from "./guest-discovery-store.js?v=852af5c8920fbe9e"
 import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=6b8334590bf1c6e1"
+} from "./home-play-strip.js?v=2e8c57fa45dbe7b8"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -112,6 +112,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return { gene_symbol: starter.symbol }
   })
   var GUEST_CONTINUATION_CARD_COUNT = 4
+  // A signed-out reader's finds, newest first (readGuestFinds): their
+  // "Your discoveries" until login moves them into the account.
+  var guestFinds = []
   var HOME_LAYOUT_DEFAULT = "bricks"
   var CARD_VARIANT_DEFAULT = "image-only"
   var HOME_SKELETON_CARD_COUNT = 4
@@ -2334,13 +2337,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function guestDiscoveryEntries() {
-    // The signed-out archive is a fixed four-card preview, not a second local
-    // collection. Gene visits are still buffered privately for a bounded merge
-    // after login, but they must never enlarge or replace these visible starters.
-    var starterEntries = GUEST_STARTER_GENES.map(function (entry) {
-      return Object.assign({ encounter_count: 1 }, entry)
-    })
-    return normalizeDiscoveryEntries(starterEntries)
+    // A signed-out reader's discoveries are what they found in this browser,
+    // the same gallery a signed-in reader gets. With nothing found yet, the
+    // four starters stand behind the strip, which takes their place.
+    var entries = guestFinds.length
+      ? guestFinds.map(function (symbol) {
+          return { gene_symbol: symbol }
+        })
+      : GUEST_STARTER_GENES
+    return normalizeDiscoveryEntries(
+      entries.map(function (entry) {
+        return Object.assign({ encounter_count: 1 }, entry)
+      }),
+    )
   }
 
   function fallbackDiscoveredGene(entry) {
@@ -2657,7 +2666,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       )
     }
     var yours =
-      "Yours" +
+      "Your discoveries" +
       (known
         ? '<span class="icono-collection-tab-count">' + esc(count.toLocaleString()) + "</span>"
         : "")
@@ -2667,15 +2676,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           esc(count.toLocaleString() + " of " + total.toLocaleString() + " genes") +
           '"'
         : ""
-    var progress = known && total > 0 ? Math.min(100, (count / total) * 100) : 0
+    // How far the reader has got through the catalogue, as a meter at the
+    // row's end (the owner, 2026-10-28: in line with the tabs, not a line
+    // along their border). A first find shows as a sliver, not an empty bar.
+    var progress = known && total > 0 && count > 0 ? Math.min(100, (count / total) * 100) : 0
     return (
+      '<div class="icono-collection-bar">' +
       '<div class="icono-collection-tabs" role="tablist" aria-label="Collection">' +
       tab("personal", yours, !shared, title) +
-      tab("shared", "Everyone’s", shared, "") +
+      tab("shared", "Global discoveries", shared, "") +
+      "</div>" +
       (progress > 0
-        ? '<span class="icono-collection-tabs-progress" aria-hidden="true" style="width:' +
-          esc(progress.toFixed(2)) +
-          '%"></span>'
+        ? '<span class="icono-collection-meter"' +
+          title +
+          ' aria-hidden="true"><span style="width:' +
+          esc(Math.max(2, progress).toFixed(2)) +
+          '%"></span></span>'
         : "") +
       "</div>"
     )
@@ -2838,11 +2854,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       homeCollectionOptionsMarkup() +
       "</select>" +
       "</label>" +
+      // A signed-out reader's gallery has nothing to sort (it is newest
+      // first), so the login takes Sort's place once they have found a gene.
+      '<a class="icono-gallery-login" id="icono-guest-login" hidden>Log in to save</a>' +
       "</div>" +
       '<div class="icono-collection-shell" id="icono-collection-shell">' +
       '<div class="icono-collection-summary-host" id="icono-collection-summary" hidden></div>' +
       '<div class="icono-empty" id="icono-empty" hidden></div>' +
       "</div>" +
+      // The starters' strip over a signed-out reader's own gallery, until
+      // they have found all four.
+      '<div class="icono-home-auxiliary icono-home-lead" id="icono-home-lead" hidden></div>' +
       '<a class="icono-feed-skip" href="#icono-feed-after">Skip past gene collection</a>' +
       '<div class="icono-feed" id="icono-grid" aria-busy="true" role="feed" aria-label="Gene collection" tabindex="0">' +
       '<section class="icono-feed-segment" role="presentation"><div class="icono-grid" data-layout="' +
@@ -3731,13 +3753,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // What a signed-out reader found in this browser: genes hovered with the
   // add-on (extensionSymbols, or [] before the add-on has answered), gene
   // pages opened here and symbols on the strip. The merge at login moves them
-  // into the Archive; until then they are the "Yours" count.
+  // into the Archive; until then they are the "Your discoveries" count.
   function guestDiscoverySymbols(extensionSymbols) {
     var symbols = new Set(extensionSymbols)
     websiteGuestDiscoveries.listEntries().forEach(function (entry) {
       symbols.add(entry.gene_symbol)
     })
     return Array.from(symbols)
+  }
+
+  // The same finds, newest first: this browser's on the site (the shelf keeps
+  // them oldest first), then the add-on's, which arrive oldest first.
+  function readGuestFinds() {
+    return readExtensionGuestDiscoveries().then(function (extensionSymbols) {
+      return guestDiscoverySymbols(extensionSymbols).reverse()
+    })
+  }
+
+  function guestFoundEveryStarter() {
+    return HOME_STARTERS.every(function (starter) {
+      return guestFinds.indexOf(starter.symbol) !== -1
+    })
   }
 
   // B-1173: the next step under the strip's cards. Install comes first: in the same browser the add-on keeps
@@ -3811,23 +3847,26 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   // A signed-out reader gets the four starters face down under one line each
-  // (B-1173), with the add-on or without it. What this browser already found
-  // is face up. A catalogue that cannot draw the starters gets the install
-  // card. onCount(n) gets the reader's finds for the "Yours" tab.
+  // (B-1173), with the add-on or without it, until they have found all four
+  // (owner, 2026-10-28). The starters among their finds (guestFinds, read
+  // before the feed's first page) are face up. A catalogue that cannot draw
+  // the starters gets the install card. onCount(n) gets the reader's finds
+  // for the "Your discoveries" tab.
   //
-  // The page takes the strip's layout before the shelf loads (the add-on can
-  // take 1.5 s to answer), so the starters' feed never shows and then jumps
-  // away. A tab switch clears the strip and bumps homePlayGeneration, so a
-  // load that was still running for the old tab mounts nothing.
+  // With no finds the strip is the whole tab: the page takes its layout so
+  // the starters' feed never shows and then jumps away. With finds
+  // (aboveFeed) it sits over the reader's own gallery. A tab switch clears
+  // the strip and bumps homePlayGeneration, so a load that was still running
+  // for the old tab mounts nothing.
   var homePlayGeneration = 0
 
-  function setHomePlayLayout(container, on) {
+  function setHomePlayLayout(container, on, aboveFeed) {
     container.classList.toggle("icono-home-auxiliary--play", on)
     var main = document.getElementById("icono-main")
-    if (main) main.classList.toggle("icono-page-main--play", on)
+    if (main) main.classList.toggle("icono-page-main--play", on && !aboveFeed)
   }
 
-  function appendHomePlayStripOrInstallCard(container, onCount) {
+  function appendHomePlayStripOrInstallCard(container, onCount, aboveFeed) {
     if (!container) return
     if (container.querySelector("[data-icono-home-play], [data-icono-home-install-card]")) return
     syncInstallStateFromDomMarker()
@@ -3836,7 +3875,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       return
     }
     var generation = ++homePlayGeneration
-    setHomePlayLayout(container, true)
+    setHomePlayLayout(container, true, aboveFeed)
     var starters = HOME_STARTERS.map(function (starter) {
       return starter.symbol
     })
@@ -3851,21 +3890,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stale = function () {
       return generation !== homePlayGeneration || !container.isConnected
     }
-    // With the add-on, its finds already live in this browser, and logging
-    // in is what moves them to other devices: the Chrome store listing's
-    // "Connect with Discord to sync across devices."
-    var loginAction = {
-      kind: "link",
-      sameTab: true,
-      note: "Connect with Discord to sync across devices.",
-      label: "Log in with Discord",
-      href: voteLoginUrl(),
-    }
-    var have = new Set()
-    // The strip mounts with this browser's own finds as soon as the
+    // Every find counts, the add-on's too; the strip mounts as soon as the
     // catalogue answers (the one the Archive already loaded, so no request).
-    // The add-on can take 1.5 s to answer; its finds count, and turn a
-    // starter face up, when they arrive.
+    // The login lives in the toolbar ("Log in to save"), not here.
+    var have = new Set(guestFinds)
     iconoplasmPublicationReader
       .genes(starters)
       .then(function (records) {
@@ -3886,13 +3914,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           appendHomeInstallCard(container)
           return
         }
-        var found = guestDiscoverySymbols([])
-        found.forEach(function (symbol) {
-          have.add(symbol)
-        })
-        var strip = mountHomePlayStrip(container, {
+        mountHomePlayStrip(container, {
           genes: genes,
-          found: found,
+          found: guestFinds,
           reverseFaceHtml: buildReverseCardFaceMarkup(),
           action: homePlayAction(),
           cardMarkup: function (gene) {
@@ -3922,19 +3946,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           },
         })
         onCount(have.size)
-        readExtensionGuestDiscoveries()
-          .then(function (extensionSymbols) {
-            if (!extensionSymbols.length || stale()) return
-            extensionSymbols.forEach(function (symbol) {
-              have.add(symbol)
-            })
-            strip.addFinds(extensionSymbols)
-            if (iconoInstallState.installed) strip.setAction(loginAction)
-            onCount(have.size)
-          })
-          .catch(function (error) {
-            console.warn(error)
-          })
       })
       .catch(function (error) {
         console.warn(error)
@@ -3943,11 +3954,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         container.querySelectorAll("[data-icono-home-play]").forEach(function (strip) {
           strip.remove()
         })
-        appendHomeInstallCard(container)
-        // The reader's finds still count: this browser's and the add-on's.
-        readExtensionGuestDiscoveries().then(function (extensionSymbols) {
-          if (!stale()) onCount(guestDiscoverySymbols(extensionSymbols).length)
-        })
+        // Over a gallery the reader's own cards are enough; on an empty tab
+        // the install card takes the strip's place.
+        if (aboveFeed) container.hidden = true
+        else appendHomeInstallCard(container)
+        onCount(have.size)
       })
   }
 
@@ -4139,12 +4150,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function clearHomeAuxiliaryCards() {
-    var host = document.getElementById("icono-home-auxiliary")
-    if (!host) return
-    host.innerHTML = ""
-    host.hidden = true
     homePlayGeneration++
-    setHomePlayLayout(host, false)
+    var main = document.getElementById("icono-main")
+    if (main) main.classList.remove("icono-page-main--lead-pending")
+    ;["icono-home-lead", "icono-home-auxiliary"].forEach(function (id) {
+      var host = document.getElementById(id)
+      if (!host) return
+      host.innerHTML = ""
+      host.hidden = true
+      setHomePlayLayout(host, false)
+    })
   }
 
   function renderTooltipMetaSkeletonHtml() {
@@ -9263,12 +9278,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     }
 
-    // The "Yours" count: a signed-out reader's finds in this browser, which
-    // the strip reports, or a signed-in reader's own collection, kept from the
-    // last time it loaded, so it stays put while they look at everyone's.
-    // No number until it is the reader's own: a session cookie means the
-    // account may be about to load, and a guest's add-on finds arrive with
-    // the strip.
+    // The "Your discoveries" count: a signed-out reader's finds in this
+    // browser (the strip recounts them as it turns cards), or a signed-in
+    // reader's own collection, kept from the last time it loaded, so it stays
+    // put on the global tab. No number until it is the reader's own: a
+    // session cookie means the account may be about to load, and a guest's
+    // add-on finds arrive with the tab's first page.
     function yoursCount() {
       if (!hasResolvedAuthState && hasSharedSessionPresenceHint()) return null
       if (!currentUser && !galleryState.authenticated) {
@@ -9317,7 +9332,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         !useClassicGallery &&
         galleryState.ready &&
         !galleryState.authenticated &&
+        !galleryState.sharedDiscoveries &&
+        !guestFinds.length
+      // A signed-out reader's own tab: nothing to sort, and once they have
+      // found a gene, the login that keeps it.
+      var guestCollection =
+        !useClassicGallery &&
+        hasResolvedAuthState &&
+        !currentUser &&
+        !galleryState.authenticated &&
         !galleryState.sharedDiscoveries
+      var main = document.getElementById("icono-main")
+      if (main) main.classList.toggle("icono-page-main--guest", guestCollection)
+      var guestLogin = document.getElementById("icono-guest-login")
+      if (guestLogin) {
+        guestLogin.hidden = !(guestCollection && yoursCount() > 0)
+        if (!guestLogin.hidden) guestLogin.href = voteLoginUrl()
+      }
       if (!useClassicGallery) {
         var newestOrderOption = orderEl.querySelector('option[value="newest"]')
         if (newestOrderOption) {
@@ -9375,8 +9406,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (localReadyPromise) return localReadyPromise
       if (!currentUser && !galleryState.sharedDiscoveries) {
         localReadyPromise = initialSharedSettingsPromise
-          .then(function () {
+          .then(readGuestFinds)
+          .then(function (finds) {
             if (disposed) return
+            guestFinds = finds
             fetchHomeCollectionCounts().then(function (countData) {
               if (disposed) return
               galleryState.total = countData.total
@@ -9634,12 +9667,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           auxiliary.hidden = false
           if (useClassicGallery || galleryState.authenticated || galleryState.sharedDiscoveries) {
             appendHomeInstallCard(auxiliary)
+          } else if (!guestFinds.length) {
+            appendHomePlayStripOrInstallCard(auxiliary, countGuestFinds)
+          } else if (guestFoundEveryStarter()) {
+            countGuestFinds(guestFinds.length)
+            appendHomeInstallCard(auxiliary)
           } else {
-            appendHomePlayStripOrInstallCard(auxiliary, function (count) {
-              if (disposed) return
-              galleryState.guestDiscoveryCount = count
-              syncCollectionChrome()
-            })
+            // The reader's gallery waits, hidden, for the strip over it, so
+            // their cards don't jump down when it arrives.
+            var lead = document.getElementById("icono-home-lead")
+            lead.hidden = false
+            auxiliary.hidden = true
+            document.getElementById("icono-main").classList.add("icono-page-main--lead-pending")
+            appendHomePlayStripOrInstallCard(lead, countGuestFinds, true)
           }
           appendDiscordActionCard(auxiliary)
         }
@@ -9714,6 +9754,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       window.history[push ? "pushState" : "replaceState"](state, "", visibleUrl)
     }
 
+    function countGuestFinds(count) {
+      var main = document.getElementById("icono-main")
+      if (main) main.classList.remove("icono-page-main--lead-pending")
+      if (disposed) return
+      galleryState.guestDiscoveryCount = count
+      syncCollectionChrome()
+    }
+
+    // The strip's links open other sites in a new tab. A signed-out reader
+    // who comes back has found more there: read the finds again and redraw
+    // the tab when they changed.
+    function rereadGuestFinds() {
+      if (document.visibilityState !== "visible" || disposed) return
+      if (useClassicGallery || currentUser || !hasResolvedAuthState) return
+      if (galleryState.sharedDiscoveries) return
+      readGuestFinds().then(function (finds) {
+        if (disposed || currentUser || galleryState.sharedDiscoveries) return
+        if (finds.join(" ") !== guestFinds.join(" ")) resetCollection(false)
+      })
+    }
+    document.addEventListener("visibilitychange", rereadGuestFinds)
+
     function resetCollection(pushHistory) {
       destroyHomeMasonry()
       clearHomeAuxiliaryCards()
@@ -9736,7 +9798,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
     syncOrderOptions()
     syncCollectionChrome()
-    // The "Yours" count's title needs the catalogue's size; draw again once it is known.
+    // The count's title and meter need the catalogue's size; draw again once it is known.
     loadCatalogueGeneCount().then(function () {
       if (!disposed) syncCollectionChrome()
     })
@@ -9750,6 +9812,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var nextLink = document.head.querySelector("link[data-icono-feed-next]")
       if (nextLink) nextLink.remove()
       document.removeEventListener("click", handleSearchOutsideClick)
+      document.removeEventListener("visibilitychange", rereadGuestFinds)
     }
     orderEl.addEventListener("change", function () {
       galleryState.order = useClassicGallery
@@ -9779,18 +9842,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     function discoveredSearchSymbols() {
       if (useClassicGallery || galleryState.sharedDiscoveries || galleryState.authenticated)
         return null
-      var symbols = new Set()
-      var entries = galleryState.authenticated
-        ? galleryState.discoveryEntries
-        : guestDiscoveryEntries().concat(
-            websiteGuestDiscoveries.pendingSymbols().map(function (symbol) {
-              return { gene_symbol: symbol }
-            }),
-          )
-      for (var i = 0; i < entries.length; i++) {
-        var symbol = normalizedSymbol(entries[i] && (entries[i].gene_symbol || entries[i].symbol))
-        if (symbol) symbols.add(symbol)
-      }
+      var symbols = new Set(guestFinds)
+      websiteGuestDiscoveries.pendingSymbols().forEach(function (symbol) {
+        symbols.add(normalizedSymbol(symbol))
+      })
       return symbols
     }
 
