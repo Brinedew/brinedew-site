@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { publishIconoplasmGeneStableObject } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
-import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
+import { accountsDatabase, iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 
 // ARCHITECTURE FENCE [IPD-010]: routine publication is per gene and bounded.
 // B-898, B-1063: the per-gene publisher, on the real D1 schema (every
@@ -19,7 +19,9 @@ import { iconoplasmDatabase } from "./test-helpers/account-erasure-fixture.js"
 //    listed gene loses it;
 // 5. reading a gene's inputs costs more than one D1 call;
 // 6. an election changes the winner, but the clans page and the admin pages,
-//    which read it from the gene rollup, keep the old one (or none).
+//    which read it from the gene rollup, keep the old one (or none);
+// 7. a guest opens a gene page that has a caretaker and sees nobody (NOTUM,
+//    2026-10-29), or sees someone whose role is only offered, not accepted.
 // The vote-version recheck after the write is proven in iconoplasm.d1-votes.test.js
 // (failure mode 11).
 const A = "a".repeat(64)
@@ -204,4 +206,47 @@ test("a gene's inputs are one D1 call", async () => {
   })
   // The inputs batch, the vote-version recheck, the route membership.
   assert.equal(db.calls - before, 3)
+})
+
+const CARETAKER = `acct_${"c".repeat(32)}`
+
+async function caretakerOf(status) {
+  const db = geneDatabase()
+  const accounts = await accountsDatabase()
+  accounts.database.exec(`
+    INSERT INTO brinedew_accounts (account_id, created_at, updated_at) VALUES ('${CARETAKER}', 1, 1);
+    INSERT INTO users (discord_id, username, avatar_url, tier, created_at, updated_at, account_id)
+    VALUES ('4242', 'Ottilie', 'https://cdn.discordapp.com/avatars/4242/abc.png', 'registered', 1, 1, '${CARETAKER}');
+    INSERT INTO brinedew_account_identities (provider, provider_subject, account_id, created_at, last_seen_at)
+    VALUES ('discord', '4242', '${CARETAKER}', 1, 1);
+  `)
+  if (status) {
+    db.database
+      .prepare(
+        `INSERT INTO icono_caretaker_assignments
+           (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+            relinquish_policy, invited_by_account_id, started_at, suspended_at)
+         VALUES ('assign-TP53', 'TP53', ?, ?, '2026-10-01', 'retain', ?, '2026-10-22 08:00:00', ?)`,
+      )
+      .run(CARETAKER, status, CARETAKER, status === "suspended" ? "2026-10-25" : null)
+  }
+  const objects = recordingStore()
+  await publishIconoplasmGeneStableObject({ ICONOPLASM_DB: db, DB: accounts }, "TP53", {
+    objects,
+    readManifestation: noText,
+  })
+  return objects.written.at(-1).value.caretaker
+}
+
+test("a gene's object names its caretaker for every reader, guests included", async () => {
+  const shown = {
+    username: "Ottilie",
+    avatar_url: "https://cdn.discordapp.com/avatars/4242/abc.png",
+    since: "2026-10-22",
+  }
+  assert.deepEqual(await caretakerOf("active"), shown)
+  // A suspended caretaker still shows, as on the /caretakers page.
+  assert.deepEqual(await caretakerOf("suspended"), shown)
+  assert.equal(await caretakerOf("pending_acceptance"), null)
+  assert.equal(await caretakerOf(null), null)
 })

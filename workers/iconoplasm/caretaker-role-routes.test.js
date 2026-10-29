@@ -191,12 +191,15 @@ test("1, 2, 3, 6: one caretaker per gene and per person, a retry claims once, a 
     ],
   )
   assert.equal((await h.claim("MFNG", "claim_bob_mfng_00002", { as: BOB })).status, 200)
-  assert.deepEqual(h.settled, [], "no supervote moved, so no election ran")
+  // Each claim rewrites the gene page it puts a new caretaker on (and a switch
+  // the page it left); a retried claim changes nothing.
+  assert.deepEqual(h.settled, ["MFNG", "WEE1", "MFNG", "MFNG"])
 })
 
 test("4: leaving with a supervote takes it out of the election once", async (t) => {
   const h = harness(t)
   const claimed = await h.claim("MFNG", "claim_alice_mfng_0001")
+  h.settled.length = 0
   h.db.database.exec(
     `UPDATE icono_caretaker_assignments
         SET supervote_asset_sha256 = '${"a".repeat(64)}', supervote_direction = 1,

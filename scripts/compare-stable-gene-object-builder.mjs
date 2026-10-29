@@ -92,6 +92,7 @@ export function inputsFromGeneObject(geneObject) {
       pin: null,
       previous_winner: geneObject.portrait?.asset_sha256 || null,
       manifestation,
+      caretaker: geneObject.caretaker ?? null,
       vote_version: geneObject.vote_version ?? null,
     },
   }
@@ -123,9 +124,11 @@ export function compareGeneObject(geneObject) {
   const liveWinner = geneObject.portrait?.asset_sha256 || null
   const pinned = buildStableGeneObject(content, { ...facts, pin: liveWinner }, { now: stamp })
   const expected = structuredClone(geneObject)
-  // Gene objects older than B-898 stage 2 carry no vote version; the builder writes
-  // null for "none read". Leaked private tags are dropped on purpose (B-859).
+  // Gene objects older than B-898 stage 2 carry no vote version, and those
+  // written before 2026-10-30 no caretaker; the builder writes null for "none
+  // read". Leaked private tags are dropped on purpose (B-859).
   if (!("vote_version" in expected)) expected.vote_version = null
+  if (!("caretaker" in expected)) expected.caretaker = null
   if (expected.canonical_manifestation)
     delete expected.canonical_manifestation.accepted_tags_derivative
   return {

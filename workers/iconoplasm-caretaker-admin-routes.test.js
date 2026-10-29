@@ -197,6 +197,8 @@ test("2, 3: suspend, resume and end each apply once from the version the page sa
 
   const resumed = await h.act("resume", { expected_assignment_version: 2 })
   assert.deepEqual([resumed.body.status, resumed.body.assignment_version], ["active", 3])
+  // A suspended caretaker still shows on the gene page, so neither change republishes it.
+  assert.deepEqual(h.settled, [], "nothing readers see changed")
   const ended = await h.act("end", {
     expected_assignment_version: 3,
     relinquish_policy: "retain",
@@ -216,7 +218,7 @@ test("2, 3: suspend, resume and end each apply once from the version the page sa
       ended_by_account_id: ADMIN,
     },
   )
-  assert.deepEqual(h.settled, [], "nothing readers see changed")
+  assert.deepEqual(h.settled, ["A8101"], "the gene page drops its caretaker")
 })
 
 test("4, 5: an end with withdraw takes the texts out of use, and an end with a supervote re-elects", async (t) => {

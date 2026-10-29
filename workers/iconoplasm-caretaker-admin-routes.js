@@ -354,7 +354,7 @@ export async function changeCaretakerRoleAsAdmin(
     reason,
     policy,
   })
-  const settle = new Set(change.reElect)
+  const settle = new Set(change.republish)
   const { role } = change
   if (role.status === "ended" && role.relinquish_policy === "withdraw") {
     const withdrawn = await db.batch(

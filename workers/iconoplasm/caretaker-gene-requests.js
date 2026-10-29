@@ -403,7 +403,7 @@ async function readRequestOn(db, symbol, requestId) {
 function settled(request, status) {
   return {
     result: { ok: true, replayed: true, request_id: request.request_id, status },
-    reElect: [],
+    republish: [],
     notify: false,
   }
 }
@@ -439,7 +439,7 @@ async function withdrawRequest(db, request, accountId, now) {
     throw unavailable(`This request is already ${request.status}; refresh the gene page`)
   return {
     result: { ok: true, request_id: request.request_id, status: "withdrawn" },
-    reElect: [],
+    republish: [],
     notify: false,
   }
 }
@@ -468,7 +468,7 @@ async function rejectRequest(db, request, now) {
     throw unavailable(`This request is already ${request.status}; refresh the gene page`)
   return {
     result: { ok: true, request_id: request.request_id, status: "rejected" },
-    reElect: [],
+    republish: [],
     notify: true,
   }
 }
@@ -687,13 +687,6 @@ async function acceptRequest(db, request, body, now) {
   if (after?.status !== "accepted")
     throw unavailable(`This request is already ${after?.status || "gone"}; refresh the gene page`)
   if (after.decided_at !== now) return settled(request, "accepted")
-  const ended = await db
-    .prepare(
-      `SELECT gene_symbol FROM icono_caretaker_assignments
-        WHERE caretaker_assignment_id IN (?, ?) AND supervote_asset_sha256 IS NOT NULL`,
-    )
-    .bind(holderRole.caretaker_assignment_id, requesterRole?.caretaker_assignment_id || "")
-    .all()
   return {
     result: {
       ok: true,
@@ -703,7 +696,7 @@ async function acceptRequest(db, request, body, now) {
       canonical_symbol: symbol,
       ...(swap ? { offered_symbol: offered } : {}),
     },
-    reElect: (ended?.results || []).map((row) => row.gene_symbol),
+    republish: swap ? [symbol, offered] : [symbol],
     notify: true,
   }
 }
