@@ -6,10 +6,11 @@
 // would do". The line the owner approved (picture, name, "Caretaker since …")
 // keeps the name at every width.
 //
-// Fails if a guest or a signed-in reader, on desktop or a 360 or 400 px phone,
-// doesn't see the caretaker's whole name and start date as a link to
-// /caretakers inside the toolbar; if the caretaker sees that line next to their
-// own chip; or if a gene with no caretaker shows one.
+// Fails if a guest or a signed-in reader, on desktop or a 360, 375 or 400 px
+// phone, doesn't see the caretaker's whole name and start date as a link to
+// /caretakers inside the toolbar; if the caretaker doesn't see the same line, as
+// the one button that opens their tools; if a phone card has empty space under
+// its footer; or if a gene with no caretaker shows one.
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
@@ -23,7 +24,7 @@ const CARETAKER = {
   avatar_url: "https://cdn.discordapp.com/embed/avatars/1.png",
   since: "2026-10-22",
 }
-const WIDTHS = [...VIEWPORTS, [360, 780, "phone-360"]]
+const WIDTHS = [...VIEWPORTS, [375, 812, "phone-375"], [360, 780, "phone-360"]]
 // A 64 px picture, so the avatar never waits on Discord and shows in the screenshots.
 const PICTURE = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAoklEQVR42u3ZSRHAMAwEwYUTEMHkd5AGTyj4UGwdUyUA0z9b0tVa6BEAAAAAAAAAAAAAq3mfu2c8AjrTzRk6km7I0Nn6dYPOpq8z5KR+2iA/9XOGeoBf6ycM8lY/aqgE2FY/ZCgD2FzfbwAAAAAAAAAAAADAczoEgC+lA0D4rQSLLR+A8LvRDNvpDPeBJBeaDDeyJFdKDt0AAAAAAAAAgIDzAeNSzL2xzCemAAAAAElFTkSuQmCC",
@@ -64,6 +65,12 @@ function asCaretaker(pathname, request) {
         assignment_version: 3,
         status: "active",
         leave_policy: "retain",
+      },
+      head: {
+        head_version: 4,
+        gene_revision: 9,
+        canonical_selection_id: "selection_4",
+        canonical_revision_id: "revision_1",
       },
       manifestations: [],
     }
@@ -108,43 +115,65 @@ test("every reader sees a gene's caretaker on its page", async (t) => {
           caretaker: CARETAKER,
         })
         const line = page.locator("[data-icono-gene-caretaker]")
-        if (reader === "caretaker") {
-          await page.waitForSelector("[data-icono-caretaker-open]", { timeout: 30_000 })
-          assert.equal(await line.isVisible(), false, `${where}: one face, their own chip`)
-        } else {
-          await line.waitFor({ state: "visible", timeout: 30_000 })
-          await page.waitForTimeout(500)
-          const seen = await line.evaluate((el) => {
-            const railEl = el.closest("[data-icono-canonical-rail]")
-            const name = el.querySelector(".icono-gene-caretaker__name")
-            const rail = railEl.getBoundingClientRect()
-            const own = el.getBoundingClientRect()
-            return {
-              href: el.getAttribute("href"),
-              name: name.textContent,
-              nameCut: name.scrollWidth > name.clientWidth,
-              since: el.querySelector(".icono-gene-caretaker__since").textContent,
-              insideRail: own.left >= rail.left - 1 && own.right <= rail.right + 1,
-              railOverflow: railEl.scrollWidth - railEl.clientWidth,
-            }
-          })
-          assert.deepEqual(
-            seen,
-            {
-              href: "/caretakers",
-              name: CARETAKER.username,
-              nameCut: false,
-              since: "Caretaker since Oct 22, 2026",
-              insideRail: true,
-              railOverflow: 0,
-            },
-            where,
-          )
-        }
+        const own = reader === "caretaker"
+        // The caretaker's line turns into their button once their role is known.
+        await page.waitForSelector(
+          own
+            ? "[data-icono-gene-caretaker][data-icono-caretaker-open]"
+            : "[data-icono-gene-caretaker]",
+          { state: "visible", timeout: 30_000 },
+        )
+        await page.waitForTimeout(500)
+        const seen = await line.evaluate((el) => {
+          const railEl = el.closest("[data-icono-canonical-rail]")
+          const name = el.querySelector(".icono-gene-caretaker__name")
+          const rail = railEl.getBoundingClientRect()
+          const box = el.getBoundingClientRect()
+          const card = document.querySelector(".icono-gene-lead-card")
+          const sheet = card.querySelector(".icono-label-dossier-shell")
+          return {
+            href: el.getAttribute("href"),
+            name: name.textContent,
+            nameCut: name.scrollWidth > name.clientWidth,
+            since: el.querySelector(".icono-gene-caretaker__since").textContent,
+            insideRail: box.left >= rail.left - 1 && box.right <= rail.right + 1,
+            railOverflow: railEl.scrollWidth - railEl.clientWidth,
+            chips: document.querySelectorAll("[data-icono-caretaker-open]").length,
+            // Phones: the card ends just under its footer (up to 114 px of empty
+            // card at 360 px before 2026-10-29).
+            emptyCardBelowSheet:
+              innerWidth > 720
+                ? 0
+                : Math.max(
+                    0,
+                    Math.round(
+                      card.getBoundingClientRect().bottom - sheet.getBoundingClientRect().bottom,
+                    ) - 16,
+                  ),
+          }
+        })
+        assert.deepEqual(
+          seen,
+          {
+            href: own ? null : "/caretakers",
+            name: CARETAKER.username,
+            nameCut: false,
+            since: "Caretaker since Oct 22, 2026",
+            insideRail: true,
+            railOverflow: 0,
+            chips: own ? 1 : 0,
+            emptyCardBelowSheet: 0,
+          },
+          where,
+        )
         await page.locator("[data-icono-canonical-rail]").scrollIntoViewIfNeeded()
         await page.screenshot({
           path: path.join(OUT, `gene-page-caretaker-${reader}-${viewport[2]}.png`),
         })
+        if (own) {
+          await line.click()
+          await page.waitForSelector(".icono-caretaker-dialog[open]", { timeout: 10_000 })
+        }
         await context.close()
       }
     }
