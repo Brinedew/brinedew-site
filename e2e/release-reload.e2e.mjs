@@ -57,7 +57,7 @@ test("a missing on-demand script reloads the page once, then works", async (t) =
     const { page, answers, documents } = await openWithMissing(
       browser,
       origin,
-      /\/static\/iconoplasm\/diagram-studio\.[0-9a-f]{16}\.js$/,
+      /\/static\/iconoplasm\/diagram-studio\.[0-9a-f]{16}\.v\.js$/,
       1,
     )
     await page.waitForSelector('[data-studio-root][data-ready="true"]', { timeout: 45_000 })
@@ -81,7 +81,7 @@ test("a script that stays missing reloads once, not forever", async (t) => {
     const { page, documents } = await openWithMissing(
       browser,
       origin,
-      /\/static\/iconoplasm\/app\.[0-9a-f]{16}\.js$/,
+      /\/static\/iconoplasm\/app\.[0-9a-f]{16}\.v\.js$/,
       Infinity,
     )
     await page.waitForTimeout(8_000)

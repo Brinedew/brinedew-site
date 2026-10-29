@@ -170,7 +170,7 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   // workers/iconoplasm-static-assets.workerd.test.js.
   assert.equal(
     readdirSync(path.join(target, "static", "iconoplasm")).filter((name) =>
-      /^styles\.[0-9a-f]{16}\.css$/.test(name),
+      /^styles\.[0-9a-f]{16}\.v\.css$/.test(name),
     ).length,
     1,
   )
