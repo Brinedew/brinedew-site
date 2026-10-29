@@ -156,7 +156,8 @@ export async function routeProduction(
 // A caretaker can show or hide a gene's lore at any moment, so a test that
 // expects no lore pins it hidden instead of trusting today's live object
 // (2026-10-21: TP53's caretaker turned its lore on and two tests went red).
-export async function fulfillWithoutLore(route) {
+// `fields` overrides more of the object, e.g. `{ caretaker: null }`.
+export async function fulfillWithoutLore(route, fields = {}) {
   const response = await route.fetch()
   const gene = await response.json()
   gene.canonical_manifestation = {
@@ -164,7 +165,7 @@ export async function fulfillWithoutLore(route) {
     public_page_visible: false,
     prose: null,
   }
-  await route.fulfill({ response, json: gene })
+  await route.fulfill({ response, json: { ...gene, ...fields } })
 }
 
 export function measureButtons(rootSelector) {

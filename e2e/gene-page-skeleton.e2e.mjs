@@ -102,7 +102,11 @@ test("the gene page skeleton holds the loaded page's boxes", async (t) => {
     assert.deepEqual(await page.evaluate(skeletonLeaks), [], label)
 
     // The skeleton holds no lore box: a gene with public lore grows after it loads.
-    while (held.length) await fulfillWithoutLore(held.shift())
+    // Nor a caretaker line: on a phone it takes its own row in the toolbar, so a
+    // gene with a caretaker (3 of about 19,000 on 2026-10-29) grows there by one
+    // row, 1,300 px down the page, below the fold (gene-page-caretaker.e2e.mjs
+    // holds that). TP53 has one, so it loads here as the typical gene.
+    while (held.length) await fulfillWithoutLore(held.shift(), { caretaker: null })
     await context.unroute("**/genes/v3/**")
     await page.waitForSelector("#icono-gene-content .icono-candidate-strip .icono-candidate-card")
     await page.waitForTimeout(1500)

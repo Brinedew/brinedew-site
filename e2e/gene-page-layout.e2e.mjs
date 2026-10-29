@@ -23,6 +23,8 @@
 //     second viewer.
 // 12. A tile loses the asset attribute the caretaker's "Made from version N"
 //     link hangs on.
+// 13. A handwritten note on the label covers a printed option's words (on
+//     2026-10-29 every phone drew "pro-control" across "TUMOR SUPPRESSOR").
 //
 // What is real: the built site, TP53's published candidates and tallies,
 // PhotoSwipe, Embla, Chrome. The signed-in reader (an admin who looks after
@@ -210,7 +212,14 @@ function toolbarFit() {
   const collapsed = rail.classList.contains("is-collapsed")
   rail.classList.remove("is-collapsed")
   rail.classList.add("is-measuring")
-  const overflows = rail.scrollWidth > rail.clientWidth + 1
+  // A rail whose caretaker line has its own row wraps instead of scrolling, so
+  // the buttons overflow when they drop under the gene's name, not when the rail
+  // grows wider.
+  const meta = rail.querySelector(".icono-canonical-toolbar-meta")
+  const actions = rail.querySelector(".icono-canonical-toolbar-actions")
+  const overflows =
+    rail.scrollWidth > rail.clientWidth + 1 ||
+    (!!meta && !!actions && actions.offsetTop >= meta.offsetTop + meta.offsetHeight)
   rail.classList.remove("is-measuring")
   if (collapsed) rail.classList.add("is-collapsed")
   const more = rail.querySelector(".icono-toolbar-more")
@@ -225,6 +234,33 @@ function toolbarFit() {
     stillOverflows: rail.scrollWidth > rail.clientWidth + 1,
     clipped,
   }
+}
+
+// Runs in the page: each handwritten note on the lead card that covers a printed
+// option's letters, as "note over option". The words are drawn, not text, so the
+// letters are taken as the middle half of the option's line; a note that only
+// grazes the line, as "female" does above SOLUBLE, is fine.
+function notesOverPrintedWords() {
+  const card = document.querySelector(".icono-gene-lead-card")
+  const words = [...card.querySelectorAll(".icono-label-option")].map((option) => {
+    const box = option.getBoundingClientRect()
+    const inset = box.height / 4
+    return {
+      name: option.className.match(/icono-label-option--(\S+)/)?.[1] ?? "option",
+      left: box.left,
+      right: box.right,
+      top: box.top + inset,
+      bottom: box.bottom - inset,
+    }
+  })
+  return [...card.querySelectorAll(".icono-label-hand-note")]
+    .filter((note) => note.textContent.trim() && note.checkVisibility())
+    .flatMap((note) => {
+      const n = note.getBoundingClientRect()
+      return words
+        .filter((w) => n.left < w.right && n.right > w.left && n.top < w.bottom && n.bottom > w.top)
+        .map((w) => `${note.textContent.trim()} over ${w.name}`)
+    })
 }
 
 // Runs in the page: each tile's shown score next to its vote box's asset.
@@ -320,6 +356,13 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
         )
         assert.equal(fit.stillOverflows, false, `${name}: the toolbar still overflows`)
         assert.deepEqual(fit.clipped, [], `${name}: toolbar items cut short`)
+
+        // 13.
+        assert.deepEqual(
+          await page.evaluate(notesOverPrintedWords),
+          [],
+          `${name}: handwriting covers printed words`,
+        )
 
         // 12: every tile names its picture, which the caretaker's "Made from
         // version N" link needs (B-1095's strip dropped it and the links vanished).

@@ -623,8 +623,9 @@ function normalizeCardModelHandwriting(payload) {
 }
 function splitStylePairColumns(stylePairs) {
   var pairs = Array.isArray(stylePairs) ? stylePairs.slice(0, 7) : [];
-  if (pairs.length <= 4) return [pairs];
-  return [pairs.slice(0, 4), pairs.slice(4, 7)];
+  if (pairs.length <= 2) return [pairs];
+  var half = Math.ceil(pairs.length / 2);
+  return [pairs.slice(0, half), pairs.slice(half)];
 }
 function stylePairTemplate(pair) {
   var safePair = asObject(pair);
@@ -688,7 +689,10 @@ function familyTraitTemplate(familyFeature) {
       class="icono-label-family-trait-field icono-label-family-trait-field--empty"
     ></div>`;
   }
-  return b2`<div class="icono-label-family-trait-field">
+  var long = String(familyFeature).trim().length > 44;
+  return b2`<div
+    class="icono-label-family-trait-field${long ? " icono-label-family-trait-field--long" : ""}"
+  >
     <div class="icono-label-hand-note icono-label-hand-note--family-trait">${familyFeature}</div>
   </div>`;
 }

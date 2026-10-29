@@ -67,7 +67,7 @@ test("real seven-clan KALRN infocard projects PFAM lanes into a 4 plus 3 column 
       ["Immunoglobulin E-set", "Protein Kinase", "Spectrin", "Dbl homology-like"],
       ["CRAL-TRIO", "PH domain", "SH3"],
     ],
-    "5+ clan genes must split after the fourth lane instead of stacking every clan on the left",
+    "clans split evenly between the columns instead of stacking on the left",
   )
   assert.equal(
     model.stylePairs.some((pair) => /\+\d|more clans|mixed/i.test(`${pair.origin} ${pair.note}`)),

@@ -154,7 +154,7 @@ test("a gene with no canonical text and no portrait still gets its gene object",
 
 test("a gene the catalogue no longer carries loses its page; a listed gene keeps it", async () => {
   // 2026-10-08: 618 genes left the catalogue and every one kept its page,
-  // "New candidate" button included (ADGRE4P, a pseudogene, among them).
+  // "Add portraits" button included (ADGRE4P, a pseudogene, among them).
   const db = geneDatabase()
   for (const symbol of ["TP53", "ADGRE4P"])
     db.database

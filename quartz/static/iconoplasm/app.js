@@ -133,7 +133,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   // "1" while this browser last saw an image API key on the reader's account,
-  // so the New candidate tabs show at once; the account's answer still decides.
+  // so the Add portraits tabs show at once; the account's answer still decides.
   var ICONO_IMAGE_KEY_HINT_STORAGE_KEY = "iconoplasm.has-image-api-key"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
@@ -1397,35 +1397,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function renderCaretakerIdentityMarkup(caretaker, className) {
-    var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
-    var username = String(profile.username || "").trim()
-    var avatarUrl = String(profile.avatar_url || "").trim()
-    if (!username || !caretakerAvatarAllowed(avatarUrl)) return ""
-    return (
-      '<div class="icono-caretaker-identity ' +
-      esc(className || "") +
-      '" aria-label="Caretaker ' +
-      esc(username) +
-      '"><img class="icono-caretaker-identity__avatar" src="' +
-      esc(avatarUrl) +
-      '" alt="" loading="lazy" decoding="async"><span class="icono-caretaker-identity__name">' +
-      esc(username) +
-      "</span></div>"
-    )
-  }
-
   // The gene's caretaker, for every reader: picture, name and start date, as a
   // link to the /caretakers list (the mock the owner approved on 2026-10-29).
   // It sits after the star and the printer and, on a bar too narrow for it, takes
-  // its own line above them (fitCanonicalToolbar). Lost in the October move to the
-  // stable gene object until the object named them.
-  function renderGeneCaretakerMarkup(caretaker) {
+  // its own line above them (fitCanonicalToolbar). For the caretaker themself the
+  // same line is a button, the door to their tools (B-862: a thing you click, like
+  // Reddit's Mod Mode toggle, not a sentence telling you where to go).
+  function renderGeneCaretakerMarkup(caretaker, own) {
     var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
     var username = String(profile.username || "").trim()
     var avatarUrl = String(profile.avatar_url || "").trim()
     if (!username || !caretakerAvatarAllowed(avatarUrl)) return ""
-    var since = profile.since ? new Date(profile.since + "T00:00:00Z") : null
+    var sinceDay = String(profile.since || "")
+    var since = sinceDay ? new Date(sinceDay + "T00:00:00Z") : null
     var sinceText =
       since && !isNaN(since.getTime())
         ? "Caretaker since " +
@@ -1436,8 +1420,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             timeZone: "UTC",
           })
         : "Caretaker"
-    return (
-      '<a class="icono-gene-caretaker" href="/caretakers" data-icono-nav data-icono-gene-caretaker>' +
+    var inner =
       '<img src="' +
       esc(avatarUrl) +
       '" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer">' +
@@ -1445,56 +1428,56 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(username) +
       '</span><span class="icono-gene-caretaker__since">' +
       esc(sinceText) +
-      "</span></span></a>"
-    )
+      "</span></span>"
+    var attributes = ' data-icono-gene-caretaker data-icono-caretaker-since="' + esc(sinceDay) + '"'
+    return own
+      ? '<button type="button" class="icono-gene-caretaker icono-gene-caretaker--own"' +
+          attributes +
+          ' data-icono-caretaker-open title="Open caretaker tools">' +
+          inner +
+          "</button>"
+      : '<a class="icono-gene-caretaker" href="/caretakers" data-icono-nav' +
+          attributes +
+          ">" +
+          inner +
+          "</a>"
   }
 
   function syncViewerCaretakerToolbarIdentity(container, isCaretaker) {
     var actions = container && container.querySelector(".icono-canonical-toolbar-actions")
     if (!actions || !currentUser) return
-    // The caretaker sees their own chip, the door to their tools, instead of the
-    // line every other reader sees.
-    var byline = container.querySelector("[data-icono-gene-caretaker]")
-    if (byline) byline.hidden = !!isCaretaker
-    var existing = actions.querySelector(".icono-caretaker-identity--toolbar")
+    var line = container.querySelector("[data-icono-gene-caretaker]")
+    var own = !!(line && line.hasAttribute("data-icono-caretaker-open"))
     if (!isCaretaker) {
-      if (existing && existing.getAttribute("data-icono-viewer-caretaker") === "true") {
-        existing.remove()
+      // They stopped looking after this gene on this page: back to the reader's line.
+      if (own) {
+        line.insertAdjacentHTML("beforebegin", line._iconoReaderLine || "")
+        line.remove()
       }
       return
     }
-    if (existing && existing.hasAttribute("data-icono-caretaker-open")) return
-    // B-862: your own caretaker chip is the door to your tools, like Reddit's
-    // Mod Mode toggle or YouTube's "Customize channel": a badge you click, not a
-    // sentence telling you where to go.
-    var markup = renderCaretakerIdentityMarkup(
+    if (own) return
+    // Their own name and picture, which the gene object may not carry yet right
+    // after a claim; the start date comes from the object when it has one.
+    var markup = renderGeneCaretakerMarkup(
       {
         username: currentUser.username,
         avatar_url: currentUser.avatar_url,
+        since: line ? line.getAttribute("data-icono-caretaker-since") : "",
       },
-      "icono-caretaker-identity--toolbar",
+      true,
     )
     if (!markup) return
-    markup = markup
-      .replace(
-        '<div class="icono-caretaker-identity ',
-        '<button type="button" data-icono-caretaker-open data-icono-viewer-caretaker="true" title="Open caretaker tools" class="icono-caretaker-identity icono-caretaker-identity--button ',
-      )
-      .replace(
-        /<\/span><\/div>$/,
-        '</span><span class="icono-caretaker-identity__badge">Caretaker</span></button>',
-      )
-    if (existing) {
-      existing.insertAdjacentHTML("beforebegin", markup)
-      existing.remove()
+    var readerLine = line ? line.outerHTML : ""
+    if (line) {
+      line.insertAdjacentHTML("beforebegin", markup)
+      line.remove()
     } else {
-      var anchor =
-        actions.querySelector(".icono-toolbar-more") ||
-        actions.querySelector("[data-icono-caretaker-claim-action]")
-      if (!anchor) return
-      anchor.insertAdjacentHTML("beforebegin", markup)
+      actions.insertAdjacentHTML("beforebegin", markup)
     }
-    actions.querySelector("[data-icono-caretaker-open]")?.addEventListener("click", function () {
+    var mine = container.querySelector("[data-icono-gene-caretaker]")
+    mine._iconoReaderLine = readerLine
+    mine.addEventListener("click", function () {
       var host = container.querySelector("[data-icono-caretaker-island]")
       if (!host) return
       void loadCaretakerPanel().then(function (panel) {
@@ -5124,8 +5107,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       ? toPhysicalCardPx(voteRect.bottom - cardRect.top) + 16
       : dossierTop + toPhysicalCardPx(peekRect.height) + 12
     var fullInfoHeight = Math.max(toPhysicalCardPx(peekRect.height))
+    // scrollHeight is a layout length, already in unscaled card pixels; dividing it
+    // by the fit scale again left up to 114 px of empty card on a 360 px phone
+    // (79 px on a 375 px iPhone) between the footer and the toolbar.
     if (infoCard.scrollHeight) {
-      fullInfoHeight = Math.max(fullInfoHeight, toPhysicalCardPx(infoCard.scrollHeight))
+      fullInfoHeight = Math.max(fullInfoHeight, infoCard.scrollHeight)
     }
     var measuredContent = infoCard.querySelectorAll(
       [
@@ -6333,7 +6319,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(dialogId) +
       '">' +
       ICONO_PLUS_ICON +
-      "<span>New candidate</span>" +
+      "<span>Add portraits</span>" +
       "</button>"
     )
   }
@@ -6343,7 +6329,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var dialogId = "icono-request-dialog-" + safeSymbol
     return dialogMarkup({
       id: dialogId,
-      title: "New candidate for " + safeSymbol,
+      title: "Add portraits for " + safeSymbol,
       size: "wide",
       fixed: true,
       className: "icono-request-dialog",
@@ -7384,7 +7370,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
 
     // The provider list is cached for the page; it is asked for when the
-    // reader points at New candidate or opens it, never on a page view.
+    // reader points at Add portraits or opens it, never on a page view.
     function checkImageApiKey() {
       if (!currentUser) {
         if (requestTabList) requestTabList.hidden = true

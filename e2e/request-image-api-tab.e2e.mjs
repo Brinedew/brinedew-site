@@ -1,4 +1,4 @@
-// B-1181: the New candidate dialog's Image API tab, checked in a real browser.
+// B-1181: the Add portraits dialog's Image API tab, checked in a real browser.
 // Owner decision (27 Oct 2026): "only introduce the tab for users who added a
 // key in settings (pro users who seek it out deliberately) for now."
 //
@@ -12,7 +12,7 @@
 //    (Gemini 3 Pro Image, twice Flash's price) instead of the provider's own
 //    model (Gemini 3.1 Flash Image);
 // 4. viewing a gene page asks the Worker for the provider list: only pointing
-//    at New candidate or opening it may;
+//    at Add portraits or opening it may;
 // 5. a key holder's second open in the same visit waits for the server before
 //    the tabs show.
 //
