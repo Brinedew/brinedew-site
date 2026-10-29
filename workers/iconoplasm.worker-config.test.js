@@ -47,5 +47,4 @@ test("Iconoplasm routes straight to the stateful Worker, with no Durable Object 
       config.durable_objects.bindings.map((binding) => binding.name),
       ["GAME_SESSIONS"],
     )
-  assert.equal(stateful.vars.ICONOPLASM_SCHEMA_TRANSITION, "0")
 })

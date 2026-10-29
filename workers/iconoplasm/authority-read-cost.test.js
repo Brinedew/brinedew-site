@@ -3,10 +3,8 @@ import test from "node:test"
 import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate as gateway } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import runtime from "../the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import {
-  iconoplasmBackgroundJob,
   ICONOPLASM_BACKGROUND_MINUTES,
   ICONOPLASM_RECURRING_CRON,
-  ICONOPLASM_NIGHTLY_CRON,
 } from "../iconoplasm-background-schedule.js"
 
 // The gallery tick only decides whether to dispatch the Actions catalog
@@ -57,43 +55,4 @@ test("rejected authority requests cannot schedule projection repairs or touch D1
   await Promise.allSettled(background)
   assert.equal(queries, 0)
   assert.equal(background.length, 0)
-})
-
-test("schema transition refuses application D1 and runs no scheduled work", async () => {
-  let queries = 0
-  const db = {
-    prepare() {
-      queries++
-      throw new Error("unready schema queried")
-    },
-  }
-  const env = {
-    ICONOPLASM_SCHEMA_TRANSITION: "1",
-    ICONOPLASM_DB: db,
-    ICONOPLASM_ADMIN_TOKEN: "test-admin",
-  }
-  const ctx = {
-    waitUntil() {
-      assert.fail("transition scheduled work")
-    },
-  }
-  const blocked = await gateway(
-    new Request(
-      "https://iconoplasm.brinedew.bio/api/iconoplasm/authority/generation-leases/claim",
-      {
-        method: "POST",
-      },
-    ),
-    env,
-    ctx,
-  )
-  assert.equal(blocked.status, 503)
-  assert.equal((await blocked.json()).code, "ICONOPLASM_SCHEMA_TRANSITION")
-  for (const cron of [ICONOPLASM_RECURRING_CRON, ICONOPLASM_NIGHTLY_CRON]) {
-    for (let minute = 0; minute < 60; minute++) {
-      const event = { cron, scheduledTime: Date.UTC(2026, 8, 6, 23, minute) }
-      if (iconoplasmBackgroundJob(event)) await runtime.scheduled(event, env, ctx)
-    }
-  }
-  assert.equal(queries, 0)
 })

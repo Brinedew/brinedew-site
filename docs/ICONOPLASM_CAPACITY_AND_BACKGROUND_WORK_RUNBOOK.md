@@ -86,8 +86,7 @@ script verifies the installed triggers equal the toml's after the last Worker
 deploy and fails the release otherwise. The toml owns the trigger set: record a
 trigger change there, never by hand on the provider. `scripts/verify-code-release.mjs` refuses the push with
 `MIGRATION_NOT_ONLINE` when the changes since the installed revision include
-an unapplied migration that is not reviewed as online. It also refuses while a
-schema transition or reader recovery is active. Every release reconciles the
+an unapplied migration that is not reviewed as online. Every release reconciles the
 crawler policy (`cloudflare/iconoplasm-crawler-policy.json`) and the Worker
 routes, so a change to either ships with ordinary code.
 

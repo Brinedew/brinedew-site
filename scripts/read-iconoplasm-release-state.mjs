@@ -1,14 +1,6 @@
-import { appendFileSync } from "node:fs"
-import { pathToFileURL } from "node:url"
-import { createOperationCostAccountUsageReader } from "../workers/iconoplasm/operation-cost-account-usage.js"
-import {
-  KV_ACCOUNT_CEILINGS,
-  OPERATOR_ACCOUNT_CEILINGS,
-} from "../shared/iconoplasm-d1-budget-policy.js"
-
-// The installed setting is the release state. A working published reader is
-// not evidence that application writes are active, and a failed reader is not
-// permission to put a working application into maintenance.
+// The installed Worker's settings say which revision is live: the deploy wrote
+// its commit into ICONOPLASM_HTML_SHELL_CACHE_VERSION. A code-only release
+// (verify-code-release.mjs) diffs against that revision.
 export async function readIconoplasmReleaseState({
   accountId = process.env.CLOUDFLARE_ACCOUNT_ID,
   token = process.env.CLOUDFLARE_API_TOKEN,
@@ -28,100 +20,10 @@ export async function readIconoplasmReleaseState({
   const value = await response.json()
   if (value?.success !== true || !Array.isArray(value.result?.bindings))
     throw new Error("COST_RELEASE_STATE_UNAVAILABLE")
-  function setting(name, fallback) {
-    const matches = value.result.bindings.filter((item) => item.name === name)
-    if (!matches.length) return fallback
-    if (matches.length !== 1 || matches[0].type !== "plain_text")
-      throw new Error("COST_RELEASE_STATE_INVALID")
-    return matches[0].text
-  }
-  const transition = setting("ICONOPLASM_SCHEMA_TRANSITION", "0")
-  if (!["0", "1"].includes(transition)) throw new Error("COST_RELEASE_STATE_INVALID")
-  return {
-    schema_transition: transition === "1",
-    reader_recovery: setting("ICONOPLASM_SCHEMA_TRANSITION_MODE", "") === "reader-recovery",
-    origin_run_id: setting("ICONOPLASM_MIGRATION_ORIGIN_RUN_ID", ""),
-    cache_version: setting("ICONOPLASM_HTML_SHELL_CACHE_VERSION", ""),
-  }
-}
-
-export function selectReleaseOriginRunId(state, runId, requestedRunId = "") {
-  if (!/^\d+$/.test(runId) || (requestedRunId && !/^\d+$/.test(requestedRunId)))
-    throw new Error("COST_RELEASE_ORIGIN_REQUIRED")
-  if (!state.schema_transition) {
-    if (requestedRunId) throw new Error("COST_RELEASE_CONTINUATION_REQUIRES_MAINTENANCE")
-    return runId
-  }
-  const retained = state.origin_run_id
-  if (retained && !/^\d+$/.test(retained)) throw new Error("COST_RELEASE_STATE_INVALID")
-  if (retained && requestedRunId && retained !== requestedRunId)
-    throw new Error("COST_RELEASE_CONTINUATION_MUST_PRESERVE_ORIGIN")
-  if (!retained && !requestedRunId) throw new Error("COST_RELEASE_RESUME_RUN_REQUIRED")
-  return retained || requestedRunId
-}
-
-export function requireReaderRecoveryHeadroom(sample, now = Date.now()) {
-  // The reviewed wrapper cannot reach D1 on its reader routes. These are the
-  // complete verification probes' conservative Worker/KV bounds, not a permit
-  // for migrations, catalog reconstruction, or normal application activation.
-  const maximum = { requests: 20, kv_reads: 100 }
-  if (
-    sample?.day !== new Date(now).toISOString().slice(0, 10) ||
-    !Number.isSafeInteger(sample.measured_at) ||
-    !Number.isSafeInteger(sample.kv_measured_at) ||
-    [sample.measured_at, sample.kv_measured_at].some((time) => time > now || now - time > 60000)
+  const matches = value.result.bindings.filter(
+    (item) => item.name === "ICONOPLASM_HTML_SHELL_CACHE_VERSION",
   )
-    throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
-  for (const [meter, bound] of Object.entries(maximum)) {
-    if (!Number.isSafeInteger(sample[meter]) || sample[meter] < 0)
-      throw new Error("COST_ACCOUNT_USAGE_UNAVAILABLE")
-    if (sample[meter] + bound > (OPERATOR_ACCOUNT_CEILINGS[meter] ?? KV_ACCOUNT_CEILINGS[meter]))
-      throw new Error(`COST_READER_RECOVERY_HEADROOM: ${meter}`)
-  }
-  return { rows_read: 0, rows_written: 0, kv_writes: 0, ...maximum }
-}
-
-export function requireReaderRecoveryCompatibleState(state) {
-  if (!state || typeof state !== "object") throw new Error("COST_RELEASE_STATE_INVALID")
-  // A recovery deploy is allowed to enter the explicitly D1-free transition
-  // from normal operation, but it must never overwrite another in-progress
-  // transition with a different artifact or contract.
-  if (state.schema_transition && !state.reader_recovery)
-    throw new Error("COST_READER_RECOVERY_INCOMPATIBLE_INSTALLED_STATE")
-  return state
-}
-
-async function main() {
-  const state = await readIconoplasmReleaseState()
-  const originRunId = selectReleaseOriginRunId(
-    state,
-    process.env.GITHUB_RUN_ID,
-    process.env.ICONOPLASM_RELEASE_ORIGIN_RUN_ID,
-  )
-  let maximum
-  if (state.schema_transition) {
-    const reader = createOperationCostAccountUsageReader({
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-      token: process.env.CLOUDFLARE_BUDGET_ANALYTICS_TOKEN,
-    })
-    maximum = requireReaderRecoveryHeadroom(await reader.refresh({ includeKv: true }))
-  }
-  if (process.env.GITHUB_OUTPUT)
-    appendFileSync(process.env.GITHUB_OUTPUT, `schema_transition=${state.schema_transition}\n`)
-  if (process.env.GITHUB_ENV)
-    appendFileSync(process.env.GITHUB_ENV, `ICONOPLASM_RELEASE_ORIGIN_RUN_ID=${originRunId}\n`)
-  console.log(
-    JSON.stringify({
-      ...state,
-      origin_run_id: originRunId,
-      maximum,
-    }),
-  )
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    console.error(error.message)
-    process.exitCode = 1
-  })
+  if (matches.length > 1 || (matches.length && matches[0].type !== "plain_text"))
+    throw new Error("COST_RELEASE_STATE_INVALID")
+  return { cache_version: matches[0]?.text ?? "" }
 }

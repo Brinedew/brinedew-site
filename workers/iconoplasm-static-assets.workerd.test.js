@@ -6,7 +6,6 @@ import { createRequire } from "node:module"
 import test from "node:test"
 import { parse as parseToml } from "toml"
 import { prepareIconoplasmEdgeAssets } from "../scripts/prepare-iconoplasm-edge-assets.mjs"
-import { prepareRetainedAssetsConfig } from "../scripts/prepare-iconoplasm-schema-transition-config.mjs"
 import { proveAnonymousRouteTopology } from "../scripts/lib/iconoplasm-static-topology-proof.mjs"
 
 const require = createRequire(import.meta.url)
@@ -255,299 +254,148 @@ test(
   },
 )
 
-test(
-  "real workerd preparation topology is exactly the retained pre-cutover route contract",
-  { timeout: 30_000 },
-  async () => {
-    const { temporaryRoot, outputRoot } = await makeAssetFixture()
-    let runtime
-    try {
-      const canonical = await readFile(
-        path.join(
-          repoRoot,
-          "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-        ),
-        "utf8",
-      )
-      const config = parseToml(prepareRetainedAssetsConfig(canonical))
-      const retained = config.unsafe.metadata.assets.config
-      assert.equal(config.unsafe.metadata.keep_assets, true)
-      runtime = new Miniflare(
-        convertV4MiniflareOptions({
-          name: "iconoplasm-preparation-preview-test",
-          modules: true,
-          script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
-          compatibilityDate: "2026-08-01",
-          assets: {
-            directory: outputRoot,
-            run_worker_first: retained.run_worker_first,
-            routerConfig: { has_user_worker: true },
-            assetConfig: { not_found_handling: retained.not_found_handling },
-          },
-        }),
-      )
-
-      for (const pathname of ["/", "/genes", "/robots.txt"])
-        assert.notEqual(
-          (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
-          599,
-          pathname,
-        )
-      for (const method of ["GET", "HEAD"]) {
-        const blotResponse = await runtime.dispatchFetch("https://iconoplasm.test/blot/TP53.webp", {
-          method,
-          redirect: "manual",
-        })
-        assert.equal(blotResponse.status, 599, "the exact blot handler owns the mutable alias")
-      }
-      for (const pathname of ["/search?q=TP53", "/api/auth/me"])
-        assert.equal(
-          (await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)).status,
-          599,
-          pathname,
-        )
-      for (const pathname of WORKER_OWNED_PAGES)
-        assert.equal(
-          (
-            await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
-              redirect: "manual",
-            })
-          ).status,
-          599,
-          `${pathname} is a Worker page`,
-        )
-      // The retained bytes hold the per-gene documents, so a containment deploy
-      // serves a gene page from the asset layer at no Worker request.
-      const genePage = await runtime.dispatchFetch("https://iconoplasm.test/gene/TP53")
-      assert.equal(genePage.status, 200)
-      assert.match(await genePage.text(), /<link rel="canonical" href="[^"]*\/gene\/TP53">/)
-    } finally {
-      await runtime?.dispose()
-      await rm(temporaryRoot, { recursive: true, force: true })
-    }
-  },
-)
-
 // ARCHITECTURE FENCE [IPD-003]
 // The crawler documents are static files built from catalog/v3/index.json; the
-// Worker owns none of them, in production or during a containment deploy.
+// Worker owns none of them.
 // Ways this can fail:
-//  1. A stateful Worker entry (the runtime or the containment quarantine shell)
-//     still imports something that no longer exists, so the Worker fails to
-//     load and every /api route goes down with it.
+//  1. The stateful Worker runtime still imports something that no longer
+//     exists, so the Worker fails to load and every /api route goes down with it.
 //  2. robots.txt -> sitemap.xml no longer lists every catalog gene and the
 //     /genes letter pages, or lists a URL this host does not serve
 //     (/sitemaps/...), so a crawler either misses genes or keeps fetching dead URLs.
 //  3. /genes or /genes/<letter> (B-1098: where agents and readers look for the
 //     whole list) answers anything but a static page linking every gene, or an
 //     old /genes/<range> address answers 200 under a URL nobody publishes.
-//  4. A request for /genes, /genes/<letter>, /robots.txt, /sitemap.xml or
-//     /llms.txt reaches the Worker (or /genes/<range> and /sitemaps/* do, in
-//     production). That spends a metered
-//     request per crawler fetch and answers with whatever the Worker does for
-//     unknown paths. During containment every unknown path reaches the
-//     quarantine shell by design; there a retired range sitemap must not read
-//     D1, KV or storage.
-//  5. During a containment deploy, robots.txt, sitemap.xml or llms.txt differ
-//     from what production serves, so a crawler that visits mid-maintenance
-//     indexes a sitemap or obeys a policy that disappears when the window closes.
+//  4. A request for /genes, /genes/<letter>, /genes/<range>, /robots.txt,
+//     /sitemap.xml, /sitemaps/* or /llms.txt reaches the Worker. That spends a
+//     metered request per crawler fetch and answers with whatever the Worker
+//     does for unknown paths.
+//  5. The served robots.txt, sitemap.xml or llms.txt differ from the built files.
 //  6. A retired range-sitemap URL still answers 200 with XML, so a crawler
 //     keeps polling a shard nobody maintains.
 // The receipt lands in artifacts/b-898-discovery-static/ for the PR.
-test(
-  "crawler documents are static in production and in the containment deploy",
-  { timeout: 60_000 },
-  async () => {
-    // 1
-    for (const entry of [
-      "./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js",
-      "./b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js",
-    ]) {
-      const module = await import(entry)
-      assert.equal(typeof module.default?.fetch, "function", `${entry} must export a fetch handler`)
-    }
+test("crawler documents are static files the Worker never sees", { timeout: 60_000 }, async () => {
+  // 1
+  const runtimeModule =
+    await import("./the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js")
+  assert.equal(typeof runtimeModule.default?.fetch, "function", "the runtime must export fetch")
 
-    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-crawler-"))
-    const sourceRoot = path.join(temporaryRoot, "public")
-    const outputRoot = path.join(temporaryRoot, "public-iconoplasm-edge")
-    await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
-    await mkdir(path.join(sourceRoot, "static"), { recursive: true })
-    for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
-      await writeFile(
-        path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`),
-        "<!doctype html>",
-      )
-    await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
-    const catalogRows = [
-      ["TP53", "tumor protein p53", "", "", 0],
-      ["A1BG", "alpha-1-B glycoprotein", "", "", 0],
-      ["ZNF25", "zinc finger protein 25", "", "", 0],
-    ]
-    await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot, publishedGenes: catalogRows })
+  const temporaryRoot = await mkdtemp(path.join(tmpdir(), "iconoplasm-crawler-"))
+  const sourceRoot = path.join(temporaryRoot, "public")
+  const outputRoot = path.join(temporaryRoot, "public-iconoplasm-edge")
+  await mkdir(path.join(sourceRoot, "apps", "iconoplasm"), { recursive: true })
+  await mkdir(path.join(sourceRoot, "static"), { recursive: true })
+  for (const page of ["index", "privacy", "license", "caretaker-terms", "developers"])
+    await writeFile(path.join(sourceRoot, "apps", "iconoplasm", `${page}.html`), "<!doctype html>")
+  await writeFile(path.join(sourceRoot, "favicon.ico"), "fixture")
+  const catalogRows = [
+    ["TP53", "tumor protein p53", "", "", 0],
+    ["A1BG", "alpha-1-B glycoprotein", "", "", 0],
+    ["ZNF25", "zinc finger protein 25", "", "", 0],
+  ]
+  await prepareIconoplasmEdgeAssets({ sourceRoot, outputRoot, publishedGenes: catalogRows })
 
-    // 2
-    const staticSitemap = await readFile(path.join(outputRoot, "sitemap.xml"), "utf8")
-    const staticLlms = await readFile(path.join(outputRoot, "llms.txt"), "utf8")
-    for (const [symbol] of catalogRows)
-      assert.ok(
-        staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio/gene/${symbol}</loc>`),
-        `sitemap.xml must list ${symbol}`,
-      )
-    assert.doesNotMatch(staticSitemap, /\/sitemaps\//)
-    for (const pathname of ["/genes", "/genes/T", "/genes/A", "/genes/Z"])
-      assert.ok(
-        staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio${pathname}</loc>`),
-        `sitemap.xml must list ${pathname}`,
-      )
-    const robots = await readFile(path.join(outputRoot, "robots.txt"), "utf8")
-    assert.match(robots, /^Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml$/m)
-    assert.match(robots, /User-agent: GPTBot\nDisallow: \//)
-    assert.match(robots, /User-agent: ClaudeBot\nDisallow: \//)
+  // 2
+  const staticSitemap = await readFile(path.join(outputRoot, "sitemap.xml"), "utf8")
+  const staticLlms = await readFile(path.join(outputRoot, "llms.txt"), "utf8")
+  for (const [symbol] of catalogRows)
+    assert.ok(
+      staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio/gene/${symbol}</loc>`),
+      `sitemap.xml must list ${symbol}`,
+    )
+  assert.doesNotMatch(staticSitemap, /\/sitemaps\//)
+  for (const pathname of ["/genes", "/genes/T", "/genes/A", "/genes/Z"])
+    assert.ok(
+      staticSitemap.includes(`<loc>https://iconoplasm.brinedew.bio${pathname}</loc>`),
+      `sitemap.xml must list ${pathname}`,
+    )
+  const robots = await readFile(path.join(outputRoot, "robots.txt"), "utf8")
+  assert.match(robots, /^Sitemap: https:\/\/iconoplasm\.brinedew\.bio\/sitemap\.xml$/m)
+  assert.match(robots, /User-agent: GPTBot\nDisallow: \//)
+  assert.match(robots, /User-agent: ClaudeBot\nDisallow: \//)
 
-    const canonicalToml = await readFile(
+  const assets = parseToml(
+    await readFile(
       path.join(
         repoRoot,
         "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
       ),
       "utf8",
-    )
-    const canonicalAssets = parseToml(canonicalToml).assets
-    const containmentAssets = parseToml(prepareRetainedAssetsConfig(canonicalToml)).unsafe.metadata
-      .assets.config
-    const receipt = { generated_at: new Date().toISOString(), catalog_rows: 3, dispatches: [] }
-    try {
-      for (const [topology, assets] of [
-        ["production", canonicalAssets],
-        ["containment", containmentAssets],
-      ]) {
-        const runtime = new Miniflare(
-          convertV4MiniflareOptions({
-            name: `iconoplasm-crawler-documents-${topology}`,
-            modules: true,
-            script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
-            compatibilityDate: "2026-08-01",
-            assets: {
-              directory: outputRoot,
-              run_worker_first: assets.run_worker_first,
-              routerConfig: { has_user_worker: true },
-              assetConfig: { not_found_handling: assets.not_found_handling },
-            },
-          }),
-        )
-        try {
-          for (const pathname of [
-            "/genes",
-            "/genes/T",
-            "/genes/TO-TR",
-            "/sitemap.xml",
-            "/sitemaps/pages.xml",
-            "/sitemaps/genes/TO-TR.xml",
-            "/llms.txt",
-            "/robots.txt",
-          ]) {
-            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
-              redirect: "manual",
-            })
-            const body = await response.text()
-            const contentType = response.headers.get("content-type") || ""
-            receipt.dispatches.push({
-              topology,
-              pathname,
-              status: response.status,
-              location: response.headers.get("location"),
-              content_type: contentType,
-              worker_invoked: response.status === 599,
-            })
-            // 4: during containment every unknown path, a retired range included,
-            // reaches the quarantine shell by design.
-            const retired = pathname.startsWith("/sitemaps/") || pathname === "/genes/TO-TR"
-            if (topology === "production" || !retired)
-              assert.notEqual(response.status, 599, `${topology} ${pathname} invoked the Worker`)
-            // 3
-            if (pathname === "/genes") {
-              assert.equal(response.status, 200, `${topology} ${pathname}`)
-              assert.match(contentType, /html/)
-              assert.match(body, /href="\/genes\/T"/)
-              assert.match(body, /href="\/caretakers"/)
-            }
-            if (pathname === "/genes/T") {
-              assert.equal(response.status, 200, `${topology} ${pathname}`)
-              assert.match(body, /href="\/gene\/TP53"/)
-              assert.doesNotMatch(body, /\/gene\/A1BG/)
-            }
-            if (pathname === "/genes/TO-TR" && topology === "production")
-              assert.equal(response.status, 404, `${topology} ${pathname}`)
-            // 2 and 5
-            if (pathname === "/sitemap.xml") assert.equal(body, staticSitemap, topology)
-            if (pathname === "/llms.txt") assert.equal(body, staticLlms, topology)
-            if (pathname === "/robots.txt") assert.equal(body, robots, topology)
-            // 6
-            if (pathname.startsWith("/sitemaps/"))
-              assert.doesNotMatch(contentType, /xml/, `${topology} ${pathname} answered XML`)
-          }
-        } finally {
-          await runtime.dispose()
-        }
-      }
-    } finally {
-      await rm(temporaryRoot, { recursive: true, force: true })
-    }
-
-    // 4 and 6 for the containment deploy: its not_found_handling is "none", so
-    // every unknown path (the retired range sitemaps included) reaches the
-    // quarantine shell. There they must read no D1, KV or storage binding and
-    // must not answer XML.
-    const { default: quarantineShell } =
-      await import("./b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js")
-    const touchedBindings = new Set()
-    const env = new Proxy(
-      { ICONOPLASM_SCHEMA_TRANSITION: "1", ICONOPLASM_SCHEMA_TRANSITION_MODE: "reader-recovery" },
-      {
-        get(target, key) {
-          if (typeof key === "string" && /DB$|^KV$|PORTRAITS|STORAGE_PASSWORD/.test(key))
-            touchedBindings.add(key)
-          return target[key]
-        },
+    ),
+  ).assets
+  const receipt = { generated_at: new Date().toISOString(), catalog_rows: 3, dispatches: [] }
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      name: "iconoplasm-crawler-documents",
+      modules: true,
+      script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+      compatibilityDate: "2026-08-01",
+      assets: {
+        directory: outputRoot,
+        run_worker_first: assets.run_worker_first,
+        routerConfig: { has_user_worker: true },
+        assetConfig: { not_found_handling: assets.not_found_handling },
       },
-    )
-    const upstream = []
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = async (input) => {
-      upstream.push(String(input?.url || input))
-      return new Response("Not Found", { status: 404, headers: { "Content-Type": "text/html" } })
-    }
-    try {
-      for (const pathname of ["/sitemaps/pages.xml", "/sitemaps/genes/TO-TR.xml"]) {
-        const response = await quarantineShell.fetch(
-          new Request(`https://iconoplasm.brinedew.bio${pathname}`),
-          env,
-          { waitUntil() {} },
-        )
-        const contentType = response.headers.get("content-type") || ""
-        await response.body?.cancel()
-        receipt.dispatches.push({
-          topology: "containment-worker",
-          pathname,
-          status: response.status,
-          content_type: contentType,
-        })
-        assert.equal(response.status, 404, pathname)
-        assert.doesNotMatch(contentType, /xml/, pathname)
+    }),
+  )
+  try {
+    for (const pathname of [
+      "/genes",
+      "/genes/T",
+      "/genes/TO-TR",
+      "/sitemap.xml",
+      "/sitemaps/pages.xml",
+      "/sitemaps/genes/TO-TR.xml",
+      "/llms.txt",
+      "/robots.txt",
+    ]) {
+      const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+        redirect: "manual",
+      })
+      const body = await response.text()
+      const contentType = response.headers.get("content-type") || ""
+      receipt.dispatches.push({
+        pathname,
+        status: response.status,
+        location: response.headers.get("location"),
+        content_type: contentType,
+        worker_invoked: response.status === 599,
+      })
+      // 4
+      assert.notEqual(response.status, 599, `${pathname} invoked the Worker`)
+      // 3
+      if (pathname === "/genes") {
+        assert.equal(response.status, 200, pathname)
+        assert.match(contentType, /html/)
+        assert.match(body, /href="\/genes\/T"/)
+        assert.match(body, /href="\/caretakers"/)
       }
-    } finally {
-      globalThis.fetch = originalFetch
+      if (pathname === "/genes/T") {
+        assert.equal(response.status, 200, pathname)
+        assert.match(body, /href="\/gene\/TP53"/)
+        assert.doesNotMatch(body, /\/gene\/A1BG/)
+      }
+      if (pathname === "/genes/TO-TR") assert.equal(response.status, 404, pathname)
+      // 2 and 5
+      if (pathname === "/sitemap.xml") assert.equal(body, staticSitemap)
+      if (pathname === "/llms.txt") assert.equal(body, staticLlms)
+      if (pathname === "/robots.txt") assert.equal(body, robots)
+      // 6
+      if (pathname.startsWith("/sitemaps/"))
+        assert.doesNotMatch(contentType, /xml/, `${pathname} answered XML`)
     }
-    assert.deepEqual([...touchedBindings], [])
-    receipt.containment_worker_upstream = upstream
+  } finally {
+    await runtime.dispose()
+    await rm(temporaryRoot, { recursive: true, force: true })
+  }
 
-    const receiptDirectory = path.join(repoRoot, "artifacts", "b-898-discovery-static")
-    await mkdir(receiptDirectory, { recursive: true })
-    await writeFile(
-      path.join(receiptDirectory, "crawler-documents-receipt.json"),
-      `${JSON.stringify(receipt, null, 2)}\n`,
-    )
-  },
-)
+  const receiptDirectory = path.join(repoRoot, "artifacts", "b-898-discovery-static")
+  await mkdir(receiptDirectory, { recursive: true })
+  await writeFile(
+    path.join(receiptDirectory, "crawler-documents-receipt.json"),
+    `${JSON.stringify(receipt, null, 2)}\n`,
+  )
+})
 
 // B-818: iconoplasm.brinedew.bio has one URL convention, clean lowercase paths.
 // Every older shape that something once linked answers a 301 to where it lives
@@ -562,21 +410,22 @@ test(
 //     layer's own .html handling.
 //  4. A redirect captures a page this host serves (/privacy, /gene/TP53) or a
 //     path the Worker owns (/api, /blot), changing what readers get there.
-//  5. A redirect is answered by the Worker, spending a metered request, or
-//     disappears in the containment deploy.
+//  5. A redirect is answered by the Worker, spending a metered request.
 //  6. The query string is dropped, so a store or campaign link loses its tag.
 test(
   "old URL shapes answer a static 301 to the one clean convention",
   { timeout: 60_000 },
   async () => {
     const { temporaryRoot, outputRoot } = await makeAssetFixture()
-    const canonicalToml = await readFile(
-      path.join(
-        repoRoot,
-        "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+    const assets = parseToml(
+      await readFile(
+        path.join(
+          repoRoot,
+          "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+        ),
+        "utf8",
       ),
-      "utf8",
-    )
+    ).assets
     const moved = [
       ["/About.html", "https://brinedew.bio/about"],
       // B-906: the footer shared with the main site links /about.
@@ -614,69 +463,57 @@ test(
       "/gene/TP53",
     ]
     const receipt = { generated_at: new Date().toISOString(), dispatches: [] }
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        name: "iconoplasm-moved-paths",
+        modules: true,
+        script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+        compatibilityDate: "2026-08-01",
+        assets: {
+          directory: outputRoot,
+          run_worker_first: assets.run_worker_first,
+          routerConfig: { has_user_worker: true },
+          assetConfig: { not_found_handling: assets.not_found_handling },
+        },
+      }),
+    )
     try {
-      for (const [topology, assets] of [
-        ["production", parseToml(canonicalToml).assets],
-        [
-          "containment",
-          parseToml(prepareRetainedAssetsConfig(canonicalToml)).unsafe.metadata.assets.config,
-        ],
-      ]) {
-        const runtime = new Miniflare(
-          convertV4MiniflareOptions({
-            name: `iconoplasm-moved-paths-${topology}`,
-            modules: true,
-            script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
-            compatibilityDate: "2026-08-01",
-            assets: {
-              directory: outputRoot,
-              run_worker_first: assets.run_worker_first,
-              routerConfig: { has_user_worker: true },
-              assetConfig: { not_found_handling: assets.not_found_handling },
-            },
-          }),
-        )
-        try {
-          for (const [pathname, target] of moved) {
-            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
-              redirect: "manual",
-            })
-            await response.text()
-            const location = response.headers.get("location")
-            receipt.dispatches.push({ topology, pathname, status: response.status, location })
-            // 1, 2, 5 and 6
-            assert.equal(response.status, 301, `${topology} ${pathname}`)
-            assert.equal(location, target, `${topology} ${pathname}`)
-            // 3: a same-host target is a page, not another redirect
-            if (target.startsWith("/")) {
-              const landed = await runtime.dispatchFetch(`https://iconoplasm.test${target}`, {
-                redirect: "manual",
-              })
-              await landed.text()
-              assert.ok(landed.status < 300 || landed.status > 399, `${topology} ${target}`)
-              if (topology === "production") assert.equal(landed.status, 200, target)
-            }
-          }
-          // 4
-          for (const pathname of served) {
-            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
-              redirect: "manual",
-            })
-            await response.text()
-            assert.equal(response.status, 200, `${topology} ${pathname}`)
-          }
-          for (const pathname of ["/api/auth/me", "/blot/TP53.webp"]) {
-            const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
-              redirect: "manual",
-            })
-            await response.text()
-            assert.equal(response.status, 599, `${topology} ${pathname} stays Worker-owned`)
-          }
-        } finally {
-          await runtime.dispose()
+      for (const [pathname, target] of moved) {
+        const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+          redirect: "manual",
+        })
+        await response.text()
+        const location = response.headers.get("location")
+        receipt.dispatches.push({ pathname, status: response.status, location })
+        // 1, 2, 5 and 6
+        assert.equal(response.status, 301, pathname)
+        assert.equal(location, target, pathname)
+        // 3: a same-host target is a page, not another redirect
+        if (target.startsWith("/")) {
+          const landed = await runtime.dispatchFetch(`https://iconoplasm.test${target}`, {
+            redirect: "manual",
+          })
+          await landed.text()
+          assert.equal(landed.status, 200, target)
         }
       }
+      // 4
+      for (const pathname of served) {
+        const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+          redirect: "manual",
+        })
+        await response.text()
+        assert.equal(response.status, 200, pathname)
+      }
+      for (const pathname of ["/api/auth/me", "/blot/TP53.webp"]) {
+        const response = await runtime.dispatchFetch(`https://iconoplasm.test${pathname}`, {
+          redirect: "manual",
+        })
+        await response.text()
+        assert.equal(response.status, 599, `${pathname} stays Worker-owned`)
+      }
     } finally {
+      await runtime.dispose()
       await rm(temporaryRoot, { recursive: true, force: true })
     }
     const receiptDirectory = path.join(repoRoot, "artifacts", "b818")

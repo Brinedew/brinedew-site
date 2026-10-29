@@ -1775,7 +1775,6 @@ export default {
 
     const backgroundEvent = { cron: cronExpr, scheduledTime: event?.scheduledTime }
     if (iconoplasmBackgroundJob(backgroundEvent)) {
-      if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") return
       const background = await runIconoplasmBackgroundJob(backgroundEvent, {
         // B-898: the quarter-hour catalog tick. One D1 row read and one KV read;
         // when the newest canonical publish event moved past the last dispatch

@@ -232,11 +232,7 @@ These files are as fresh as the last deploy: a gene added to the catalog object
 appears in `sitemap.xml` and gets its document on the next push to `main`,
 not when the catalog object is republished. The asset layer answers every one
 of them before the Worker runs, so a crawler request costs no Worker request
-and reads no KV, D1, Durable Object, Queue or storage object. The containment
-deploy (`scripts/prepare-iconoplasm-schema-transition-config.mjs`) keeps the
-same asset bytes and routes only the Worker's own paths into the Worker, so
-gene pages, robots, sitemap and llms.txt stay identical during a maintenance
-window.
+and reads no KV, D1, Durable Object, Queue or storage object.
 
 The bundle counts toward Cloudflare's 20,000-file limit per Worker version. A
 real build on 2026-10-03 produced 19,535 files (19,023 gene documents, 478
