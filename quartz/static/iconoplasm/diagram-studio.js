@@ -3602,7 +3602,7 @@ const TOUR_STEPS = [
   [
     "[data-studio-x6-canvas]",
     "Draw relationships",
-    "Hover a portrait, then drag from one of its dots to another portrait. Scroll to pan; Ctrl+scroll zooms.",
+    "Hover over a portrait, then drag from one of its dots to another portrait. Scroll to pan; Ctrl+scroll zooms.",
     "left",
   ],
   [
