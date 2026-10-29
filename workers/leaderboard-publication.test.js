@@ -4,7 +4,7 @@
 // avatars embedded, and the page reads it from the CDN. Everything runs on a real local D1
 // (Miniflare) with production's account tables; Bunny Storage and Discord's CDN are a fake `fetch`
 // that records every request. The page's side (what it requests, what it draws, what it does when
-// the CDN fails) is e2e/geneguessr-direct-structures.e2e.mjs.
+// the CDN fails) is e2e/geneguessr-score-and-leaderboard.e2e.mjs.
 //
 // Failure modes this file proves, written before the code:
 //   P1  the object says more than the board shows (an id, wins, a played day), lists a private or a
