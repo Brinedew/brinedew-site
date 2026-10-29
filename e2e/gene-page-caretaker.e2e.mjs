@@ -61,7 +61,10 @@ test("every reader sees a gene's caretaker on its page", async (t) => {
         await chip.waitFor({ state: "visible", timeout: 30_000 })
         const who = session ? "signed-in" : "guest"
         assert.equal(await chip.getAttribute("href"), "/caretakers", `${who} ${viewport[2]}`)
-        assert.match(await chip.innerText(), /e2e-caretaker/, `${who} ${viewport[2]}`)
+        // A narrow toolbar keeps the picture and the badge and drops the name.
+        const name = chip.locator(".icono-caretaker-identity__name")
+        assert.equal(await name.textContent(), "e2e-caretaker", `${who} ${viewport[2]}`)
+        if (viewport[2] === "desktop") assert.ok(await name.isVisible(), `${who} sees the name`)
         const avatar = chip.locator("img")
         assert.equal(await avatar.getAttribute("src"), CARETAKER.avatar_url)
         const box = await chip.boundingBox()
