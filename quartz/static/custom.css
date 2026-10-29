@@ -1036,6 +1036,30 @@
       drop-shadow(0 0 16px rgb(150 195 210 / 0.22));
   }
 
+  /* Until every part is ready (prepareCaretakerFilm), the film's place stays
+     empty at its full size, and the finished film then fades in once, whole. */
+  .icono-film.icono-film--pending,
+  :root[saved-theme="dark"] .icono-film.icono-film--pending {
+    background: none;
+    filter: none;
+  }
+
+  .icono-film--arriving {
+    animation: icono-film-arrive 180ms ease-out both;
+  }
+
+  @keyframes icono-film-arrive {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .icono-film--arriving {
+      animation: none;
+    }
+  }
+
   /* The lane is exposed film: caretaker-film.js renders its density as a mask over the ink.
      The box is twice the band's width (7.9%), so the band's lateral halo fades inside it. */
   .icono-film__lane {

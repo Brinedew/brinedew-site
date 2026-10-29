@@ -11,6 +11,10 @@
 // 5. the title renders in the blog serif;
 // 6. the title and the Close button overlap;
 // 7. a button label wraps onto a second line.
+// The sidebar's caretaker film, before it, is checked for:
+// 8. painting part by part: ladder bands with no film behind them, the
+//    portrait or the marker hand arriving after the rest, or the panel
+//    jumping when the film lands (owner, 2026-10-29).
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and the measured geometry land in artifacts/e2e/.
@@ -163,15 +167,61 @@ test("the caretaker's own toolbar badge opens the caretaker panel", async (t) =>
         }
         return undefined
       })
+      // The film is one object, so it appears whole (owner, 2026-10-29). The
+      // portrait comes late here, and every film the sidebar puts on the page
+      // is recorded as it lands: an empty place first, then the finished film
+      // with its print and its marker hand already there.
+      await context.route(
+        (url) => url.pathname.startsWith("/portraits/"),
+        async (route) => {
+          await new Promise((resolve) => setTimeout(resolve, 1_500))
+          return route.fallback()
+        },
+      )
+      await context.addInitScript(() => {
+        window.__films = []
+        new MutationObserver(() => {
+          for (const film of document.querySelectorAll(
+            "[data-icono-caretaker-assignment] .icono-film",
+          )) {
+            if (film.__seen) continue
+            film.__seen = true
+            const photo = film.querySelector(".icono-film__photo")
+            const box = film.getBoundingClientRect()
+            window.__films.push({
+              pending: film.classList.contains("icono-film--pending"),
+              photo: photo ? photo.complete && photo.naturalWidth > 0 : null,
+              marker: document.fonts.check('22px "Permanent Marker"'),
+              size: [Math.round(box.width), Math.round(box.height)],
+            })
+          }
+        }).observe(document, { childList: true, subtree: true })
+      })
       const page = await context.newPage()
       await page.goto(`${HOST}/gene/TP53`)
       if (name === "desktop") {
         // B-996: the sidebar shows the gene's own caretaker film: the period ladder's
         // nine bands, the gene's lane, and the symbol in wax marker. No chips, no
         // instruction sentence.
-        await page.waitForSelector("[data-icono-caretaker-assignment] .icono-film", {
-          timeout: 30_000,
-        })
+        await page.waitForSelector(
+          "[data-icono-caretaker-assignment] .icono-film:not(.icono-film--pending)",
+          { timeout: 30_000 },
+        )
+        const films = await page.evaluate(() => window.__films)
+        const whole = films.filter((film) => !film.pending)
+        assert.ok(
+          films[0]?.pending,
+          `sidebar: the film's place came first: ${JSON.stringify(films)}`,
+        )
+        assert.ok(
+          whole.every((film) => film.photo === true && film.marker),
+          `sidebar: every film landed with its print and marker hand: ${JSON.stringify(films)}`,
+        )
+        assert.deepEqual(
+          films[0].size,
+          whole[0].size,
+          "sidebar: the empty place is the film's size",
+        )
         const symbol = await page.textContent(".icono-film__symbol")
         assert.equal(symbol.replace(/\s+/g, ""), "TP53", "sidebar: symbol written on the print")
         // The lanes are exposed film: each is a rendered mask over the ink, so count the
