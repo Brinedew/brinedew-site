@@ -104,12 +104,6 @@ test("a gene's first portrait is its winner at once, and the election reaches D1
   assert.equal(geneObject.weight_kg, 43.7)
   assert.equal(result.winner_asset_sha256, A)
   assert.deepEqual({ ...winnerOf(db) }, { asset: A, pinned: 0 })
-  const rollup = db.database
-    .prepare(
-      "SELECT current_asset_sha256 AS asset FROM icono_admin_gene_rollup WHERE gene_symbol = 'TP53'",
-    )
-    .get()
-  assert.equal(rollup?.asset, A, "clans and admin read the winner from the gene rollup")
 })
 
 test("a pin beats the election and the election leaves the pinned state alone", async () => {

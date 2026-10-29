@@ -86,7 +86,8 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_overview: owner({ rows_written: 0, rows_read: 100_000 }),
   admin_coverage: owner(CATALOGUE_READ),
   admin_public_stats_audit: owner(CATALOGUE_READ),
-  admin_canon_audit: owner(CATALOGUE_READ),
+  // B-1188: the gallery's facts for at most 200 named genes, about 30 rows a gene.
+  admin_canon_audit: owner({ rows_written: 0, rows_read: 6_000 }),
   admin_read_models_sync: perItem("symbols", BATCH_PRICES.gene_object),
   admin_read_models_shared_discoveries: batch(SMALL_WRITE),
   admin_assets: owner(SMALL_READ),
