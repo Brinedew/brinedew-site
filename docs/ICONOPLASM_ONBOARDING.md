@@ -109,7 +109,7 @@ What it shows:
 
 What API drives it:
 
-- `GET /api/iconoplasm/discoveries/me`
+- `GET /api/iconoplasm/discoveries/me`: the bare shelf (gene symbol, first and last encounter, count); the page joins names, portraits and sort fields from the published catalogue it already holds
 
 What it is **not**:
 
@@ -129,10 +129,6 @@ What it shows:
 What API drives it:
 
 - `catalog/v3/index.json` on the CDN, paged and sorted in the browser by the publication reader (no Worker route)
-
-What it is **not**:
-
-- not `discoveries/me?show_all=1` with a giant payload pretending the full catalog is a discovered shelf
 
 If you are debugging the homepage, figure out which of these two modes should be active **before** touching code.
 
