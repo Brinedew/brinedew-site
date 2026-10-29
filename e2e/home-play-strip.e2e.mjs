@@ -200,7 +200,8 @@ async function openArchive(
       sites.push(request.url())
     }
   })
-  await page.goto(`${HOST}/`)
+  // Held portraits keep the page's load event from firing.
+  await page.goto(`${HOST}/`, holdPortraits ? { waitUntil: "domcontentloaded" } : {})
   await page.waitForSelector("[data-icono-home-play], #icono-home-auxiliary:not([hidden]) > *", {
     timeout: 45_000,
   })
