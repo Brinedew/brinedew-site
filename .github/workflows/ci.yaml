@@ -160,9 +160,10 @@ jobs:
       - name: Reproduce a newly added public extension package from this commit
         run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
 
-  # The repository suite in two halves on two runners (node --test-shard deals
-  # the files out in turn). One runner took 324 s on 2026-10-28 behind about
-  # 4 minutes of setup, and the browser tests then waited for it.
+  # The repository suite in three thirds on three runners (node --test-shard
+  # deals the files out in turn). One runner took 324 s on 2026-10-28 behind
+  # about 4 minutes of setup; two took 122 s and 154 s, the longest lane of a
+  # normal PR, with no file over 18 s, so a third runner divides it again.
   tests:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.notes_only != 'true' }}
@@ -173,7 +174,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -186,7 +187,7 @@ jobs:
         id: tests
         shell: bash
         env:
-          TEST_SHARD: ${{ matrix.shard }}/2
+          TEST_SHARD: ${{ matrix.shard }}/3
         run: |
           set +e
           pnpm test > "$RUNNER_TEMP/repository-tests.log" 2>&1
@@ -215,14 +216,15 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # Browser E2E in the runner's installed Chrome, in two halves like the
-  # repository suite. A run takes only the files its change can break, plus one
-  # swept by run number (scripts/select-e2e.mjs): all 21 together took 588 s on
-  # 2026-10-16. A manual run, or a change to the harness, the dependencies or
-  # CI, takes them all.
+  # Browser E2E in the runner's installed Chrome, in three thirds. Node deals
+  # the files to the thirds in name order and runs a third's files side by
+  # side, so no file should run much longer than its third: the GeneGuessr
+  # tests are four files because as one they took 490 s, the whole lane's wait
+  # (B-1187). A run takes only the files its change can break, plus one swept
+  # by run number (scripts/select-e2e.mjs). A manual run, or a change to the
+  # harness, the dependencies or CI, takes them all.
   # The step's limit stops a hung browser. No --test-timeout: Node applies it
-  # to each whole file too, and geneguessr-direct-structures alone runs about
-  # 310 s.
+  # to each whole file too.
   e2e:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.notes_only != 'true' }}
@@ -233,7 +235,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -249,7 +251,7 @@ jobs:
         timeout-minutes: 15
         env:
           BASE_SHA: ${{ github.event_name != 'workflow_dispatch' && (github.event.pull_request.base.sha || github.event.before) || '' }}
-          SHARD: ${{ matrix.shard }}/2
+          SHARD: ${{ matrix.shard }}/3
         run: |
           files="$(node scripts/select-e2e.mjs --base "$BASE_SHA" --rotate "$GITHUB_RUN_NUMBER")"
           echo "E2E files: $files"

@@ -34,7 +34,7 @@
 // and the leaderboard is read when its sidebar section reaches the viewport. The visit is
 // measured on a desktop viewport (the sidebar beside the game, on screen at load) and on a
 // phone (the sidebar below the game), with 3 and 6 guesses; the counts land in
-// geneguessr-request-budget.json. Failure modes, written before the code:
+// <test file>-request-budget.json. Failure modes, written before the code:
 //  9. a guess is answered without its score and the page asks again (`guess-similarity`), or
 //     shows a spinner, or shows a number other than the one the Worker computes;
 // 10. the page asks `/api/graphics-settings` at load, or styles the first viewer with the
@@ -55,7 +55,7 @@
 // 12. a visit writes a row to the session-write evidence tables, or any D1 row other than the
 //     aggregates;
 // 13. the leaderboard read at the end of a desktop visit costs more than a few dozen rows.
-// The rows land in geneguessr-request-budget.json with the counts.
+// The rows land in that file with the counts.
 //
 // B-965 takes the leaderboard off the Worker: the "Top Streaks" box is read from an object on the
 // CDN that the Worker's own scheduled job publishes (workers/lib/leaderboard-publication.js; here
@@ -76,17 +76,19 @@
 // for RCSB and SWISS-MODEL, which send no Cache-Control. Mol* is served from public/static/vendor (the build puts it
 // there, pinned by SHA-256). Needs an installed Chrome. The request counts land in
 // artifacts/e2e/ (E2E_OUT).
-// E2E scope: quartz/static/geneguessr/ quartz/static/vendor/ !workers/iconoplasm
+//
+// The tests live in geneguessr-direct-loads, geneguessr-direct-failures, geneguessr-visit-budget
+// and geneguessr-score-and-leaderboard (.e2e.mjs), so Node runs them side by side; as one file
+// they took about 490 s. Importing this module registers the hooks that seed D1, run the
+// leaderboard job and start the server, once in each file's process.
 import assert from "node:assert/strict"
 import { createServer } from "node:http"
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import test, { after, before, mock } from "node:test"
+import { after, before, mock } from "node:test"
 
 import worker from "../workers/the-only-allowed-internal-stateful-worker-runtime-do-not-duplicate.js"
 import { publicContentSecurityPolicy } from "../workers/lib/the-only-public-document-policy-do-not-duplicate.js"
-import { DEFAULT_GRAPHICS_SETTINGS } from "../workers/admin.js"
-import { getBlendedSimilarity } from "../workers/lib/protein-store.js"
 import {
   geneguessrWorkerEnv,
   meteredDb,
@@ -97,22 +99,25 @@ import {
   seedLeaderboard,
 } from "../workers/daily-selection-pool-test-d1.js"
 import {
-  ANONYMOUS_PDB_HEADER,
-  MAX_STRUCTURE_FILE_BYTES,
-} from "../quartz/static/geneguessr/structure-bytes.js"
-import {
   ICONOPLASM_BACKGROUND_MINUTES,
   ICONOPLASM_RECURRING_CRON,
 } from "../workers/iconoplasm-background-schedule.js"
 import { LEADERBOARD_OBJECT_KEY } from "../workers/lib/iconoplasm-published-objects.js"
 import { OUT, ROOT, launchChrome } from "./harness.mjs"
 
-const STATIC = path.join(ROOT, "quartz", "static")
-const MOLSTAR_BUILD = path.join(ROOT, "public", "static", "vendor", "pdbe-molstar-3.8.0", "build")
-const BCIF = readFileSync(path.join(ROOT, "e2e", "fixtures", "1CRN.bcif"))
+export const STATIC = path.join(ROOT, "quartz", "static")
+export const MOLSTAR_BUILD = path.join(
+  ROOT,
+  "public",
+  "static",
+  "vendor",
+  "pdbe-molstar-3.8.0",
+  "build",
+)
+export const BCIF = readFileSync(path.join(ROOT, "e2e", "fixtures", "1CRN.bcif"))
 // An older page, to measure what the same visit cost before direct loading.
-const APP_JS = process.env.GG_APP_JS || path.join(STATIC, "geneguessr", "app.js")
-const TYPES = {
+export const APP_JS = process.env.GG_APP_JS || path.join(STATIC, "geneguessr", "app.js")
+export const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css",
   ".js": "text/javascript",
@@ -125,7 +130,7 @@ const TYPES = {
 // The game page in the shape Quartz gives it: the game in the centre column and the right sidebar
 // (where the stats and the "Top Streaks" section are mounted) beside it from 1200 px, below it
 // under that. The grid numbers are those of quartz/styles/variables.scss and base.scss.
-const PAGE = `<!doctype html>
+export const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>GeneGuessr</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/geneguessr/styles.css">
@@ -166,16 +171,16 @@ const PAGE = `<!doctype html>
 <script type="module" src="/static/geneguessr/app.js"></script></body></html>`
 // The game document's real policy. Only `upgrade-insecure-requests` is dropped, because the
 // test origin is plain http on loopback.
-const CSP = publicContentSecurityPolicy({ geneguessrGame: true }).replace(
+export const CSP = publicContentSecurityPolicy({ geneguessrGame: true }).replace(
   /;?\s*upgrade-insecure-requests/,
   "",
 )
-const PROVIDER_HOSTS = ["models.rcsb.org", "alphafold.ebi.ac.uk", "swissmodel.expasy.org"]
+export const PROVIDER_HOSTS = ["models.rcsb.org", "alphafold.ebi.ac.uk", "swissmodel.expasy.org"]
 // The CDN the "Top Streaks" object is published to and read from, Bunny Storage behind the
 // Worker's own writes, and Discord's CDN behind its avatar fetches: all fixtures here.
-const CDN_HOST = "img.brinedew.bio"
-const STORAGE_ZONE = "e2e-zone"
-const BUNNY_ENV = {
+export const CDN_HOST = "img.brinedew.bio"
+export const STORAGE_ZONE = "e2e-zone"
+export const BUNNY_ENV = {
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "e2e-storage-password",
@@ -183,16 +188,16 @@ const BUNNY_ENV = {
   ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
 }
 // A real 1 x 1 PNG: what Discord's CDN answers for an avatar.
-const AVATAR_PNG = Buffer.from(
+export const AVATAR_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64",
 )
-const DESKTOP = { width: 1280, height: 900 }
-const PHONE = { width: 390, height: 844 }
+export const DESKTOP = { width: 1280, height: 900 }
+export const PHONE = { width: 390, height: 844 }
 // Public streaks the leaderboard shows, best first: a full board of five, each with the avatar
 // Discord stores for the account.
-const avatarOf = (id) => `https://cdn.discordapp.com/avatars/${id}/e2e.png`
-const LEADERBOARD = [
+export const avatarOf = (id) => `https://cdn.discordapp.com/avatars/${id}/e2e.png`
+export const LEADERBOARD = [
   { id: "d1", username: "Ada", streak: 12, wins: 40, avatar: avatarOf("d1") },
   { id: "d2", username: "Barbara", streak: 7, wins: 31, avatar: avatarOf("d2") },
   { id: "d3", username: "Chien-Shiung", streak: 3, wins: 9, avatar: avatarOf("d3") },
@@ -200,27 +205,30 @@ const LEADERBOARD = [
   { id: "d5", username: "Emmy", streak: 1, wins: 5, avatar: avatarOf("d5") },
 ]
 
-let db
-let metered
-let dispose
-let rows
-let origin
-let server
-let harness
-let cookie = "geneguessr_session=e2e-visitor"
-let requests = []
+export let db
+export let metered
+export let dispose
+export let rows
+export let origin
+export let server
+export let harness
+export let cookie = "geneguessr_session=e2e-visitor"
+export let requests = []
 // What a visit costs on the meters besides Workers requests: Durable Object calls (reads and
 // writes of the session), KV reads and puts, and D1 rows.
-const meters = { doReads: 0, doWrites: 0, kvGets: 0 }
-let rewrite = { directUrls: true, tokenRoute: true }
+export const meters = { doReads: 0, doWrites: 0, kvGets: 0 }
+export let rewrite = { directUrls: true, tokenRoute: true }
+export const setRewrite = (value) => {
+  rewrite = value
+}
 // Bunny Storage's objects (written by the Worker's scheduled job), and what the CDN host answers:
 // `up` serves the stored object, `down` fails the connection, `garbage` answers 200 with a page
 // that is not JSON, `tampered` serves the object with picture addresses the page must not request.
-const bunny = new Map()
-const board = { mode: "up" }
+export const bunny = new Map()
+export const board = { mode: "up" }
 
 // A short helix, 12 residues: enough for Mol* to draw a cartoon.
-function helix() {
+export function helix() {
   const residues = [
     "GLY",
     "ALA",
@@ -263,7 +271,7 @@ function helix() {
 
 // SWISS-MODEL's PDB files open with TITLE, EXPDTA, AUTHOR, REVDAT, JRNL and REMARK records
 // and have no HEADER record (the first lines of a real one, 2026-10-03, are the same).
-function swissModelPdb() {
+export function swissModelPdb() {
   const head = [
     "TITLE     SWISS-MODEL SERVER (https://swissmodel.expasy.org)",
     "TITLE    2 Untitled Project",
@@ -280,7 +288,7 @@ function swissModelPdb() {
   return `${[...head, ...atoms, "TER", "END"].join("\n")}\n`
 }
 
-function alphaFoldCif() {
+export function alphaFoldCif() {
   const header = [
     "data_AF-E2E-F1",
     "#",
@@ -314,7 +322,7 @@ function alphaFoldCif() {
 }
 
 // What a provider answers for a file, by host: the format each one serves.
-function providerFile(url) {
+export function providerFile(url) {
   const { hostname } = new URL(url)
   if (hostname === "models.rcsb.org") return { body: BCIF, type: "application/octet-stream" }
   if (hostname === "swissmodel.expasy.org") {
@@ -495,7 +503,7 @@ after(async () => {
   await dispose?.()
 })
 
-function stripDirectUrls(pathname, text) {
+export function stripDirectUrls(pathname, text) {
   const strip = (token) => {
     if (token && typeof token === "object") delete token.directUrl
   }
@@ -517,14 +525,14 @@ function stripDirectUrls(pathname, text) {
   return text
 }
 
-const readBody = async (request) => {
+export const readBody = async (request) => {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
   return Buffer.concat(chunks).toString("utf8")
 }
 
 // The page searches this static file for a guess; its rows are the seeded proteins.
-function proteinIndex() {
+export function proteinIndex() {
   return {
     schema_version: 1,
     fields: ["uniprot", "hgnc", "gene_surname", "full_name", "length", "synonyms"],
@@ -541,10 +549,10 @@ function proteinIndex() {
 
 // The target the daily pick gave the newest session (the visit's own), and three proteins to
 // guess, one per source.
-const newestTarget = () => [...harness.sessions.values()].at(-1).targetId
+export const newestTarget = () => [...harness.sessions.values()].at(-1).targetId
 // `count` proteins to guess, cycling through the three sources: the first three are one of
 // each, the next three the second of each.
-const guessRows = (target, count = 3) => {
+export const guessRows = (target, count = 3) => {
   const sources = ["pdb", "swissmodel", "alphafold"]
   const pools = sources.map((source) =>
     rows.filter(
@@ -554,12 +562,12 @@ const guessRows = (target, count = 3) => {
   return Array.from({ length: count }, (_, index) => pools[index % 3][Math.floor(index / 3)])
 }
 
-function resetMeters() {
+export function resetMeters() {
   metered.receipts.length = 0
   harness.kvPuts.length = 0
   Object.assign(meters, { doReads: 0, doWrites: 0, kvGets: 0 })
 }
-const readMeters = () => ({
+export const readMeters = () => ({
   ...meters,
   kvPuts: harness.kvPuts.length,
   d1RowsRead: metered.totalRead(),
@@ -577,7 +585,7 @@ const readMeters = () => ({
     ),
 })
 
-function category(line) {
+export function category(line) {
   if (line.startsWith("GET /api/game/bootstrap")) return "bootstrap"
   if (line.startsWith("GET /api/graphics-settings")) return "graphicsSettings"
   if (line.startsWith("GET /api/stats/leaderboard")) return "leaderboard"
@@ -589,7 +597,7 @@ function category(line) {
   if (line.includes("/api/structure-token")) return "structureToken"
   return "other"
 }
-function counts(lines) {
+export function counts(lines) {
   const out = {
     bootstrap: 0,
     graphicsSettings: 0,
@@ -607,7 +615,7 @@ function counts(lines) {
 }
 
 // The CDN host, as `board.mode` says (see above). Every request to it is recorded on the tracker.
-async function answerCdn(route, tracker) {
+export async function answerCdn(route, tracker) {
   const request = route.request()
   const { pathname } = new URL(request.url())
   if (request.method() === "OPTIONS") {
@@ -649,7 +657,7 @@ async function answerCdn(route, tracker) {
 // A browser context for one visitor. Off-origin requests: Mol* comes from the vendored build, a
 // provider answers from a fixture with the CORS header the real ones send (or as `provider`
 // says), and everything else is refused. `tracker` records what the page did.
-async function openVisitor(
+export async function openVisitor(
   browser,
   { visitorCookie, provider = null, viewport = { width: 1200, height: 900 }, noObserver = false },
 ) {
@@ -768,13 +776,13 @@ async function openVisitor(
   return { page, context, tracker }
 }
 
-async function openGame(page) {
+export async function openGame(page) {
   await page.goto(`${origin}/?gg_api=${encodeURIComponent(origin)}`)
   await page.waitForSelector('body[data-geneguessr-status="rendered"]', { timeout: 30000 })
 }
 
 // Types a protein's gene symbol, picks the suggestion and waits for its card.
-async function guess(page, row, cardsAfter) {
+export async function guess(page, row, cardsAfter) {
   await page.fill("#pg-input", row.gene)
   await page.waitForSelector(`.pg-suggestion[data-uniprot="${row.uniprot}"]`, { timeout: 10000 })
   await page.click(`.pg-suggestion[data-uniprot="${row.uniprot}"]`)
@@ -786,7 +794,7 @@ async function guess(page, row, cardsAfter) {
 }
 
 // Waits until `expected` viewers have rendered or shown an error, and returns which.
-async function settle(page, tracker, expected, timeoutMs = 40000) {
+export async function settle(page, tracker, expected, timeoutMs = 40000) {
   const failedViewers = () =>
     page.evaluate(() =>
       [...document.querySelectorAll(".pg-structure-error")]
@@ -805,7 +813,7 @@ async function settle(page, tracker, expected, timeoutMs = 40000) {
 }
 
 // A visit: open the game and make `guesses` guesses by typing and clicking.
-async function visit(
+export async function visit(
   browser,
   { visitorCookie, guesses = 3, provider = null, viewport, noObserver = false },
 ) {
@@ -842,7 +850,7 @@ async function visit(
 // A returning visitor: a session that already holds these guesses with no score (the bootstrap
 // scores them). The page opens the newest guess's card, so a load shows two viewers (the target
 // and that guess); the visitor then opens the other two cards, and reloads.
-async function returningVisit(browser, { visitorCookie }) {
+export async function returningVisit(browser, { visitorCookie }) {
   const { page, context, tracker } = await openVisitor(browser, { visitorCookie })
   cookie = visitorCookie
   await worker.fetch(
@@ -897,7 +905,7 @@ async function returningVisit(browser, { visitorCookie }) {
   return { page, context, tracker, phases, target: state.targetId, guessed: chosen }
 }
 
-const chromeAndMolstar = async (t) => {
+export const chromeAndMolstar = async (t) => {
   if (!existsSync(path.join(MOLSTAR_BUILD, "pdbe-molstar-plugin.js"))) {
     if (process.env.CI) throw new Error("public/static/vendor Mol* build is missing")
     t.skip("the Mol* build is not in public/static/vendor (run pnpm run build)")
@@ -906,424 +914,28 @@ const chromeAndMolstar = async (t) => {
   return launchChrome(t)
 }
 
-const measured = {}
-const save = () => {
+// The test file Node is running: each of the four saves its measurements under its own name.
+const testFile = path.basename(process.argv[1], ".e2e.mjs")
+export const measured = {}
+export const save = () => {
   mkdirSync(OUT, { recursive: true })
-  writeFileSync(
-    path.join(OUT, "geneguessr-direct-structures.json"),
-    JSON.stringify(measured, null, 2),
-  )
+  writeFileSync(path.join(OUT, `${testFile}.json`), JSON.stringify(measured, null, 2))
 }
-const hostsOf = (urls) => urls.map((url) => new URL(url).hostname).sort()
-const rowWith = (source, result) =>
+export const hostsOf = (urls) => urls.map((url) => new URL(url).hostname).sort()
+export const rowWith = (source, result) =>
   rows.find((row) => row.structure_source === source && result.guessed.includes(row.uniprot))
-
-test("page load plus three guesses: guess structures come from the providers, the target through the Worker", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, page, context, tracker } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-direct",
-    })
-    mkdirSync(OUT, { recursive: true })
-    await page.screenshot({
-      path: path.join(OUT, "geneguessr-direct-structures.png"),
-      fullPage: true,
-    })
-    const blobs = await page.evaluate(() => window.__blobs)
-    const providerFetches = await page.evaluate(() => window.__providerFetches)
-    await context.close()
-    measured.direct = { ...result, blobs }
-
-    assert.equal(
-      result.counts.structureKey,
-      0,
-      `guess views through the Worker: ${result.requests}`,
-    )
-    assert.equal(result.counts.structureTarget, 1, "the target is one Worker view")
-    assert.equal(result.counts.structureToken, 0, "no token request")
-    assert.deepEqual(
-      hostsOf(result.providerRequests),
-      [...PROVIDER_HOSTS].sort(),
-      "one request to each provider, for the three guesses",
-    )
-    assert.deepEqual(result.failed, [], "no viewer failed")
-    assert.equal(result.complete.length, 4, `rendered viewers: ${result.complete}`)
-    assert.deepEqual(tracker.cspViolations, [], "the policy lets every provider request through")
-    // What Mol* is given: a SWISS-MODEL PDB always opens with the anonymous HEADER line, and
-    // the file after it is the provider's, byte for byte.
-    const header = new TextDecoder().decode(ANONYMOUS_PDB_HEADER)
-    assert.equal(blobs.length, 4, "one blob per viewer")
-    assert.ok(
-      blobs.every((blob) => !blob.head.startsWith("TITLE     SWISS-MODEL")),
-      "a SWISS-MODEL PDB reached Mol* without its HEADER line",
-    )
-    const swiss = blobs.filter((blob) => blob.head.startsWith("HEADER    MODEL"))
-    assert.ok(swiss.length >= 1)
-    for (const blob of swiss) assert.equal(blob.size, swissModelPdb().length + header.length)
-    assert.ok(
-      blobs.some((blob) => blob.size === BCIF.length),
-      "the RCSB file is delivered whole",
-    )
-    assert.ok(
-      blobs.some((blob) => blob.size === alphaFoldCif().length),
-      "the AlphaFold file too",
-    )
-    for (const sent of tracker.providerHeaders) {
-      assert.equal(sent.referer, undefined, `a provider got a referrer: ${sent.referer}`)
-      assert.equal(sent.cookie, undefined, "a provider got a cookie")
-    }
-    // The page asks for exactly that: no credentials, no referrer, and the browser's own cache
-    // for a repeat view (a provider such as RCSB sends no Cache-Control, so a default fetch
-    // asks the provider again, 270 to 424 ms against 1 to 2 ms measured on 2026-10-03).
-    assert.deepEqual(
-      hostsOf(providerFetches.map((fetched) => `https://${fetched.host}/`)),
-      [...PROVIDER_HOSTS].sort(),
-    )
-    for (const fetched of providerFetches) {
-      assert.equal(fetched.credentials, "omit", `${fetched.host}: credentials`)
-      assert.equal(fetched.referrerPolicy, "no-referrer", `${fetched.host}: referrer policy`)
-      assert.equal(fetched.cache, "force-cache", `${fetched.host}: a repeat view is the browser's`)
-    }
-  } finally {
-    save()
-    await browser.close()
-  }
-})
-
-test("the same visit with no direct URL in the payloads loads every guess through the Worker, as before", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: false }
-    const { result, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-proxy",
-    })
-    await context.close()
-    measured.proxyOnly = result
-
-    assert.equal(result.counts.structureKey, 3)
-    assert.equal(result.counts.structureTarget, 1)
-    assert.deepEqual(result.providerRequests, [], "the browser never talks to a provider")
-    assert.deepEqual(result.failed, [])
-    assert.equal(result.complete.length, 4)
-  } finally {
-    rewrite = { directUrls: true }
-    save()
-    await browser.close()
-  }
-})
-
-test("a returning visitor's load, opened cards and reload take every guess from its provider with no structure request to the Worker", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const visitor = await returningVisit(browser, { visitorCookie: "geneguessr_session=e2e-back" })
-    await visitor.context.close()
-    measured.returning = visitor.phases
-    const [load, opened, reload] = visitor.phases
-    for (const phase of visitor.phases) {
-      assert.equal(phase.counts.structureKey, 0, `${phase.name}: no guess through the Worker`)
-      assert.equal(phase.counts.structureToken, 0, `${phase.name}: no token request`)
-      assert.deepEqual(phase.failed, [], `${phase.name}: no viewer failed`)
-    }
-    for (const phase of [load, reload]) {
-      assert.equal(phase.counts.bootstrap, 1, `${phase.name}: one bootstrap`)
-      assert.equal(phase.counts.structureTarget, 1, `${phase.name}: the target is one Worker view`)
-    }
-    assert.deepEqual(hostsOf(load.providerRequests), ["alphafold.ebi.ac.uk"], "load: the open card")
-    assert.equal(load.complete.length, 2, `load: ${load.complete}`)
-    assert.deepEqual(
-      hostsOf(opened.providerRequests),
-      ["models.rcsb.org", "swissmodel.expasy.org"],
-      "opening the other cards loads them from their providers",
-    )
-    assert.equal(opened.counts.total, 0, "opening a card makes no Worker request")
-    assert.deepEqual(hostsOf(reload.providerRequests), [...PROVIDER_HOSTS].sort(), "reload")
-    assert.equal(reload.complete.length, 4, `reload: ${reload.complete}`)
-  } finally {
-    save()
-    await browser.close()
-  }
-})
-
-test("no payload and no provider request names the target before the reveal", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, context, page } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-secret",
-    })
-    const target = rows.find((row) => row.uniprot === result.target)
-    const seen = await page.evaluate(async (base) => {
-      const response = await fetch(`${base}/api/game/bootstrap`, { credentials: "include" })
-      return response.text()
-    }, origin)
-    await context.close()
-
-    const nameable = [target.uniprot, target.pdb_id, target.swissmodel_url, target.alphafold_url]
-      .filter(Boolean)
-      .map(String)
-    const everyRequest = [...result.requests, ...result.providerRequests].join("\n")
-    for (const secret of nameable) {
-      assert.ok(!seen.includes(secret), `the bootstrap names the target: ${secret}`)
-      assert.ok(!everyRequest.includes(secret), `a request names the target: ${secret}`)
-    }
-    assert.match(seen, /\/api\/structure-cached\?type=target/)
-  } finally {
-    await browser.close()
-  }
-})
-
-test("a provider that fails, answers an error or blocks the browser sends that one guess through the Worker", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-failing",
-      provider: async (url, route) => {
-        const { hostname } = new URL(url)
-        if (hostname === "models.rcsb.org") {
-          await route.abort("connectionreset")
-          return true
-        }
-        if (hostname === "alphafold.ebi.ac.uk") {
-          await route.fulfill({
-            status: 503,
-            body: "busy",
-            headers: { "access-control-allow-origin": "*" },
-          })
-          return true
-        }
-        // SWISS-MODEL answers a 404 with no CORS header, as the real one does.
-        await route.fulfill({ status: 404, body: "no model" })
-        return true
-      },
-    })
-    await context.close()
-    measured.providersFailing = result
-
-    const key = (path) => `GET /api/structure-cached?key=${encodeURIComponent(path)}`
-    assert.deepEqual(
-      result.requests.filter((line) => line.includes("structure-cached?key=")).sort(),
-      [
-        key(`pdb/${rowWith("pdb", result).pdb_id}.bcif`),
-        key(`swissmodel/${rowWith("swissmodel", result).uniprot}_tmpl.pdb`),
-        key(`alphafold/${rowWith("alphafold", result).uniprot}.cif`),
-      ].sort(),
-    )
-    assert.deepEqual(result.failed, [], "the Worker route shows every viewer")
-    assert.equal(result.complete.length, 4)
-  } finally {
-    save()
-    await browser.close()
-  }
-})
-
-test("a structure that fails to load leaves the clues playable, and a failure after the game rendered cannot replace it", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { page, context } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-structure-failure",
-    })
-    // The Worker's route for the target's structure answers 500.
-    await context.route(
-      (url) =>
-        url.origin === origin &&
-        url.pathname === "/api/structure-cached" &&
-        url.searchParams.get("type") === "target",
-      (route) =>
-        route.fulfill({
-          status: 500,
-          contentType: "application/json",
-          body: JSON.stringify({ error: "structure unavailable" }),
-        }),
-    )
-    await openGame(page)
-    const message = page.locator(".pg-structure-error:not([hidden])").first()
-    await message.waitFor({ timeout: 30000 })
-    assert.match(
-      await message.innerText(),
-      /You can still play using the clues below\./,
-      "the viewer says what is still possible",
-    )
-    // The clues are there, and a guess is played through to its card.
-    assert.ok(await page.locator("#pg-input").isVisible(), "the guess box is on the page")
-    await guess(page, guessRows(newestTarget(), 1)[0], 1)
-
-    // A viewer that fails later, after the game rendered, is logged and nothing else: it
-    // cannot replace the game with an error page.
-    await page.evaluate(() => {
-      setTimeout(() => {
-        throw new Error("a viewer failed in the background")
-      }, 0)
-      Promise.reject(new Error("a viewer request was rejected late"))
-    })
-    await page.waitForTimeout(500)
-    assert.equal(await page.locator("body").getAttribute("data-geneguessr-status"), "rendered")
-    assert.ok(await page.locator("#pg-input").isVisible(), "the game is still on the page")
-    assert.equal(
-      await page.locator('.pg-feedback-card[id^="guess-card-"]').count(),
-      1,
-      "the guess card is still there",
-    )
-    await context.close()
-  } finally {
-    await browser.close()
-  }
-})
-
-test("an empty answer from a provider counts as a failure, not as a structure", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-empty",
-      provider: async (url, route) => {
-        if (new URL(url).hostname !== "swissmodel.expasy.org") return false
-        // The page puts a HEADER line in front of a SWISS-MODEL file; an empty file is still empty.
-        await route.fulfill({
-          status: 200,
-          body: "",
-          headers: { "content-type": "text/plain", "access-control-allow-origin": "*" },
-        })
-        return true
-      },
-    })
-    await context.close()
-
-    assert.equal(result.counts.structureKey, 1, `fallbacks: ${result.requests}`)
-    assert.match(
-      result.requests.find((line) => line.includes("structure-cached?key=")),
-      /swissmodel/,
-    )
-    assert.deepEqual(result.failed, [])
-    assert.equal(result.complete.length, 4)
-  } finally {
-    await browser.close()
-  }
-})
-
-test("a provider that stalls sends that guess through the Worker", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const started = Date.now()
-    const { result, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-stalled",
-      provider: async (url) => {
-        if (new URL(url).hostname !== "swissmodel.expasy.org") return false
-        await new Promise(() => {}) // never answers; closing the context ends it
-      },
-    })
-    await context.close()
-    measured.providerStalled = { ...result, seconds: Math.round((Date.now() - started) / 1000) }
-
-    assert.equal(result.counts.structureKey, 1, `fallbacks: ${result.requests}`)
-    assert.match(
-      result.requests.find((line) => line.includes("structure-cached?key=")),
-      /swissmodel/,
-    )
-    assert.deepEqual(result.failed, [])
-    assert.equal(result.complete.length, 4)
-  } finally {
-    save()
-    await browser.close()
-  }
-})
-
-test("an oversize body from a provider is cut off, never reaches Mol*, and is not downloaded a second time", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-oversize",
-      provider: async (url, route) => {
-        if (new URL(url).hostname !== "swissmodel.expasy.org") return false
-        await route.fulfill({
-          status: 200,
-          body: Buffer.alloc(MAX_STRUCTURE_FILE_BYTES + 1024, 0x41),
-          headers: { "content-type": "text/plain", "access-control-allow-origin": "*" },
-        })
-        return true
-      },
-    })
-    await context.close()
-    measured.oversize = result
-
-    assert.equal(result.counts.structureKey, 0, "no second download through the Worker")
-    assert.equal(result.failed.length, 1, `failed viewers: ${result.failed}`)
-    assert.match(result.failed[0], /Could not load the 3D structure/)
-    assert.equal(result.complete.length, 3, "the other three viewers render")
-  } finally {
-    save()
-    await browser.close()
-  }
-})
-
-test("a direct URL that is not a provider URL is never requested and the guess loads through the Worker", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    const bad = [
-      "https://evil.example/x.cif",
-      "http://models.rcsb.org/v1/1CRN/full?encoding=bcif",
-      "https://user:pw@alphafold.ebi.ac.uk/files/AF-X-F1-model_v6.cif",
-    ]
-    let next = 0
-    // Every guess response names a different bad URL, in the order the guesses are made.
-    rewrite = {
-      directUrls: true,
-      offList: (pathname, text) => {
-        if (pathname !== "/api/game/guess") return text
-        const payload = JSON.parse(text)
-        if (payload.guessStructureToken) payload.guessStructureToken.directUrl = bad[next++]
-        return JSON.stringify(payload)
-      },
-    }
-    const { result, context, tracker } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-offlist",
-    })
-    await context.close()
-    measured.offList = result
-
-    assert.equal(next, 3)
-    assert.deepEqual(result.providerRequests, [], "no request to a provider")
-    assert.deepEqual(
-      tracker.offOrigin.filter((url) => !/cdn\.jsdelivr\.net/.test(url)),
-      [],
-      "no request off the page's origin",
-    )
-    assert.deepEqual(tracker.cspViolations, [], "the page refused them before the policy had to")
-    assert.equal(result.counts.structureKey, 3)
-    assert.deepEqual(result.failed, [])
-  } finally {
-    rewrite = { directUrls: true }
-    save()
-    await browser.close()
-  }
-})
 
 // ---------------------------------------------------------------------------------------------
 // B-957: the request budget of a visit. What a visit costs on the free plan is its Worker
 // requests (two meter units each), so these tests count them for page load plus 3 and 6
 // guesses, on a desktop viewport and on a phone.
 
-const budget = {}
-const saveBudget = () => {
+export const budget = {}
+export const saveBudget = () => {
   mkdirSync(OUT, { recursive: true })
-  writeFileSync(path.join(OUT, "geneguessr-request-budget.json"), JSON.stringify(budget, null, 2))
+  writeFileSync(path.join(OUT, `${testFile}-request-budget.json`), JSON.stringify(budget, null, 2))
 }
-const leaderboardShown = (page) =>
+export const leaderboardShown = (page) =>
   page.evaluate(() => ({
     names: [...document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-name")].map(
       (el) => el.textContent,
@@ -1334,7 +946,7 @@ const leaderboardShown = (page) =>
     texts: window.__leaderboardTexts,
   }))
 // The pictures in the box: where each comes from, and whether the browser decoded it.
-const picturesDecoded = (page, count) =>
+export const picturesDecoded = (page, count) =>
   page.waitForFunction(
     (expected) => {
       const images = [
@@ -1347,7 +959,7 @@ const picturesDecoded = (page, count) =>
     count,
     { timeout: 10000 },
   )
-const leaderboardPictures = (page) =>
+export const leaderboardPictures = (page) =>
   page.evaluate(() =>
     [...document.querySelectorAll("#pg-sidebar-leaderboard img.pg-leaderboard-avatar")].map(
       (img) => ({
@@ -1356,406 +968,10 @@ const leaderboardPictures = (page) =>
       }),
     ),
   )
-const BOARD_READ = `GET /${LEADERBOARD_OBJECT_KEY}`
-const RANKED = {
+export const BOARD_READ = `GET /${LEADERBOARD_OBJECT_KEY}`
+export const RANKED = {
   names: LEADERBOARD.map((entry) => entry.username),
   streaks: LEADERBOARD.map((entry) => entry.streak),
 }
-const rowsShown = () =>
+export const rowsShown = () =>
   document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-row").length > 0
-
-for (const [layout, viewport] of [
-  ["desktop", DESKTOP],
-  ["phone", PHONE],
-]) {
-  for (const guesses of [3, 6]) {
-    const expectedTotal = 2 + guesses
-    test(`a ${layout} visit, page load plus ${guesses} guesses, costs ${expectedTotal} Worker requests, none of them the board or its pictures`, async (t) => {
-      const browser = await chromeAndMolstar(t)
-      if (!browser) return
-      try {
-        rewrite = { directUrls: true }
-        const { result, page, context, tracker } = await visit(browser, {
-          visitorCookie: `geneguessr_session=e2e-budget-${layout}-${guesses}`,
-          guesses,
-          viewport,
-        })
-        // The visit's own measurements first: a visitor on a phone has not scrolled to the
-        // sidebar, a desktop visitor has it on screen.
-        const marks = await page.evaluate(() => window.__pendingMarks)
-        const entry = { ...result, pendingMarks: marks }
-        budget[`${layout}${guesses}`] = entry
-        if (layout === "phone") {
-          // Then the visitor scrolls down to the sidebar: the section is read once.
-          await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
-          await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-          entry.afterScroll = { ...counts(requests), cdn: [...tracker.cdn] }
-        } else {
-          await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-        }
-        await picturesDecoded(page, LEADERBOARD.length)
-        entry.pictures = await leaderboardPictures(page)
-        await context.close()
-
-        const c = result.counts
-        assert.equal(c.bootstrap, 1, `bootstrap: ${result.requests}`)
-        assert.equal(c.structureTarget, 1, "the target is one Worker view")
-        assert.equal(c.guess, guesses, "one request a guess")
-        assert.equal(c.similarity, 0, "no request for a similarity score")
-        assert.equal(c.graphicsSettings, 0, "no request for the graphics settings")
-        assert.equal(c.structureKey, 0, "no guess view through the Worker")
-        assert.equal(c.structureToken, 0, "no token request")
-        assert.equal(c.other, 0, `nothing else: ${result.requests}`)
-        assert.equal(c.leaderboard, 0, "the board is not a Worker request")
-        assert.equal(c.avatar, 0, "nor are its pictures")
-        assert.equal(c.total, expectedTotal, `${result.requests}`)
-        assert.deepEqual(
-          result.cdnRequests,
-          layout === "desktop" ? [BOARD_READ] : [],
-          "one CDN read on a desktop, none on a phone before its section is reached",
-        )
-        assert.equal(marks, 0, "a score never shows as pending")
-        // D1 rows (B-960, B-959): the receipts of every statement the visit ran.
-        const receipts = result.meters.d1Receipts
-        assert.deepEqual(
-          receipts.filter((receipt) => /game_session_write_/.test(receipt.sql)),
-          [],
-          "a successful session write records nothing",
-        )
-        assert.deepEqual(
-          receipts
-            .filter((receipt) => receipt.rowsWritten && !/daily_guess_aggregate/.test(receipt.sql))
-            .map((receipt) => receipt.sql),
-          [],
-          "the only rows a visit writes are the aggregates",
-        )
-        assert.equal(result.meters.d1RowsWritten, guesses, "1 row a guess")
-        assert.deepEqual(
-          receipts.filter((receipt) => /leaderboard_streaks/.test(receipt.sql)),
-          [],
-          "a visit reads no board from D1",
-        )
-        assert.deepEqual(result.failed, [], "no viewer failed")
-        assert.equal(result.complete.length, 1 + guesses, `rendered viewers: ${result.complete}`)
-        assert.deepEqual(tracker.cspViolations, [])
-        if (layout === "phone") {
-          assert.deepEqual(
-            entry.afterScroll.cdn,
-            [BOARD_READ],
-            "scrolling to the section reads the object once",
-          )
-          assert.equal(entry.afterScroll.leaderboard + entry.afterScroll.avatar, 0)
-          assert.equal(entry.afterScroll.total, expectedTotal)
-        }
-        assert.equal(entry.pictures.length, LEADERBOARD.length, "a picture for every entry")
-        for (const picture of entry.pictures) {
-          assert.ok(
-            picture.src.startsWith("data:image/png;base64"),
-            `a data: image: ${picture.src}`,
-          )
-          assert.ok(picture.decoded, "the browser decoded it")
-        }
-      } finally {
-        saveBudget()
-        await browser.close()
-      }
-    })
-  }
-}
-
-test("each card shows the similarity score the Worker computes, at once and never as a spinner", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { result, page, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-scores",
-      viewport: DESKTOP,
-    })
-    const shown = await page.evaluate(() => ({
-      pending: window.__pendingMarks,
-      cards: [...document.querySelectorAll('.pg-feedback-card[id^="guess-card-"]')].map((card) => ({
-        gene: card.querySelector(".pg-feedback-gene")?.textContent,
-        score: card.querySelector(".pg-feedback-score")?.textContent,
-        bar: card.querySelector(".pg-bar-fill")?.style.width,
-      })),
-    }))
-    await context.close()
-    const target = rows.find((row) => row.uniprot === result.target)
-    assert.equal(shown.cards.length, 3)
-    for (const card of shown.cards) {
-      const guessed = rows.find((row) => row.gene === card.gene)
-      const expected = (await getBlendedSimilarity(db, guessed.gene, target.gene)).blended
-      assert.equal(typeof expected, "number", `${card.gene}: the seeded embeddings score`)
-      assert.equal(card.score, `${expected}%`, `${card.gene}: the number on the card`)
-      assert.equal(card.bar, `${expected}%`, `${card.gene}: the bar`)
-    }
-    assert.equal(shown.pending, 0, "no spinner or pending mark was ever added to the page")
-  } finally {
-    await browser.close()
-  }
-})
-
-test("the page is styled with the settings the bootstrap carries, with no request of their own", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  const tuned = {
-    ...DEFAULT_GRAPHICS_SETTINGS,
-    camera: { ...DEFAULT_GRAPHICS_SETTINGS.camera, mode: "orthographic" },
-  }
-  const cameraMode = async (stored) => {
-    if (stored) harness.kv.set("graphics_settings", JSON.stringify(stored))
-    else harness.kv.delete("graphics_settings")
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: `geneguessr_session=e2e-graphics-${stored ? "tuned" : "default"}`,
-      viewport: DESKTOP,
-    })
-    requests = []
-    // `molstar_debug` hands the page's last viewer to the test.
-    await page.goto(`${origin}/?molstar_debug&gg_api=${encodeURIComponent(origin)}`)
-    await page.waitForSelector('body[data-geneguessr-status="rendered"]', { timeout: 30000 })
-    await settle(page, tracker, 1)
-    await page.waitForTimeout(1500) // the stylization steps wait 100 to 300 ms each
-    const mode = await page.evaluate(
-      () => globalThis.__GeneguessrMolstarDebug?.viewer?.plugin?.canvas3d?.props?.camera?.mode,
-    )
-    const seen = counts(requests)
-    await context.close()
-    return { mode, seen }
-  }
-  try {
-    rewrite = { directUrls: true }
-    const withStored = await cameraMode(tuned)
-    const withDefault = await cameraMode(null)
-    budget.graphicsSettings = { withStored, withDefault }
-    assert.equal(withStored.mode, "orthographic", "the stored value styled the first viewer")
-    assert.equal(withDefault.mode, "perspective", "the control: with no stored value, the default")
-    assert.equal(withStored.seen.graphicsSettings, 0, "no settings request with a stored value")
-    assert.equal(withDefault.seen.graphicsSettings, 0, "none without one")
-  } finally {
-    harness.kv.delete("graphics_settings")
-    saveBudget()
-    await browser.close()
-  }
-})
-
-test("a phone reads the leaderboard when its section nears the screen, and it looks as it always did", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-board-phone",
-      viewport: PHONE,
-    })
-    requests = []
-    await openGame(page)
-    await page.waitForTimeout(2000)
-    const before = {
-      counts: counts(requests),
-      shown: await leaderboardShown(page),
-      cdn: [...tracker.cdn],
-    }
-    const offScreen = await page.evaluate(() => {
-      const top = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect().top
-      return top - window.innerHeight
-    })
-    await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    // Away and back: the rows are already there, so no second read.
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await page.waitForTimeout(500)
-    await page.locator("#pg-sidebar-leaderboard").scrollIntoViewIfNeeded()
-    await page.waitForTimeout(1000)
-    const after = {
-      counts: counts(requests),
-      shown: await leaderboardShown(page),
-      cdn: [...tracker.cdn],
-    }
-    await context.close()
-    budget.leaderboardPhone = { before, after, pixelsBelowTheScreenAtLoad: Math.round(offScreen) }
-
-    assert.ok(offScreen > 400, `the section starts ${offScreen} px below the screen at load`)
-    assert.deepEqual(before.cdn, [], "not read while off screen")
-    assert.deepEqual(before.shown.texts, ["Loading leaderboard..."], "the first paint")
-    assert.deepEqual(after.cdn, [BOARD_READ], "read once, however often it is scrolled to")
-    assert.equal(
-      after.counts.leaderboard + after.counts.avatar,
-      0,
-      "no Worker request for the board or its pictures",
-    )
-    assert.deepEqual({ names: after.shown.names, streaks: after.shown.streaks }, RANKED)
-    assert.ok(
-      !after.shown.texts.includes("No public streaks yet."),
-      `the empty text never flashed: ${JSON.stringify(after.shown.texts)}`,
-    )
-    assert.equal(after.shown.texts.length, 2, "loading, then the rows")
-  } finally {
-    saveBudget()
-    await browser.close()
-  }
-})
-
-test("a desktop reads the leaderboard at load, because its section is on screen, and it looks as it always did", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-board-desktop",
-      viewport: DESKTOP,
-    })
-    requests = []
-    await openGame(page)
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    await picturesDecoded(page, LEADERBOARD.length)
-    const shown = await leaderboardShown(page)
-    const onScreen = await page.evaluate(() => {
-      const box = document.getElementById("pg-sidebar-leaderboard").getBoundingClientRect()
-      return box.top >= 0 && box.bottom <= window.innerHeight
-    })
-    await context.close()
-    budget.leaderboardDesktop = { counts: counts(requests), cdn: [...tracker.cdn], shown, onScreen }
-
-    assert.equal(onScreen === true, true, "the section is on the first screen")
-    assert.deepEqual(tracker.cdn, [BOARD_READ], "read at load, from the CDN")
-    assert.equal(counts(requests).leaderboard + counts(requests).avatar, 0, "no Worker request")
-    assert.deepEqual(tracker.cspViolations, [], "the document policy lets the page read it")
-    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
-    assert.equal(shown.texts.length, 2, `loading, then the rows: ${JSON.stringify(shown.texts)}`)
-    assert.ok(!shown.texts.includes("No public streaks yet."), "the empty text never flashed")
-  } finally {
-    saveBudget()
-    await browser.close()
-  }
-})
-
-test("a browser without IntersectionObserver still reads the leaderboard, at load", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-board-old",
-      viewport: PHONE,
-      noObserver: true,
-    })
-    requests = []
-    await openGame(page)
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    const shown = await leaderboardShown(page)
-    await context.close()
-
-    assert.deepEqual(tracker.cdn, [BOARD_READ])
-    assert.equal(counts(requests).leaderboard, 0)
-    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
-  } finally {
-    await browser.close()
-  }
-})
-
-test("with the CDN unreachable the page falls back to the Worker route, and a full board costs what it used to: the route and a request for each picture", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    board.mode = "down"
-    const { result, page, context } = await visit(browser, {
-      visitorCookie: "geneguessr_session=e2e-budget-fallback",
-      guesses: 3,
-      viewport: DESKTOP,
-    })
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    await picturesDecoded(page, LEADERBOARD.length)
-    const shown = await leaderboardShown(page)
-    const pictures = await leaderboardPictures(page)
-    await context.close()
-    budget.desktop3WithTheCdnDown = { ...result, pictures }
-
-    assert.deepEqual(result.cdnRequests, [BOARD_READ], "tried once")
-    assert.equal(result.counts.leaderboard, 1, "then the route")
-    assert.equal(result.counts.avatar, LEADERBOARD.length, "and a request a picture")
-    assert.equal(
-      result.counts.total,
-      2 + 3 + 1 + LEADERBOARD.length,
-      `a 3-guess desktop visit with a full board before B-965: ${result.requests}`,
-    )
-    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
-    for (const picture of pictures) {
-      assert.ok(
-        picture.src.startsWith("/api/avatar?src="),
-        `the Worker's avatar route: ${picture.src}`,
-      )
-      assert.ok(picture.decoded)
-    }
-  } finally {
-    board.mode = "up"
-    saveBudget()
-    await browser.close()
-  }
-})
-
-test("an answer from the CDN that is not the board sends the page to the Worker route", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    board.mode = "garbage"
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-board-garbage",
-      viewport: DESKTOP,
-    })
-    requests = []
-    await openGame(page)
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    const shown = await leaderboardShown(page)
-    await context.close()
-
-    assert.deepEqual(tracker.cdn, [BOARD_READ])
-    assert.equal(counts(requests).leaderboard, 1, "the route answered")
-    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
-    assert.ok(!shown.texts.includes("No public streaks yet."), "the empty text never flashed")
-  } finally {
-    board.mode = "up"
-    await browser.close()
-  }
-})
-
-test("a board object that names a picture address other than a data: image never makes the page request it", async (t) => {
-  const browser = await chromeAndMolstar(t)
-  if (!browser) return
-  try {
-    rewrite = { directUrls: true }
-    board.mode = "tampered"
-    const { page, context, tracker } = await openVisitor(browser, {
-      visitorCookie: "geneguessr_session=e2e-board-tampered",
-      viewport: DESKTOP,
-    })
-    requests = []
-    await openGame(page)
-    await page.waitForFunction(rowsShown, null, { timeout: 10000 })
-    await page.waitForTimeout(1500)
-    const shown = await leaderboardShown(page)
-    const pictures = await leaderboardPictures(page)
-    const initials = await page.evaluate(
-      () =>
-        document.querySelectorAll("#pg-sidebar-leaderboard .pg-leaderboard-avatar-fallback").length,
-    )
-    await context.close()
-
-    assert.deepEqual({ names: shown.names, streaks: shown.streaks }, RANKED)
-    assert.equal(initials, 2, "the two tampered entries show the initial of the name")
-    assert.equal(pictures.length, LEADERBOARD.length - 2)
-    assert.ok(pictures.every((picture) => picture.src.startsWith("data:image/png;base64")))
-    assert.deepEqual(
-      tracker.offOrigin.filter((url) => /tracker\.example/.test(url)),
-      [],
-      "the page never asked for the address",
-    )
-    assert.deepEqual(tracker.cspViolations, [], "the page refused it before the policy had to")
-    assert.equal(counts(requests).avatar, 0)
-  } finally {
-    board.mode = "up"
-    await browser.close()
-  }
-})
