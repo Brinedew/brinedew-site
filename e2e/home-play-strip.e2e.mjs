@@ -235,7 +235,7 @@ const siteAddresses = (page) =>
     nodes.map((node) => node.textContent),
   )
 // On a phone the two windows sit in one swipe row (candidate-strip.js), each
-// wide enough to read, the second past the screen's edge.
+// wide enough to read, the second peeking in and running past the edge.
 const siteRow = (page) =>
   page.$eval("[data-icono-play-next] .icono-play-sites", (row) => ({
     ready: row.classList.contains("is-strip-ready"),
@@ -493,7 +493,10 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       const [first, second] = row.windows
       assert.ok(first.width >= 250, `a ${first.width} px window on a ${row.screen} px phone`)
       assert.equal(second.top, first.top, "the windows stack instead of sitting in a row")
-      assert.ok(second.left + 40 > row.screen, "the second window is not past the edge")
+      assert.ok(
+        second.left < row.screen && second.left + second.width > row.screen,
+        `the second window doesn't peek in from the edge: ${JSON.stringify(row)}`,
+      )
       await page.$eval("[data-icono-play-next]", (element) =>
         element.scrollIntoView({ block: "center", behavior: "instant" }),
       )
