@@ -53,10 +53,11 @@ answer the same way (`D1_ACCOUNT_READ_LIMIT`, `D1_ACCOUNT_WRITE_LIMIT`).
 
 **What publishing costs, measured 2026-10-09** (Cloudflare `d1QueriesAdaptiveGroups`,
 rows written per statement; indexes and triggers count): a portrait upsert
-about 9, an election's winner row and event 4 each, a gene rollup rebuild 6.6,
-a publish event 4. A new gene's first portrait is about 28 rows written; the
-free plan's 100,000 a day hold roughly 3,000 of them at the 85% share. Price a
-batch job with these numbers before running it.
+about 9, an election's winner row and event 4 each, a publish event 4. A new
+gene's first portrait was about 28 rows written then, 6.6 of them a gene rollup
+rebuild that no longer runs (B-1188), so about 21 now; the free plan's 100,000
+a day hold roughly 4,000 of them at the 85% share. Price a batch job with these
+numbers before running it.
 
 ## Stable gene object
 

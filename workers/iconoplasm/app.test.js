@@ -191,12 +191,6 @@ test("new portraits land on the gene's stable object with one candidate_added ev
   assert.equal(geneObject.portrait.status, "published")
   assert.equal(result.body.genes[0].winner_asset_sha256, geneObject.portrait.asset_sha256)
   assert.deepEqual(
-    h
-      .rows("SELECT current_asset_sha256, total_assets FROM icono_admin_gene_rollup")
-      .map((row) => ({ ...row })),
-    [{ current_asset_sha256: sha("a"), total_assets: 2 }],
-  )
-  assert.deepEqual(
     h.rows("SELECT vision_id FROM icono_vision_rollup_dirty").map((row) => row.vision_id),
     ["anima-v1-23013"],
   )

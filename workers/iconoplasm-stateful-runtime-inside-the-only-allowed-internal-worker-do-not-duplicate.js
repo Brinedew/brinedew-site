@@ -111,7 +111,7 @@ import {
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
-import { readAdminGallery } from "./iconoplasm/admin-gallery.js"
+import { readAdminGallery, readAdminGeneFacts } from "./iconoplasm/admin-gallery.js"
 import {
   GENE_VOTE_VERSION_SQL,
   VOTE_DAILY_BUDGET_EXHAUSTED,
@@ -1187,10 +1187,6 @@ const ADMIN_READ_MODEL_SYNC_REQUEST_VISION_MAX = 1000
 // worse than omitting it: the picker is part of the request contract and must
 // not advertise an example that the execution path cannot reproduce.
 const GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION = 3
-const adminReadModelState = {
-  ready: false,
-  promise: null,
-}
 
 const RANDOM_ARTIST_METAVISION_RE = /^artist-random-[a-z0-9-]+$/i
 const LEGACY_ARTIST_VISION_RE = /^artist-(?!random-)[a-z0-9()_-]+$/i
@@ -12509,9 +12505,7 @@ async function ensureStorageAuditQueueState(env) {
   if (existing) return existing
 
   const totalSymbolsRow = await env.ICONOPLASM_DB.prepare(
-    `SELECT COUNT(*) AS count
-     FROM icono_admin_gene_rollup
-     WHERE COALESCE(total_assets, 0) > 0`,
+    `SELECT COUNT(DISTINCT gene_symbol) AS count FROM icono_portrait_assets`,
   ).first()
 
   await env.ICONOPLASM_DB.prepare(
@@ -12590,14 +12584,13 @@ async function listStorageAuditSeedSymbolsAfter(
     500,
   )
   const response = await env.ICONOPLASM_DB.prepare(
-    `SELECT gene_symbol
-     FROM icono_admin_gene_rollup
-     WHERE COALESCE(total_assets, 0) > 0
-       AND (? = '' OR gene_symbol > ?)
+    `SELECT DISTINCT gene_symbol
+     FROM icono_portrait_assets
+     WHERE gene_symbol > ?
      ORDER BY gene_symbol ASC
      LIMIT ?`,
   )
-    .bind(afterSymbol, afterSymbol, cleanedLimit)
+    .bind(afterSymbol, cleanedLimit)
     .all()
   return Array.from(
     new Set(
@@ -14287,347 +14280,6 @@ export async function rebuildVoteAssetSummaryForSymbols(env, rawSymbols) {
   return symbols.length
 }
 
-export async function rebuildGeneRollupForSymbols(env, rawSymbols) {
-  if (!env.ICONOPLASM_DB || !Array.isArray(rawSymbols) || rawSymbols.length <= 0) return 0
-  const symbols = Array.from(
-    new Set(rawSymbols.map((value) => normalizeSymbol(value)).filter(Boolean)),
-  )
-  if (!symbols.length) return 0
-  const symbolsJson = JSON.stringify(symbols)
-
-  const deleteStatement = env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT upper(value) AS gene_symbol
-       FROM json_each(?)
-     )
-     DELETE FROM icono_admin_gene_rollup
-     WHERE gene_symbol IN (SELECT gene_symbol FROM incoming)
-       AND NOT EXISTS (
-         SELECT 1 FROM icono_gene_catalog gc
-         WHERE gc.gene_symbol = icono_admin_gene_rollup.gene_symbol
-           AND COALESCE(NULLIF(TRIM(gc.full_name), ''), '') <> ''
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM icono_portrait_assets pa
-         WHERE pa.gene_symbol = icono_admin_gene_rollup.gene_symbol
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM icono_publish_state ps
-         WHERE ps.gene_symbol = icono_admin_gene_rollup.gene_symbol
-           AND COALESCE(ps.current_asset_sha256, '') <> ''
-       )`,
-  ).bind(symbolsJson)
-
-  const insertStatement = env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT upper(value) AS gene_symbol
-       FROM json_each(?)
-     )
-     INSERT INTO icono_admin_gene_rollup (
-       gene_symbol,
-       full_name,
-       search_symbol,
-       search_full_name,
-       manifestation,
-       current_asset_sha256,
-       current_asset_missing,
-       admin_override,
-       total_assets,
-       candidate_count,
-       approved_count,
-       rejected_count,
-       stale_count,
-       legacy_count,
-       last_asset_at,
-       live_status,
-       live_is_stale,
-       live_is_legacy,
-       live_autopick_eligible,
-       live_vision_id,
-      live_emulsion_id,
-       live_artist_tag,
-       live_artist_name,
-       live_upvotes,
-       live_downvotes,
-       live_score,
-       live_created_at,
-       leader_asset_sha256,
-       leader_vision_id,
-      leader_emulsion_id,
-       leader_artist_tag,
-       leader_artist_name,
-       leader_upvotes,
-       leader_downvotes,
-       leader_score,
-       leader_created_at,
-       updated_at
-     )
-      WITH publish_info AS (
-        SELECT
-          i.gene_symbol,
-          gc.full_name,
-          lower(COALESCE(ps.current_asset_sha256, '')) AS current_asset_sha256,
-          COALESCE(ps.admin_override, 0) AS admin_override
-        FROM incoming i
-        LEFT JOIN icono_gene_catalog gc
-          ON gc.gene_symbol = i.gene_symbol
-        LEFT JOIN icono_publish_state ps
-         ON ps.gene_symbol = i.gene_symbol
-     ),
-     asset_base AS (
-       SELECT
-         pa.gene_symbol AS gene_symbol,
-         pa.asset_sha256 AS asset_sha256,
-         lower(COALESCE(pa.status, 'draft')) AS status,
-         COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
-         COALESCE(pa.is_stale, 0) AS is_stale,
-         COALESCE(pa.is_legacy, 0) AS is_legacy,
-         COALESCE(pa.vision_id, '') AS vision_id,
-         COALESCE(pa.emulsion_id, '') AS emulsion_id,
-         COALESCE(pa.artist_tag, '') AS artist_tag,
-         COALESCE(pa.artist_name, '') AS artist_name,
-         COALESCE(pa.created_at, '') AS created_at,
-         COALESCE(vs.upvotes, 0) AS upvotes,
-         COALESCE(vs.downvotes, 0) AS downvotes,
-         COALESCE(vs.score, 0) AS score,
-         CASE
-           WHEN COALESCE(caretaker.active, 0) = 1
-            AND caretaker.asset_sha256 = pa.asset_sha256 THEN 1
-           ELSE 0
-         END AS caretaker_supervote,
-         CASE
-           WHEN COALESCE(caretaker.active, 0) = 1
-            AND caretaker.asset_sha256 = pa.asset_sha256
-           THEN COALESCE(caretaker.direction, 1)
-           ELSE NULL
-         END AS caretaker_supervote_direction,
-         COALESCE(vs.score, 0) + CASE
-           WHEN COALESCE(caretaker.active, 0) = 1
-            AND caretaker.asset_sha256 = pa.asset_sha256
-           THEN 10 * COALESCE(caretaker.direction, 1)
-           ELSE 0
-         END AS weighted_score
-       FROM icono_portrait_assets pa
-       JOIN incoming i
-         ON pa.gene_symbol = i.gene_symbol
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-       LEFT JOIN (${CARETAKER_SUPERVOTES_SQL}) caretaker
-         ON caretaker.gene_symbol = pa.gene_symbol
-     ),
-     asset_counts AS (
-       SELECT
-         gene_symbol,
-         COUNT(*) AS total_assets,
-         SUM(
-           CASE
-             WHEN COALESCE(autopick_eligible, 1) = 1
-              AND COALESCE(status, 'draft') <> 'rejected'
-              AND COALESCE(asset_sha256, '') <> '' THEN 1
-             ELSE 0
-           END
-         ) AS candidate_count,
-         SUM(CASE WHEN COALESCE(status, 'draft') = 'approved' THEN 1 ELSE 0 END) AS approved_count,
-         SUM(CASE WHEN COALESCE(status, 'draft') = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
-         SUM(CASE WHEN COALESCE(is_stale, 0) = 1 THEN 1 ELSE 0 END) AS stale_count,
-         SUM(CASE WHEN COALESCE(is_legacy, 0) = 1 THEN 1 ELSE 0 END) AS legacy_count,
-         MAX(NULLIF(created_at, '')) AS last_asset_at
-       FROM asset_base
-       GROUP BY gene_symbol
-     ),
-     current_asset AS (
-       SELECT
-         pi.gene_symbol,
-         ab.asset_sha256,
-         ab.status,
-         ab.is_stale,
-         ab.is_legacy,
-         ab.autopick_eligible,
-         ab.vision_id,
-         ab.emulsion_id,
-         ab.artist_tag,
-         ab.artist_name,
-         ab.upvotes,
-         ab.downvotes,
-         ab.score,
-         ab.created_at
-       FROM publish_info pi
-       LEFT JOIN asset_base ab
-         ON ab.gene_symbol = pi.gene_symbol
-        AND ab.asset_sha256 = pi.current_asset_sha256
-     ),
-     ranked_candidates AS (
-       SELECT
-         ab.gene_symbol,
-         ab.asset_sha256,
-         ab.vision_id,
-         ab.emulsion_id,
-         ab.artist_tag,
-         ab.artist_name,
-         ab.upvotes,
-         ab.downvotes,
-         ab.score,
-         ab.created_at,
-         ROW_NUMBER() OVER (
-           PARTITION BY ab.gene_symbol
-           ORDER BY
-             COALESCE(ab.weighted_score, ab.score, 0) DESC,
-             CASE WHEN ab.caretaker_supervote_direction = 1 THEN 1 ELSE 0 END DESC,
-             COALESCE(ab.score, 0) DESC,
-             CASE WHEN COALESCE(ab.is_legacy, 0) = 0 THEN 1 ELSE 0 END DESC,
-             COALESCE(ab.upvotes, 0) DESC,
-             COALESCE(ab.created_at, '') DESC,
-             CASE WHEN pi.current_asset_sha256 = ab.asset_sha256 THEN 1 ELSE 0 END DESC,
-             ab.asset_sha256 ASC
-         ) AS row_num
-       FROM asset_base ab
-       JOIN publish_info pi
-         ON pi.gene_symbol = ab.gene_symbol
-       WHERE COALESCE(ab.autopick_eligible, 1) = 1
-         AND COALESCE(ab.status, 'draft') <> 'rejected'
-         AND COALESCE(ab.asset_sha256, '') <> ''
-     ),
-     leader_asset AS (
-       SELECT *
-       FROM ranked_candidates
-       WHERE row_num = 1
-     )
-     SELECT
-       pi.gene_symbol,
-       COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol) AS full_name,
-       pi.gene_symbol AS search_symbol,
-       upper(COALESCE(NULLIF(TRIM(pi.full_name), ''), pi.gene_symbol)) AS search_full_name,
-        '' AS manifestation,
-       NULLIF(pi.current_asset_sha256, '') AS current_asset_sha256,
-       CASE
-         WHEN NULLIF(pi.current_asset_sha256, '') IS NOT NULL
-          AND (
-            ca.asset_sha256 IS NULL
-            OR COALESCE(ca.asset_sha256, '') = ''
-          ) THEN 1
-         ELSE 0
-       END AS current_asset_missing,
-       COALESCE(pi.admin_override, 0) AS admin_override,
-       COALESCE(ac.total_assets, 0) AS total_assets,
-       COALESCE(ac.candidate_count, 0) AS candidate_count,
-       COALESCE(ac.approved_count, 0) AS approved_count,
-       COALESCE(ac.rejected_count, 0) AS rejected_count,
-       COALESCE(ac.stale_count, 0) AS stale_count,
-       COALESCE(ac.legacy_count, 0) AS legacy_count,
-       ac.last_asset_at,
-       COALESCE(ca.status, '') AS live_status,
-       COALESCE(ca.is_stale, 0) AS live_is_stale,
-       COALESCE(ca.is_legacy, 0) AS live_is_legacy,
-       COALESCE(ca.autopick_eligible, 0) AS live_autopick_eligible,
-       COALESCE(ca.vision_id, '') AS live_vision_id,
-      COALESCE(ca.emulsion_id, '') AS live_emulsion_id,
-       COALESCE(ca.artist_tag, '') AS live_artist_tag,
-       COALESCE(ca.artist_name, '') AS live_artist_name,
-       COALESCE(ca.upvotes, 0) AS live_upvotes,
-       COALESCE(ca.downvotes, 0) AS live_downvotes,
-       COALESCE(ca.score, 0) AS live_score,
-       COALESCE(ca.created_at, '') AS live_created_at,
-       la.asset_sha256 AS leader_asset_sha256,
-       COALESCE(la.vision_id, '') AS leader_vision_id,
-      COALESCE(la.emulsion_id, '') AS leader_emulsion_id,
-       COALESCE(la.artist_tag, '') AS leader_artist_tag,
-       COALESCE(la.artist_name, '') AS leader_artist_name,
-       COALESCE(la.upvotes, 0) AS leader_upvotes,
-       COALESCE(la.downvotes, 0) AS leader_downvotes,
-       COALESCE(la.score, 0) AS leader_score,
-       COALESCE(la.created_at, '') AS leader_created_at,
-       CURRENT_TIMESTAMP AS updated_at
-     FROM publish_info pi
-     LEFT JOIN asset_counts ac
-       ON ac.gene_symbol = pi.gene_symbol
-     LEFT JOIN current_asset ca
-       ON ca.gene_symbol = pi.gene_symbol
-     LEFT JOIN leader_asset la
-       ON la.gene_symbol = pi.gene_symbol
-     WHERE COALESCE(NULLIF(TRIM(pi.full_name), ''), '') <> ''
-        OR COALESCE(ac.total_assets, 0) > 0
-        OR NULLIF(pi.current_asset_sha256, '') IS NOT NULL
-     ON CONFLICT(gene_symbol) DO UPDATE SET
-       full_name = excluded.full_name,
-       search_symbol = excluded.search_symbol,
-       search_full_name = excluded.search_full_name,
-       manifestation = excluded.manifestation,
-       current_asset_sha256 = excluded.current_asset_sha256,
-       current_asset_missing = excluded.current_asset_missing,
-       admin_override = excluded.admin_override,
-       total_assets = excluded.total_assets,
-       candidate_count = excluded.candidate_count,
-       approved_count = excluded.approved_count,
-       rejected_count = excluded.rejected_count,
-       stale_count = excluded.stale_count,
-       legacy_count = excluded.legacy_count,
-       last_asset_at = excluded.last_asset_at,
-       live_status = excluded.live_status,
-       live_is_stale = excluded.live_is_stale,
-       live_is_legacy = excluded.live_is_legacy,
-       live_autopick_eligible = excluded.live_autopick_eligible,
-       live_vision_id = excluded.live_vision_id,
-       live_emulsion_id = excluded.live_emulsion_id,
-       live_artist_tag = excluded.live_artist_tag,
-       live_artist_name = excluded.live_artist_name,
-       live_upvotes = excluded.live_upvotes,
-       live_downvotes = excluded.live_downvotes,
-       live_score = excluded.live_score,
-       live_created_at = excluded.live_created_at,
-       leader_asset_sha256 = excluded.leader_asset_sha256,
-       leader_vision_id = excluded.leader_vision_id,
-       leader_emulsion_id = excluded.leader_emulsion_id,
-       leader_artist_tag = excluded.leader_artist_tag,
-       leader_artist_name = excluded.leader_artist_name,
-       leader_upvotes = excluded.leader_upvotes,
-       leader_downvotes = excluded.leader_downvotes,
-       leader_score = excluded.leader_score,
-       leader_created_at = excluded.leader_created_at,
-       updated_at = CURRENT_TIMESTAMP
-     WHERE icono_admin_gene_rollup.full_name IS NOT excluded.full_name
-        OR icono_admin_gene_rollup.search_symbol IS NOT excluded.search_symbol
-        OR icono_admin_gene_rollup.search_full_name IS NOT excluded.search_full_name
-        OR icono_admin_gene_rollup.manifestation IS NOT excluded.manifestation
-        OR icono_admin_gene_rollup.current_asset_sha256 IS NOT excluded.current_asset_sha256
-        OR icono_admin_gene_rollup.current_asset_missing IS NOT excluded.current_asset_missing
-        OR icono_admin_gene_rollup.admin_override IS NOT excluded.admin_override
-        OR icono_admin_gene_rollup.total_assets IS NOT excluded.total_assets
-        OR icono_admin_gene_rollup.candidate_count IS NOT excluded.candidate_count
-        OR icono_admin_gene_rollup.approved_count IS NOT excluded.approved_count
-        OR icono_admin_gene_rollup.rejected_count IS NOT excluded.rejected_count
-        OR icono_admin_gene_rollup.stale_count IS NOT excluded.stale_count
-        OR icono_admin_gene_rollup.legacy_count IS NOT excluded.legacy_count
-        OR icono_admin_gene_rollup.last_asset_at IS NOT excluded.last_asset_at
-        OR icono_admin_gene_rollup.live_status IS NOT excluded.live_status
-        OR icono_admin_gene_rollup.live_is_stale IS NOT excluded.live_is_stale
-        OR icono_admin_gene_rollup.live_is_legacy IS NOT excluded.live_is_legacy
-        OR icono_admin_gene_rollup.live_autopick_eligible IS NOT excluded.live_autopick_eligible
-        OR icono_admin_gene_rollup.live_vision_id IS NOT excluded.live_vision_id
-        OR icono_admin_gene_rollup.live_emulsion_id IS NOT excluded.live_emulsion_id
-        OR icono_admin_gene_rollup.live_artist_tag IS NOT excluded.live_artist_tag
-        OR icono_admin_gene_rollup.live_artist_name IS NOT excluded.live_artist_name
-        OR icono_admin_gene_rollup.live_upvotes IS NOT excluded.live_upvotes
-        OR icono_admin_gene_rollup.live_downvotes IS NOT excluded.live_downvotes
-        OR icono_admin_gene_rollup.live_score IS NOT excluded.live_score
-        OR icono_admin_gene_rollup.live_created_at IS NOT excluded.live_created_at
-        OR icono_admin_gene_rollup.leader_asset_sha256 IS NOT excluded.leader_asset_sha256
-        OR icono_admin_gene_rollup.leader_vision_id IS NOT excluded.leader_vision_id
-        OR icono_admin_gene_rollup.leader_emulsion_id IS NOT excluded.leader_emulsion_id
-        OR icono_admin_gene_rollup.leader_artist_tag IS NOT excluded.leader_artist_tag
-        OR icono_admin_gene_rollup.leader_artist_name IS NOT excluded.leader_artist_name
-        OR icono_admin_gene_rollup.leader_upvotes IS NOT excluded.leader_upvotes
-        OR icono_admin_gene_rollup.leader_downvotes IS NOT excluded.leader_downvotes
-        OR icono_admin_gene_rollup.leader_score IS NOT excluded.leader_score
-        OR icono_admin_gene_rollup.leader_created_at IS NOT excluded.leader_created_at`,
-  ).bind(symbolsJson)
-
-  // Preserve the last complete projection if replacement fails.
-  await env.ICONOPLASM_DB.batch([deleteStatement, insertStatement])
-
-  return symbols.length
-}
-
 export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   if (!env.ICONOPLASM_DB || !Array.isArray(rawVisionIds) || rawVisionIds.length <= 0) return 0
   const visionIds = Array.from(
@@ -14924,7 +14576,6 @@ async function syncAdminReadModels(
     symbols = [],
     visionIds = [],
     skipVoteSummaries = false,
-    skipGeneRollups = false,
     skipVisionRollups = false,
     skipDashboard = false,
   } = {},
@@ -14944,7 +14595,6 @@ async function syncAdminReadModels(
   for (let index = 0; index < symbolList.length; index += ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT) {
     const symbolChunk = symbolList.slice(index, index + ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT)
     if (!skipVoteSummaries) await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
-    if (!skipGeneRollups) await rebuildGeneRollupForSymbols(env, symbolChunk)
     if (!skipVisionRollups)
       for (const visionId of await collectVisionIdsForSymbols(env, symbolChunk))
         finalVisionIdSet.add(visionId)
@@ -14956,7 +14606,6 @@ async function syncAdminReadModels(
       finalVisionIds.slice(index, index + ADMIN_READ_MODEL_VISION_BATCH_DEFAULT),
     )
   if (!skipDashboard) await assertAdminCountSummary(env)
-  adminReadModelState.ready = true
   return { symbols: symbolList.length, visions: finalVisionIds.length }
 }
 
@@ -14975,31 +14624,6 @@ export async function drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env) 
     if (result.drained < 128) break
   }
   return { ok: true, drained, applied, duplicates }
-}
-
-async function ensureAdminReadModelsReady(env) {
-  if (!env.ICONOPLASM_DB) return
-  if (adminReadModelState.ready) return
-  if (adminReadModelState.promise) {
-    await adminReadModelState.promise
-    return
-  }
-  adminReadModelState.promise = (async () => {
-    const summary = await env.ICONOPLASM_DB.prepare(
-      `SELECT summary_key FROM icono_admin_dashboard_summary WHERE summary_key = ? LIMIT 1`,
-    )
-      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
-      .first()
-    if (!summary) {
-      throw new Error("Admin count summary is missing; migration 0095 is required")
-    }
-    adminReadModelState.ready = true
-  })()
-  try {
-    await adminReadModelState.promise
-  } finally {
-    adminReadModelState.promise = null
-  }
 }
 
 // B-1188: the admin home, from the tables that are true. Gene counts come from
@@ -15141,68 +14765,74 @@ async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
   }
 }
 
-async function fetchAdminCanonAudit(env, { limit = 1500, eventLimit = 40 } = {}) {
+// B-1188: the workstation compares its own canon picks with the site's, so it
+// names the genes it has picks for, and gets each one's card, pin and vote
+// winner as the gallery reads them (readAdminGeneFacts). This used to list
+// 4,000 rows of icono_admin_gene_rollup, a copy only admin actions rebuilt, by
+// candidate count, whatever genes the workstation had picks for.
+const ADMIN_CANON_AUDIT_SYMBOLS = 200
+
+async function fetchAdminCanonAudit(env, { symbols = [], eventLimit = 0 } = {}) {
   if (!env.ICONOPLASM_DB) return { rows: [], recent_events: [] }
-
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(4000, Number.parseInt(String(limit || "1500"), 10) || 1500),
-  )
-  const cleanedEventLimit = Math.max(
-    0,
-    Math.min(200, Number.parseInt(String(eventLimit || "40"), 10) || 40),
-  )
-
-  await ensureAdminReadModelsReady(env)
-  const auditResp = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       gene_symbol,
-       current_asset_sha256,
-       current_asset_missing,
-       admin_override,
-       total_assets,
-       rejected_count AS rejected_assets,
-       stale_count AS stale_assets,
-       legacy_count AS legacy_assets,
-       candidate_count AS eligible_assets,
-       current_asset_sha256 AS current_resolved_asset_sha256,
-       live_status AS current_status,
-       live_is_stale AS current_is_stale,
-       live_is_legacy AS current_is_legacy,
-       live_vision_id AS current_vision_id,
-       live_artist_tag AS current_artist_tag,
-       live_artist_name AS current_artist_name,
-       live_upvotes AS current_upvotes,
-       live_downvotes AS current_downvotes,
-       live_score AS current_score,
-       live_created_at AS current_created_at,
-       leader_asset_sha256,
-       '' AS leader_status,
-       0 AS leader_is_stale,
-       0 AS leader_is_legacy,
-       leader_vision_id,
-       leader_artist_tag,
-       leader_artist_name,
-       leader_upvotes,
-       leader_downvotes,
-       leader_score,
-       leader_created_at
-     FROM icono_admin_gene_rollup
-     ORDER BY candidate_count DESC, total_assets DESC, gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
-
+  const wanted = Array.from(new Set(symbols.map((value) => normalizeSymbol(value)).filter(Boolean)))
+  const facts = wanted.length ? await readAdminGeneFacts(env.ICONOPLASM_DB, wanted) : new Map()
+  const rows = [...facts.values()].map((fact) => {
+    const live = fact.live || {}
+    const leader = fact.leader_row || {}
+    return {
+      gene_symbol: fact.gene_symbol,
+      current_asset_sha256: fact.current || "",
+      current_resolved_asset_sha256: fact.live ? fact.current : "",
+      admin_override: fact.admin_override ? 1 : 0,
+      total_assets: fact.counts.total_assets,
+      rejected_assets: fact.counts.rejected_count,
+      stale_assets: fact.counts.stale_count,
+      legacy_assets: fact.counts.legacy_count,
+      eligible_assets: fact.counts.candidate_count,
+      current_status: live.status || "",
+      current_is_stale: live.is_stale || 0,
+      current_is_legacy: live.is_legacy || 0,
+      current_vision_id: live.vision_id || "",
+      current_artist_tag: live.artist_tag || "",
+      current_artist_name: live.artist_name || "",
+      current_upvotes: live.upvotes || 0,
+      current_downvotes: live.downvotes || 0,
+      current_score: live.score || 0,
+      current_created_at: live.created_at || "",
+      leader_asset_sha256: fact.leader?.asset_sha256 || "",
+      leader_status: leader.status || "",
+      leader_is_stale: leader.is_stale || 0,
+      leader_is_legacy: leader.is_legacy || 0,
+      leader_vision_id: leader.vision_id || "",
+      leader_artist_tag: leader.artist_tag || "",
+      leader_artist_name: leader.artist_name || "",
+      leader_upvotes: leader.upvotes || 0,
+      leader_downvotes: leader.downvotes || 0,
+      leader_score: leader.score || 0,
+      leader_created_at: leader.created_at || "",
+    }
+  })
   return {
-    rows: Array.isArray(auditResp?.results) ? auditResp.results : [],
-    recent_events: await fetchAdminRecentEvents(env, { limit: cleanedEventLimit }),
+    rows,
+    recent_events: await fetchAdminRecentEvents(env, { limit: eventLimit }),
   }
 }
 
-// The nightly canon repair (23:58 UTC), called in process by the cron: 250
-// genes at most, let in by that whole price before it reads (B-1067). The price
-// is an unmeasured estimate: a gene object rebuild per gene.
+// The nightly canon repair (23:58 UTC), called in process by the cron. It
+// re-elects the catalogue genes whose readers see a broken card (one that names
+// a portrait not stored) or no card though a candidate could be one, 250 at
+// most, unpinned. It looks for them only while the counts say there are some,
+// with the admin home's scans (about 80,000 rows read on the 2026-10-29 copy
+// if both run to the end), and is let in by that price before it reads
+// (B-1067).
+//
+// Chesterton's fence (B-1188): this used to pick genes from
+// icono_admin_gene_rollup, a copy only admin actions rebuilt, and also re-elect
+// genes whose card was not the copy's vote leader. On the 2026-10-29 copy it
+// flagged 28 such genes every night, the election kept every card, and its last
+// real change was on 2026-10-07. The true election over all 19,381 genes found
+// none whose card was not the winner: every vote and every new portrait runs
+// the election, so that check found only the copy's drift.
 const SCHEDULED_CANON_REPAIR_GENES = 250
 export async function repairCanonInvariantsForScheduled(env) {
   const admission = await admitBatchWork(env.ICONOPLASM_DB, {
@@ -15210,7 +14840,7 @@ export async function repairCanonInvariantsForScheduled(env) {
     criticality: "sheddable_plus",
     price: {
       rows_written: 60 * SCHEDULED_CANON_REPAIR_GENES,
-      rows_read: 300 * SCHEDULED_CANON_REPAIR_GENES,
+      rows_read: 80_000 + 300 * SCHEDULED_CANON_REPAIR_GENES,
     },
   })
   if (!admission.ok) return { ok: true, deferred: true, admission: admission.body }
@@ -15228,47 +14858,69 @@ export async function repairCanonInvariants(
   if (!env.ICONOPLASM_DB) {
     return { ok: false, scanned: 0, changed: 0, unresolved: 0, symbols: [] }
   }
-
-  await ensureAdminReadModelsReady(env)
+  const db = env.ICONOPLASM_DB
   const cleanedLimit = Math.max(1, Math.min(1000, Number.parseInt(String(limit || 250), 10) || 250))
   const auditReason =
     String(reason || "scheduled_canon_invariant_repair").slice(0, 2000) ||
     "scheduled_canon_invariant_repair"
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       gene_symbol,
-       current_asset_sha256,
-       leader_asset_sha256,
-       candidate_count,
-       current_asset_missing,
-       admin_override
-     FROM icono_admin_gene_rollup
-     WHERE COALESCE(admin_override, 0) = 0
-       AND (
-         (COALESCE(candidate_count, 0) > 0 AND COALESCE(current_asset_sha256, '') = '')
-         OR COALESCE(current_asset_missing, 0) = 1
-         OR (
-           COALESCE(candidate_count, 0) > 0
-           AND COALESCE(current_asset_sha256, '') <> ''
-           AND COALESCE(leader_asset_sha256, '') <> ''
-           AND lower(current_asset_sha256) <> lower(leader_asset_sha256)
-         )
-       )
-     ORDER BY
-       COALESCE(current_asset_missing, 0) DESC,
-       COALESCE(candidate_count, 0) DESC,
-       gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
+  const [genes, cards] = await Promise.all([
+    db
+      .prepare(`SELECT genes, drift FROM icono_admin_dashboard_summary WHERE summary_key = ?`)
+      .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
+      .first(),
+    db
+      .prepare(
+        `SELECT catalog_published_live_portraits AS cards
+           FROM icono_asset_summary_counts WHERE summary_key = 'default'`,
+      )
+      .first(),
+  ])
+  const symbolsOf = (result) =>
+    (Array.isArray(result?.results) ? result.results : []).map((row) => row.gene_symbol)
+  const broken =
+    Number(genes?.drift || 0) > 0
+      ? symbolsOf(
+          await db
+            .prepare(
+              `SELECT ps.gene_symbol FROM icono_publish_state ps
+                 CROSS JOIN icono_gene_catalog gc ON gc.gene_symbol = ps.gene_symbol
+                WHERE COALESCE(ps.admin_override, 0) = 0
+                  AND COALESCE(ps.current_asset_sha256, '') <> ''
+                  AND NOT EXISTS (SELECT 1 FROM icono_portrait_assets b
+                                   WHERE b.gene_symbol = ps.gene_symbol
+                                     AND b.asset_sha256 = ps.current_asset_sha256)
+                ORDER BY ps.gene_symbol
+                LIMIT ?`,
+            )
+            .bind(cleanedLimit)
+            .all(),
+        )
+      : []
+  const room = cleanedLimit - broken.length
+  const bare =
+    room > 0 && Number(genes?.genes || 0) > Number(cards?.cards || 0)
+      ? symbolsOf(
+          await db
+            .prepare(
+              `SELECT gc.gene_symbol FROM icono_gene_catalog gc
+                 LEFT JOIN icono_publish_state ps ON ps.gene_symbol = gc.gene_symbol
+                WHERE COALESCE(ps.current_asset_sha256, '') = ''
+                  AND COALESCE(ps.admin_override, 0) = 0
+                  AND EXISTS (SELECT 1 FROM icono_portrait_assets pa
+                               WHERE pa.gene_symbol = gc.gene_symbol AND ${ATTENTION_ELIGIBLE})
+                ORDER BY gc.gene_symbol
+                LIMIT ?`,
+            )
+            .bind(room)
+            .all(),
+        )
+      : []
 
-  const rows = Array.isArray(resp?.results) ? resp.results : []
   const touchedSymbols = []
   const changedSymbols = []
   const unresolved = []
-  for (const row of rows) {
-    const symbol = normalizeSymbol(row?.gene_symbol || "")
+  for (const raw of [...broken, ...bare]) {
+    const symbol = normalizeSymbol(raw || "")
     if (!symbol) continue
     touchedSymbols.push(symbol)
     const result = await autoPromoteTopVotedPortrait(env, {
@@ -15279,13 +14931,6 @@ export async function repairCanonInvariants(
     })
     if (result?.changed) changedSymbols.push(symbol)
     else unresolved.push(symbol)
-  }
-
-  if (touchedSymbols.length) {
-    await syncAdminReadModels(env, {
-      symbols: touchedSymbols,
-      skipVisionRollups: true,
-    })
   }
 
   return {
@@ -15336,7 +14981,6 @@ async function fetchAdminCoverage(env) {
     return { total: 0, zero: 0, one: 0, two_to_five: 0, six_plus: 0 }
   }
 
-  await ensureAdminReadModelsReady(env)
   const row = await env.ICONOPLASM_DB.prepare(
     `SELECT
        genes AS total,
@@ -15393,8 +15037,6 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
   const symbol = normalizeSymbol(rawSymbol)
   if (!symbol) return null
   const base = portraitBase(url, env)
-
-  await ensureAdminReadModelsReady(env)
 
   // The card and the pin as published, not icono_admin_gene_rollup's copy of
   // them, which drifted (B-1188).
@@ -16293,13 +15935,8 @@ export async function publishIconoplasmGeneStableObject(
         winner: { asset_sha256: winner },
       })
       // The projected winner is the gene object's previous winner from now on (the tie-break).
-      if (projection.changed) {
+      if (projection.changed)
         geneObject = buildStableGeneObject(content, { ...facts, previous_winner: winner })
-        // The clans page and the admin pages read the winner from the gene
-        // rollup (B-1064 moves clans to the gene objects); nothing else refreshes it
-        // when a vote or a first portrait changes the winner.
-        await rebuildGeneRollupForSymbols(env, [symbol])
-      }
     }
     stable = await store.writeStable(stableGeneObjectKey(symbol), geneObject)
     if (pass >= STABLE_GENE_OBJECT_MAX_PASSES) break
@@ -22141,16 +21778,20 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (!env.ICONOPLASM_DB)
         return done("admin_canon_audit_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
 
-      const limit = Math.max(
-        1,
-        Math.min(4000, Number.parseInt(url.searchParams.get("limit") || "1500", 10)),
-      )
+      const symbols = String(url.searchParams.get("symbols") || "")
+        .split(",")
+        .filter(Boolean)
+      if (symbols.length > ADMIN_CANON_AUDIT_SYMBOLS)
+        return done(
+          "admin_canon_audit_400",
+          json({ error: `At most ${ADMIN_CANON_AUDIT_SYMBOLS} symbols a request` }, 400),
+        )
       const eventLimit = Math.max(
         0,
-        Math.min(200, Number.parseInt(url.searchParams.get("event_limit") || "40", 10)),
+        Math.min(200, Number.parseInt(url.searchParams.get("event_limit") || "0", 10) || 0),
       )
       const base = portraitBase(url, env)
-      const audit = await fetchAdminCanonAudit(env, { limit, eventLimit })
+      const audit = await fetchAdminCanonAudit(env, { symbols, eventLimit })
       const rows = (audit.rows || []).map((row) => {
         const symbol = normalizeSymbol(row?.gene_symbol || "")
         const currentAssetSha = normalizeSha256(row?.current_asset_sha256 || "") || null
