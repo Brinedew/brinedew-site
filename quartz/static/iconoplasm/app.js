@@ -1388,11 +1388,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  // A picture through our avatar proxy, or Discord's own address as the gene
+  // object and /caretakers carry it (no Worker request per face).
+  function caretakerAvatarAllowed(url) {
+    return (
+      url.indexOf("/api/avatar?src=") === 0 ||
+      /^https:\/\/cdn\.discordapp\.com\/(avatars|embed\/avatars)\//.test(url)
+    )
+  }
+
   function renderCaretakerIdentityMarkup(caretaker, className) {
     var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
     var username = String(profile.username || "").trim()
     var avatarUrl = String(profile.avatar_url || "").trim()
-    if (!username || avatarUrl.indexOf("/api/avatar?src=") !== 0) return ""
+    if (!username || !caretakerAvatarAllowed(avatarUrl)) return ""
     return (
       '<div class="icono-caretaker-identity ' +
       esc(className || "") +
@@ -1404,6 +1413,36 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(username) +
       "</span></div>"
     )
+  }
+
+  // The gene's caretaker in its toolbar, for every reader: the viewer's own chip
+  // (below) with the same Caretaker badge, as a link to the /caretakers list. Lost
+  // in the October move to the stable gene object until the object named them.
+  function renderGeneCaretakerMarkup(caretaker) {
+    var markup = renderCaretakerIdentityMarkup(caretaker, "icono-caretaker-identity--toolbar")
+    if (!markup) return ""
+    var since = caretaker.since ? new Date(caretaker.since + "T00:00:00Z") : null
+    var sinceText =
+      since && !isNaN(since.getTime())
+        ? "Since " +
+          since.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            timeZone: "UTC",
+          })
+        : ""
+    return markup
+      .replace(
+        '<div class="icono-caretaker-identity ',
+        '<a href="/caretakers"' +
+          (sinceText ? ' title="' + esc(sinceText) + '"' : "") +
+          ' class="icono-caretaker-identity icono-caretaker-identity--link ',
+      )
+      .replace(
+        /<\/span><\/div>$/,
+        '</span><span class="icono-caretaker-identity__badge">Caretaker</span></a>',
+      )
   }
 
   function syncViewerCaretakerToolbarIdentity(container, isCaretaker) {
@@ -6349,7 +6388,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
       renderCanonicalToolbarMetaMarkup(g) +
       '<div class="icono-canonical-toolbar-actions">' +
-      renderCaretakerIdentityMarkup(g.caretaker, "icono-caretaker-identity--toolbar") +
+      renderGeneCaretakerMarkup(g.caretaker) +
       // B-838: More menu. Wide bars show its items inline; narrow bars collapse them
       // behind the ... button (native popover, no JS toggling).
       '<button type="button" class="icono-button icono-button--icon icono-toolbar-more" popovertarget="icono-toolbar-menu-' +

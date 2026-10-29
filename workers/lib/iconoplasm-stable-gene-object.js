@@ -265,6 +265,23 @@ function publicManifestation(record) {
   }
 }
 
+// The gene's caretaker as the gene page's toolbar shows them, the same three
+// fields the /caretakers directory publishes: Discord name, Discord's own
+// picture address (no Worker request per face) and the day they started.
+const DISCORD_AVATAR = /^https:\/\/cdn\.discordapp\.com\/(avatars|embed\/avatars)\//
+
+function publicCaretaker(record) {
+  const username = text(record?.username, 80)
+  const avatarUrl = String(record?.avatar_url || "")
+  if (!username || !DISCORD_AVATAR.test(avatarUrl)) return null
+  const since = String(record?.since || "").slice(0, 10)
+  return {
+    username,
+    avatar_url: avatarUrl,
+    since: /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : null,
+  }
+}
+
 function voteTallies(facts) {
   const tallies = new Map()
   for (const row of Array.isArray(facts?.votes) ? facts.votes : []) {
@@ -292,6 +309,7 @@ function activeSupervote(facts) {
  *            pin: asset_sha256 | null,
  *            previous_winner: asset_sha256 readers see now | null,
  *            manifestation: public text record | null,
+ *            caretaker: { username, avatar_url, since } | null,
  *            vote_version: integer | null }
  */
 export function buildStableGeneObject(
@@ -334,6 +352,7 @@ export function buildStableGeneObject(
     portrait_candidates: pool,
     candidate_count: pool.length,
     canonical_manifestation: publicManifestation(facts?.manifestation),
+    caretaker: publicCaretaker(facts?.caretaker),
     resolved_from: "published_card_catalog_bulk",
     stable_object_version: STABLE_GENE_OBJECT_VERSION,
     vote_version: voteVersion,

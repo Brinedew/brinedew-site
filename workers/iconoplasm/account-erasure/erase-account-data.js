@@ -598,10 +598,10 @@ export async function eraseBrinedewAccountOnRequest(
     return { account, erasure: { complete: true, rows_written: 0, changed: {} } }
   }
   await requestBrinedewAccountErasure(db, lifecycle)
-  // The person's caretaker role ends first, before anything is removed; a role
-  // that held a supervote re-runs its gene's election (`services.settleGene`).
-  // A failed election never stops the erasure: the end moved the gene's vote
-  // version, so the gene's next vote elects without the supervote.
+  // The person's caretaker role ends first, before anything is removed, and the
+  // gene's object is rewritten without them (`services.settleGene`), so it stops
+  // naming them and its election drops their supervote. A failed rewrite never
+  // stops the erasure; the gene's next vote or publish rewrites it.
   for (const symbol of await endRolesOfErasedAccount(
     env.ICONOPLASM_DB,
     accountId,

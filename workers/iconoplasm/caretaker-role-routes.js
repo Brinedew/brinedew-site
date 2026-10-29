@@ -65,8 +65,8 @@ function param(c, name) {
 }
 
 // `caretakerSession` resolves the signed-in Brinedew account (it 401s without
-// one). `settleGene` re-runs a gene's election and republishes its gene object, for a
-// role that ended with its supervote on one of the gene's images.
+// one). `settleGene` re-runs a gene's election and republishes its gene object, for
+// every gene whose caretaker changed: the object names the caretaker readers see.
 export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene }) {
   const signedIn = (c) => requireBrowserSession(c.req.raw, c.env, caretakerSession)
   const now = () => new Date().toISOString()
@@ -76,7 +76,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
     try {
       ctx = c.executionCtx
     } catch {}
-    for (const symbol of symbols) {
+    for (const symbol of new Set(symbols)) {
       try {
         await settleGene(c.env, ctx, symbol)
       } catch (error) {
@@ -128,7 +128,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
 
   app.post(`${GENE}/claim`, (c) =>
     mutation(c, async ({ accountId, session, body, db }) => {
-      const { result, reElect } = await claimGene(db, {
+      const { result, republish } = await claimGene(db, {
         geneLocator: param(c, "gene"),
         accountId,
         body,
@@ -136,14 +136,14 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
         switchPolicy: createCaretakerSwitchPolicy(c.env),
         session,
       })
-      await settle(c, reElect)
+      await settle(c, republish)
       return jsonResponse(result)
     }),
   )
 
   app.post(`${GENE}/assignments/:assignment/:action{accept|decline|end}`, (c) =>
     mutation(c, async ({ accountId, body, db }) => {
-      const { result, reElect } = await changeOwnRole(db, {
+      const { result, republish } = await changeOwnRole(db, {
         geneLocator: param(c, "gene"),
         roleId: param(c, "assignment"),
         action: c.req.param("action"),
@@ -151,7 +151,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
         body,
         now: now(),
       })
-      await settle(c, reElect)
+      await settle(c, republish)
       return jsonResponse(result)
     }),
   )
@@ -171,7 +171,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
 
   app.post(`${GENE}/requests/:request/:action{accept|reject|withdraw}`, (c) =>
     mutation(c, async ({ accountId, body, db }) => {
-      const { result, reElect, notify } = await decideGeneRequest(db, {
+      const { result, republish, notify } = await decideGeneRequest(db, {
         geneLocator: param(c, "gene"),
         requestId: param(c, "request"),
         action: c.req.param("action"),
@@ -179,7 +179,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
         body: parsed(DECISION_BODY, body),
         now: now(),
       })
-      await settle(c, reElect)
+      await settle(c, republish)
       if (notify) deliverSoon(c)
       return jsonResponse(result)
     }),

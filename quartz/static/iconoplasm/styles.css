@@ -1016,6 +1016,20 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   border-color: var(--dark);
 }
 
+/* Everyone else sees the gene's caretaker as a link to the /caretakers list:
+   the same chip without the button's frame until it is pointed at. */
+.icono-caretaker-identity--link {
+  padding: 0.2rem 0.55rem 0.2rem 0.2rem;
+  border: 1px solid transparent;
+  border-radius: var(--icono-control-radius);
+  text-decoration: none;
+}
+
+.icono-caretaker-identity--link:hover,
+.icono-caretaker-identity--link:focus-visible {
+  border-color: var(--gray);
+}
+
 .icono-caretaker-identity__badge {
   padding: 0.18rem 0.4rem;
   border-radius: 999px;

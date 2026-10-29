@@ -617,7 +617,7 @@ test("4: a caretaker supervote weighs exactly 10 and obeys every supervote rule"
     policy: "retain",
   })
   assert.equal(ended.changed, true)
-  assert.deepEqual(ended.reElect, ["EGFR"])
+  assert.deepEqual(ended.republish, ["EGFR"])
   election = await readGeneElection(db, "EGFR")
   assert.equal(election.winner.asset_sha256, sha("d"))
   assert.ok(election.version > versionBefore, "the end moved the gene's vote version")

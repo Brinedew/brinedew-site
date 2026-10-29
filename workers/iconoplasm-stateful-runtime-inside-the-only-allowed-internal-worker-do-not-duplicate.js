@@ -137,7 +137,11 @@ import { createIconoplasmAdminPublicationHandlers } from "./iconoplasm-admin-pub
 import { createIconoplasmAdminReadModelHandlers } from "./iconoplasm-admin-read-model-routes.js"
 import { createIconoplasmCaretakerAdminHandlers } from "./iconoplasm-caretaker-admin-routes.js"
 import { createIconoplasmCaretakerNotificationHandlers } from "./iconoplasm-caretaker-notifications.js"
-import { readCaretakerDirectory, readPublicCaretakers } from "./iconoplasm-public-caretakers.js"
+import {
+  readAccountProfiles,
+  readCaretakerDirectory,
+  readPublicCaretakers,
+} from "./iconoplasm-public-caretakers.js"
 import { attachStylePublishedPortraits } from "./iconoplasm/style-published-portraits.js"
 import {
   caretakerCommentOutboxStatement,
@@ -15740,9 +15744,10 @@ async function hydratedCatalogArtifact(env, hash) {
 // about 2 rows per portrait plus six): the factory's rows (catalogue, essence,
 // portraits) as the builder's content, and what readers did (vote
 // tallies, the caretaker supervote, the published state, the vote version) as
-// its facts. The canonical text comes from the manifestation authority; a gene
-// that has none yet (599 genes on 2026-10-09) gets a stable object without one instead
-// of none at all. Returns null for a gene the catalogue doesn't carry.
+// its facts. The canonical text comes from the manifestation authority, and the
+// caretaker's name and picture from the account database; a gene that has no text
+// yet (599 genes on 2026-10-09) gets a stable object without one instead of none
+// at all. Returns null for a gene the catalogue doesn't carry.
 const GENE_OBJECT_ESSENCE_COLUMNS = [
   "weight_kg",
   "molecular_weight_kda",
@@ -15790,6 +15795,25 @@ function geneObjectPortraitContent(row) {
     sample_number: row.sample_number,
     sample_text_hash: row.sample_text_hash,
     artist_id: publicArtistIdForRow(row) || null,
+  }
+}
+
+// The gene's caretaker as readers see them: an active or suspended role, as on
+// /caretakers. One read of the account database, only for a gene that has one.
+// A failed read leaves the caretaker out of this build rather than stopping the
+// vote's republish; the next build names them again.
+async function readGeneCaretakerFact(env, role) {
+  const accountId = String(role?.account_id || "").trim()
+  if (!accountId || !["active", "suspended"].includes(String(role?.assignment_status || "")))
+    return null
+  try {
+    const profile = (await readAccountProfiles(env.DB, [accountId], { discordUrls: true })).get(
+      accountId,
+    )
+    return profile ? { ...profile, since: String(role.started_at || "").slice(0, 10) } : null
+  } catch (error) {
+    console.error("[ICONOPLASM_GENE_CARETAKER_READ]", String(error))
+    return null
   }
 }
 
@@ -15872,6 +15896,7 @@ async function readGeneObjectInputs(env, symbol, { readManifestation } = {}) {
       previous_winner: currentAsset,
       vote_version: Math.max(0, Number(version?.results?.[0]?.version || 0) || 0),
       manifestation: await (readManifestation || readPublicManifestationFact)(env, symbol),
+      caretaker: await readGeneCaretakerFact(env, supervoteRow),
     },
   }
 }
