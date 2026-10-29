@@ -41,12 +41,10 @@ const TOKEN = "admin-token-0000000000000000000000000002"
 
 const sha = (n) => n.toString(16).padStart(64, "0")
 const symbol = (n) => `G${String(n).padStart(5, "0")}`
-// TP53 has 72 portraits. Readers see A, the votes favour B, and the old rollup
-// copy still names C.
+// TP53 has 72 portraits. Readers see A and the votes favour B.
 const tp53 = (j) => sha(9_000_000 + j)
 const A = tp53(3)
 const B = tp53(40)
-const C = tp53(5)
 const NOT_STORED = "e".repeat(64)
 
 // The site's shape for gene n of N: every 50th gene has no portrait; the rest
@@ -107,9 +105,6 @@ async function seedSite(db, genes) {
        (gene_symbol, asset_sha256, candidate_ref, upvotes, score, vote_count)
        SELECT 'TP53', printf('%064x', 9000000 + j), 'a:TP53', s, s, s
          FROM (SELECT j, CASE WHEN j = 40 THEN 40 ELSE 0 END AS s FROM js)`,
-    `INSERT INTO icono_admin_gene_rollup
-       (gene_symbol, current_asset_sha256, leader_asset_sha256, candidate_count)
-       VALUES ('TP53', '${C}', '${C}', 3)`,
   ])
     await db.prepare(sql).run()
 }
