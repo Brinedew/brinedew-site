@@ -569,7 +569,7 @@ test(
       const get = (pathname) => runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)
       const IMMUTABLE = "public, max-age=31536000, immutable"
       const home = await (await get("/")).text()
-      const entry = home.match(/\/static\/iconoplasm\/app\.([0-9a-f]{16})\.js/)
+      const entry = home.match(/\/static\/iconoplasm\/app\.([0-9a-f]{16})\.v\.js/)
       assert.ok(entry, "the home page loads app.js by its versioned name")
       assert.doesNotMatch(home, /static\/iconoplasm\/app\.js/, "no unversioned app.js left")
 
@@ -584,7 +584,7 @@ test(
         assert.equal(response.status, 200, `${pathname} is served`)
         assert.equal(response.headers.get("cache-control"), IMMUTABLE, pathname)
         const bytes = Buffer.from(await response.arrayBuffer())
-        const hash = pathname.match(/\.([0-9a-f]{16})\.(?:js|css)$/)[1]
+        const hash = pathname.match(/\.([0-9a-f]{16})\.v\.(?:js|css)$/)[1]
         assert.equal(
           createHash("sha256").update(bytes).digest("hex").slice(0, 16),
           hash,
@@ -595,7 +595,7 @@ test(
           .matchAll(/["'`]((?:\.{1,2}\/)[^"'`\s?#$]*\.(?:js|css))(\?v=[^"'`]*)?["'`]/g)) {
           const target = new URL(match[1], `https://iconoplasm.test${pathname}`).pathname
           if (target.includes("/vendor/") || !target.startsWith("/static/iconoplasm/")) continue
-          if (/\.[0-9a-f]{16}\.(?:js|css)$/.test(target)) {
+          if (/\.[0-9a-f]{16}\.v\.(?:js|css)$/.test(target)) {
             queue.push(target)
             continue
           }

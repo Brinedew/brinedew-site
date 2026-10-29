@@ -1,5 +1,5 @@
 // Iconoplasm's browser modules are served under names that carry the SHA-256
-// of their own bytes (caretaker-film.74ed28e6c4cce069.js), so a name can never
+// of their own bytes (caretaker-film.74ed28e6c4cce069.v.js), so a name can never
 // answer with other bytes. The edge ignores query strings: under the old
 // `?v=<hash>` stamps, a reader who loaded a page while a release was still
 // spreading could cache last release's file under this release's stamp for a
@@ -34,7 +34,15 @@ export const MODULE_ROOT = "static"
 // files load each other by name, and they change only when we upgrade them.
 const UNVERSIONED_FOLDERS = new Set(["vendor", "downloads"])
 const MODULE_FILE = /\.(?:js|css|mjs)$/
-export const VERSIONED_NAME = /\.([0-9a-f]{16})\.(js|css|mjs)$/
+// The ".v" before the extension is what the _headers rule `/static/*.v.js`
+// matches to make a versioned file immutable. A placeholder inside a file name
+// (`/static/*.:hash.js`) passes in Miniflare but never matched in production
+// (measured 2026-10-29: every versioned file answered must-revalidate), so the
+// rule is a splat and fixed text, the shape `/static/*.js` proves live.
+export const VERSIONED_NAME = /\.([0-9a-f]{16})\.v\.(js|css|mjs)$/
+// Release af8041a66 named files without the ".v"; the manifest it wrote still
+// lists them, and they are as content-addressed as the new ones.
+const EARLIER_NAME = /\.([0-9a-f]{16})(?:\.v)?\.(js|css|mjs)$/
 // A quoted relative or root-relative module address inside a module, with or
 // without the old ?v= stamp. Template strings with ${} are not addresses.
 const MODULE_REFERENCE =
@@ -65,7 +73,7 @@ function resolveReference(from, specifier) {
 }
 
 function versionedPath(file, hash) {
-  return file.replace(MODULE_FILE, (extension) => `.${hash}${extension}`)
+  return file.replace(MODULE_FILE, (extension) => `.${hash}.v${extension}`)
 }
 
 // Writes name.<hash>.ext beside every script and stylesheet under static/
@@ -78,8 +86,8 @@ export async function versionIconoplasmModules({ outputRoot }) {
   const sources = new Map()
   for (const file of files) {
     const source = await readFile(path.join(outputRoot, file), "utf8")
-    if (VERSIONED_NAME.test(file))
-      throw new Error(`${file} already looks versioned; rename it so the hash rule stays exact`)
+    if (/\.v\.(?:js|css|mjs)$/.test(file))
+      throw new Error(`${file} would be cached as immutable by its name; rename it`)
     sources.set(file, source)
   }
   const dependencies = new Map(
@@ -156,7 +164,7 @@ export async function retainEarlierModules({
         !current.has(file) &&
         file.startsWith(`${MODULE_ROOT}/`) &&
         !file.split("/").includes("..") &&
-        VERSIONED_NAME.test(file) &&
+        EARLIER_NAME.test(file) &&
         Date.parse(shipped) >= earliest,
     )
     .sort(([, left], [, right]) => Date.parse(right) - Date.parse(left))
@@ -176,7 +184,7 @@ export async function retainEarlierModules({
       continue
     }
     if (!bytes) continue
-    if (sha256(bytes).slice(0, 16) !== file.match(VERSIONED_NAME)[1])
+    if (sha256(bytes).slice(0, 16) !== file.match(EARLIER_NAME)[1])
       throw new Error(`The live ${file} does not match the hash in its name`)
     await mkdir(path.dirname(path.join(outputRoot, file)), { recursive: true })
     await writeFile(path.join(outputRoot, file), bytes)
