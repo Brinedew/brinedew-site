@@ -282,6 +282,10 @@ export function mountHomePlayStrip(container, options) {
     return '<span class="icono-play-line">' + esc(line).replace(symbol, pill) + "</span>"
   }).join("")
   const back = options.reverseFaceHtml
+  // Both faces exist before a card turns, as in Takayu Studio's card flip
+  // (motion-reference.takayustudio.jp, "Card Flip"): a face built at the tap
+  // turns up dark and its portrait pops in after (owner, 2026-10-29). A face
+  // still down is inert, so neither focus nor a screen reader finds the gene.
   const slot = (gene, faceUp) =>
     '<div class="icono-play-slot' +
     (faceUp ? " is-found" : "") +
@@ -293,8 +297,10 @@ export function mountHomePlayStrip(container, options) {
     '<div class="icono-play-slot-face icono-play-slot-back" aria-hidden="true">' +
     back +
     "</div>" +
-    '<div class="icono-play-slot-face icono-play-slot-front">' +
-    (faceUp ? options.cardMarkup(gene) : "") +
+    '<div class="icono-play-slot-face icono-play-slot-front"' +
+    (faceUp ? "" : ' inert aria-hidden="true"') +
+    ">" +
+    options.cardMarkup(gene) +
     "</div></div></div>"
 
   const root = doc.createElement("div")
@@ -318,6 +324,9 @@ export function mountHomePlayStrip(container, options) {
     homePlayActionMarkup(options.action) +
     "</div></section>"
   container.insertBefore(root, container.firstChild)
+  // The portraits load now, not when they come into view, so a find has its
+  // picture ready to turn up.
+  for (const image of root.querySelectorAll(".icono-play-slot-front img")) image.loading = "eager"
   for (const card of root.querySelectorAll(".icono-play-slot-front > *")) {
     options.onCardMounted(card)
   }
@@ -331,27 +340,6 @@ export function mountHomePlayStrip(container, options) {
       openButton.remove()
       options.onOpen()
     })
-  }
-
-  // The portraits load once the strip is on screen, so a card turns face up
-  // with its picture already there.
-  function warmPortraits() {
-    for (const gene of genes.values()) {
-      if (found.has(gene.symbol)) continue
-      const img = new win.Image()
-      img.decoding = "async"
-      img.src = gene.portraitUrl
-    }
-  }
-  if ("IntersectionObserver" in win) {
-    const watcher = new win.IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return
-      watcher.disconnect()
-      warmPortraits()
-    })
-    watcher.observe(root)
-  } else {
-    warmPortraits()
   }
 
   const slotOf = (symbol) => root.querySelector('[data-icono-play-slot="' + symbol + '"]')
@@ -371,15 +359,25 @@ export function mountHomePlayStrip(container, options) {
     lit = ""
   }
 
+  // The find counts at once; the card turns once its portrait is painted. A
+  // portrait that fails to load still lets the card turn, onto its fallback.
   function discover(symbol) {
     if (found.has(symbol)) return
     found.add(symbol)
+    options.onFind(symbol)
     const element = slotOf(symbol)
     const front = element.querySelector(".icono-play-slot-front")
-    front.innerHTML = options.cardMarkup(genes.get(symbol))
-    options.onCardMounted(front.firstElementChild)
-    element.classList.add("is-found")
-    options.onFind(symbol)
+    const image = front.querySelector("img")
+    const painted = image && image.decode ? image.decode() : Promise.resolve()
+    painted
+      .catch(() => {})
+      .then(() => {
+        if (!element.isConnected) return
+        options.onCardMounted(front.firstElementChild)
+        front.removeAttribute("inert")
+        front.removeAttribute("aria-hidden")
+        element.classList.add("is-found")
+      })
   }
 
   for (const pill of root.querySelectorAll(".icono-play-pill")) {
