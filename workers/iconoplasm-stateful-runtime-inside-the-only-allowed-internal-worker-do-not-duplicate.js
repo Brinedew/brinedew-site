@@ -9168,6 +9168,8 @@ const GENERATION_REQUEST_STRENGTH_COLUMNS = `vision_id, emulsion_id, artist_tag,
        workflow_id, workflow_label, prompt_version, variant_slot, image_count, live_count,
        score, vote_h_index, preview_assets_json`
 const GENERATION_REQUEST_FIRST_PAGE = 120
+// The rows a style search reads from each prefix range, at most.
+const GENERATION_REQUEST_SEARCH_RANGE_ROWS = 240
 const GENERATION_REQUEST_NEXT_PAGE = 60
 
 // B-1014: "All styles" pages through every style in strength order (votes,
@@ -9304,7 +9306,7 @@ export async function publishRequestPickerObject(env) {
 // Every picker page leaves through here, so every style card carries its
 // blot count and its published portraits (migration 0130), whichever rollup
 // supplied the card.
-async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
+export async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
   const page = await readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)
   return {
     ...page,
@@ -9343,58 +9345,59 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
     // Style search matches the style number and vision ID only. Artist
     // identities are private (B-883): the picker never shows them, so the
     // search must not find a style by its artist either.
-    // D1 cost fence: this is query-aware search, not live discovery. It must
-    // stay on the precomputed request-option rollup so typing "0-2" cannot
-    // fan out into admin/portrait scans on every logged-in gene page.
-    const resp = await env.ICONOPLASM_DB.prepare(
-      `SELECT
-         vision_id,
-         emulsion_id,
-         workflow_id,
-         workflow_label,
-         prompt_version,
-         variant_slot,
-         image_count,
-         live_count,
-         score,
-         vote_h_index,
-         preview_assets_json
-       FROM icono_generation_request_vision_option_rollup
-       WHERE vision_id IS NOT NULL
-         AND vision_id <> ''
-         AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
-         AND (
-           (emulsion_id >= ? AND emulsion_id < ?)
-           OR (vision_id >= ? AND vision_id < ?)
-         )
-       ORDER BY
-         CASE
-           WHEN emulsion_id = ? THEN 0
-           WHEN emulsion_id >= ? AND emulsion_id < ? THEN 1
-           WHEN vision_id = ? THEN 2
-           WHEN vision_id >= ? AND vision_id < ? THEN 3
-           ELSE 4
-         END ASC,
-         vote_h_index DESC,
-         live_count DESC,
-         score DESC,
-         image_count DESC,
-         vision_id ASC
-       LIMIT 120`,
-    )
-      .bind(
-        emulsionPrefix,
-        emulsionUpper,
-        visionPrefix,
-        visionUpper,
-        emulsionPrefix,
-        emulsionPrefix,
-        emulsionUpper,
-        visionPrefix,
-        visionPrefix,
-        visionUpper,
+    // Each prefix is read as its own index range, in index order and bounded,
+    // then ranked here. One statement that ORed the two ranges let SQLite seek
+    // only on builder_version, so every search read the whole rollup: 20,577
+    // rows on the 2026-10-28 copy, for any text query (B-1187). The vision range
+    // keeps builder_version off the index (`+`), or the planner scans the
+    // priority index instead of the primary key. A prefix that matches more
+    // styles than the bound is ranked among its first ones by ID; one more
+    // typed character narrows it.
+    const rangeRows = async (column, lower, upper, versionTerm) => {
+      if (!lower || !upper) return []
+      const response = await env.ICONOPLASM_DB.prepare(
+        `SELECT vision_id, emulsion_id, workflow_id, workflow_label, prompt_version,
+                variant_slot, image_count, live_count, score, vote_h_index, preview_assets_json
+         FROM icono_generation_request_vision_option_rollup
+         WHERE ${column} >= ? AND ${column} < ?
+           AND ${versionTerm} = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
+           AND vision_id <> ''
+         ORDER BY ${column} ASC
+         LIMIT ${GENERATION_REQUEST_SEARCH_RANGE_ROWS}`,
       )
-      .all()
+        .bind(lower, upper)
+        .all()
+      return response?.results || []
+    }
+    const [emulsionRows, visionRows] = await Promise.all([
+      rangeRows("emulsion_id", emulsionPrefix, emulsionUpper, "builder_version"),
+      rangeRows("vision_id", visionPrefix, visionUpper, "+builder_version"),
+    ])
+    const within = (value, lower, upper) =>
+      Boolean(lower) && String(value || "") >= lower && String(value || "") < upper
+    const matchRank = (row) =>
+      row.emulsion_id === emulsionPrefix
+        ? 0
+        : within(row.emulsion_id, emulsionPrefix, emulsionUpper)
+          ? 1
+          : row.vision_id === visionPrefix
+            ? 2
+            : 3
+    const matched = new Map()
+    for (const row of [...emulsionRows, ...visionRows]) matched.set(row.vision_id, row)
+    const resp = {
+      results: [...matched.values()]
+        .sort(
+          (a, b) =>
+            matchRank(a) - matchRank(b) ||
+            Number(b.vote_h_index || 0) - Number(a.vote_h_index || 0) ||
+            Number(b.live_count || 0) - Number(a.live_count || 0) ||
+            Number(b.score || 0) - Number(a.score || 0) ||
+            Number(b.image_count || 0) - Number(a.image_count || 0) ||
+            (a.vision_id < b.vision_id ? -1 : a.vision_id > b.vision_id ? 1 : 0),
+        )
+        .slice(0, 120),
+    }
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
       mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
     )
