@@ -5,7 +5,6 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import {
   rebuildVoteAssetSummaryForSymbols,
-  rebuildGeneRollupForSymbols,
   rebuildVisionRollupsBatch,
 } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
@@ -75,7 +74,6 @@ test(
           ])
         for (const [phase, fn, scope] of [
           ["votes", rebuildVoteAssetSummaryForSymbols, ["TP53"]],
-          ["gene", rebuildGeneRollupForSymbols, ["TP53"]],
           ["vision", rebuildVisionRollupsBatch, ["anima-v1-1"]],
         ]) {
           const meter = createOperationCostD1Meter(db)
@@ -90,13 +88,6 @@ test(
           .first()
         assert.equal(vote.score, 1)
         assert.equal(vote.vote_count, 1)
-        const gene = await db
-          .prepare(
-            "SELECT total_assets,live_score FROM icono_admin_gene_rollup WHERE gene_symbol='TP53'",
-          )
-          .first()
-        assert.equal(gene.total_assets, 1)
-        assert.equal(gene.live_score, 1)
         const vision = await db
           .prepare(
             "SELECT image_count,score,live_count FROM icono_admin_vision_rollup WHERE vision_id='anima-v1-1'",
@@ -109,7 +100,6 @@ test(
 
       const tables = [
         "icono_vote_asset_summary",
-        "icono_admin_gene_rollup",
         "icono_admin_vision_rollup",
         "icono_generation_request_vision_option_rollup",
         "icono_generation_request_factory_option_sources",
@@ -126,7 +116,6 @@ test(
         const meter = createOperationCostD1Meter(db)
         const env = { ICONOPLASM_DB: meter.db }
         await rebuildVoteAssetSummaryForSymbols(env, ["TP53"])
-        await rebuildGeneRollupForSymbols(env, ["TP53"])
         await rebuildVisionRollupsBatch(env, ["anima-v1-1"])
         return meter.finish()
       }
@@ -143,20 +132,12 @@ test(
       assert.equal(repeated.rows_written, 0, JSON.stringify(repeated))
       assert.deepEqual(await snapshot(), stable, "unchanged projections retain data and timestamps")
       t.diagnostic(
-        JSON.stringify({ phase: "101 assets, complete three-phase repeat", cost: repeated }),
+        JSON.stringify({ phase: "101 assets, complete two-phase repeat", cost: repeated }),
       )
 
       // Real source changes still reach every dependent rollup.
       await db.prepare("UPDATE icono_image_votes SET vote_value=-1 WHERE gene_symbol='TP53'").run()
       await rebuild()
-      assert.equal(
-        (
-          await db
-            .prepare("SELECT live_score FROM icono_admin_gene_rollup WHERE gene_symbol='TP53'")
-            .first()
-        ).live_score,
-        -1,
-      )
       assert.equal(
         (
           await db
@@ -174,32 +155,6 @@ test(
             .first()
         ).score,
         -1,
-      )
-
-      // A failed replacement must retain removals from the same atomic batch too.
-      await db
-        .prepare(
-          "INSERT INTO icono_admin_gene_rollup(gene_symbol,full_name) VALUES('REMOVED','old')",
-        )
-        .run()
-      const beforeFailure = await snapshot()
-      await db
-        .prepare(
-          "CREATE TRIGGER fail_gene_rollup BEFORE INSERT ON icono_admin_gene_rollup BEGIN SELECT RAISE(ABORT,'injected rollup failure'); END",
-        )
-        .run()
-      await assert.rejects(
-        rebuildGeneRollupForSymbols({ ICONOPLASM_DB: db }, ["TP53", "REMOVED"]),
-        /injected rollup failure/,
-      )
-      assert.deepEqual(await snapshot(), beforeFailure)
-      await db.prepare("DROP TRIGGER fail_gene_rollup").run()
-      await rebuildGeneRollupForSymbols({ ICONOPLASM_DB: db }, ["REMOVED"])
-      assert.equal(
-        await db
-          .prepare("SELECT 1 FROM icono_admin_gene_rollup WHERE gene_symbol='REMOVED'")
-          .first(),
-        null,
       )
 
       // Clearing the last source must remove all scoped projections, including

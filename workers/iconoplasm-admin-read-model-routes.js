@@ -82,10 +82,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       payload?.skip_vote_summaries ?? payload?.skipVoteSummaries,
       false,
     )
-    const skipGeneRollups = coerceBoolean(
-      payload?.skip_gene_rollups ?? payload?.skipGeneRollups,
-      false,
-    )
     const skipVisionRollups = coerceBoolean(
       payload?.skip_vision_rollups ?? payload?.skipVisionRollups,
       false,
@@ -95,7 +91,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
       symbols,
       visionIds,
       skipVoteSummaries,
-      skipGeneRollups,
       skipVisionRollups,
       skipDashboard,
     }
@@ -139,7 +134,6 @@ export function createIconoplasmAdminReadModelHandlers(services) {
               ? null
               : Number(result.target_daily_percent || 0) || null,
           skip_vote_summaries: skipVoteSummaries,
-          skip_gene_rollups: skipGeneRollups,
           skip_vision_rollups: skipVisionRollups,
           skip_dashboard: skipDashboard,
         },
