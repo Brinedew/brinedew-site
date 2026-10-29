@@ -339,37 +339,24 @@ Non-negotiable rules:
      public media or gene HTML, and prove a rewrite of
      the gene's stable object moves them together
 
-### do not delete the alarms
+### the cost guards measure, they don't read text
 
-Some files exist specifically to annoy the future editor before they can repeat the billing incident.
+`workers/iconoplasm.d1-cost-barrier.test.js` runs the real SQL and counts the
+rows each path reads. `workers/iconoplasm/batch-admission.test.js` proves that
+batch work is let in by its price. `workers/iconoplasm.worker-config.test.js`
+parses both Wrangler configs and checks that the public edge Worker holds no
+state and that production has no workers.dev bypass.
 
-Treat these as protected alarms, not cleanup fodder:
-
-- `workers/iconoplasm.d1-cost-barrier.test.js`
-- `workers/iconoplasm.d1-hot-query-guard.test.js`
-- `workers/iconoplasm.do-not-delete-cost-guards.test.js`
-- `.github/hooks/iconoplasm-d1-guardrails.json`
-- `.github/hooks/iconoplasm-d1-guardrails.ps1`
-- `CLAUDE.md`
-- `.github/instructions/iconoplasm-d1-cost-barrier.instructions.md`
-- `.github/workflows/deploy-quartz.yml`
-- `scripts/assert-iconoplasm-worker-budget-guards.mjs`
-
-If one of those tests fails, your first assumption should be that code drifted into a dangerous shape.
-
-Do **not** do any of these:
-
-- delete the test because it is inconvenient
-- rename the test so nobody notices what it was guarding
-- remove the warning comments from `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
-- strip the docs/instruction text because it feels repetitive
-
-If you genuinely need to replace one of these guards, the replacement has to land in the same change, be stricter or clearer, and say in comments why the old guard was no longer the right one.
+If one of those tests fails, your first assumption should be that code drifted
+into a dangerous shape. Fix the code, or replace the test in the same change with
+one that measures more. Don't add tests that match source, docs or workflow text:
+they fail on unrelated edits and catch nothing that a measurement would miss
+(B-1187).
 
 Verified test command:
 
 ```text
-pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.d1-hot-query-guard.test.js workers/iconoplasm.do-not-delete-cost-guards.test.js workers/iconoplasm/batch-admission.test.js
+pnpm test -- workers/iconoplasm.d1-cost-barrier.test.js workers/iconoplasm.worker-config.test.js workers/iconoplasm/batch-admission.test.js
 ```
 
 If that suite stops proving fresh-isolate reuse of shared snapshots, assume you are one edit away from another billing incident.

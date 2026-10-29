@@ -17,102 +17,6 @@ function readRepositoryFile(relativePath) {
   return readFileSync(path.join(REPOSITORY_ROOT, relativePath), "utf8")
 }
 
-const registry = JSON.parse(readRepositoryFile("architecture-fences.json"))
-
-test("IPD-001 portrait module URLs follow actual bytes through the immutable import chain", () => {
-  for (const [module, consumers] of [
-    ["portrait-delivery.js", ["app.js", "gene-card-thumb-delivery.js"]],
-  ]) {
-    const bytes = readFileSync(path.join(REPOSITORY_ROOT, "quartz/static/iconoplasm", module))
-    const digest = createHash("sha256").update(bytes).digest("hex").slice(0, 16)
-    for (const consumer of consumers) {
-      assert.ok(
-        readRepositoryFile(`quartz/static/iconoplasm/${consumer}`).includes(
-          `./${module}?v=${digest}`,
-        ),
-        `${consumer} must load the current ${module}, not a permanently cached dated import`,
-      )
-    }
-  }
-})
-
-test("architecture fence registry distributes every decision across independent guard categories", () => {
-  assert.equal(registry.schema_version, 1)
-  assert.ok(Array.isArray(registry.fences) && registry.fences.length > 0)
-
-  const ids = new Set()
-  for (const fence of registry.fences) {
-    assert.match(fence.id, /^[A-Z][A-Z0-9]*-\d{3}$/)
-    assert.equal(ids.has(fence.id), false, `Duplicate architecture fence id: ${fence.id}`)
-    ids.add(fence.id)
-    assert.ok(fence.decision?.trim(), `${fence.id} must state the protected decision`)
-    assert.ok(fence.reason?.trim(), `${fence.id} must explain why the decision exists`)
-    assert.ok(fence.change_control?.trim(), `${fence.id} must explain how it may be changed`)
-    assert.ok(fence.runbook?.trim(), `${fence.id} must name its current-state runbook`)
-
-    const categories = new Set(fence.markers.map((marker) => marker.category))
-    const requiredCategories = [
-      ...registry.baseline_marker_categories,
-      ...(fence.additional_required_marker_categories || []),
-    ]
-    for (const category of requiredCategories) {
-      assert.equal(
-        categories.has(category),
-        true,
-        `${fence.id} is missing the ${category} enforcement category`,
-      )
-    }
-
-    for (const marker of fence.markers) {
-      assert.match(
-        readRepositoryFile(marker.file),
-        new RegExp(marker.token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `${fence.id} marker is missing from ${marker.file}`,
-      )
-    }
-  }
-})
-
-// ARCHITECTURE FENCE [IPD-011]
-test("IPD-011 keeps one stable-gene-object blot authority across every public surface", () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-011")
-  assert.ok(fence, "IPD-011 must remain registered")
-  assert.equal(fence.title, "Every public blot follows from the one stable gene object")
-  assert.equal(fence.runbook, "docs/ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md")
-
-  assert.match(fence.decision, /stable gene object owns the public character/i)
-  assert.match(fence.decision, /blot address is computed from it alone/i)
-  assert.match(fence.decision, /Every public surface resolves that same identity/i)
-
-  const runtime = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-  const publicMediaStart = runtime.indexOf("async function handlePublicMedia")
-  const publicMediaEnd = runtime.indexOf("\nasync function ", publicMediaStart + 1)
-  assert.ok(publicMediaStart >= 0 && publicMediaEnd > publicMediaStart)
-  const publicMedia = runtime.slice(publicMediaStart, publicMediaEnd)
-  assert.match(publicMedia, /readStableGeneObjectProjection/)
-  assert.doesNotMatch(publicMedia, /readPublishedGeneCardPortraitProjection/)
-  assert.match(publicMedia, /publicGeneBlotMediaEnvelope/)
-  assert.doesNotMatch(publicMedia, /await portraitState\(env/)
-
-  const resolverStart = runtime.indexOf("async function handlePublicImageResolve")
-  const resolverEnd = runtime.indexOf("\nasync function ", resolverStart + 1)
-  assert.ok(resolverStart >= 0 && resolverEnd > resolverStart)
-  const resolver = runtime.slice(resolverStart, resolverEnd)
-  assert.match(resolver, /readStableGeneObjectProjection/)
-  assert.doesNotMatch(resolver, /readPublishedCardCatalogArtifact|currentMobileCardSnapshotVersion/)
-})
-
-// ARCHITECTURE FENCE [IPD-003]
-test("IPD-003 keeps discovery eligibility on the exact published gene object", () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-003")
-  assert.ok(fence, "IPD-003 must remain registered")
-  assert.match(fence.decision, /One stable gene object defines each gene's public identity/i)
-  assert.match(fence.decision, /blot's address follows/i)
-  assert.match(fence.decision, /fails closed/i)
-})
-
 // ARCHITECTURE FENCE [IPD-001]
 // This test is deliberately independent of the website and extension adapter
 // tests. A future edit that changes the defaults and updates a nearby test must
@@ -182,30 +86,9 @@ test("IPD-001 keeps Bunny primary on healthy tabs and canonical as the one-probe
     "accelerator",
     "Known accelerator URLs must remain rewritable after an explicit disable",
   )
-
-  const workerSource = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-  assert.doesNotMatch(workerSource, /ICONOPLASM_PORTRAIT_ACCELERATOR_ENABLED/)
-  assert.match(workerSource, /enabled:\s*Boolean\(acceleratorOrigin\)/)
-
-  const wranglerConfig = readRepositoryFile(
-    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-  )
-  assert.equal(
-    wranglerConfig.match(
-      /^ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL = "https:\/\/img\.brinedew\.bio"$/gm,
-    )?.length,
-    2,
-    "Production and staging must both declare the cached Bunny origin (img.brinedew.bio, B-1087)",
-  )
-  assert.match(
-    readRepositoryFile("quartz/components/Head.tsx"),
-    /<link rel="preconnect" href="https:\/\/img\.brinedew\.bio" \/>/,
-  )
 })
 
-// ARCHITECTURE FENCE [IPD-008]
+// ARCHITECTURE FENCE [IPD-001]
 test("IPD-001 late image results cannot undo a newer source decision", () => {
   const session = createPortraitDeliverySession()
   const canonical = "https://iconoplasm.brinedew.bio/portraits/v1/a.webp"
@@ -221,102 +104,6 @@ test("IPD-001 late image results cannot undo a newer source decision", () => {
   assert.equal(later.hedgeDelayMs, null)
   session.reportSuccess(later.fallbackUrl, later.decisionId)
   assert.equal(session.state().state, "accelerator")
-})
-
-// ARCHITECTURE FENCE [IPD-008]
-test("IPD-008 keeps foreground hover on the stable CDN gene object and cross-site portrait reuse", () => {
-  const contentSource = readRepositoryFile("iconoplasm-extension/content.js")
-  const apiSource = readRepositoryFile("iconoplasm-extension/content-api.js")
-  const portraitSource = readRepositoryFile("iconoplasm-extension/content-portrait-cache.js")
-  const background = readRepositoryFile("iconoplasm-extension/service-worker.js")
-  const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
-  const runtimeSource = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-
-  // B-898 stage 1: hover detail is the one stable object per gene on the free
-  // CDN. The metered card-snapshots routes remain the website's fallback only;
-  // the extension must never reference them again.
-  assert.doesNotMatch(contentSource, /\/api\/public\/v1\/card-snapshots\//)
-  assert.match(background, /https:\/\/iconoplasmportraits\.b-cdn\.net\/genes\/v3\//)
-  assert.doesNotMatch(background, /card-snapshots|card-content\/v1|delivery-index/)
-  assert.match(contentSource, /priority:\s*"foreground"/)
-  assert.match(apiSource, /CANCEL_ICONOPLASM_API_FETCH/)
-  assert.match(apiSource, /ICONOPLASM_CONTEXT_INVALIDATED/)
-  assert.match(contentSource, /sendMessage: extensionRuntime\.sendMessage/)
-  assert.match(contentSource, /extensionRuntime\.checkConnected\(\)/)
-  assert.match(contentSource, /readingSession\.dispose\(\)/)
-  assert.match(contentSource, /portraitCache\.dispose\(\)/)
-  assert.doesNotMatch(
-    portraitSource,
-    /runtime\.sendMessage/,
-    "Portrait requests must share terminal update-disconnection handling with metadata",
-  )
-  assert.match(portraitSource, /GET_PORTRAIT_DATA_URL/)
-  assert.doesNotMatch(portraitSource, /GET_PORTRAIT_SOURCE_PLAN/)
-  assert.match(background, /portraitByteCache\.get/)
-  assert.doesNotMatch(
-    contentSource,
-    /storageApi: chrome\.storage\.local|\.hydratePersistentCache\(/,
-    "pages must not clone the whole saved detail or locator collection",
-  )
-  assert.match(background, /loadPlannedSource/)
-  assert.match(portraitSource, /new ImageCtor\(\)/)
-  assert.match(portraitSource, /Promise\.any\(\[primaryPromise, fallbackPromise\]\)/)
-  assert.match(routeSource, /public_card_snapshot_gene/)
-  assert.match(runtimeSource, /max-age=31536000, immutable/)
-  assert.doesNotMatch(
-    contentSource,
-    /if \(geneDetailStore\.promiseCache\.has\(normalizedSymbol\)\)/,
-    "Foreground hover must not inherit speculative batch tail latency",
-  )
-})
-
-// ARCHITECTURE FENCE [IPD-008]
-test("IPD-008 forbids public KV discovery scans and preserves one bounded portrait lane", () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-008")
-  assert.ok(fence, "IPD-008 must remain registered")
-  assert.match(fence.decision, /read the two published objects/i)
-  assert.match(fence.decision, /do not probe private identity/i)
-  assert.match(fence.change_control, /one published authority/i)
-
-  const policyTests = readRepositoryFile("workers/iconoplasm-publication-alias-policy.test.js")
-  assert.match(policyTests, /coherent public reader is O\(1\) at max history/)
-  assert.match(policyTests, /assert\.equal\(kv\.lists\.length, 0\)/)
-
-  const routeSource = readRepositoryFile("workers/iconoplasm-route-contract.js")
-  assert.match(routeSource, /rateLimit:\s*rateLimit\("gene_detail", 120\)/)
-  assert.match(routeSource, /rateLimit:\s*rateLimit\("portrait_locator", 120\)/)
-})
-
-// ARCHITECTURE FENCE [IPD-001] + [IPD-008] + [IPD-011]
-test("Bunny fences protect canonical authority without forbidding immutable CDN caches", () => {
-  const delivery = registry.fences.find((entry) => entry.id === "IPD-001")
-  const readPlane = registry.fences.find((entry) => entry.id === "IPD-008")
-  const canon = registry.fences.find((entry) => entry.id === "IPD-011")
-  assert.match(delivery.decision, /published Iconoplasm objects .* from img\.brinedew\.bio/i)
-  assert.match(delivery.decision, /First-party identity remains canonical/i)
-  assert.match(readPlane.decision, /read the two published objects/i)
-  assert.match(canon.decision, /same identity/i)
-  const instructions = readRepositoryFile("AGENTS.md")
-  assert.doesNotMatch(instructions, /healthy cold read is one\s+bounded prefix list/)
-  assert.doesNotMatch(instructions, /including the exact-pair\s+fast path; never disable cleanup/)
-  assert.match(instructions, /Write competing\s+hypotheses and disproof tests/)
-  assert.doesNotMatch(instructions, /project almost certainly did not change/)
-  for (const fence of registry.fences) {
-    assert.doesNotMatch(fence.decision, /non-Vietnam/, "A country is not a connectivity test")
-  }
-})
-
-// ARCHITECTURE FENCE [IPD-004]
-test("IPD-004 runs one job per scheduled wakeup and never polls the retired discovery table", () => {
-  const schedule = readRepositoryFile("workers/iconoplasm-background-schedule.js")
-  const runtime = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-  // Each scheduled minute maps to exactly one job (a duplicate minute throws at load).
-  assert.match(schedule, /Invalid or overlapping Iconoplasm background minute/)
-  assert.doesNotMatch(runtime, /icono_gene_discoveries/)
 })
 
 // B-1037: on 2026-10-06 an 870-gene Image Lab batch died four times on a private 2,500
@@ -363,106 +150,6 @@ test("B-1037 every daily limit is a number only in the one budget policy", () =>
   )
 })
 
-// ARCHITECTURE FENCE [IPD-005]
-test("IPD-005 uses the per-database wall and a verified cold archive", () => {
-  const config = readRepositoryFile(
-    "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
-  )
-  const admin = readRepositoryFile("quartz/static/iconoplasm/admin.js")
-  const archive = readRepositoryFile("workers/iconoplasm-publish-event-archive.js")
-  const snapshotGenerator = readRepositoryFile(
-    "scripts/generate-iconoplasm-observability-snapshot.mjs",
-  )
-  assert.match(
-    config,
-    /ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY = "500000000"/,
-  )
-  assert.match(config, /binding = "ICONOPLASM_AUDIT_DB"/)
-  assert.match(admin, /d1Storage\.databaseLimitBytes/)
-  assert.doesNotMatch(admin, /d1Storage\.databaseSizeBytes,\s*5 \* 1024 \* 1024 \* 1024/)
-  assert.match(snapshotGenerator, /\/d1\/database\/\$\{databaseId\}/)
-  assert.match(snapshotGenerator, /databaseMetadata\?\.file_size/)
-  assert.match(snapshotGenerator, /"d1_control_plane"/)
-  assert.match(archive, /Publish-event archive verification failed/)
-  assert.match(archive, /DELETE FROM icono_publish_events/)
-})
-
-// B-1036: the PowerShell request budget reads its ceilings from the one policy.
-test("the PowerShell request budget reads its ceilings from the one budget policy", () => {
-  const requestBudget = readRepositoryFile("scripts/lib/CloudflareWorkerRequestBudget.ps1")
-  assert.match(requestBudget, /'shared' 'iconoplasm-d1-budget-policy\.js'/)
-  assert.match(requestBudget, /OPERATOR_ACCOUNT_CEILINGS/)
-  assert.match(requestBudget, /FREE_PLAN_DAILY_LIMITS\.requests/)
-  assert.doesNotMatch(requestBudget, /\b(2500|75000|3500000|70000)\b/)
-  assert.match(requestBudget, /workersInvocationsAdaptive/)
-  assert.match(requestBudget, /FileShare\]::None/)
-})
-
-// ARCHITECTURE FENCE [IPD-009]
-test("IPD-009 keeps the cold path and deployment topology explicit", () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-009")
-  assert.ok(fence, "IPD-009 must remain registered")
-  assert.match(fence.decision, /one publisher's coherent static release/i)
-  assert.match(fence.decision, /never reconstruct public truth from D1/i)
-  assert.match(fence.decision, /second state owner/i)
-
-  const topology = JSON.parse(readRepositoryFile("cloudflare/deployment-topology.json"))
-  assert.equal(topology.architectureFence, "IPD-009")
-  assert.equal(topology.stateOwner.cloudflareScript, "geneguessr-api")
-  assert.equal(topology.staticFirst.dynamicInvocationCount, 1)
-  assert.equal(topology.staticFirst.staticAssetsBypassWorker, true)
-  assert.equal(topology.stateOwner.publicProxyAllowed, false)
-
-  const lifecycle = readRepositoryFile("docs/ICONOPLASM_REQUEST_LIFECYCLE.md")
-  assert.match(lifecycle, /application shell and published Iconoplasm\s+artifacts/i)
-  assert.match(lifecycle, /Sign-in adds explicit private or mutation requests/i)
-  assert.match(lifecycle, /publication system owns two objects/i)
-
-  const runtime = readRepositoryFile(
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  )
-  assert.match(runtime, /ARCHITECTURE FENCE \[IPD-009\]/)
-  assert.match(runtime, /FROM icono_published_gene_routes/)
-  assert.match(runtime, /ICONOPLASM PUBLICATION \(B-898\)\. Two published objects/)
-  assert.match(runtime, /export async function publishIconoplasmGeneStableObject\(/)
-
-  const routeMigration = readRepositoryFile("migrations-iconoplasm/0059_published_gene_routes.sql")
-  assert.match(routeMigration, /gene_symbol TEXT PRIMARY KEY NOT NULL/)
-  assert.doesNotMatch(
-    routeMigration.match(
-      /CREATE TABLE IF NOT EXISTS icono_published_gene_routes[\s\S]*?WITHOUT ROWID;/,
-    )?.[0] || "",
-    /asset_sha256|portrait|vote/i,
-  )
-})
-
-// ARCHITECTURE FENCE [IPD-006]
-// The behaviour (one receipt per order across sessions, cancellations leaving
-// the group) is tested end to end in workers/iconoplasm.request-order.test.js.
-test("IPD-006 groups receipts by order and bounds Discord receipts", () => {
-  const delivery = readRepositoryFile("workers/iconoplasm-request-notifications.js")
-  const migration = readRepositoryFile("migrations-iconoplasm/0134_delivery_groups_by_order.sql")
-  assert.match(delivery, /DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10/)
-  assert.match(delivery, /DISCORD_ATTACHMENT_BATCH_MAX_BYTES/)
-  assert.match(delivery, /full\.webp/)
-  assert.match(migration, /trg_icono_generation_request_cancel_shrinks_delivery_group/)
-  assert.doesNotMatch(delivery, /setTimeout|setInterval/)
-})
-
-// B-774: request-scoped discovery resolution must never scan the catalog
-// aliases. One full alias scan measured 0.5M-2.1M D1 rows read and matched
-// nothing; three of them consumed 3.16M reads on 2026-09-18.
-test("B-774 forbids catalog-wide alias scans in discovery resolution", () => {
-  for (const file of [
-    "workers/iconoplasm/discovery-ordinal-store.js",
-    "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-  ]) {
-    const source = readRepositoryFile(file)
-    assert.doesNotMatch(source, /json_each\(\s*icono_gene_catalog\.aliases_json\s*\)/, file)
-    assert.doesNotMatch(source, /resolveCatalogAliases/, file)
-  }
-})
-
 // B-764: D1 records migration filenames, not their later contents. Production
 // missed the activation table when 0106 was edited after application. Lock the
 // applied bytes; every future repair must use a new forward-only migration.
@@ -480,11 +167,9 @@ test("B-764 locks the applied compact-discovery migration bytes", () => {
 // ARCHITECTURE FENCE [IPD-013]
 // B-1085, the 2026-10-11 vote outage: a copy ran past a stop that only read
 // Cloudflare's lagging meter. Fails if an admin route can be added without a
-// price, or if the gate drifts back to reading the meter alone or to letting
-// an unreadable meter through.
+// price. workers/iconoplasm/app.test.js covers the gate refusing an unreadable
+// meter.
 test("IPD-013 lets batch work in by its price, and an unpriced admin route can't be built", async () => {
-  const fence = registry.fences.find((entry) => entry.id === "IPD-013")
-  assert.ok(fence, "IPD-013 must remain registered")
   const { Hono } = await import("hono")
   const { BATCH_GATE, assertEveryAdminRoutePriced } =
     await import("../workers/iconoplasm/batch-admission.js")
@@ -505,13 +190,4 @@ test("IPD-013 lets batch work in by its price, and an unpriced admin route can't
   for (const route of ICONOPLASM_ROUTE_CONTRACTS)
     if (route.auth === "administrator" || route.auth === "authority-generation-bearer")
       assert.ok(BATCH_ROUTE_PRICES[route.id], `${route.id} must name its D1 price`)
-  const prices = readRepositoryFile("workers/iconoplasm/batch-route-prices.js")
-  assert.match(prices, /^assertPrices\(\)$/m)
-
-  const app = readRepositoryFile("workers/iconoplasm/app.js")
-  const admission = readRepositoryFile("workers/iconoplasm/batch-admission.js")
-  assert.match(app, /assertEveryAdminRoutePriced\(app,/)
-  assert.match(app, /batchRouteSpec\(route\)/)
-  assert.match(admission, /D1_METER_UNAVAILABLE/)
-  assert.match(admission, /FROM icono_batch_admissions WHERE minute >= \?/)
 })

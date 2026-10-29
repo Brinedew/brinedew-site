@@ -8,19 +8,8 @@ import { test } from "node:test"
 import vm from "node:vm"
 
 import JSZip from "jszip"
+import { parse as parseYaml } from "yaml"
 
-const workflowText = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
-const edgeWorkflowText = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
-const preparationWorkflowText = readFileSync(
-  ".github/workflows/prepare-iconoplasm-release.yml",
-  "utf8",
-)
-const readmeText = readFileSync("iconoplasm-extension/README.md", "utf8")
-const firefoxSourcePackageText = readFileSync(
-  "scripts/package-iconoplasm-firefox-source.mjs",
-  "utf8",
-)
-const amoSourceReadmeText = readFileSync("iconoplasm-extension/AMO-SOURCE-README.md", "utf8")
 function quoteWindowsCommandArg(arg) {
   return /[\s"&|<>^]/u.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg
 }
@@ -110,33 +99,21 @@ function firstDifference(expected, actual) {
   })
 }
 
-test("Firefox store publish workflow stays behind the human GUI gate", () => {
-  assert.match(workflowText, /workflow_dispatch:/)
-  assert.match(workflowText, /human_confirmation:/)
-  assert.match(workflowText, /expected_version:/)
-  assert.match(workflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
-  assert.match(workflowText, /Iconoplasm GUI/)
-  assert.match(workflowText, /verify-iconoplasm-publisher-authority\.mjs/)
-  assert.match(workflowText, /wait-for-iconoplasm-release-ci\.mjs/)
-  assert.match(workflowText, /needs: prepare-release/)
-  assert.match(workflowText, /ref: \$\{\{ inputs.expected_commit \}\}/)
-  assert.match(workflowText, /iconoplasm-release-bundle\.mjs download/)
-  assert.doesNotMatch(workflowText, /package-iconoplasm.*\.mjs/)
-  assert.match(
-    preparationWorkflowText,
-    /package-iconoplasm-extension\.mjs --target=firefox --release/,
-  )
-  assert.match(preparationWorkflowText, /verify-iconoplasm-firefox-source-rebuild\.mjs --release/)
-  assert.match(workflowText, /actions:\s*read/)
-  assert.doesNotMatch(workflowText, /^on:\s*\n\s*push:/m)
+// Store publication is a human act: both store workflows run only when someone
+// dispatches them with the confirmation phrase, never on a push or a schedule.
+test("store publish workflows start only by hand, with a human confirmation input", () => {
+  for (const file of ["publish-iconoplasm-firefox.yml", "publish-iconoplasm-edge.yml"]) {
+    const workflow = parseYaml(readFileSync(`.github/workflows/${file}`, "utf8"))
+    assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch"], file)
+    assert.ok(workflow.on.workflow_dispatch.inputs.human_confirmation, file)
+    assert.ok(workflow.on.workflow_dispatch.inputs.expected_version, file)
+  }
 })
 
-test("Firefox publication also requires a certified ownership adapter", () => {
-  const workflow = readFileSync(".github/workflows/publish-iconoplasm-firefox.yml", "utf8")
+test("Firefox and Edge publication need a certified PDF ownership adapter", () => {
   const certification = JSON.parse(
     readFileSync("iconoplasm-extension/pdf-ownership-certification.json", "utf8"),
   )
-  assert.match(workflow, /verify-iconoplasm-pdf-release-gate\.mjs --target=firefox/)
   assert.equal(certification.targets.chrome.store_release_ready, true)
   assert.equal(certification.targets.edge.store_release_ready, true)
   assert.equal(certification.targets.firefox.implementation_complete, true)
@@ -144,105 +121,6 @@ test("Firefox publication also requires a certified ownership adapter", () => {
   assert.equal(certification.renderer.pdfjs_distribution, "unmodified-pdfjs-dist")
   assert.equal(certification.renderer.filled_pill_pdf_fallback, "pill-outline")
   assert.equal(certification.targets.safari.store_release_ready, false)
-})
-
-test("Edge publication requires the same certified ownership contract", () => {
-  const workflow = readFileSync(".github/workflows/publish-iconoplasm-edge.yml", "utf8")
-  assert.match(workflow, /verify-iconoplasm-pdf-release-gate\.mjs --target=edge/)
-})
-
-test("Edge store publish workflow stays behind the human GUI gate", () => {
-  assert.match(edgeWorkflowText, /workflow_dispatch:/)
-  assert.match(edgeWorkflowText, /human_confirmation:/)
-  assert.match(edgeWorkflowText, /expected_version:/)
-  assert.match(edgeWorkflowText, /YES, I AM A HUMAN, PUBLISH ICONOPLASM/)
-  assert.match(edgeWorkflowText, /verify-iconoplasm-publisher-authority\.mjs/)
-  assert.match(edgeWorkflowText, /wait-for-iconoplasm-release-ci\.mjs/)
-  assert.match(edgeWorkflowText, /actions:\s*read/)
-  assert.match(edgeWorkflowText, /EDGE_ADDONS_CLIENT_ID/)
-  assert.match(edgeWorkflowText, /EDGE_ADDONS_API_KEY/)
-  assert.match(edgeWorkflowText, /b8547df3-4156-4b56-b7dc-3752347b6794/)
-  assert.match(edgeWorkflowText, /background\.service_worker/)
-  assert.match(edgeWorkflowText, /needs: prepare-release/)
-  assert.match(edgeWorkflowText, /ref: \$\{\{ inputs.expected_commit \}\}/)
-  assert.match(edgeWorkflowText, /iconoplasm-release-bundle\.mjs download/)
-  assert.doesNotMatch(edgeWorkflowText, /package-iconoplasm.*\.mjs/)
-  assert.match(preparationWorkflowText, /package-iconoplasm-extension\.mjs --target=edge --release/)
-  assert.match(edgeWorkflowText, /iconoplasm-edge-v\$env:EXPECTED_VERSION\.zip/)
-  assert.doesNotMatch(edgeWorkflowText, /^on:\s*\n\s*push:/m)
-})
-
-test("store publish packaging goes through WXT browser targets", () => {
-  const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
-  const packageScriptText = readFileSync("scripts/package-iconoplasm-extension.mjs", "utf8")
-  const wxtConfigText = readFileSync("wxt.config.ts", "utf8")
-
-  assert.match(
-    packageJson.devDependencies?.wxt || "",
-    /^0\.21\./,
-    "WXT should be an explicit dev dependency so browser-target packaging is not homegrown",
-  )
-  assert.match(
-    packageScriptText,
-    /\[wxtCli, "zip", "--browser"/,
-    "the Iconoplasm package script should delegate browser-specific ZIP creation to WXT",
-  )
-  // B-856: `pnpm exec` re-verifies dependencies and rewrote the main
-  // checkout's node_modules through a worktree junction.
-  assert.doesNotMatch(
-    packageScriptText,
-    /\bpnpm\b[^\n]*\bexec\b|"exec", "wxt"/,
-    "packaging must run WXT with node, never through a package manager",
-  )
-  assert.equal(
-    packageJson.scripts?.["package:iconoplasm-safari"],
-    "node ./scripts/package-iconoplasm-extension.mjs --target=safari",
-    "Safari should have a first-class WXT build target even though App Store publishing is separate",
-  )
-  assert.match(
-    packageScriptText,
-    /value === "safari"/,
-    "the package script should accept Safari as an explicit target",
-  )
-  assert.match(
-    packageScriptText,
-    /releaseZipName:\s*`iconoplasm-safari-webext-v\$\{packageVersion\}\.zip`[\s\S]*validationZipName:\s*"iconoplasm-safari-webext-validation\.zip"/,
-    "Safari validation must not masquerade as a versioned App Store release artifact",
-  )
-  assert.match(packageScriptText, /Release packaging requires --expected-version=X\.Y\.Z/)
-  assert.match(packageScriptText, /Refusing to overwrite release artifact/)
-  assert.match(wxtConfigText, /ICONOPLASM_WXT_OUT_DIR/)
-  assert.match(wxtConfigText, /ICONOPLASM_WXT_ARTIFACT_TEMPLATE/)
-  assert.doesNotMatch(
-    packageScriptText,
-    /Compress-Archive/,
-    "the package script should not keep a separate PowerShell ZIP implementation after moving to WXT",
-  )
-  assert.match(
-    wxtConfigText,
-    /browser === "firefox"[\s\S]*"generated\/catalog-contract\.js"[\s\S]*"generated\/portrait-delivery-core\.js"[\s\S]*"publication-alias-overlay\.js"[\s\S]*"content-settings\.js"[\s\S]*"service-worker\.js"/,
-    "WXT config should load every Firefox background-page dependency before the service worker",
-  )
-  assert.match(
-    packageScriptText,
-    /function validatePackagedBackground\(\)[\s\S]*Firefox background dependency order is invalid/,
-    "packaging must validate the final Firefox manifest instead of trusting source configuration",
-  )
-  assert.match(
-    packageScriptText,
-    /const supportsPdfReader = packageTarget !== "safari"/,
-    "Chrome, Edge, and Firefox should package the shared reader while Safari stays capability-gated",
-  )
-  assert.match(
-    packageScriptText,
-    /function validatePackagedPdfSurface\(\)/,
-    "packaging must reject PDF-reader drift in every final browser payload",
-  )
-  assert.match(
-    wxtConfigText,
-    /browser !== "firefox"[\s\S]*delete manifest\.browser_specific_settings/,
-    "WXT config should own the Chromium-target removal of Firefox-only manifest fields",
-  )
 })
 
 test("release-shaped artifacts require an explicit matching publisher version", () => {
@@ -337,33 +215,6 @@ test("Firefox background-page scripts boot in dependency order without importScr
   assert.equal(listeners.installed.length, 1)
   assert.equal(listeners.startup.length, 1)
   assert.equal(listeners.message.length, 1)
-})
-
-test("Firefox reviewer source package reproduces the pnpm/WXT build", () => {
-  const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
-  const sharedSyncText = readFileSync("scripts/sync-iconoplasm-shared.mjs", "utf8")
-
-  assert.match(firefoxSourcePackageText, /"pnpm-lock\.yaml"/)
-  assert.match(firefoxSourcePackageText, /"pnpm-workspace\.yaml"/)
-  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/amo-source\/package\.json"/)
-  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/amo-source\/tsconfig\.json"/)
-  assert.match(firefoxSourcePackageText, /"wxt\.config\.ts"/)
-  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/publication-alias-overlay\.js"/)
-  assert.match(firefoxSourcePackageText, /"iconoplasm-extension\/content-settings\.js"/)
-  assert.doesNotMatch(firefoxSourcePackageText, /"package-lock\.json"/)
-  assert.match(amoSourceReadmeText, /pnpm install --frozen-lockfile/)
-  assert.equal(
-    packageJson.scripts?.["sync:iconoplasm-extension"],
-    "node ./scripts/sync-iconoplasm-shared.mjs --extension-only",
-  )
-  assert.match(amoSourceReadmeText, /pnpm run sync:iconoplasm-extension/)
-  assert.match(amoSourceReadmeText, /dist\/validation\/firefox\/iconoplasm-firefox-validation\.zip/)
-  assert.match(sharedSyncText, /process\.argv\.includes\("--extension-only"\)/)
-  assert.match(
-    sharedSyncText,
-    /if \(!extensionOnly\) \{\s*const \{ syncStaticImportVersions, syncStudioImportVersions \} =\s*await import\("\.\/lib\/static-import-versions\.mjs"\)/,
-  )
-  assert.doesNotMatch(amoSourceReadmeText, /npm ci/)
 })
 
 test(
@@ -467,81 +318,6 @@ test(
     }
   },
 )
-
-test("Firefox submission uses the locked audited publisher and sends reviewer source", () => {
-  const packageJson = JSON.parse(readFileSync("package.json", "utf8"))
-
-  assert.equal(packageJson.devDependencies?.["publish-browser-extension"], "5.1.0")
-  assert.equal(packageJson.devDependencies?.["web-ext"], undefined)
-  assert.match(preparationWorkflowText, /package-iconoplasm-firefox-source\.mjs --release/)
-  assert.match(workflowText, /FIREFOX_SOURCES_ZIP:/)
-  assert.match(workflowText, /FIREFOX_EXTENSION_ID: iconoplasm@brinedew\.bio/)
-  assert.match(workflowText, /FIREFOX_CHANNEL: listed/)
-  assert.match(workflowText, /pnpm exec publish-extension/)
-  assert.doesNotMatch(workflowText, /unlisted/)
-  assert.doesNotMatch(workflowText, /pnpm dlx/)
-  assert.doesNotMatch(workflowText, /\bweb-ext\b/)
-})
-
-test("Edge store publish workflow expands operation IDs into documented polling URLs", () => {
-  assert.match(
-    edgeWorkflowText,
-    /"operation_id=\$operationLocation" >> \$env:GITHUB_OUTPUT/,
-    "Edge Add-ons Location headers are operation IDs, not absolute URLs",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /OPERATION_ID:\s*\$\{\{ steps\.edge_upload\.outputs\.operation_id \}\}/,
-    "package validation should consume the package-upload operation ID",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /submissions\/draft\/package\/operations\/\$operationId/,
-    "package validation must poll the documented package operation endpoint",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /OPERATION_ID:\s*\$\{\{ steps\.edge_publish\.outputs\.operation_id \}\}/,
-    "publish wait should consume the publish operation ID",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /submissions\/operations\/\$operationId/,
-    "publish wait must poll the documented publish operation endpoint",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /\$body = @\{ notes = \[string\]\$env:CERTIFICATION_NOTES \} \| ConvertTo-Json/,
-    "Edge publish notes must be posted as the JSON shape documented by Microsoft",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /InProgressSubmission/,
-    "Edge publish failures should identify the active Partner Center submission blocker",
-  )
-  assert.match(
-    edgeWorkflowText,
-    /if:\s*always\(\)[\s\S]*name: iconoplasm-edge-package/,
-    "Edge ZIP evidence should be uploaded even when Microsoft blocks the publish operation",
-  )
-  assert.doesNotMatch(
-    edgeWorkflowText,
-    /Invoke-RestMethod -Uri \$env:OPERATION_LOCATION/,
-    "the workflow must not try to request a bare GUID as a hostname",
-  )
-})
-
-test("extension release docs point store publish at the Iconoplasm GUI", () => {
-  assert.match(readmeText, /Website Ops -> Store publish/)
-  assert.match(readmeText, /Firefox \+ Edge/)
-  assert.match(
-    readmeText,
-    /do not trigger store publish from unattended CLI, LLM, scheduled job, website deploy automation, push, or cron/,
-  )
-  assert.match(readmeText, /Chrome Web Store publishing remains human-dashboard only/)
-  assert.match(readmeText, /Safari publishing is not another browser ZIP upload/)
-  assert.match(readmeText, /pnpm run package:iconoplasm-safari/)
-})
 
 test("the AMO reviewer build pins the same direct build tools as the submission build", () => {
   const versions = (file) => {

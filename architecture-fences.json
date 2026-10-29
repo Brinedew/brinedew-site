@@ -112,11 +112,6 @@
           "token": "ARCHITECTURE FENCE [IPD-004]"
         },
         {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
-          "token": "ARCHITECTURE FENCE [IPD-004]"
-        },
-        {
           "category": "config",
           "file": "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
           "token": "ARCHITECTURE FENCE [IPD-004]"
@@ -202,11 +197,6 @@
         {
           "category": "source",
           "file": "migrations-iconoplasm/0134_delivery_groups_by_order.sql",
-          "token": "ARCHITECTURE FENCE [IPD-006]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-006]"
         }
       ]
@@ -313,11 +303,6 @@
         {
           "category": "source",
           "file": "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js",
-          "token": "ARCHITECTURE FENCE [IPD-009]"
-        },
-        {
-          "category": "test",
-          "file": "scripts/architecture-fences.test.js",
           "token": "ARCHITECTURE FENCE [IPD-009]"
         },
         {

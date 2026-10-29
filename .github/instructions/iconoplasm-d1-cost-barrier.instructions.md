@@ -1,57 +1,40 @@
 ---
-description: "Use when editing Iconoplasm worker cost-barrier code, Iconoplasm D1 tests, onboarding docs, or agent instructions. Covers the protected alarm files, the triplicate guardrail rule, and why deleting warnings/tests is dangerous."
+description: "Use when editing Iconoplasm worker cost-barrier code, Iconoplasm D1 tests, onboarding docs, or agent instructions. Covers which tests guard D1 cost and why they measure instead of reading text."
 name: "Iconoplasm D1 Cost Barrier"
 applyTo: "workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js, workers/iconoplasm-caller.js, workers/*.test.js, docs/ICONOPLASM_ONBOARDING.md, CLAUDE.md, .github/hooks/iconoplasm-d1-guardrails.*, .github/instructions/iconoplasm-d1-cost-barrier.instructions.md"
 ---
 
 # Iconoplasm D1 cost barrier
 
-Treat the Iconoplasm D1 guardrails like alarm bells, not clutter.
+A full-table read on a public path can spend the account's whole D1 day. The
+guards against that run code and measure it:
 
-## the triplicate rule
+1. `workers/iconoplasm.d1-cost-barrier.test.js` runs the real SQL against a real
+   D1 and counts the rows each path reads.
+2. `workers/iconoplasm/batch-admission.test.js` and `workers/iconoplasm/app.test.js`
+   prove that admin and workstation routes are let in by their D1 price, and
+   that batch work stops when Cloudflare's meter is unreadable.
+3. `workers/iconoplasm.worker-config.test.js` parses both Wrangler configs: the
+   public edge Worker holds no state, and production has no workers.dev bypass.
+4. The per-path cost tests next to the code (for example
+   `workers/iconoplasm/factory-rollup-source-cost.test.js`) assert rows read
+   and written for one path each.
 
-If you add or replace a deterministic D1 safety defense, it should exist in at least three separate places so a future editor has to deliberately remove multiple barriers before dangerous code can slip through.
+The safety story:
 
-Right now the intended stack is:
-
-1. runtime warning comments in `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
-2. guard tests in:
-   - `workers/iconoplasm.d1-cost-barrier.test.js`
-   - `workers/iconoplasm.d1-hot-query-guard.test.js`
-   - `workers/iconoplasm.do-not-delete-cost-guards.test.js`
-3. repo instructions and docs in:
-   - `CLAUDE.md`
-   - `docs/ICONOPLASM_ONBOARDING.md`
-   - this file
-4. deploy-time checks in:
-   - `.github/workflows/deploy-quartz.yml`
-   - `scripts/assert-iconoplasm-worker-budget-guards.mjs`
-5. the hook guard in `.github/hooks/iconoplasm-d1-guardrails.json` and `.github/hooks/iconoplasm-d1-guardrails.ps1`
-
-The current safety story is intentionally split:
-
-- hot public and first-party reads stay off the budget DO entirely
+- hot public and first-party reads stay off batch admission entirely
 - admin and workstation routes are let in by their D1 price before they run (`workers/iconoplasm/batch-admission.js`, `workers/iconoplasm/batch-route-prices.js`, IPD-013), and batch work stops when Cloudflare's meter is unreadable
-- usage visibility comes from Cloudflare dashboard and GraphQL analytics, not an app-owned request-path report
+- usage visibility comes from Cloudflare dashboard and GraphQL analytics, and from the per-request record (`workers/lib/the-only-request-record.js`)
 
 ## what not to do
 
-Do not do any of these just because a change is inconvenient:
-
-- delete a failing guard test
-- rename a guard test so nobody recognizes it
-- remove the loud warning comments from `workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js`
+- weaken a measuring test to make a change fit
 - replace raw canonical-key predicates with `upper(...)` / `lower(...)` on hot paths
 - remove the shared KV barrier and rely on module memory alone
-- put hot read traffic back on the budget DO just because it feels tidy to count everything in one place
-- rebuild `/api/iconoplasm/admin/cost/usage` into a fake internal telemetry source instead of pointing operators at Cloudflare-native observability
+- put hot read traffic behind batch admission
+- add a test that matches source, docs or workflow text: it fails on unrelated edits and catches nothing that a measurement would miss (B-1187)
 
 ## if a guard fails
 
-Assume the guard is telling you something useful.
-
-Fix the code, or land a stricter replacement guard in the same change and explain why the old one was no longer the right guard.
-
-## chesterton's fence
-
-If you see a bizarrely long helper or test name with `DO_NOT_DELETE` in it, that is intentional. The project is using friction on purpose because the failure mode is a real billing incident, not a tidy-code dispute.
+Assume the guard is telling you something useful. Fix the code, or replace the
+test in the same change with one that measures more, and say why.

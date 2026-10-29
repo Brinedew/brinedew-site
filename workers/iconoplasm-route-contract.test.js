@@ -284,3 +284,19 @@ test("no route writes or verifies legacy manifestation plaintext", () => {
   assert.equal(ids.includes("admin_manifestation_upsert"), false)
   assert.equal(ids.includes("admin_manifestation_state"), false)
 })
+
+test("image edit and candidate generation routes require a signed-in person", () => {
+  for (const routeId of [
+    "image_edit_providers",
+    "image_edit_jobs_create",
+    "image_edit_job",
+    "image_edit_job_publish",
+    "candidate_generation_jobs_create",
+    "candidate_generation_job",
+    "candidate_generation_job_publish",
+  ]) {
+    const route = ICONOPLASM_ROUTE_CONTRACTS.find((entry) => entry.id === routeId)
+    assert.ok(route, `${routeId} must stay in the declarative route contract`)
+    assert.match(String(route.auth), /authenticated/)
+  }
+})
