@@ -160,10 +160,11 @@ jobs:
       - name: Reproduce a newly added public extension package from this commit
         run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
 
-  # The repository suite in three thirds on three runners (node --test-shard
-  # deals the files out in turn). One runner took 324 s on 2026-10-28 behind
-  # about 4 minutes of setup; two took 122 s and 154 s, the longest lane of a
-  # normal PR, with no file over 18 s, so a third runner divides it again.
+  # The repository suite in three thirds on three runners (scripts/run-tests.mjs
+  # deals the files out, the slow ones first). One runner took 324 s on
+  # 2026-10-28 behind about 4 minutes of setup; two took 122 s and 154 s, the
+  # longest lane of a normal PR, with no file over 18 s, so a third runner
+  # divides it again.
   tests:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.notes_only != 'true' }}

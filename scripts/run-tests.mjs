@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
@@ -67,11 +67,28 @@ const tsxCliPath = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", imp
 // Workerd and PowerShell integration files spawn their own processes. Starting
 // one test process per host CPU starves bounded child startup checks on Windows.
 const concurrency = Math.min(4, availableParallelism())
-// CI splits the suite across runners: TEST_SHARD=1/3 runs every third file.
-const shard = process.env.TEST_SHARD ? [`--test-shard=${process.env.TEST_SHARD}`] : []
+// CI splits the suite across runners: TEST_SHARD=1/3 runs a third of the files.
+// Dealt in name order, as `--test-shard` does, the thirds summed 345 s, 94 s
+// and 171 s of tests on 2026-10-29 (B-1187): the slow files start a real
+// runtime (Miniflare's D1, workerd, a child process, a browser) and several sat
+// in one third. So those are dealt out first, in turn, and the rest after them.
+function shardFiles(files, spec) {
+  const [index, total] = spec.split("/").map(Number)
+  if (!(index >= 1 && index <= total)) throw new Error(`TEST_SHARD must be i/n, not ${spec}`)
+  const startsRuntime = (file) =>
+    /Miniflare|getD1Database|workerd|spawnSync|execFileSync|execFile\(|spawn\(|chromium|launchChrome/.test(
+      readFileSync(file, "utf8"),
+    )
+  const sorted = [...files].sort()
+  const dealt = [...sorted.filter(startsRuntime), ...sorted.filter((file) => !startsRuntime(file))]
+  return dealt.filter((_, position) => position % total === index - 1)
+}
+const shardedFiles = process.env.TEST_SHARD
+  ? shardFiles(testFiles, process.env.TEST_SHARD)
+  : testFiles
 const result = spawnSync(
   process.execPath,
-  [tsxCliPath, "--test", `--test-concurrency=${concurrency}`, ...shard, ...testFiles],
+  [tsxCliPath, "--test", `--test-concurrency=${concurrency}`, ...shardedFiles],
   {
     cwd: process.cwd(),
     stdio: "inherit",
