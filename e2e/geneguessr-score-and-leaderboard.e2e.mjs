@@ -25,6 +25,7 @@ import {
   origin,
   picturesDecoded,
   requests,
+  resetRequests,
   rows,
   rowsShown,
   saveBudget,
@@ -80,7 +81,7 @@ test("the page is styled with the settings the bootstrap carries, with no reques
       visitorCookie: `geneguessr_session=e2e-graphics-${stored ? "tuned" : "default"}`,
       viewport: DESKTOP,
     })
-    requests = []
+    resetRequests()
     // `molstar_debug` hands the page's last viewer to the test.
     await page.goto(`${origin}/?molstar_debug&gg_api=${encodeURIComponent(origin)}`)
     await page.waitForSelector('body[data-geneguessr-status="rendered"]', { timeout: 30000 })
@@ -118,7 +119,7 @@ test("a phone reads the leaderboard when its section nears the screen, and it lo
       visitorCookie: "geneguessr_session=e2e-board-phone",
       viewport: PHONE,
     })
-    requests = []
+    resetRequests()
     await openGame(page)
     await page.waitForTimeout(2000)
     const before = {
@@ -175,7 +176,7 @@ test("a desktop reads the leaderboard at load, because its section is on screen,
       visitorCookie: "geneguessr_session=e2e-board-desktop",
       viewport: DESKTOP,
     })
-    requests = []
+    resetRequests()
     await openGame(page)
     await page.waitForFunction(rowsShown, null, { timeout: 10000 })
     await picturesDecoded(page, LEADERBOARD.length)
@@ -210,7 +211,7 @@ test("a browser without IntersectionObserver still reads the leaderboard, at loa
       viewport: PHONE,
       noObserver: true,
     })
-    requests = []
+    resetRequests()
     await openGame(page)
     await page.waitForFunction(rowsShown, null, { timeout: 10000 })
     const shown = await leaderboardShown(page)
@@ -275,7 +276,7 @@ test("an answer from the CDN that is not the board sends the page to the Worker 
       visitorCookie: "geneguessr_session=e2e-board-garbage",
       viewport: DESKTOP,
     })
-    requests = []
+    resetRequests()
     await openGame(page)
     await page.waitForFunction(rowsShown, null, { timeout: 10000 })
     const shown = await leaderboardShown(page)
@@ -301,7 +302,7 @@ test("a board object that names a picture address other than a data: image never
       visitorCookie: "geneguessr_session=e2e-board-tampered",
       viewport: DESKTOP,
     })
-    requests = []
+    resetRequests()
     await openGame(page)
     await page.waitForFunction(rowsShown, null, { timeout: 10000 })
     await page.waitForTimeout(1500)

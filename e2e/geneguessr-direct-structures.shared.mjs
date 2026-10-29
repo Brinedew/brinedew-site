@@ -214,6 +214,10 @@ export let server
 export let harness
 export let cookie = "geneguessr_session=e2e-visitor"
 export let requests = []
+// Test files cannot assign an imported binding, so they empty the list through this.
+export const resetRequests = () => {
+  requests = []
+}
 // What a visit costs on the meters besides Workers requests: Durable Object calls (reads and
 // writes of the session), KV reads and puts, and D1 rows.
 export const meters = { doReads: 0, doWrites: 0, kvGets: 0 }
