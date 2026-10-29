@@ -4417,7 +4417,7 @@ html[saved-theme="dark"] .icono-play-check {
    7:9, each in its browser window. For a reader with the add-on, the window
    and the page's name under it are one link. The windows sit in the gene
    page's candidate strip: side by side where both fit, and on a phone one
-   window with the edge of the next, as wide as a candidate tile. */
+   window with the edge of the next. */
 .icono-play-sites {
   flex: 1 1 100%;
   min-width: 0;
@@ -4443,9 +4443,12 @@ html[saved-theme="dark"] .icono-play-check {
   scroll-snap-align: start;
 }
 
+/* The window leaves 4rem for the next one at any phone width. A candidate
+   tile's 16rem floor (it holds a vote footer) left 26 px of the next window at
+   360 px, too little to read as a second picture. */
 @media (max-width: 640px) {
   .icono-play-site {
-    flex-basis: clamp(16rem, 78%, 17.5rem);
+    flex-basis: min(100% - 4rem, 17.5rem);
   }
 }
 
