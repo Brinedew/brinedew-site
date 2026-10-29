@@ -515,9 +515,7 @@ Pages serve the HTML directly, so the Worker never sees a wiki or post page. The
 
 Every push uploads and activates a new public edge Worker version ("Deploy the compatible public edge Worker"); a version upload leaves the installed routes alone. Keep the `routes` key in `wrangler.toml` anyway: `wrangler deploy` with a config that has no `routes` key can clear the existing routes.
 
-The following "Reassign production routes to the public edge worker" step is final-state verification. It checks each pattern and logs "Route already points at..." when the routes are already correct.
-
-A maintenance release deploys in this order: the internal stateful worker first, the public edge worker second, and the route reassignment third. Keep that order when you change the workflow. The release's post-deploy acceptance checks the live result.
+Every release then runs "Reassign production routes to the public edge worker" and "Reassign Iconoplasm route to the stateful worker" as final-state checks, in this order: the internal stateful worker first, the public edge worker second, the route reassignment third. Each pattern logs "Route already points at..." when it is right and is moved back to its owner when it isn't. The release's post-deploy acceptance checks the live result.
 
 ## Iconoplasm cost barriers and budget guards
 
