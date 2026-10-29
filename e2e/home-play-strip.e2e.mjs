@@ -42,7 +42,13 @@
 // 13. a guest with a find has no "Log in to save" in Sort's place, one with
 //    none has it, or the strip carries a login of its own;
 // 14. a guest who comes back from another tab with new finds doesn't see
-//    them until a reload.
+//    them until a reload;
+// 15. on a phone the two sites shrink side by side until they can't be read,
+//    instead of sitting in a swipe row (owner, 2026-10-29: "examples
+//    screenshot unreadable side by side on mobile");
+// 16. a card found on the strip waits for a reload before it joins the
+//    gallery under it (owner, 2026-10-29: "tapped cards dont get instantly
+//    added to the collection").
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/home-play-strip*.
@@ -228,6 +234,18 @@ const siteAddresses = (page) =>
   page.$$eval("[data-icono-play-next] .icono-play-site .icono-play-address", (nodes) =>
     nodes.map((node) => node.textContent),
   )
+// On a phone the two windows sit in one swipe row (candidate-strip.js), each
+// wide enough to read, the second past the screen's edge.
+const siteRow = (page) =>
+  page.$eval("[data-icono-play-next] .icono-play-sites", (row) => ({
+    ready: row.classList.contains("is-strip-ready"),
+    still: row.classList.contains("is-strip-still"),
+    screen: document.documentElement.clientWidth,
+    windows: [...row.querySelectorAll(".icono-play-site")].map((site) => {
+      const box = site.getBoundingClientRect()
+      return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width) }
+    }),
+  }))
 // For a reader with the add-on, each window and the page's name under it are
 // one link.
 const siteLinks = (page) =>
@@ -469,6 +487,17 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         ["Install on mobile"],
       )
       assert.equal(await nextNote(page), DOCS_LINE)
+      // 15. The two sites are a swipe row, not two shrunken windows.
+      const row = await siteRow(page)
+      assert.ok(row.ready && !row.still, `the sites are not a swipe row: ${JSON.stringify(row)}`)
+      const [first, second] = row.windows
+      assert.ok(first.width >= 250, `a ${first.width} px window on a ${row.screen} px phone`)
+      assert.equal(second.top, first.top, "the windows stack instead of sitting in a row")
+      assert.ok(second.left + 40 > row.screen, "the second window is not past the edge")
+      await page.$eval("[data-icono-play-next]", (element) =>
+        element.scrollIntoView({ block: "center", behavior: "instant" }),
+      )
+      await shot(page, "phone-sites")
       await page.tap("[data-icono-play-open]")
       const steps = await page.waitForSelector("[data-icono-home-install-card]", {
         timeout: 5_000,
@@ -660,10 +689,12 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.deepEqual(await gallery(page), ["EGFR", "CD4", "PRL", "RHO", "INS"])
       assert.equal(await yours(page), "5")
       assert.equal((await login(page))?.text, "Log in to save")
-      // The add-on's next step follows the gallery.
-      assert.ok(
-        await page.$("#icono-home-auxiliary [data-icono-home-install-card]"),
-        "no next step after the gallery",
+      // The add-on's next step follows the gallery, with a page of 453 genes.
+      const next = await page.$("#icono-home-auxiliary [data-icono-home-install-card]")
+      assert.ok(next, "no next step after the gallery")
+      assert.equal(
+        await next.$eval("a.icono-install-link", (link) => link.href),
+        "https://en.wikipedia.org/wiki/List_of_human_clusters_of_differentiation",
       )
       await context.close()
     })
@@ -697,6 +728,12 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         )
         await page.hover(pill("INS"))
         assert.equal(await yours(page), "3")
+        // 16. The card found on the strip joins the gallery under it at once.
+        await page.waitForSelector('#icono-grid a.icono-image-only-link[href="/gene/INS"]', {
+          timeout: 10_000,
+        })
+        assert.deepEqual(await gallery(page), ["INS", "TP53", "RHO"])
+        assert.deepEqual(await faceUp(page), ["INS", "RHO"])
         await page.mouse.move(5, 5)
         await page.waitForTimeout(700)
         await (

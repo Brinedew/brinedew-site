@@ -32,12 +32,15 @@ function prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
 }
 
+// A frame is any child of the track: candidate cards on a gene page, the
+// example site windows on the home page.
 function frames(track) {
-  return Array.prototype.slice.call(track.querySelectorAll(":scope > .icono-candidate-card"))
+  return Array.prototype.slice.call(track.children)
 }
 
-function frameOf(node) {
-  return node && node.closest ? node.closest(".icono-candidate-card") : null
+function frameOf(track, node) {
+  while (node && node.parentElement !== track) node = node.parentElement
+  return node || null
 }
 
 function isTypingTarget(node) {
@@ -75,7 +78,7 @@ function developImages(track) {
 
 function installStrip(section) {
   var viewport = section.querySelector("[data-icono-strip-viewport]")
-  var track = viewport && viewport.querySelector(".icono-candidate-grid")
+  var track = viewport && viewport.firstElementChild
   if (!track) return
   var state = { api: null, loading: false, startSnap: 0, refresh: null }
   section._iconoCandidateStrip = state
@@ -102,7 +105,9 @@ function installStrip(section) {
     var list = frames(track)
     if (!list.length) return
     var clamped = Math.max(0, Math.min(list.length - 1, index))
-    var target = list[clamped].querySelector(".icono-candidate-media-button")
+    var target =
+      list[clamped].querySelector(".icono-candidate-media-button") ||
+      (list[clamped].matches("a[href], button") ? list[clamped] : null)
     if (!target) return
     target.focus({ preventScroll: true })
     var api = state.api
@@ -116,7 +121,7 @@ function installStrip(section) {
   section.addEventListener("keydown", function (event) {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
     if (isTypingTarget(event.target) || isMenuTarget(event.target)) return
-    var frame = frameOf(event.target)
+    var frame = frameOf(track, event.target)
     var list = frames(track)
     var index = frame ? list.indexOf(frame) : -1
     var key = event.key
@@ -250,7 +255,9 @@ function installStrip(section) {
     function sync() {
       if (prev) prev.disabled = !api.canScrollPrev()
       if (next) next.disabled = !api.canScrollNext()
-      if (nav) nav.hidden = !api.canScrollPrev() && !api.canScrollNext()
+      var still = !api.canScrollPrev() && !api.canScrollNext()
+      if (nav) nav.hidden = still
+      section.classList.toggle("is-strip-still", still)
       developImages(track)
     }
 
@@ -287,12 +294,15 @@ function wantsCarousel(section) {
 
 // Safe to call again: a strip already installed only re-checks whether it
 // should be a carousel right now (after a tab switch).
+export function installSwipeStrip(section) {
+  if (!section) return
+  var state = section._iconoCandidateStrip
+  if (state) state.refresh()
+  else installStrip(section)
+}
+
 export function installCandidateStrips(root) {
   if (!root || !root.querySelectorAll) return
   var sections = root.querySelectorAll("[data-icono-candidate-strip]")
-  for (var i = 0; i < sections.length; i += 1) {
-    var state = sections[i]._iconoCandidateStrip
-    if (state) state.refresh()
-    else installStrip(sections[i])
-  }
+  for (var i = 0; i < sections.length; i += 1) installSwipeStrip(sections[i])
 }
