@@ -30,7 +30,7 @@ import {
   updateDiagramItem,
 } from "./diagram-document.js?v=128a1dcb637288b1"
 import { STUDIO_ICONS } from "./diagram-studio-icons.js?v=f4f5c3cf1effb8eb"
-import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=f2e7077bc0436804"
+import { createDiagramEditor, exportDiagramWithX6 } from "./diagram-x6-editor.js?v=735474bad806fb00"
 import {
   DIAGRAM_TEMPLATES,
   buildTemplateDocument,
@@ -38,7 +38,7 @@ import {
   templateSymbols,
   templateThumbnail,
 } from "./diagram-templates.js?v=220602dd298fbe51"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=ba142878e1fba542"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=3da5cf94acec5d3c"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -3671,6 +3671,8 @@ async function startTour({ force = false } = {}) {
     ;({ driver } = await import(TOUR_RUNTIME_URL))
   } catch (error) {
     tourOpen = false
+    // A release removed the runtime after this page opened: reload once (Head.tsx).
+    globalThis.__iconoplasmReloadForRelease?.(error)
     throw error
   }
   const tour = driver({
