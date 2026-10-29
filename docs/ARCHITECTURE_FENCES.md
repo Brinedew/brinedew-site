@@ -9,7 +9,7 @@ exhausted, and give deferred work an inspected executor, wake condition and
 failure destination. Change a deadlocking guard through explicit change
 control. Canonical: the RECOVERY-001 rule in the root `AGENTS.md`.
 
-This repository uses executable Chesterton's fences for decisions that look
+This repository uses Chesterton's fences for decisions that look
 locally removable but protect a system-wide cost, correctness, ownership, or
 release invariant.
 
@@ -25,16 +25,17 @@ participates in the protected decision:
 6. the production deploy workflow when violating the fence could ship a costly
    or correctness-breaking release.
 
-Markers use `ARCHITECTURE FENCE [ID]`. The registry test verifies that every
-declared marker exists and that every fence covers the required categories.
-Fence-specific tests then assert the protected behavior.
+Markers use `ARCHITECTURE FENCE [ID]`, so a search finds every place that
+carries a fence. No test checks that the markers exist: tests that matched our
+own source, docs and workflow text failed on unrelated edits and caught no real
+regression (B-1187). Each fence's behavior tests assert the protected behavior.
 
 ## Change rule
 
 A fence is not permanent dogma. It may be removed or replaced when the
 architecture changes. The change must be explicit: update the registry,
 rationale, source, configuration, behavioral tests, and deploy guard together.
-Deleting or weakening only the nearest guard is a regression.
+Deleting or weakening only the nearest behavior test is a regression.
 
 ## Adding a fence
 

@@ -12,8 +12,6 @@ function Test-IconoplasmD1GuardrailPayload-ForProtectedAlarmFiles {
     $protectedMarkers = @(
         'workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js',
         'workers/iconoplasm.d1-cost-barrier.test.js',
-        'workers/iconoplasm.d1-hot-query-guard.test.js',
-        'workers/iconoplasm.do-not-delete-cost-guards.test.js',
         'docs/ICONOPLASM_ONBOARDING.md',
         'CLAUDE.md',
         '.github/hooks/iconoplasm-d1-guardrails.json',
@@ -21,8 +19,6 @@ function Test-IconoplasmD1GuardrailPayload-ForProtectedAlarmFiles {
         '.github/instructions/iconoplasm-d1-cost-barrier.instructions.md',
         'Website/workers/iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js',
         'Website/workers/iconoplasm.d1-cost-barrier.test.js',
-        'Website/workers/iconoplasm.d1-hot-query-guard.test.js',
-        'Website/workers/iconoplasm.do-not-delete-cost-guards.test.js',
         'Website/docs/ICONOPLASM_ONBOARDING.md'
     )
 
