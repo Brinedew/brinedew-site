@@ -935,12 +935,10 @@ async function fetchPortraitBytes(resolvedUrl, cacheKey, signal) {
     if (signal?.aborted) abort()
     const timer = setTimeout(() => controller?.abort(), portraitDeliveryPolicy.probe_timeout_ms)
     try {
-      const resp = await fetch(resolvedUrl, {
-        headers: {
-          "X-Iconoplasm-Extension-Version": currentExtensionVersion(),
-        },
-        ...(controller ? { signal: controller.signal } : {}),
-      })
+      // A plain GET, no version header: a custom header makes the portrait
+      // CDN (img.brinedew.bio) answer a preflight that doesn't allow it, and
+      // Safari then refuses every portrait (Chrome lets it through). B-1190.
+      const resp = await fetch(resolvedUrl, controller ? { signal: controller.signal } : {})
       if (!resp.ok) {
         console.error("[Iconoplasm] Portrait fetch failed:", resp.status, resolvedUrl)
         return ""

@@ -1648,6 +1648,45 @@
       },
       { passive: true },
     )
+    // A tap on a phone. Safari on iPhone sends no mouse events for a tap on
+    // plain text, because this listener is on the document and not on the
+    // word, so the card opens on the touch's pointerup (B-1190). A gene inside
+    // a link opens its card on the first tap and follows the link on the
+    // second, the way iOS itself treats a hover menu.
+    let swallowLinkClick = false
+    document.addEventListener(
+      "pointerup",
+      (event) => {
+        if (event.pointerType !== "touch") return
+        if (event.target?.closest?.(".iconoplasm-tooltip")) return
+        const next = rangeHighlights.hitTest(event)
+        if (!next) {
+          if (!rangeHoverAnchor) return
+          rangeHoverAnchor = null
+          rangeHighlights.hover(null)
+          leaveTooltipAnchor(event.target)
+          return
+        }
+        if (next === rangeHoverAnchor && activeSymbol === next.dataset.gene) return
+        rangeHoverAnchor = next
+        rangeHighlights.hover(next)
+        activateTooltipForAnchor(next)
+        swallowLinkClick = true
+        setTimeout(() => (swallowLinkClick = false), 800)
+      },
+      { passive: true },
+    )
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (!swallowLinkClick) return
+        swallowLinkClick = false
+        if (!event.target?.closest?.("a[href]")) return
+        event.preventDefault()
+        event.stopPropagation()
+      },
+      true,
+    )
     pageScanner = IconoContentScanner.createPageScanner({
       annotations: rangeHighlights,
       documentRef: document,
