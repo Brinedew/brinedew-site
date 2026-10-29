@@ -85,7 +85,7 @@ to the legacy handler, the 30,000-line `if` chain in the stateful runtime.
 
 ## Architecture fence registry
 
-The executable registry is `architecture-fences.json`: every entry carries its full decision, reason, change control, linked runbook and required markers, and `scripts/architecture-fences.test.js` enforces those markers across instructions, runbooks, source, tests and deploy. Read the registry entry and the runbook it names before changing a fence's domain; replace a fence only by an explicit migration that updates every enforcement point together.
+The registry is `architecture-fences.json`: every entry carries its full decision, reason, change control and linked runbook, and lists the places that carry its `ARCHITECTURE FENCE [ID]` marker so a search finds them. Behavior tests guard each fence. No test checks the markers, because a test that matches our own text fails on unrelated edits and catches no real regression (B-1187). Read the registry entry and the runbook it names before changing a fence's domain; replace a fence only by an explicit change that updates its registry entry, runbook, code and tests together.
 
 **ARCHITECTURE FENCE [IPD-001]** — Bunny is Iconoplasm's healthy-path portrait accelerator; direct delivery avoids charging each image to the Worker budget, and a failed probe changes only that tab. Registry: `architecture-fences.json`; runbook: `docs/ICONOPLASM_PORTRAIT_DELIVERY_RUNBOOK.md`.
 
