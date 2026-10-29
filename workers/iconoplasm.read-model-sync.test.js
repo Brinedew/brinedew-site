@@ -361,26 +361,6 @@ test("admin sync reads transactional counts without rebuilding catalogue history
     .filter((call) => call.method === "run" && call.sql.includes("icono_admin_gallery_count_cache"))
     .map((call) => call.sql)
   assert.deepEqual(countCacheSql, [])
-
-  await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/admin/overview?event_limit=0", {
-      headers: {
-        Authorization: "Bearer secret-admin-token",
-      },
-    }),
-    env,
-    {},
-  )
-
-  const attentionSql = env.gatewayDb.calls.find(
-    (call) =>
-      call.method === "all" &&
-      call.sql.includes("current_asset_missing") &&
-      call.sql.includes("LIMIT 12"),
-  )?.sql
-
-  assert.match(
-    attentionSql || "",
-    /FROM icono_gene_catalog gc\s+JOIN icono_admin_gene_rollup gr\s+ON gr\.gene_symbol = gc\.gene_symbol/,
-  )
+  // The admin home's own counts and attention list are tested on the real
+  // schema in iconoplasm/admin-dashboard-counts.test.js.
 })

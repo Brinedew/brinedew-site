@@ -22,18 +22,22 @@
 //     portrait, or the broken and stale genes;
 //  7. a page with one busy gene (72 portraits in a row, all of TP53) comes up
 //     short or repeats the gene.
+//  8. the admin home's counts or its list of genes that need the owner are not
+//     the site's (0095 counted 610 genes with no candidate that each had one).
 import assert from "node:assert/strict"
 import test from "node:test"
 import { DatabaseSync } from "node:sqlite"
 import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
 
+import { handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { readAdminGallery } from "./admin-gallery.js"
 import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
 const MIGRATIONS = new URL("../../migrations-iconoplasm/", import.meta.url)
 const require = createRequire(import.meta.url)
 const LIMIT = 120
+const TOKEN = "admin-token-0000000000000000000000000002"
 
 const sha = (n) => n.toString(16).padStart(64, "0")
 const symbol = (n) => `G${String(n).padStart(5, "0")}`
@@ -74,10 +78,9 @@ async function seedSite(db, genes) {
   const name = `printf('G%05d', n)`
   const tp53Ids = `WITH RECURSIVE js(j) AS (VALUES(1) UNION ALL SELECT j + 1 FROM js WHERE j < 72)`
   for (const sql of [
-    // The counters' rows; migration 0095 makes them from production's data.
+    // The counters' rows; migrations 0104 and 0147 make them from production's data.
     `INSERT INTO icono_admin_dashboard_summary (summary_key) VALUES ('default')`,
-    `INSERT INTO icono_admin_gallery_count_cache (count_key, mode, filter, total)
-       VALUES ('all:all', 'all', 'all', 0)`,
+    `INSERT INTO icono_asset_summary_counts (summary_key) VALUES ('default')`,
     `${ids} INSERT INTO icono_gene_catalog (gene_symbol, full_name)
        SELECT ${name}, CASE WHEN n % 10 = 0 THEN 'protein kinase ' || n ELSE 'protein ' || n END
          FROM ids`,
@@ -233,6 +236,30 @@ test(
         })
         for (const sort of ["votes", "recency", "mismatch"])
           await view(`live ${sort}, search kinase`, { sort, query: "KINASE" })
+
+        // 8: the admin home counts the site as it is, and lists the broken
+        // genes first, then the ones with no candidate.
+        const homeMeter = createOperationCostD1Meter(db)
+        const home = await (
+          await handleApi(
+            new Request(
+              "https://iconoplasm.brinedew.bio/api/iconoplasm/admin/overview?event_limit=0",
+              { headers: { Authorization: `Bearer ${TOKEN}` } },
+            ),
+            { ICONOPLASM_DB: homeMeter.db, ICONOPLASM_ADMIN_TOKEN: TOKEN },
+            {},
+          )
+        ).json()
+        views["admin home"] = homeMeter.finish().rows_read
+        const bare = range(genes, (n) => !hasPortraits(n))
+        assert.deepEqual(
+          [home.summary.genes, home.summary.drift, home.summary.missing],
+          [genes + 1, range(genes, isBroken).length, bare.length],
+        )
+        assert.deepEqual(
+          home.attention.map((item) => item.symbol),
+          [...range(genes, isBroken), ...bare].slice(0, 12),
+        )
 
         // 2: no view reads past the genome and its page's own portraits.
         measured[genes] = views

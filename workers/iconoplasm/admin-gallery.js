@@ -145,7 +145,8 @@ async function cachedTotal(db, sql, key) {
 }
 
 const LIVE_GENES_TOTAL = `SELECT genes AS total FROM icono_admin_dashboard_summary WHERE summary_key = ?`
-const ALL_CANDIDATES_TOTAL = `SELECT total FROM icono_admin_gallery_count_cache WHERE count_key = ?`
+// Every stored portrait, counted in the same transaction as each portrait write (B-744).
+const ALL_CANDIDATES_TOTAL = `SELECT candidate_assets AS total FROM icono_asset_summary_counts WHERE summary_key = ?`
 
 // Mismatch first, with nothing to narrow it: broken genes (or their
 // candidates), then stale ones, then the rest by name. The first two are small
@@ -302,7 +303,7 @@ async function pickCandidates(db, { sort, filter, search, offset, limit }) {
     if (sort === "mismatch")
       return {
         keys: await mismatchFirst(db, { live: false, offset, limit }),
-        total: await cachedTotal(db, ALL_CANDIDATES_TOTAL, "all:all"),
+        total: await cachedTotal(db, ALL_CANDIDATES_TOTAL, "default"),
       }
     const sql = {
       name: `SELECT pa.gene_symbol, pa.asset_sha256 FROM icono_portrait_assets pa
@@ -325,7 +326,7 @@ async function pickCandidates(db, { sort, filter, search, offset, limit }) {
     )
     return {
       keys,
-      total: sort === "votes" ? null : await cachedTotal(db, ALL_CANDIDATES_TOTAL, "all:all"),
+      total: sort === "votes" ? null : await cachedTotal(db, ALL_CANDIDATES_TOTAL, "default"),
     }
   }
   const source =
