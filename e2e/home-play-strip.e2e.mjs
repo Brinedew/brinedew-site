@@ -150,7 +150,7 @@ async function openArchive(
   browser,
   origin,
   options,
-  { seed = null, addOn = null, slowPortraits = 0 } = {},
+  { seed = null, addOn = null, holdPortraits = false } = {},
 ) {
   const context = await browser.newContext(options)
   const api = []
@@ -169,11 +169,17 @@ async function openArchive(
     const object = await cdnObject(pathname)
     return route.fulfill({ ...object, headers: { "access-control-allow-origin": "*" } })
   })
-  if (slowPortraits) {
+  // Portraits wait here until the test releases them, so "before the
+  // portrait came" doesn't depend on how fast the runner is.
+  const heldPortraits = []
+  let releasePortraits = () => {}
+  if (holdPortraits) {
+    const gate = new Promise((resolve) => (releasePortraits = resolve))
     await context.route(
       (url) => url.hostname === CDN_HOST && url.pathname.startsWith("/portraits/"),
       async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, slowPortraits))
+        heldPortraits.push(new URL(route.request().url()).pathname)
+        await gate
         return route.fallback()
       },
     )
@@ -198,7 +204,7 @@ async function openArchive(
   await page.waitForSelector("[data-icono-home-play], #icono-home-auxiliary:not([hidden]) > *", {
     timeout: 45_000,
   })
-  return { context, page, api, downloads, sites }
+  return { context, page, api, downloads, sites, heldPortraits, releasePortraits }
 }
 
 const pill = (symbol) => `[data-icono-play-symbol="${symbol}"]`
@@ -480,11 +486,11 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
     })
 
     await t.test("a card turns over with its portrait already painted", async () => {
-      const { context, page } = await openArchive(
+      const { context, page, heldPortraits, releasePortraits } = await openArchive(
         browser,
         origin,
         { ...PHONE, userAgent: UA.android },
-        { slowPortraits: 2_000 },
+        { holdPortraits: true },
       )
       // Each card as it starts to turn: is its portrait painted, and is a face
       // still down out of reach?
@@ -519,6 +525,11 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.equal(await yours(page), "1")
       assert.deepEqual(await lit(page), ["INS"])
       assert.deepEqual(await faceUp(page), [], "the card turned before its portrait came")
+      assert.ok(
+        heldPortraits.some((pathname) => pathname.includes("/portraits/")),
+        "no portrait request was held, so this proves nothing",
+      )
+      releasePortraits()
       await turned(page, ["INS"])
       assert.deepEqual(await page.evaluate(() => window.__turns), [
         { symbol: "INS", painted: true },
