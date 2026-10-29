@@ -1,4 +1,4 @@
-// B-883: the New candidate > Free queue style picker, checked in a real browser.
+// B-883: the Add portraits > Free queue style picker, checked in a real browser.
 // Owner decision (27 Sep 2026): 3:4 style cards, built from the design system.
 // Owner decision (26 Oct 2026, B-1179): no picking; a tap on a style requests
 // it, "Request all favorites" sits at the bottom-left, and a deck of what is

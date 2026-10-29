@@ -38,7 +38,7 @@ Downvote the current portrait by tapping X or "misfit" under the current portrai
 
 ## All candidate portraits are even worse!
 
-Tap "new candidate" and put one in the free queue (see the [[apps/iconoplasm/docs/request-a-new-portrait#3. Queue a free candidate|Request a new portrait]]). To get a portrait in a minute or two instead, save an API key in the user settings for the service that you prefer for generating portraits, and use the **Image API** tab (see [[apps/iconoplasm/docs/generate-with-your-key|Generate with your own key]]).
+Tap "Add portraits" and put one in the free queue (see the [[apps/iconoplasm/docs/request-a-new-portrait#3. Queue a free candidate|Request a new portrait]]). To get a portrait in a minute or two instead, save an API key in the user settings for the service that you prefer for generating portraits, and use the **Image API** tab (see [[apps/iconoplasm/docs/generate-with-your-key|Generate with your own key]]).
 
 ## All generated portraits for a gene are built on the same bad character concept.
 

@@ -785,7 +785,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 /* B-838: the toolbar under the gene card is ONE row at every width. Pattern from
    Apple HIG and Material 3 toolbar guidance and the Unsplash / Civitai image pages
-   (checked 2026-09-25): one labelled primary on the trailing edge (New candidate),
+   (checked 2026-09-25): one labelled primary on the trailing edge (Add portraits),
    icon-only secondaries, rarely used actions (Edit portrait, caretaker claim/switch)
    collapse into a More menu when the bar is narrow, and the metadata truncates
    instead of pushing anything around. Nothing wraps, nothing scrolls sideways. */
@@ -823,7 +823,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: contents;
 }
 
-/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, New candidate. */
+/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, Add portraits. */
 .icono-canonical-toolbar-meta {
   display: flex;
   flex: 0 1 auto;
@@ -947,7 +947,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 /* With a caretaker line the bar reads as two groups: this card (star, print, who
-   looks after it) on the left, and what makes images (Edit image, New candidate)
+   looks after it) on the left, and what makes images (Edit image, Add portraits)
    on the right, so the line doesn't split the icons apart. */
 .icono-gene-toolbar-rail:has(> .icono-gene-request-panel > .icono-gene-caretaker:not([hidden]))
   .icono-canonical-toolbar-actions {
@@ -4864,7 +4864,7 @@ a.icono-play-site:focus-visible .icono-play-site-label {
 
 /* B-457 #3: on mobile (390x844 reference) the gene-page hero portrait
    was rendering ~310px tall, eating ~46% of the viewport and pushing the
-   toolbar rail (Edit portrait / New candidate from B-472) below the fold.
+   toolbar rail (Edit portrait / Add portraits from B-472) below the fold.
    The hero IS the page on mobile, but the portrait alone shouldn't be —
    cap it so the first viewport shows the portrait + the start of the
    dossier rows + at least the top of the toolbar rail. The cap only
@@ -7159,7 +7159,7 @@ h2.icono-section-label {
    box, the strip arrows, the count boxes) and bare (star, print, ⋯). Reddit's
    post row puts every action in one shape, and the App Store's strip arrows are
    bare. Here an icon is always a bare glyph that tints on hover, and only a word
-   (New candidate, Comment, Join) gets a filled button. */
+   (Add portraits, Comment, Join) gets a filled button. */
 
 /* The tile vote: ⇧ score ⇩ as bare glyphs, the way Reddit and Stack Overflow vote. */
 .icono-candidate-footer .icono-vote-box--arrows {

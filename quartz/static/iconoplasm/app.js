@@ -133,7 +133,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var ICONO_EXTENSION_RELEASE_METADATA_URL = "/static/iconoplasm/extension-release.json"
   var ICONO_REQUEST_TAB_STORAGE_KEY = "iconoplasm.new-candidate-tab"
   // "1" while this browser last saw an image API key on the reader's account,
-  // so the New candidate tabs show at once; the account's answer still decides.
+  // so the Add portraits tabs show at once; the account's answer still decides.
   var ICONO_IMAGE_KEY_HINT_STORAGE_KEY = "iconoplasm.has-image-api-key"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
@@ -6319,7 +6319,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(dialogId) +
       '">' +
       ICONO_PLUS_ICON +
-      "<span>New candidate</span>" +
+      "<span>Add portraits</span>" +
       "</button>"
     )
   }
@@ -6329,7 +6329,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var dialogId = "icono-request-dialog-" + safeSymbol
     return dialogMarkup({
       id: dialogId,
-      title: "New candidate for " + safeSymbol,
+      title: "Add portraits for " + safeSymbol,
       size: "wide",
       fixed: true,
       className: "icono-request-dialog",
@@ -7370,7 +7370,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
 
     // The provider list is cached for the page; it is asked for when the
-    // reader points at New candidate or opens it, never on a page view.
+    // reader points at Add portraits or opens it, never on a page view.
     function checkImageApiKey() {
       if (!currentUser) {
         if (requestTabList) requestTabList.hidden = true

@@ -33,10 +33,10 @@ Your saved emulsion appears in the **Load version** dropdown. You can keep multi
 
 ## Generate a candidate with your key
 
-1. Under the current portrait, click the **New candidate** button in the bottom right.
-   ![[image-37.png|Current portrait with the New candidate button in the bottom right.]]
+1. Under the current portrait, click the **Add portraits** button in the bottom right.
+   ![[image-37.png|Current portrait with the Add portraits button in the bottom right.]]
 2. In the dialog, click the **Image API** tab:
-   ![[image-38.png|The menu that opens from the New candidate button]] 
+   ![[image-38.png|The menu that opens from the Add portraits button]] 
 3. In the **Provider** selector, you should see your newly added provider (e.g. **OpenAI API · gpt-image-2**).
 4. Keep the "emulsion" field empty, or click it to select the emulsion that you saved in the user settings.
 5. Keep "Prose" to send the gene's full description to the model as a prose prompt. If your image model works best with a prompt in the form of a tag cloud, switch the selector to "Tags".
