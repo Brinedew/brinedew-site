@@ -958,7 +958,9 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker {
   order: -1;
-  flex: 1 0 100%;
+  /* Edge to edge of the bar: its own width plus the bar's padding it reaches into. */
+  box-sizing: border-box;
+  flex: 0 0 calc(100% + 2 * var(--icono-space-2));
   margin: calc(-1 * var(--icono-space-2)) calc(-1 * var(--icono-space-2)) 0;
   padding: 12px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);

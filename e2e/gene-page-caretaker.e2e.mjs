@@ -24,9 +24,9 @@ const CARETAKER = {
   since: "2026-10-22",
 }
 const WIDTHS = [...VIEWPORTS, [360, 780, "phone-360"]]
-// One transparent pixel, so the avatar never waits on Discord.
-const PIXEL = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+// A 64 px picture, so the avatar never waits on Discord and shows in the screenshots.
+const PICTURE = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAoklEQVR42u3ZSRHAMAwEwYUTEMHkd5AGTyj4UGwdUyUA0z9b0tVa6BEAAAAAAAAAAAAAq3mfu2c8AjrTzRk6km7I0Nn6dYPOpq8z5KR+2iA/9XOGeoBf6ycM8lY/aqgE2FY/ZCgD2FzfbwAAAAAAAAAAAADAczoEgC+lA0D4rQSLLR+A8LvRDNvpDPeBJBeaDDeyJFdKDt0AAAAAAAAAgIDzAeNSzL2xzCemAAAAAElFTkSuQmCC",
   "base64",
 )
 
@@ -78,9 +78,9 @@ async function openGene(browser, origin, { viewport, reader, caretaker }) {
   await routeProduction(context, origin, reader === "caretaker" ? asCaretaker : undefined, {
     session: reader !== "guest",
   })
-  await context.route("https://cdn.discordapp.com/**", (route) =>
-    route.fulfill({ status: 200, contentType: "image/png", body: PIXEL }),
-  )
+  const picture = (route) => route.fulfill({ status: 200, contentType: "image/png", body: PICTURE })
+  await context.route("https://cdn.discordapp.com/**", picture)
+  await context.route(`${HOST}/api/avatar*`, picture)
   await context.route("**/genes/v3/TP53.json", async (route) => {
     const response = await route.fetch()
     const gene = await response.json()
