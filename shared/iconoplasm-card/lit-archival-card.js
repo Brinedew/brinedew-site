@@ -49,8 +49,11 @@ function normalizeCardModelHandwriting(payload) {
 
 function splitStylePairColumns(stylePairs) {
   var pairs = Array.isArray(stylePairs) ? stylePairs.slice(0, 7) : []
-  if (pairs.length <= 4) return [pairs]
-  return [pairs.slice(0, 4), pairs.slice(4, 7)]
+  // Three or more clans split evenly: four in one column (and one in the other)
+  // ran the left column into the alignment row on MAN2C1 and MARS1.
+  if (pairs.length <= 2) return [pairs]
+  var half = Math.ceil(pairs.length / 2)
+  return [pairs.slice(0, half), pairs.slice(half)]
 }
 
 function stylePairTemplate(pair) {
@@ -145,7 +148,11 @@ function familyTraitTemplate(familyFeature) {
       class="icono-label-family-trait-field icono-label-family-trait-field--empty"
     ></div>`
   }
-  return html`<div class="icono-label-family-trait-field">
+  // Over 44 characters a trait needs two lines on a phone, written smaller.
+  var long = String(familyFeature).trim().length > 44
+  return html`<div
+    class="icono-label-family-trait-field${long ? " icono-label-family-trait-field--long" : ""}"
+  >
     <div class="icono-label-hand-note icono-label-hand-note--family-trait">${familyFeature}</div>
   </div>`
 }

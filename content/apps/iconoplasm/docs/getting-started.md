@@ -90,7 +90,7 @@ Clicking on a gene image transfers you to the gene's page. There you will find t
 
 1. Click the star to keep this portrait's style (its emulsion) in your favorites. In the free queue, **Add all favorites** puts every favorite in your batch at once.
 2. Click the printer to download a print copy: the portrait with the gene's name and symbol printed on it.
-3. Click **New candidate** to request a new portrait for this gene. See [[apps/iconoplasm/docs/request-a-new-portrait|Request a new portrait]].
+3. Click **Add portraits** to request a new portrait for this gene. See [[apps/iconoplasm/docs/request-a-new-portrait|Request a new portrait]].
 4. **MISFIT** and **FIT** are your vote on this portrait: **Reject portrait** or **Approve portrait**. The current portrait is the one with the highest approval score.
 5. Under the card, **Overview** shows comments and the other candidate portraits for this gene. **Comments** and **Candidates** show one of the two.
 

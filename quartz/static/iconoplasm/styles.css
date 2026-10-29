@@ -785,7 +785,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 /* B-838: the toolbar under the gene card is ONE row at every width. Pattern from
    Apple HIG and Material 3 toolbar guidance and the Unsplash / Civitai image pages
-   (checked 2026-09-25): one labelled primary on the trailing edge (New candidate),
+   (checked 2026-09-25): one labelled primary on the trailing edge (Add portraits),
    icon-only secondaries, rarely used actions (Edit portrait, caretaker claim/switch)
    collapse into a More menu when the bar is narrow, and the metadata truncates
    instead of pushing anything around. Nothing wraps, nothing scrolls sideways. */
@@ -823,7 +823,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: contents;
 }
 
-/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, New candidate. */
+/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, Add portraits. */
 .icono-canonical-toolbar-meta {
   display: flex;
   flex: 0 1 auto;
@@ -891,12 +891,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: none;
 }
 
-.icono-gene-toolbar-rail.is-collapsed
-  .icono-caretaker-identity--toolbar
-  .icono-caretaker-identity__name {
-  display: none;
-}
-
 /* The gene's caretaker, for every reader (the approved mock, 2026-10-29): after
    the star and the printer on a wide bar; on a bar too narrow for it, its own
    line above them (.is-stacked, set by fitCanonicalToolbar), so the name is
@@ -906,7 +900,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   /* Never squeezed on one line: a bar too short for it stacks it instead. */
   flex: none;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   margin-inline-start: var(--icono-space-2);
   color: inherit;
@@ -952,6 +946,37 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-decoration: underline;
 }
 
+/* With a caretaker line the bar reads as two groups: this card (star, print, who
+   looks after it) on the left, and what makes images (Edit image, Add portraits)
+   on the right, so the line doesn't split the icons apart. */
+.icono-gene-toolbar-rail:has(> .icono-gene-request-panel > .icono-gene-caretaker:not([hidden]))
+  .icono-canonical-toolbar-actions {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+/* The caretaker's own line is the door to their tools: the same line, framed
+   as a button. */
+.icono-gene-caretaker--own {
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--gray);
+  border-radius: var(--icono-control-radius);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.icono-gene-caretaker--own:hover,
+.icono-gene-caretaker--own:focus-visible {
+  border-color: var(--dark);
+}
+
+.icono-gene-caretaker--own:hover .icono-gene-caretaker__name,
+.icono-gene-caretaker--own:focus-visible .icono-gene-caretaker__name {
+  text-decoration: none;
+}
+
 .icono-gene-toolbar-rail.is-stacked {
   flex-wrap: wrap;
 }
@@ -964,6 +989,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   margin: calc(-1 * var(--icono-space-2)) calc(-1 * var(--icono-space-2)) 0;
   padding: 12px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
+}
+
+/* Stacked, the caretaker's own button keeps its frame, inside the bar's padding. */
+.icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker--own {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--gray);
 }
 
 .icono-gene-toolbar-rail.is-measuring .icono-canonical-toolbar-actions {
@@ -1043,18 +1076,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: none;
 }
 
-.icono-caretaker-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  min-width: 0;
-  color: var(--dark);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.78rem;
-  font-weight: 500;
-  line-height: 1;
-}
-
 .icono-caretaker-identity__avatar {
   display: block;
   width: 1.8rem;
@@ -1064,36 +1085,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   object-fit: cover;
 }
 
-.icono-caretaker-identity__name {
-  max-width: 14ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* B-862: the viewer's own chip is a button that opens the caretaker panel. */
-.icono-caretaker-identity--button {
-  padding: 0.2rem 0.55rem 0.2rem 0.2rem;
-  border: 1px solid var(--gray);
-  border-radius: var(--icono-control-radius);
-  background: transparent;
-  cursor: pointer;
-}
-
-.icono-caretaker-identity--button:hover,
-.icono-caretaker-identity--button:focus-visible {
-  border-color: var(--dark);
-}
-
-.icono-caretaker-identity__badge {
-  padding: 0.18rem 0.4rem;
-  border-radius: 999px;
-  background: var(--dark);
-  color: var(--light);
-  font-size: 0.66rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 /* The sign-in dialog's one action fills the row, an easy target on a phone. */
 .icono-vote-login-link {
   width: 100%;
@@ -4873,7 +4864,7 @@ a.icono-play-site:focus-visible .icono-play-site-label {
 
 /* B-457 #3: on mobile (390x844 reference) the gene-page hero portrait
    was rendering ~310px tall, eating ~46% of the viewport and pushing the
-   toolbar rail (Edit portrait / New candidate from B-472) below the fold.
+   toolbar rail (Edit portrait / Add portraits from B-472) below the fold.
    The hero IS the page on mobile, but the portrait alone shouldn't be —
    cap it so the first viewport shows the portrait + the start of the
    dossier rows + at least the top of the toolbar rail. The cap only
@@ -7168,7 +7159,7 @@ h2.icono-section-label {
    box, the strip arrows, the count boxes) and bare (star, print, ⋯). Reddit's
    post row puts every action in one shape, and the App Store's strip arrows are
    bare. Here an icon is always a bare glyph that tints on hover, and only a word
-   (New candidate, Comment, Join) gets a filled button. */
+   (Add portraits, Comment, Join) gets a filled button. */
 
 /* The tile vote: ⇧ score ⇩ as bare glyphs, the way Reddit and Stack Overflow vote. */
 .icono-candidate-footer .icono-vote-box--arrows {

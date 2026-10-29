@@ -226,7 +226,7 @@ test("gene page tabs: Overview slices lead into Lore, Comments and Candidates", 
     // 5: TP53 with its lore hidden from readers: no Lore tab.
     const context = await browser.newContext({ viewport: { width: 1280, height: 860 } })
     await routeProduction(context, origin)
-    await context.route(`**/genes/v3/${SYMBOL}.json`, fulfillWithoutLore)
+    await context.route(`**/genes/v3/${SYMBOL}.json`, (route) => fulfillWithoutLore(route))
     const page = await context.newPage()
     await page.goto(`${HOST}/gene/${SYMBOL}`)
     await page.waitForSelector(`${TABS} [data-icono-gene-tab]`, { timeout: 30_000 })

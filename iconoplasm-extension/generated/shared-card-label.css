@@ -1464,9 +1464,17 @@
     --icono-label-mobile-collapse-lift: 3.672rem;
     --icono-label-mobile-viewport-height: auto;
     --icono-label-mobile-band-row-height: 4.6rem;
-    --icono-label-mobile-header-row-height: 2.16rem;
-    --icono-label-mobile-style-row-height: 17.8rem;
-    --icono-label-mobile-alignment-row-height: 2.9rem;
+    /* The emulsion number and family share a line; the family trait gets the line
+       under them, wide enough for one line of handwriting (two, written smaller, for
+       the few traits over 44 characters). As a third of the old row it wrapped and
+       spilled over the labels above for about 40% of genes (2026-10-29). */
+    --icono-label-mobile-header-row-height: 5.56rem;
+    /* The alignment row is tall enough for its handwritten note to sit above the
+       circled option, as "female" sits above SOLUBLE; at 2.9rem the note was drawn
+       across "TUMOR SUPPRESSOR" on every phone (2026-10-29). The 1.6rem comes from
+       the style row, which keeps room for five clans written one per line. */
+    --icono-label-mobile-style-row-height: 17rem;
+    --icono-label-mobile-alignment-row-height: 4.5rem;
     --icono-label-mobile-footer-row-height: 15.6rem;
     /* Mobile archival card constraints from production review:
        - the collapsed tab must match the site's softer archival taste, not brutalist office tabs
@@ -2317,8 +2325,8 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-header-stack {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
-    grid-template-rows: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: 2.16rem minmax(0, 1fr);
   }
 
   /* Mobile dossier keeps the desktop paper template. The top three-cell row is a fixed
@@ -2354,15 +2362,15 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-filed-block {
-    grid-column: 3;
-    grid-row: 1;
+    grid-column: 1 / -1;
+    grid-row: 2;
     display: grid;
     grid-template-rows: min-content min-content;
-    align-content: center;
+    align-content: start;
     gap: 0.08rem;
     padding: 0.28rem 0.44rem 0.24rem;
-    border-top: 0;
-    border-left: 1px solid var(--icono-label-rule);
+    border-top: 1px solid var(--icono-label-rule);
+    border-left: 0;
     position: relative;
     overflow: visible;
   }
@@ -2371,26 +2379,28 @@
     .icono-label-dossier-shell
     .icono-label-family-trait-field {
     display: grid;
-    align-items: center;
+    align-items: start;
     min-height: 0;
-    block-size: 0.96rem;
+    block-size: auto;
     overflow: visible;
   }
 
-  /* Mobile family-trait handwriting is not a centered label chip. It should float a little
-     above the cell midpoint, like a pen annotation on a printed form. Do not "fix" this by
-     centering the handwriting vertically; only the printed typewriter lanes get strict
-     center alignment. */
+  /* The trait is written on its line under the printed label, never across it. */
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-hand-note--family-trait {
-    position: absolute;
-    left: 0;
-    top: calc(50% - 0.16rem);
-    transform: translateY(-50%) rotate(-3deg);
-    transform-origin: left center;
-    max-width: 100%;
+    position: static;
+    line-height: 0.92;
+    transform: rotate(-2deg);
+    transform-origin: left top;
     pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-family-trait-field--long
+    .icono-label-hand-note--family-trait {
+    font-size: calc(var(--icono-label-mobile-hand-size) * 0.8);
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2707,9 +2717,7 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-hand-note--politics-tumor-suppressor {
-    /* Alignment handwriting also floats above the centered typed selector lane. Do not try to
-       "correct" overlap by moving the typed options down or by centering the handwriting. The
-       printed options stay centered; the handwritten note lives above that center line. */
+    /* The handwritten note sits above the option it annotates, never on the typed words. */
     position: absolute;
     left: 50%;
     top: -0.42rem;
@@ -2784,14 +2792,17 @@
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-style-stack--two-column {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* One clan per line: two columns left each name about 80 px, so long names
+       wrapped four or five lines deep and printed over each other (MAN2C1). */
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.24rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-style-column {
     display: grid;
-    grid-auto-rows: 3.12rem;
+    grid-auto-rows: minmax(2.4rem, auto);
     gap: 0.24rem;
     align-content: start;
     min-width: 0;
@@ -2806,7 +2817,7 @@
     align-items: center;
     gap: 0.34rem;
     min-width: 0;
-    min-block-size: 3.12rem;
+    min-block-size: 2.4rem;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
@@ -2843,7 +2854,7 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 0.86rem;
     align-content: start;
-    padding: 0.18rem 0.8rem 0.22rem;
+    padding: 1.7rem 0.8rem 0.22rem;
     overflow: visible;
   }
 
@@ -2883,7 +2894,7 @@
     .icono-label-hand-note--politics {
     position: absolute;
     left: 50%;
-    top: -0.42rem;
+    top: -2.5rem;
     z-index: 2;
     justify-self: center;
     align-self: start;
@@ -2894,6 +2905,20 @@
     transform: translateX(-50%) rotate(-4deg);
     transform-origin: center top;
     pointer-events: none;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-alignment-grid
+    .icono-label-hand-note--politics-oncogene {
+    left: 25%;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-alignment-grid
+    .icono-label-hand-note--politics-tumor-suppressor {
+    left: 75%;
   }
 
   .icono-card--variant-lab-label.icono-card--brick

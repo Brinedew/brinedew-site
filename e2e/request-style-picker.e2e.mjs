@@ -1,4 +1,4 @@
-// B-883: the New candidate > Free queue style picker, checked in a real browser.
+// B-883: the Add portraits > Free queue style picker, checked in a real browser.
 // Owner decision (27 Sep 2026): 3:4 style cards, built from the design system.
 // Owner decision (26 Oct 2026, B-1179): no picking; a tap on a style requests
 // it, "Request all favorites" sits at the bottom-left, and a deck of what is
@@ -293,8 +293,13 @@ function createApi(posts, options = {}) {
           }
       }
       const delay = body.request_mode === "random" ? options.randomDelay : options.styleDelay
-      if (!delay) return answer
-      return new Promise((resolve) => setTimeout(() => resolve(answer), delay))
+      if (!delay && !options.hold) return answer
+      // `options.hold`: no answer leaves before that promise settles, so a step
+      // that must count the deck before the server answers can't lose the race
+      // to a slow screenshot.
+      return new Promise((resolve) =>
+        setTimeout(() => Promise.resolve(options.hold).then(() => resolve(answer)), delay || 0),
+      )
     }
     return undefined
   }
@@ -955,10 +960,14 @@ test("random and style requests share one deck that survives every detour", asyn
       await context.addInitScript(() =>
         localStorage.setItem("iconoplasm.new-candidate-tab", "free"),
       )
-      // The server refuses the second random click and the style 31261.
+      // The server refuses the second random click and the style 31261. It
+      // answers nothing until step 3, so steps 1 and 2 count the deck before
+      // any refusal (a desktop screenshot can outlast a 600 ms answer).
+      let answer
       const api = createApi(posts, {
         randomDelay: 600,
         styleDelay: 600,
+        hold: new Promise((resolve) => (answer = resolve)),
         refuse: { random: 2, visionId: "anima-v1-31261" },
       })
       await routeProduction(context, origin, api)
@@ -1021,6 +1030,7 @@ test("random and style requests share one deck that survives every detour", asyn
 
       // 3. The second random click was refused (25): it leaves the deck, and
       // the reader is told; the server's refresh agrees with the deck (26).
+      answer()
       await settle(5)
       assert.equal(
         posts.filter((post) => (post.requested_vision_ids || []).includes("anima-v1-1184")).length,
