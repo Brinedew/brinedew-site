@@ -23,6 +23,8 @@
 //     second viewer.
 // 12. A tile loses the asset attribute the caretaker's "Made from version N"
 //     link hangs on.
+// 13. A handwritten note on the label covers a printed option's words (on
+//     2026-10-29 every phone drew "pro-control" across "TUMOR SUPPRESSOR").
 //
 // What is real: the built site, TP53's published candidates and tallies,
 // PhotoSwipe, Embla, Chrome. The signed-in reader (an admin who looks after
@@ -234,6 +236,33 @@ function toolbarFit() {
   }
 }
 
+// Runs in the page: each handwritten note on the lead card that covers the ink of
+// a printed option, as "note over OPTION".
+function notesOverPrintedWords() {
+  const card = document.querySelector(".icono-gene-lead-card")
+  const words = [...card.querySelectorAll(".icono-label-option")].flatMap((option) => {
+    const range = document.createRange()
+    range.selectNodeContents(option)
+    return [...range.getClientRects()]
+      .filter((box) => box.width && box.height)
+      .map((box) => ({ box, text: option.textContent.trim() }))
+  })
+  return [...card.querySelectorAll(".icono-label-hand-note")]
+    .filter((note) => note.textContent.trim() && note.checkVisibility())
+    .flatMap((note) => {
+      const n = note.getBoundingClientRect()
+      return words
+        .filter(
+          ({ box }) =>
+            n.left < box.right - 1 &&
+            n.right > box.left + 1 &&
+            n.top < box.bottom - 1 &&
+            n.bottom > box.top + 1,
+        )
+        .map(({ text }) => `${note.textContent.trim()} over ${text}`)
+    })
+}
+
 // Runs in the page: each tile's shown score next to its vote box's asset.
 function shownScores() {
   return [...document.querySelectorAll("[data-icono-candidate-vote-box]")].map((box) => [
@@ -327,6 +356,13 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
         )
         assert.equal(fit.stillOverflows, false, `${name}: the toolbar still overflows`)
         assert.deepEqual(fit.clipped, [], `${name}: toolbar items cut short`)
+
+        // 13.
+        assert.deepEqual(
+          await page.evaluate(notesOverPrintedWords),
+          [],
+          `${name}: handwriting covers printed words`,
+        )
 
         // 12: every tile names its picture, which the caretaker's "Made from
         // version N" link needs (B-1095's strip dropped it and the links vanished).

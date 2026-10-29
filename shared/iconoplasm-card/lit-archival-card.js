@@ -145,7 +145,11 @@ function familyTraitTemplate(familyFeature) {
       class="icono-label-family-trait-field icono-label-family-trait-field--empty"
     ></div>`
   }
-  return html`<div class="icono-label-family-trait-field">
+  // Over 44 characters a trait needs two lines on a phone, written smaller.
+  var long = String(familyFeature).trim().length > 44
+  return html`<div
+    class="icono-label-family-trait-field${long ? " icono-label-family-trait-field--long" : ""}"
+  >
     <div class="icono-label-hand-note icono-label-hand-note--family-trait">${familyFeature}</div>
   </div>`
 }

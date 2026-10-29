@@ -688,7 +688,10 @@ function familyTraitTemplate(familyFeature) {
       class="icono-label-family-trait-field icono-label-family-trait-field--empty"
     ></div>`;
   }
-  return b2`<div class="icono-label-family-trait-field">
+  var long = String(familyFeature).trim().length > 44;
+  return b2`<div
+    class="icono-label-family-trait-field${long ? " icono-label-family-trait-field--long" : ""}"
+  >
     <div class="icono-label-hand-note icono-label-hand-note--family-trait">${familyFeature}</div>
   </div>`;
 }

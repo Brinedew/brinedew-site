@@ -10093,7 +10093,7 @@
       if (!trait) {
         return '<div class="icono-label-family-trait-field icono-label-family-trait-field--empty"></div>';
       }
-      return '<div class="icono-label-family-trait-field"><div class="icono-label-hand-note icono-label-hand-note--family-trait">' + escapeHtml(trait) + "</div></div>";
+      return '<div class="icono-label-family-trait-field' + (trait.length > 44 ? " icono-label-family-trait-field--long" : "") + '"><div class="icono-label-hand-note icono-label-hand-note--family-trait">' + escapeHtml(trait) + "</div></div>";
     }
     function portraitDimensions(geneDetail) {
       var portrait = geneDetail && geneDetail.portrait;
