@@ -59,7 +59,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=ba142878e1fba542"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=3da5cf94acec5d3c"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -251,6 +251,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return "HTTP " + status
   }
 
+  // A script loaded on demand can be missing when this page was opened before
+  // a release: the page's head reloads it once (Head.tsx). Anything else, and
+  // this miss too when the page can't reload, stays the caller's error.
+  function reloadForMissingScript(error) {
+    if (window.__iconoplasmReloadForRelease) window.__iconoplasmReloadForRelease(error)
+    throw error
+  }
+
   function fetchJSON(path, init) {
     var requestInit = init || {}
     var publicationReader = window.IconoplasmPublicationReader
@@ -410,6 +418,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           supervoteControls.unmount(root)
         },
       })
+    }, reloadForMissingScript)
+    caretakerPanelPromise.catch(function () {
+      caretakerPanelPromise = null
     })
     return caretakerPanelPromise
   }
@@ -1033,7 +1044,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     return Promise.all([
       publicationReader.geneMetrics(),
-      import("./wiki-pageviews.js?v=cb3a800cea17433a"),
+      import("./wiki-pageviews.js?v=cb3a800cea17433a").catch(reloadForMissingScript),
     ]).then(function (loaded) {
       var metrics = loaded[0]
       var pageviews = loaded[1].ICONOPLASM_WIKI_PAGEVIEWS
@@ -12767,14 +12778,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=d6adfa805f05f730").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=56697e8514454382").then(
         function (module) {
           diagramStudio = module
           return module
         },
         function (error) {
           diagramStudioPromise = null
-          throw error
+          return reloadForMissingScript(error)
         },
       )
     }

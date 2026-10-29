@@ -746,7 +746,21 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
                   {iconoplasmModulePreloads().map((module) => (
                     <link rel="modulepreload" href={joinSegments(root, "static", module)} />
                   ))}
-                  <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.src='${joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
+                  {/* The edge bundle names every script by its hash
+                  (scripts/lib/iconoplasm-hashed-modules.mjs), so a script this
+                  page needs can be missing, never stale: the page was opened
+                  before a release removed it, or the release hasn't reached
+                  this reader's edge yet. Then the page reloads by itself, once a
+                  minute at most. A miss answers 404 under the year-long cache
+                  rule, so each failed script is fetched again past the browser
+                  cache first; browsers that don't report a response's status
+                  fetch every script the page loaded. */}
+                  <script
+                    dangerouslySetInnerHTML={{
+                      __html: `window.__iconoplasmReloadForRelease=function(reason){var failed="",guard="iconoplasm-release-reload";if(reason&&typeof reason==="object"){var m=String(reason.message||"");if(!/dynamically imported module|Importing a module script failed/i.test(m))return false;failed=(m.match(/https?:\\/\\/\\S+/)||[""])[0]}else failed=String(reason||"");try{if(Date.now()-Number(sessionStorage.getItem(guard)||0)<60000)return false;sessionStorage.setItem(guard,String(Date.now()))}catch(e){return false}var urls=failed?[failed]:[];try{performance.getEntriesByType("resource").forEach(function(e){if(e.name.indexOf(location.origin+"/static/")===0&&/\\.(?:js|css|mjs)(?:[?#]|$)/.test(e.name)&&!(e.responseStatus>=200&&e.responseStatus<400))urls.push(e.name)})}catch(e){}Promise.all(urls.map(function(u){return fetch(u,{cache:"reload"}).catch(function(){})})).then(function(){location.reload()});return true}`,
+                    }}
+                  />
+                  <script>{`document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('script');s.type='module';s.onerror=function(){window.__iconoplasmReloadForRelease(s.src)};s.src='${joinSegments(root, "static", `iconoplasm/app.js?v=${CACHE_BUST}`)}';document.body.appendChild(s)})`}</script>
                   <script>{`var ss=document.createElement('script');ss.type='module';ss.setAttribute('data-shoelace','/static/iconoplasm/vendor/shoelace/cdn');ss.src='${joinSegments(root, "static", `iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js?v=${CACHE_BUST}`)}';document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(ss)})`}</script>
                 </>
               )}
