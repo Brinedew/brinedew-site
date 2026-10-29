@@ -64,10 +64,12 @@ const serviceDiscoveryHeaders = ICONOPLASM_SERVICE_DISCOVERY_LINKS.map(
 
 // Every matching rule applies in order, and a header that two rules set is
 // sent twice, so each Cache-Control rule clears the one before it (`!`). Only a
-// name that carries its hash (scripts/lib/iconoplasm-hashed-modules.mjs) is
-// immutable: an unversioned script revalidates, and the vendor folders keep a
-// day, because their files change only when we upgrade them. Quartz names its
-// own root files by their hash.
+// name that carries its hash and ends in .v.js or .v.css
+// (scripts/lib/iconoplasm-hashed-modules.mjs) is immutable: an unversioned
+// script revalidates, and the vendor folders keep a day, because their files
+// change only when we upgrade them. Quartz names its own root files by their
+// hash. Production ignores a placeholder inside a file name (`*.:hash.js`), so
+// every rule here is a splat followed by fixed text.
 const headersFile = `/*
   Content-Security-Policy: ${iconoplasmCsp}
   Cross-Origin-Opener-Policy: same-origin
@@ -111,11 +113,11 @@ ${serviceDiscoveryHeaders}
   ! Cache-Control
   Cache-Control: public, max-age=0, must-revalidate
 
-/static/*.:hash.js
+/static/*.v.js
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
-/static/*.:hash.css
+/static/*.v.css
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
