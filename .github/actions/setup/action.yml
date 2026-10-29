@@ -1,0 +1,31 @@
+name: Set up the site toolchain
+description: Node, pnpm with its store cache, the locked dependencies and the enabled Quartz plugins.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 22
+
+    - name: Setup pnpm
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare pnpm@11.0.9 --activate
+        pnpm config set minimumReleaseAge 1440
+        echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
+
+    - name: Install Quartz plugins
+      shell: bash
+      run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
