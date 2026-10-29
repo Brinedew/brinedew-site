@@ -79,7 +79,7 @@ All read-only, provided via the mounted codebase. Not assumed accessible to the 
   - `manifest.json` — fonts, web-accessible resources, gene-color content vars.
   - `highlight-runtime.js` — highlight render modes + `--iconoplasm-gene-color` plumbing; placeholder color `#6B6B78`.
   - `blocklist-defaults.js` — 74 default-blocked ambiguous symbols (e.g. `SET`, `REST`, `CAT`).
-  - `store-assets/STORE-LISTING-COPY.md`, `AMO-LISTING-COPY.md` — marketing copy & tone.
+  - Store listing copy and tone: the Linear document [Store listings](https://linear.app/brinedew/document/store-listings-chrome-edge-firefox-copy-ids-privacy-answers-eb72e92530d2).
   - `store-assets/*.png` — reference screenshots (copied to `_ref/`).
 - **Live site referenced in code:** `https://iconoplasm.brinedew.bio/`
 - **Brand domain:** `brinedew.bio` (parent studio). Firefox add-on ID `iconoplasm@brinedew.bio`.
