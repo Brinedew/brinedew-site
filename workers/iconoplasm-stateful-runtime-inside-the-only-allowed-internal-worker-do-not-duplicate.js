@@ -18660,6 +18660,8 @@ export async function publishCatalogArtifact(env) {
   await commitPortraitReferenceSnapshot(env, portraitSnapshot, [
     { baseHash: hash, artifact: hydrated },
   ])
+  // Readers follow the manifest, so it moves last: after the artifacts, the recognition index and
+  // the receipt that the index matches the policy it was built from.
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
   catalogCache.hash = null
