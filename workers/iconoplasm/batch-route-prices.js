@@ -99,7 +99,12 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_daily_digest_day: batch({ rows_written: 0, rows_read: 60_000 }),
   admin_daily_digest_post: critical("no D1 rows: one KV read and write and one Discord post"),
   admin_publication_catalog_object: batch(SMALL_WRITE),
-  admin_gallery: owner(SMALL_READ),
+  // B-1188 (admin-gallery-cost.test.js): at most four rows a catalogue gene
+  // plus the page's own portraits, except the All candidates vote sort, which
+  // reads every vote summary. Production's copy on 2026-10-29: 3,608 rows for
+  // the default view; 64,019 for the dearest, that vote sort, which grows with
+  // the portraits (63,495 that day).
+  admin_gallery: owner({ rows_written: 0, rows_read: 100_000 }),
   admin_extension_blocklist: critical(OWN_ACTION),
   admin_publication_aliases: critical(OWN_ACTION),
   admin_gallery_mutation_publish: critical(OWN_ACTION),
