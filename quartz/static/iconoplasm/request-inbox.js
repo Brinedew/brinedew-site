@@ -4,7 +4,7 @@
 // rendering, and interaction wiring. app.js supplies only the shared API,
 // current-user, sidebar-render, and escaping boundaries.
 
-import { caretakerFilmMarkup } from "./caretaker-film.js?v=74ed28e6c4cce069"
+import { caretakerFilmMarkup, prepareCaretakerFilm } from "./caretaker-film.js?v=70d25cd0d7905703"
 
 export function createRequestInbox({
   fetchJSON,
@@ -617,21 +617,33 @@ export function createRequestInbox({
     var unread = Math.max(0, Number(item.unread_comment_count || 0) || 0)
     var requests = Math.max(0, Number(item.pending_request_count || 0) || 0)
     // B-996: the caretaker film is the caretaker's gene as an autoradiograph. Molecular weight and portrait
-    // come from the published gene detail the page already reads, once per symbol;
-    // until it arrives the film prints with the ladder alone.
+    // come from the published gene detail the page already reads, once per symbol.
+    // The film keeps its place empty until every part of it is ready, then
+    // appears whole; without the detail it prints with the ladder alone.
     var film = state.caretaker_films[symbol]
-    if (film === undefined && typeof loadCaretakerFilm === "function") {
+    if (film === undefined) {
       state.caretaker_films[symbol] = null
-      void Promise.resolve(loadCaretakerFilm(symbol))
+      void Promise.resolve()
+        .then(function () {
+          return typeof loadCaretakerFilm === "function" ? loadCaretakerFilm(symbol) : null
+        })
         .catch(function () {
           return null
         })
         .then(function (data) {
-          if (!data) return
-          state.caretaker_films[symbol] = data
-          renderSidebar()
+          var ready = {
+            kda: (data && data.kda) || 0,
+            portraitUrl: (data && data.portraitUrl) || "",
+            arriving: true,
+          }
+          return prepareCaretakerFilm(ready).then(function () {
+            state.caretaker_films[symbol] = ready
+            renderSidebar()
+          })
         })
     }
+    var arriving = !!(film && film.arriving)
+    if (film) film.arriving = false
     var suspended = item.assignment_status === "suspended"
     return (
       '<div class="icono-request-inbox__caretaker-item">' +
@@ -646,6 +658,8 @@ export function createRequestInbox({
         symbol: symbol,
         kda: film && film.kda,
         portraitUrl: film && film.portraitUrl,
+        pending: !film,
+        arriving: arriving,
         escapeHtml: escapeHtml,
       }) +
       "</a>" +

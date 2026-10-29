@@ -191,16 +191,51 @@ function symbolMarkup(symbol, escapeHtml) {
   return `<span class="icono-film__wax icono-film__symbol" style="font-size:${size}px">${lines.join("<br>")}</span>`
 }
 
-export function caretakerFilmMarkup({ symbol, kda, portraitUrl, escapeHtml }) {
-  const ladder = LADDER.marks.map((k) =>
+function ladderBands() {
+  return LADDER.marks.map((k) =>
     LADDER.strong.includes(k) ? band(ladderPosition(k), 6, 0.9) : band(ladderPosition(k), 5, 0.7),
   )
+}
+
+// What custom.css paints the film with, in both themes.
+const FILM_PICTURES = ["film-light.webp", "film-dark.webp", "wax-mask.webp"].map(
+  (name) => `/static/iconoplasm/caretaker-film/${name}`,
+)
+
+// The film is one object, so it appears whole (owner, 2026-10-29: drawn part by part, it
+// "breaks an immersion that this is a single coherent object"). Resolves once every part is
+// decoded and in the browser's memory: the plates, the wax mask, the marker font, both lanes
+// and the portrait. A part that fails to load is left out, not waited for.
+export function prepareCaretakerFilm({ kda, portraitUrl }) {
+  if (typeof document === "undefined" || typeof Image === "undefined") return Promise.resolve()
+  const pictures = [
+    ...FILM_PICTURES,
+    laneMask(ladderBands()),
+    laneMask(sampleBands(Number(kda))),
+    portraitUrl || "",
+  ].filter(Boolean)
+  const decoded = pictures.map((src) => {
+    const image = new Image()
+    image.src = src
+    return image.decode ? image.decode().catch(() => {}) : Promise.resolve()
+  })
+  const font = document.fonts
+    ? document.fonts.load('22px "Permanent Marker"').catch(() => {})
+    : Promise.resolve()
+  return Promise.all([...decoded, font]).then(() => undefined)
+}
+
+// pending: the film's place, kept empty until prepareCaretakerFilm resolves.
+// arriving: the first paint of the finished film, which fades in once.
+export function caretakerFilmMarkup({ symbol, kda, portraitUrl, pending, arriving, escapeHtml }) {
+  if (pending) return '<span class="icono-film icono-film--pending" aria-hidden="true"></span>'
+  // Decoded already, so the print paints with the rest of the film.
   const photo = portraitUrl
-    ? `<img class="icono-film__photo" src="${escapeHtml(portraitUrl)}" alt="" loading="lazy" decoding="async">`
+    ? `<img class="icono-film__photo" src="${escapeHtml(portraitUrl)}" alt="">`
     : ""
   return (
-    '<span class="icono-film" aria-hidden="true">' +
-    laneMarkup("marker", ladder) +
+    `<span class="icono-film${arriving ? " icono-film--arriving" : ""}" aria-hidden="true">` +
+    laneMarkup("marker", ladderBands()) +
     laneMarkup("sample", sampleBands(Number(kda))) +
     photo +
     `<span class="icono-film__wax icono-film__mark icono-film__mark--marker">${waxLetters("M", symbol + "M", escapeHtml)}</span>` +

@@ -9,7 +9,8 @@
 //    2026-10-24);
 // 2. hovering (desktop) or tapping (phone) a symbol doesn't turn that gene's
 //    card face up, turns another, or the "Your discoveries" tab waits for
-//    anything: it must read 1 the moment the card turns;
+//    anything: it must read 1 the moment the pointer arrives (the card itself
+//    turns once its portrait is painted, 17);
 // 3. the Archive's header is not one row of search and Sort with two tabs
 //    under it, a phone's Sort button squeezes the search box, or the strip
 //    offers a Sort that has nothing to sort;
@@ -48,7 +49,10 @@
 //    screenshot unreadable side by side on mobile");
 // 16. a card found on the strip waits for a reload before it joins the
 //    gallery under it (owner, 2026-10-29: "tapped cards dont get instantly
-//    added to the collection").
+//    added to the collection");
+// 17. a card turns face up before its portrait is painted, onto a black void
+//    that the picture then pops into (owner, 2026-10-29), or a face still
+//    down can be focused or read out, which gives the gene away.
 //
 // Needs `pnpm run build` (public-iconoplasm-edge) and an installed Chrome.
 // Screenshots and measurements land in artifacts/e2e/home-play-strip*.
@@ -142,7 +146,12 @@ function addOnBridge(symbols) {
   })
 }
 
-async function openArchive(browser, origin, options, { seed = null, addOn = null } = {}) {
+async function openArchive(
+  browser,
+  origin,
+  options,
+  { seed = null, addOn = null, holdPortraits = false } = {},
+) {
   const context = await browser.newContext(options)
   const api = []
   await routeProduction(
@@ -160,6 +169,21 @@ async function openArchive(browser, origin, options, { seed = null, addOn = null
     const object = await cdnObject(pathname)
     return route.fulfill({ ...object, headers: { "access-control-allow-origin": "*" } })
   })
+  // Portraits wait here until the test releases them, so "before the
+  // portrait came" doesn't depend on how fast the runner is.
+  const heldPortraits = []
+  let releasePortraits = () => {}
+  if (holdPortraits) {
+    const gate = new Promise((resolve) => (releasePortraits = resolve))
+    await context.route(
+      (url) => url.hostname === CDN_HOST && url.pathname.startsWith("/portraits/"),
+      async (route) => {
+        heldPortraits.push(new URL(route.request().url()).pathname)
+        await gate
+        return route.fallback()
+      },
+    )
+  }
   if (addOn) await context.addInitScript(addOnBridge, addOn)
   if (seed) {
     await context.addInitScript(
@@ -176,11 +200,12 @@ async function openArchive(browser, origin, options, { seed = null, addOn = null
       sites.push(request.url())
     }
   })
-  await page.goto(`${HOST}/`)
+  // Held portraits keep the page's load event from firing.
+  await page.goto(`${HOST}/`, holdPortraits ? { waitUntil: "domcontentloaded" } : {})
   await page.waitForSelector("[data-icono-home-play], #icono-home-auxiliary:not([hidden]) > *", {
     timeout: 45_000,
   })
-  return { context, page, api, downloads, sites }
+  return { context, page, api, downloads, sites, heldPortraits, releasePortraits }
 }
 
 const pill = (symbol) => `[data-icono-play-symbol="${symbol}"]`
@@ -200,6 +225,16 @@ const yours = (page) => page.textContent(".icono-collection-tab-count")
 const faceUp = (page) =>
   page.$$eval(".icono-play-slot.is-found", (slots) =>
     slots.map((slot) => slot.dataset.iconoPlaySlot),
+  )
+// A card turns once its portrait is painted (17), so wait for the turn.
+const turned = (page, symbols) =>
+  page.waitForFunction(
+    (want) =>
+      [...document.querySelectorAll(".icono-play-slot.is-found")]
+        .map((slot) => slot.dataset.iconoPlaySlot)
+        .join() === want.join(),
+    symbols,
+    { timeout: 15_000 },
   )
 const lit = (page) =>
   page.$$eval(".icono-play-slot.is-lit", (slots) => slots.map((slot) => slot.dataset.iconoPlaySlot))
@@ -333,7 +368,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       )
       const rest = await page.$eval(pill("INS"), (element) => element.getBoundingClientRect())
       await page.mouse.move(rest.x + rest.width / 2, rest.y + rest.height / 2, { steps: 4 })
-      assert.deepEqual(await faceUp(page), ["INS"])
+      await turned(page, ["INS"])
       assert.deepEqual(await lit(page), ["INS"])
       assert.equal(await yours(page), "1")
       // 4. Stored here. 13. Now there is something to save.
@@ -345,7 +380,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       assert.deepEqual(await lit(page), [], "INS stayed lit after the pointer left")
       for (const symbol of ["RHO", "PRL", "CD4"]) await page.hover(pill(symbol))
       await page.mouse.move(5, 5)
-      assert.deepEqual(await faceUp(page), ["INS", "RHO", "PRL", "CD4"])
+      await turned(page, ["INS", "RHO", "PRL", "CD4"])
       assert.equal(await yours(page), "4")
 
       // 5. What it was a sample of, the add-on on two other sites, one button.
@@ -451,6 +486,66 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await context.close()
     })
 
+    await t.test("a card turns over with its portrait already painted", async () => {
+      const { context, page, heldPortraits, releasePortraits } = await openArchive(
+        browser,
+        origin,
+        { ...PHONE, userAgent: UA.android },
+        { holdPortraits: true },
+      )
+      // Each card as it starts to turn: is its portrait painted, and is a face
+      // still down out of reach?
+      await page.evaluate(() => {
+        window.__turns = []
+        new MutationObserver((records) => {
+          for (const { target } of records) {
+            if (!target.classList.contains("is-found") || target.__turned) continue
+            target.__turned = true
+            const photo = target.querySelector(".icono-play-slot-front img")
+            window.__turns.push({
+              symbol: target.dataset.iconoPlaySlot,
+              painted:
+                photo.complete &&
+                photo.naturalWidth > 0 &&
+                photo.classList.contains("icono-image-only-photo--loaded"),
+            })
+          }
+        }).observe(document.querySelector(".icono-play-slots"), {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["class"],
+        })
+      })
+      const down = await page.$$eval(
+        ".icono-play-slot:not(.is-found) .icono-play-slot-front",
+        (faces) => faces.map((face) => face.inert && face.getAttribute("aria-hidden") === "true"),
+      )
+      assert.deepEqual(down, [true, true, true, true], "a face still down can be reached")
+      await page.tap(pill("INS"))
+      // The find counts at once; the portrait is still on its way.
+      assert.equal(await yours(page), "1")
+      assert.deepEqual(await lit(page), ["INS"])
+      assert.deepEqual(await faceUp(page), [], "the card turned before its portrait came")
+      assert.ok(
+        heldPortraits.some((pathname) => pathname.includes("/portraits/")),
+        "no portrait request was held, so this proves nothing",
+      )
+      releasePortraits()
+      await turned(page, ["INS"])
+      assert.deepEqual(await page.evaluate(() => window.__turns), [
+        { symbol: "INS", painted: true },
+      ])
+      assert.equal(
+        await page.$eval(
+          '[data-icono-play-slot="INS"] .icono-play-slot-front',
+          (face) => face.inert,
+        ),
+        false,
+        "the face-up card can't be reached",
+      )
+      await context.close()
+    })
+
     await t.test("Android phone: tap turns, second tap opens, Firefox steps", async () => {
       const { context, page, api, downloads } = await openArchive(browser, origin, {
         ...PHONE,
@@ -461,7 +556,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       await page.tap(pill("CD4"))
       // 8. The first tap stays on the Archive and turns the card.
       assert.equal(new URL(page.url()).pathname, "/")
-      assert.deepEqual(await faceUp(page), ["CD4"])
+      await turned(page, ["CD4"])
       assert.equal(await yours(page), "1")
       await page.waitForTimeout(700)
       await shot(page, "phone-card")
@@ -736,7 +831,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
           timeout: 10_000,
         })
         assert.deepEqual(await gallery(page), ["INS", "TP53", "RHO"])
-        assert.deepEqual(await faceUp(page), ["INS", "RHO"])
+        await turned(page, ["INS", "RHO"])
         await page.mouse.move(5, 5)
         await page.waitForTimeout(700)
         await (
