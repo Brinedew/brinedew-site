@@ -8,8 +8,8 @@
 // storage outside D1.
 //
 // D1 cost fence: every statement here is keyed by gene_symbol (a primary-key
-// prefix), by (gene_symbol, asset_sha256, user_id) (the vote identity's unique
-// index) or by json_each over an explicit, bounded item list. Nothing reads
+// prefix), by (gene_symbol, asset_sha256, user_id) (the vote table's primary
+// key, B-1188) or by json_each over an explicit, bounded item list. Nothing reads
 // the vote history of a gene: the summary row moves by the exact delta between
 // the user's old and new vote, read inside the same transaction, so a vote on
 // a gene with ten thousand votes costs what a vote on an empty gene costs.
@@ -73,7 +73,7 @@ export function geneVoteCandidateRef(symbol, assetSha256) {
   return `a:${symbol}|${assetSha256}`
 }
 
-function caretakerElectionInput(row) {
+export function caretakerElectionInput(row) {
   const asset = sha(row?.asset_sha256)
   const direction = Number(row?.direction)
   if (
