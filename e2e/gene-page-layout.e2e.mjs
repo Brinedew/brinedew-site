@@ -210,7 +210,14 @@ function toolbarFit() {
   const collapsed = rail.classList.contains("is-collapsed")
   rail.classList.remove("is-collapsed")
   rail.classList.add("is-measuring")
-  const overflows = rail.scrollWidth > rail.clientWidth + 1
+  // A rail whose caretaker line has its own row wraps instead of scrolling, so
+  // the buttons overflow when they drop under the gene's name, not when the rail
+  // grows wider.
+  const meta = rail.querySelector(".icono-canonical-toolbar-meta")
+  const actions = rail.querySelector(".icono-canonical-toolbar-actions")
+  const overflows =
+    rail.scrollWidth > rail.clientWidth + 1 ||
+    (!!meta && !!actions && actions.offsetTop >= meta.offsetTop + meta.offsetHeight)
   rail.classList.remove("is-measuring")
   if (collapsed) rail.classList.add("is-collapsed")
   const more = rail.querySelector(".icono-toolbar-more")
