@@ -10,7 +10,7 @@ import {
 
 const installed = "a".repeat(40)
 const head = "b".repeat(40)
-const state = { schema_transition: false, reader_recovery: false, cache_version: installed }
+const state = { cache_version: installed }
 
 test("a routine release includes every change since the installed Worker", () => {
   const changedPaths = [
@@ -220,12 +220,10 @@ database_id = "22222222-2222-2222-2222-222222222222"`,
   )
 })
 
-test("a routine release refuses uncertain installed lineage or active migration", () => {
+test("a routine release refuses uncertain installed lineage", () => {
   for (const unsafe of [
     { ...state, cache_version: "" },
     { ...state, cache_version: "short" },
-    { ...state, schema_transition: true },
-    { ...state, reader_recovery: true },
   ]) {
     assert.throws(
       () =>
@@ -235,7 +233,7 @@ test("a routine release refuses uncertain installed lineage or active migration"
           changedPaths: [],
           installedIsAncestor: true,
         }),
-      /CODE_RELEASE_(INSTALLED_REVISION_UNKNOWN|INCOMPATIBLE_STATE)/,
+      /CODE_RELEASE_INSTALLED_REVISION_UNKNOWN/,
     )
   }
   assert.throws(

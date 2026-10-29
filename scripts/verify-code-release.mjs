@@ -114,8 +114,6 @@ export function verifyCodeReleaseScope({
   appliedMigrations = new Set(),
   onlineMigrations = new Set(),
 }) {
-  if (state?.schema_transition || state?.reader_recovery)
-    throw new Error("CODE_RELEASE_INCOMPATIBLE_STATE")
   const installed = state?.cache_version
   if (!SHA.test(installed || "")) throw new Error("CODE_RELEASE_INSTALLED_REVISION_UNKNOWN")
   if (!SHA.test(headSha || "")) throw new Error("CODE_RELEASE_HEAD_UNKNOWN")

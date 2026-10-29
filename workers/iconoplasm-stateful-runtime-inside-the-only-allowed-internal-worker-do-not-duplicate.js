@@ -18373,15 +18373,6 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
   }
 
-  // The reader-recovery containment (ICONOPLASM_SCHEMA_TRANSITION=1) pauses
-  // the application here; only its own exact portrait reads get through.
-  if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") {
-    return json({ code: "ICONOPLASM_SCHEMA_TRANSITION" }, 503, {
-      "Cache-Control": "no-store",
-      "Retry-After": "60",
-    })
-  }
-
   if (
     path === "/health" ||
     path === "/api/health" ||

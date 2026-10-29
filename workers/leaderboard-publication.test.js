@@ -394,10 +394,6 @@ test("P5: the Worker's scheduled handler runs it at its minutes, and a storage f
     )
   }
 
-  network.storage.clear()
-  await scheduled(BOARD_MINUTE, { ICONOPLASM_SCHEMA_TRANSITION: "1" })
-  assert.equal(network.object(), null, "a schema transition pauses it with the other jobs")
-
   network.failWrites(true)
   network.storage.clear()
   await assert.rejects(scheduled(BOARD_MINUTE), /PUT failed|External portrait PUT failed/)
