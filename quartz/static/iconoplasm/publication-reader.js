@@ -402,7 +402,13 @@ export function createIconoplasmPublicationReader(options = {}) {
     // page-view table is the one source; it loads only for the order that
     // needs it, so other guest views never pay its bytes.
     const pageviews = ["popular", "popularity"].includes(order)
-      ? (await import("./wiki-pageviews.js?v=cb3a800cea17433a")).ICONOPLASM_WIKI_PAGEVIEWS
+      ? (
+          await import("./wiki-pageviews.js?v=cb3a800cea17433a").catch((error) => {
+            // A release removed it after this page opened: reload once (Head.tsx).
+            globalThis.__iconoplasmReloadForRelease?.(error)
+            throw error
+          })
+        ).ICONOPLASM_WIKI_PAGEVIEWS
       : null
     const stable = await stableCatalog()
     const rows = stable.entries.map((entry) => ({

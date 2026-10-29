@@ -129,7 +129,7 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const sitemap = readFileSync(path.join(target, "sitemap.xml"), "utf8")
   const redirects = readFileSync(path.join(target, "_redirects"), "utf8")
 
-  assert.ok(report.fileCount < 25)
+  assert.ok(report.fileCount < 26)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
@@ -146,7 +146,6 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   assert.match(headers, /openapi\.json>; rel="service-desc"; type="application\/json"/)
   assert.match(headers, /metadata>; rel="service-meta"; type="application\/json"/)
   assert.match(headers, /llms\.txt>; rel="describedby"; type="text\/plain"/)
-  assert.match(headers, /\/static\/iconoplasm\/\*/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/RB1/)
   assert.match(sitemap, /https:\/\/iconoplasm\.brinedew\.bio\/gene\/TP53/)
   assert.doesNotMatch(redirects, /^\/blot\//m)
@@ -167,6 +166,14 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
     assert.doesNotMatch(html, /id="iconoplasm-root"/)
   }
   assert.ok(statSync(path.join(target, "static", "iconoplasm", "styles.css")).isFile())
+  // Its versioned copy; what each name is cached for is measured in
+  // workers/iconoplasm-static-assets.workerd.test.js.
+  assert.equal(
+    readdirSync(path.join(target, "static", "iconoplasm")).filter((name) =>
+      /^styles\.[0-9a-f]{16}\.css$/.test(name),
+    ).length,
+    1,
+  )
 })
 
 // B-905: the bundle is capped at 20,000 files and the gene documents take

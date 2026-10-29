@@ -243,7 +243,7 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
         const url = performance
           .getEntriesByType("resource")
           .map((entry) => entry.name)
-          .find((name) => /diagram-studio\.js/.test(name))
+          .find((name) => /diagram-studio\.(?:[0-9a-f]{16}\.)?js/.test(name))
         const { graph } = await (await import(url)).__testing.editor()
         const edge = graph.getCellById(edgeId)
         const view = graph.findViewByCell(edge)

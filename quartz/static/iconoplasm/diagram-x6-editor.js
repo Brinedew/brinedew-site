@@ -109,7 +109,13 @@ let edgeCounter = 0
 let instanceCounter = 0
 
 function loadRuntime() {
-  runtimePromise ||= import(X6_RUNTIME_URL)
+  runtimePromise ||= import(X6_RUNTIME_URL).catch((error) => {
+    // A release removed the runtime after this page opened: reload once
+    // (Head.tsx), or let the next call try again.
+    runtimePromise = null
+    globalThis.__iconoplasmReloadForRelease?.(error)
+    throw error
+  })
   return runtimePromise
 }
 

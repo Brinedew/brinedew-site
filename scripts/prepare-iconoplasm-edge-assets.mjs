@@ -4,6 +4,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ICONOPLASM_SERVICE_DISCOVERY_LINKS } from "../workers/iconoplasm-service-discovery.js"
 import {
+  liveFileFetcher,
+  loadLiveBuildManifest,
+  retainEarlierModules,
+  unversionedPageReferences,
+  versionIconoplasmModules,
+  versionPageReferences,
+} from "./lib/iconoplasm-hashed-modules.mjs"
+import {
   iconoplasmGenePageTitle,
   iconoplasmPageTitle,
 } from "../quartz/static/iconoplasm/page-title.js"
@@ -54,6 +62,12 @@ const serviceDiscoveryHeaders = ICONOPLASM_SERVICE_DISCOVERY_LINKS.map(
   (link) => `  Link: ${link}`,
 ).join("\n")
 
+// Every matching rule applies in order, and a header that two rules set is
+// sent twice, so each Cache-Control rule clears the one before it (`!`). Only a
+// name that carries its hash (scripts/lib/iconoplasm-hashed-modules.mjs) is
+// immutable: an unversioned script revalidates, and the vendor folders keep a
+// day, because their files change only when we upgrade them. Quartz names its
+// own root files by their hash.
 const headersFile = `/*
   Content-Security-Policy: ${iconoplasmCsp}
   Cross-Origin-Opener-Policy: same-origin
@@ -86,16 +100,37 @@ ${serviceDiscoveryHeaders}
 /docs/*
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
-/static/iconoplasm/*
-  Cache-Control: public, max-age=31536000, immutable
-
 /static/*
   Cache-Control: public, max-age=86400
 
-/*.css
+/static/*.js
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+/static/*.css
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+/static/*.:hash.js
+  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
-/*.js
+/static/*.:hash.css
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/static/vendor/*
+  ! Cache-Control
+  Cache-Control: public, max-age=86400
+
+/static/iconoplasm/vendor/*
+  ! Cache-Control
+  Cache-Control: public, max-age=86400
+
+/:name.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/:name.js
   Cache-Control: public, max-age=31536000, immutable
 `
 
@@ -709,6 +744,8 @@ export async function prepareIconoplasmEdgeAssets({
   sourceRoot = publicRoot,
   outputRoot = targetRoot,
   publishedGenes = [],
+  previousBuild = null,
+  fetchEarlierModule = null,
 } = {}) {
   const resolvedSource = path.resolve(sourceRoot)
   const resolvedOutput = path.resolve(outputRoot)
@@ -746,13 +783,14 @@ export async function prepareIconoplasmEdgeAssets({
     await copyFile(path.join(resolvedSource, entry.name), path.join(resolvedOutput, entry.name))
   }
 
+  const versioned = await versionIconoplasmModules({ outputRoot: resolvedOutput })
   const sourceHome = await readFile(
     path.join(resolvedSource, "apps", "iconoplasm", "index.html"),
     "utf8",
   )
   await writeFile(
     path.join(resolvedOutput, "index.html"),
-    standaloneIconoplasmHtml(sourceHome, "apps/iconoplasm/index"),
+    versionPageReferences(standaloneIconoplasmHtml(sourceHome, "apps/iconoplasm/index"), versioned),
     "utf8",
   )
   const docs = await iconoplasmDocPages(resolvedSource)
@@ -765,7 +803,10 @@ export async function prepareIconoplasmEdgeAssets({
     await mkdir(path.dirname(path.join(resolvedOutput, `${page}.html`)), { recursive: true })
     await writeFile(
       path.join(resolvedOutput, `${page}.html`),
-      standaloneIconoplasmHtml(source, `apps/iconoplasm/${sourceDocument(page).slice(0, -5)}`),
+      versionPageReferences(
+        standaloneIconoplasmHtml(source, `apps/iconoplasm/${sourceDocument(page).slice(0, -5)}`),
+        versioned,
+      ),
       "utf8",
     )
   }
@@ -784,9 +825,21 @@ export async function prepareIconoplasmEdgeAssets({
     process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }),
   ).trim()
   if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new Error("Invalid build source SHA")
+  // The files room left under Cloudflare's limit goes to the previous releases'
+  // modules; the manifest written below takes one more.
+  const { modules } = await retainEarlierModules({
+    outputRoot: resolvedOutput,
+    versioned,
+    previous: previousBuild,
+    room: Math.max(
+      0,
+      maxAssetFiles - (await inspectTree(resolvedOutput, resolvedOutput)).fileCount - 1,
+    ),
+    fetchFile: fetchEarlierModule,
+  })
   await writeFile(
     path.join(resolvedOutput, "_build-manifest.json"),
-    `${JSON.stringify({ schemaVersion: 1, kind: "iconoplasm_edge_build", sourceSha })}\n`,
+    `${JSON.stringify({ schemaVersion: 1, kind: "iconoplasm_edge_build", sourceSha, modules })}\n`,
     "utf8",
   )
 
@@ -798,6 +851,12 @@ export async function prepareIconoplasmEdgeAssets({
     if (unserved.length) {
       throw new Error(
         `Iconoplasm ${page}.html links to paths this host does not serve: ${unserved.join(", ")}`,
+      )
+    }
+    const unversioned = unversionedPageReferences(html, versioned)
+    if (unversioned.length) {
+      throw new Error(
+        `Iconoplasm ${page}.html loads scripts by their unversioned names: ${unversioned.join(", ")}`,
       )
     }
   }
@@ -847,6 +906,8 @@ export async function prepareIconoplasmEdgeAssets({
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const report = await prepareIconoplasmEdgeAssets({
     publishedGenes: await loadPublishedCatalogGenes(),
+    previousBuild: await loadLiveBuildManifest({ origin: ICONOPLASM_ORIGIN }),
+    fetchEarlierModule: liveFileFetcher(ICONOPLASM_ORIGIN),
   })
   console.log(
     JSON.stringify({

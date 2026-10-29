@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { createRequire } from "node:module"
@@ -522,6 +523,116 @@ test(
       path.join(receiptDirectory, "moved-paths-receipt.json"),
       `${JSON.stringify(receipt, null, 2)}\n`,
     )
+  },
+)
+
+// The edge ignores query strings, so a script's address must carry its hash in
+// the name (scripts/lib/iconoplasm-hashed-modules.mjs). Ways this can fail:
+//  1. A versioned name answers bytes whose hash is not the name's.
+//  2. A module imports another by a name that the bundle does not serve, or by
+//     the unversioned name (a second copy of that module's state).
+//  3. An unversioned script, a vendor file or a font is cached as immutable,
+//     so a returning reader keeps an old copy for a year.
+//  4. Two rules both set Cache-Control and the response carries both values
+//     (measured live on 2026-10-29: three values on every module).
+//  5. A page still loads a script by its unversioned name.
+test(
+  "scripts load under their hashes, and only those names are immutable",
+  { timeout: 60_000 },
+  async () => {
+    const { temporaryRoot, outputRoot } = await makeAssetFixture()
+    let runtime
+    try {
+      const config = parseToml(
+        await readFile(
+          path.join(
+            repoRoot,
+            "wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml",
+          ),
+          "utf8",
+        ),
+      )
+      runtime = new Miniflare(
+        convertV4MiniflareOptions({
+          name: "iconoplasm-versioned-modules-test",
+          modules: true,
+          script: `export default {fetch(){return new Response("stateful-worker",{status:599})}}`,
+          compatibilityDate: "2026-08-01",
+          assets: {
+            directory: outputRoot,
+            run_worker_first: config.assets.run_worker_first,
+            routerConfig: { has_user_worker: true },
+            assetConfig: { not_found_handling: config.assets.not_found_handling },
+          },
+        }),
+      )
+      const get = (pathname) => runtime.dispatchFetch(`https://iconoplasm.test${pathname}`)
+      const IMMUTABLE = "public, max-age=31536000, immutable"
+      const home = await (await get("/")).text()
+      const entry = home.match(/\/static\/iconoplasm\/app\.([0-9a-f]{16})\.js/)
+      assert.ok(entry, "the home page loads app.js by its versioned name")
+      assert.doesNotMatch(home, /static\/iconoplasm\/app\.js/, "no unversioned app.js left")
+
+      // Walk the whole graph the entry reaches, as a browser would.
+      const seen = new Set()
+      const queue = [entry[0]]
+      while (queue.length) {
+        const pathname = queue.shift()
+        if (seen.has(pathname)) continue
+        seen.add(pathname)
+        const response = await get(pathname)
+        assert.equal(response.status, 200, `${pathname} is served`)
+        assert.equal(response.headers.get("cache-control"), IMMUTABLE, pathname)
+        const bytes = Buffer.from(await response.arrayBuffer())
+        const hash = pathname.match(/\.([0-9a-f]{16})\.(?:js|css)$/)[1]
+        assert.equal(
+          createHash("sha256").update(bytes).digest("hex").slice(0, 16),
+          hash,
+          `${pathname} answers the bytes its name names`,
+        )
+        for (const match of bytes
+          .toString("utf8")
+          .matchAll(/["'`]((?:\.{1,2}\/)[^"'`\s?#$]*\.(?:js|css))(\?v=[^"'`]*)?["'`]/g)) {
+          const target = new URL(match[1], `https://iconoplasm.test${pathname}`).pathname
+          if (target.includes("/vendor/") || !target.startsWith("/static/iconoplasm/")) continue
+          if (/\.[0-9a-f]{16}\.(?:js|css)$/.test(target)) {
+            queue.push(target)
+            continue
+          }
+          // A bundled library's own strings (X6's "./worker.js") name no file here.
+          await assert.rejects(
+            stat(path.join(outputRoot, target)),
+            `${pathname} imports the unversioned ${target}`,
+          )
+        }
+      }
+      assert.ok(seen.size > 20, `the entry reaches the app's modules (${seen.size})`)
+      assert.ok(
+        [...seen].some((pathname) => pathname.includes("/caretaker-manifestations.")),
+        "the caretaker panel is part of the graph",
+      )
+
+      const unversioned = await get("/static/iconoplasm/app.js")
+      assert.equal(unversioned.status, 200)
+      assert.equal(unversioned.headers.get("cache-control"), "public, max-age=0, must-revalidate")
+      assert.equal(
+        await unversioned.text(),
+        await (await get(entry[0])).text(),
+        "the unversioned copy imports the same versioned graph",
+      )
+      for (const [pathname, expected] of [
+        ["/static/iconoplasm/styles.css", "public, max-age=0, must-revalidate"],
+        ["/static/iconoplasm/vendor/shoelace/cdn/shoelace-autoloader.js", "public, max-age=86400"],
+        ["/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2", "public, max-age=86400"],
+      ]) {
+        const response = await get(pathname)
+        assert.equal(response.status, 200, pathname)
+        assert.equal(response.headers.get("cache-control"), expected, pathname)
+      }
+    } finally {
+      await runtime?.dispose()
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
   },
 )
 
