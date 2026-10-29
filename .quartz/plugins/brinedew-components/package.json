@@ -38,11 +38,6 @@
         "defaultPosition": "beforeBody",
         "defaultPriority": 15
       },
-      "Citation": {
-        "displayName": "Citation",
-        "defaultPosition": "afterBody",
-        "defaultPriority": 20
-      },
       "ProteinInfobox": {
         "displayName": "Protein Infobox",
         "defaultPosition": "beforeBody",

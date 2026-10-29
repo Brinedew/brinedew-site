@@ -8,12 +8,9 @@
  *
  * Design constraints & why they exist:
  *   - Two-column flexbox: text and frame are siblings, cannot overlap.
- *   - Single accent color (brand teal #4bb8ad) across all slides.
- *     The brand only has teal + rust; per-slide rainbow was off-palette.
- *   - Fonts: Crimson Pro (brand serif) for title + body,
- *     IBM Plex Mono (brand mono, Google Fonts stand-in for Monaspace Xenon).
+ *   - Font: Crimson Pro (brand serif) for title + body.
  *   - No decorative chrome: no glow, no corner blobs, no branding bar,
- *     no "DESKTOP FIREFOX" label. The card and text do the work.
+ *     no eyebrow label over the title. The card and text do the work.
  *   - object-fit:cover with aspect-matched frames so screenshots fill
  *     fully -- no paper-colored letterbox gaps.
  */
@@ -43,9 +40,7 @@ const H = 800
 const pal = {
   bg: "#151210", // slightly deeper than tooltip-dark-shell for poster weight
   text: "#f4eee6", // warm off-white (tooltip-ink inverted)
-  muted: "#a09486", // warm mid-gray for kicker-ish uses
   body: "#c4b8aa", // warmer, brighter than muted -- readable at 36px
-  accent: "#4bb8ad", // brand teal -- the ONE accent color
   paper: "#f3eadc", // card background (tooltip-light-shell area)
   paperInner: "#f8f2ea", // content inset
   border: "#d2c1aa", // card outline
@@ -69,8 +64,7 @@ const slides = [
   {
     input: "screenshot-2-hovercard.png",
     output: "amo-screenshot-1-hovercard.png",
-    kicker: "Firefox Add-on",
-    title: "Hover any gene symbol",
+    title: "Hover over any gene symbol",
     body: "Color-coded markers and portrait cards appear while you read papers, wikis, and notes.",
     // 628:907 ratio = 0.692.  Max inner height ~688, width = 688*0.692 = 476
     innerW: 476,
@@ -80,7 +74,6 @@ const slides = [
   {
     input: "screenshot-1-hovercard.png",
     output: "amo-screenshot-2-hovercard-alt.png",
-    kicker: "Gene Portraits",
     title: "Same symbol, same face",
     body: "Repeated genes keep their color and portrait so you recognize them at a glance.",
     // 575:802 ratio = 0.717.  innerH ~688, width = 688*0.717 = 493
@@ -91,7 +84,6 @@ const slides = [
   {
     input: "screenshot-6-archive.png",
     output: "amo-screenshot-3-archive.png",
-    kicker: "Lab Archive",
     title: "Build a visual library",
     body: "Every gene you encounter is catalogued with its portrait, molecular data, and source context.",
     // 750:1057 ratio = 0.709.  innerH ~688, width = 688*0.709 = 488
@@ -135,7 +127,7 @@ function slideHTML(slide, imgUri) {
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;700&family=IBM+Plex+Mono:wght@500&display=swap"
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;700&display=swap"
       rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -155,15 +147,7 @@ body{
   justify-content:center;
 }
 
-.kicker{
-  font-family:'IBM Plex Mono',monospace;
-  font-size:11px;font-weight:500;
-  letter-spacing:2.4px;text-transform:uppercase;
-  color:${pal.accent};
-}
-
 .title{
-  margin-top:20px;
   font-family:'Crimson Pro',Georgia,serif;
   font-size:50px;font-weight:700;
   letter-spacing:-0.02em;line-height:1.1;
@@ -216,7 +200,6 @@ body{
 </style></head>
 <body>
   <div class="text-col">
-    <span class="kicker">${esc(slide.kicker)}</span>
     <h1 class="title">${esc(slide.title)}</h1>
     <p class="body-text">${esc(slide.body)}</p>
   </div>
