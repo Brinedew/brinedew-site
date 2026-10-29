@@ -488,7 +488,7 @@ day's Workers allowance, 10x (10,000 visitors a day) spends 127% and 187%, 100x 
 and D1 rows written reach 30% and 60% at 10x (60% and 120% when every protein is new that day).
 A desktop visit with a full board of five public streaks cost 11 requests (22 units) for 3 guesses
 before the board came from the CDN, and costs that again whenever the CDN cannot be reached: the
-box was 1 request and each of its 5 pictures another (`e2e/geneguessr-direct-structures.e2e.mjs`
+box was 1 request and each of its 5 pictures another (`e2e/geneguessr-score-and-leaderboard.e2e.mjs`
 measures that fallback every run); it is 5 now. The new reader-scaled meter is Bunny bandwidth: the object is at most 55 KB (a
 full board of maximum-size avatars; a conditional request that finds it unchanged is a 304), so
 100,000 desktop visitors a day is at most 5.5 GB of Bunny traffic, and Bunny's price per GB is on
@@ -598,7 +598,9 @@ structure id or stored URLs and its token has no `directUrl`, key or link, and t
 document's `connect-src` lists exactly the three provider hosts while no other document's
 does.
 
-`e2e/geneguessr-direct-structures.e2e.mjs` proves the page's side in a real Chrome with the
+The GeneGuessr browser tests (`e2e/geneguessr-direct-loads`, `-direct-failures`, `-visit-budget`
+and `-score-and-leaderboard`, which share `e2e/geneguessr-direct-structures.shared.mjs`) prove
+the page's side in a real Chrome with the
 real Mol* build (`public/static/vendor`, which the build produces) and the game document's
 real policy: a visit of page load plus three guesses (a PDB, a SWISS-MODEL and an AlphaFold)
 makes no `/api/structure-cached?key=` request, one request to each provider and one target
@@ -636,7 +638,7 @@ picture address other than a `data:` image makes the page request nothing and dr
 The same visits assert the D1 rows from the statements' receipts: no statement against the
 session-write evidence tables, no written row but the aggregates, 1 row a guess once the day is
 under way, and no statement against `leaderboard_streaks`. The counts and meters land in
-`geneguessr-request-budget.json`.
+`geneguessr-visit-budget-request-budget.json` in the E2E artifacts.
 
 `workers/geneguessr-request-budget.test.js` must prove, through the real Worker on the
 production-shaped local D1 with embedding rows of production size, that a wrong guess's answer

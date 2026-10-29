@@ -332,6 +332,28 @@ async function routePortraits(context, requested = []) {
 const DIALOG = "[data-icono-request-dialog]"
 
 // Runs in the page: everything the assertions need, measured once.
+// The search box waits 180 ms after the last key, then renders the grid
+// without blocking. A fixed pause raced that render when three browser files
+// shared a runner (B-1187), so wait up to 5 s for the visible cards to be what
+// the query should leave (none, exactly `only`, or more than one), and let the
+// assertions after it report any difference.
+async function searchSettled(page, expected) {
+  await page
+    .waitForFunction(
+      ({ none, only }) => {
+        const labels = [...document.querySelectorAll("[data-icono-request-card]")]
+          .filter((card) => card.checkVisibility() && card.getBoundingClientRect().width > 0)
+          .map((card) => card.getAttribute("data-icono-request-card"))
+        if (none) return labels.length === 0
+        if (only) return labels.length === 1 && labels[0] === only
+        return labels.length > 1
+      },
+      expected,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
+}
+
 function measurePicker() {
   const dialog = document.querySelector("[data-icono-request-dialog]")
   const panel = dialog
@@ -772,15 +794,15 @@ test("the Free queue picker is a 3:4 style grid where a tap requests a style", a
         // 2 again: typing an artist name finds nothing; a number finds its card.
         await page.click("[data-icono-request-view='all']")
         await page.fill("[data-icono-request-query]", "secret")
-        await page.waitForTimeout(350)
+        await searchSettled(page, { none: true })
         m = await page.evaluate(measurePicker)
         assert.equal(m.visibleCards, 0, `${where}: artist search found ${m.visibleCards} styles`)
         await page.fill("[data-icono-request-query]", "2561")
-        await page.waitForTimeout(350)
+        await searchSettled(page, { only: "2561" })
         m = await page.evaluate(measurePicker)
         assert.deepEqual(m.cardLabels, ["2561"], `${where}: number search`)
         await page.fill("[data-icono-request-query]", "")
-        await page.waitForTimeout(350)
+        await searchSettled(page, {})
 
         // All styles shows every style, not six: 18. scrolling to the end of the
         // grid loads the next page, and the label claims no count.
