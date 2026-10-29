@@ -32,11 +32,9 @@ jobs:
           echo "::notice title=Preview deploy skipped::Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ICONOPLASM_ADMIN_TOKEN repo secrets to enable Cloudflare Pages preview deployments."
           echo "enabled=false" >> "$GITHUB_OUTPUT"
 
-      # Bump actions/download-artifact @v7 -> @v8 (2026 current major).
-      # This pairs with build-preview.yaml's actions/upload-artifact @v7.
       - name: Download build artifact
         if: ${{ steps.cf-config.outputs.enabled == 'true' }}
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         id: preview-build-artifact
         with:
           name: preview-build
@@ -46,7 +44,7 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         if: ${{ steps.cf-config.outputs.enabled == 'true' }}
-        uses: AdrianGonz97/refined-cf-pages-action@v1
+        uses: AdrianGonz97/refined-cf-pages-action@45ea15c1c69a7bce8ffbb79ba114daa2b52f0cff # v1.3.0
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
