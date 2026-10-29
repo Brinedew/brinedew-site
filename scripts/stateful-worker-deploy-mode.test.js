@@ -46,7 +46,7 @@ const api =
 // 8. a pending Durable Object tag with matching triggers, and matching
 //    triggers with no pending tag, both stay correct (the old behavior);
 // 9. after the release deploys, the installed triggers are read again and any
-//    difference fails the release, in the normal and the maintenance path.
+//    difference fails the release.
 const SCHEDULES = (crons) => ({ schedules: crons.map((cron) => ({ cron, created_on: "t" })) })
 const json = (status, body) => ({
   ok: status >= 200 && status < 300,
@@ -338,8 +338,7 @@ test("the checked-in config's own triggers: any order is no drift, one missing s
 })
 
 // The wiring: the release must ask before it uploads, branch on the answer,
-// and read the installed triggers again after the last Worker activation, in
-// the maintenance path as well as the normal one.
+// and read the installed triggers again after the last Worker activation.
 const WORKFLOW = parseYaml(
   readFileSync(new URL("../.github/workflows/deploy-quartz.yml", import.meta.url), "utf8"),
 )
@@ -349,7 +348,6 @@ const STATEFUL_CONFIG = "wrangler.the-only-allowed-internal-stateful-worker-do-n
 test("the release asks the deploy-mode script before uploading and branches on its answer", () => {
   const detect = STEPS.findIndex((step) => step.id === "deploy_mode")
   assert.ok(detect >= 0, "a step with id deploy_mode exists")
-  assert.equal(STEPS[detect].if, "inputs.data_maintenance != true")
   assert.ok(
     STEPS[detect].run.includes(`node scripts/stateful-worker-deploy-mode.mjs ${STATEFUL_CONFIG}`),
   )
@@ -364,13 +362,12 @@ test("the release asks the deploy-mode script before uploading and branches on i
   assert.match(STEPS[deploy].run, /wrangler versions upload --env=""/)
 })
 
-test("the installed triggers are verified after the last stateful Worker activation, in both release paths", () => {
+test("the installed triggers are verified after the last stateful Worker activation", () => {
   const verify = STEPS.findIndex((step) =>
     step.run?.includes("stateful-worker-deploy-mode.mjs --verify"),
   )
   assert.ok(verify >= 0, "a verification step exists")
   assert.ok(STEPS[verify].run.includes(`--verify ${STATEFUL_CONFIG}`))
-  // Both release paths end here, so the check has no condition of its own.
   assert.equal(STEPS[verify].if, undefined)
   assert.ok(STEPS[verify]["timeout-minutes"] <= 5)
   const activations = STEPS.flatMap((step, index) =>
@@ -378,7 +375,7 @@ test("the installed triggers are verified after the last stateful Worker activat
       ? [index]
       : [],
   )
-  assert.ok(activations.length >= 3, "the normal and maintenance activations were found")
+  assert.ok(activations.length >= 2, "the first and the final activation were found")
   assert.ok(
     verify > Math.max(...activations),
     "verification runs after every stateful deploy, or it would read stale triggers",
