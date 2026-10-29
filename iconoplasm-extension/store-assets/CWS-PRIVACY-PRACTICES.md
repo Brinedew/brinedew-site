@@ -34,10 +34,6 @@ Certify all three statements: the data isn't sold to third parties, isn't used f
 
 https://iconoplasm.brinedew.bio/privacy
 
-## Owner's steps in the dashboard
+## Where these answers live
 
-1. Register a developer account at https://chrome.google.com/webstore/devconsole and pay the one-time fee (the amount is shown in the form).
-2. **New item**: upload `quartz/static/iconoplasm/downloads/iconoplasm-extension-v0.5.10.zip`, also live at https://iconoplasm.brinedew.bio/static/iconoplasm/downloads/iconoplasm-extension-v0.5.10.zip.
-3. **Store listing**: paste from `STORE-LISTING-COPY.md`, and upload the screenshots and promo tiles in this folder.
-4. **Privacy practices**: paste the answers above.
-5. Submit for review. When it's approved, the agent switches the homepage's Chrome install panel to the store link (B-1009).
+They are saved on the item's Privacy tab in the Chrome Web Store dashboard. The listing itself is recorded in `STORE-LISTING-COPY.md`. When review passes, the homepage's Chrome install panel switches to the store link (B-1009).

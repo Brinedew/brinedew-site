@@ -1,37 +1,43 @@
-# CWS Store Listing Copy
+# Chrome Web Store listing
 
-## Short description (max 132 chars, already in manifest.json)
+The listing copies the live Edge listing (`EDGE-LISTING-COPY.md`), adjusted to the Chrome Web Store's fields.
 
-Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.
+- Item ID: `hphoofaocpclmdnhknicfpfjleifpppj`
+- Dashboard: https://chrome.google.com/webstore/devconsole/823a405e-3908-4ac8-9c05-2e01a5319890/hphoofaocpclmdnhknicfpfjleifpppj/edit/listing
+- Publisher: Brinedew.bio (non-trader)
 
-## Detailed description (CWS dashboard field)
+## Summary
 
-Iconoplasm gives every human protein-coding gene a unique color identity, then highlights gene symbols automatically as you read the web.
+The store takes the summary from `manifest.json`'s `description`.
 
-WHAT IT DOES
+## Description
 
-- Scans any page for gene symbols (TP53, BRCA1, PTEN, etc.)
-- Highlights them with their assigned gene color
-- Hover to see a rich info card with the gene's portrait, full name, and mnemonic origin
+```
+* Turn gene names on any web page into a cast of intracellular characters.
+* Hover over a gene symbol to see the mnemonic character card.
+* Tap the hover card to jump to the full Iconoplasm gene page.
+* Collect found genes in your personal gene library.
+* Connect with other Iconoplasm users on Discord to pick the most representative gene illustrations.
+```
 
-WHERE IT WORKS
-Gene symbols appear on PubMed, UniProt, Wikipedia, Ensembl, journal articles, lab wikis, and countless other sites. Iconoplasm works on all of them automatically.
+## Fields
 
-CUSTOMIZABLE
+- Category: Education
+- Language: English (United States)
+- Homepage: https://iconoplasm.brinedew.bio/
+- Support: https://iconoplasm.brinedew.bio/docs/faq
 
-- Highlight styles: underline, color pills, pill outlines, or rough hand-drawn ellipses
-- Card styles: simple inline tooltip, vintage lab label, or blot-only portrait
-- Smart blocklist filters out common English words that happen to be gene symbols (like SET, REST, CAT)
-- Add your own entries to keep highlighting precise
+The store's checker doesn't follow redirects. It refused `https://brinedew.bio/wiki/iconoplasm-faq` (a 301 to the address above) as "Support URL is not reachable", so every URL here must answer 200 directly.
 
-PRIVACY-FIRST
+## Images
 
-- Page text is read locally and never transmitted
-- Only gene symbols are sent to our server for color/portrait lookup
-- No analytics, no tracking, no third-party requests
-- Full privacy policy: https://iconoplasm.brinedew.bio/privacy
+- Icon: `../icons/icon-128.png`
+- Screenshots, 1280 x 800: `amo/amo-screenshot-1-hovercard.png`, `amo/amo-screenshot-2-hovercard-alt.png`, `amo/amo-screenshot-3-archive.png` (made by `generate-amo-screenshots.mjs`)
+- Small promo tile, 440 x 280: `promo-small.png`
+- Marquee, 1400 x 560: `promo-marquee.png`
 
-SIGN IN (OPTIONAL)
-Connect with Discord to sync across devices and access the full Iconoplasm catalog at iconoplasm.brinedew.bio.
+## Distribution
 
-19,000+ genes cataloged. Each one with a unique color and portrait. Start browsing.
+Free of charge, Public, all regions, published automatically once review passes.
+
+The review is the slow, in-depth kind, because the extension asks for access to every site. That access is the product: the extension highlights genes on whatever page the reader opens, so narrowing it to `activeTab` or a site list would turn automatic highlighting into a button press.

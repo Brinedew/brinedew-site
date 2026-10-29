@@ -101,7 +101,7 @@ Supports both Desktop Firefox and Firefox for Android 142 or newer.
 
 ## support
 
-- Support site: https://brinedew.bio/wiki/iconoplasm-faq
+- Support site: https://iconoplasm.brinedew.bio/docs/faq
 - Privacy policy: https://iconoplasm.brinedew.bio/privacy
 - Homepage: https://iconoplasm.brinedew.bio/
 
