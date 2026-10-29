@@ -58,8 +58,8 @@ normal deployment succeeds.
 
 ## Maintenance reader recovery
 
-While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`, a
-`data_maintenance` release may set
+While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`,
+`scripts/deploy-iconoplasm-reader-recovery.mjs` may set
 `ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`
 (`workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js`).
 That mode permits only GET/HEAD reads for exact content-addressed portrait

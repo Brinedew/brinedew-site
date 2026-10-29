@@ -560,7 +560,7 @@ export async function searchProteins(db, query, limit = 20, exclude = []) {
 //
 // `daily_selection_pool` is created by this code on first use, like the other
 // tables the GeneGuessr worker owns. A normal deploy applies no migration to this
-// database, and the maintenance release refuses a migration file that has no
+// database, and the release refuses a migration file that has no
 // reviewed cost-plan entry, so a file here would block it. One batch creates
 // the table, its single row and the three triggers.
 //
