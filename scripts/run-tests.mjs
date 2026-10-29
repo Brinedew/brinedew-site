@@ -67,9 +67,11 @@ const tsxCliPath = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", imp
 // Workerd and PowerShell integration files spawn their own processes. Starting
 // one test process per host CPU starves bounded child startup checks on Windows.
 const concurrency = Math.min(4, availableParallelism())
+// CI splits the suite across runners: TEST_SHARD=1/2 runs every other file.
+const shard = process.env.TEST_SHARD ? [`--test-shard=${process.env.TEST_SHARD}`] : []
 const result = spawnSync(
   process.execPath,
-  [tsxCliPath, "--test", `--test-concurrency=${concurrency}`, ...testFiles],
+  [tsxCliPath, "--test", `--test-concurrency=${concurrency}`, ...shard, ...testFiles],
   {
     cwd: process.cwd(),
     stdio: "inherit",

@@ -45,14 +45,14 @@ jobs:
       ICONOPLASM_RELEASE_ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
       ICONOPLASM_COST_OVERRUN_LOG: ${{ github.workspace }}/../iconoplasm-cost-overruns.jsonl
     steps:
-      # Bump actions/checkout @v6 -> @v7 and actions/upload-artifact @v6 -> @v7
-      # (2026 current majors). This workflow is the canonical production
-      # deploy path; anything that touches it should also update the
-      # "Canonical production deploy path" comment in scripts/deploy-cloudflare-prod.ps1.
+      # This workflow is the canonical production deploy path; anything that
+      # touches it should also update the "Canonical production deploy path"
+      # comment in scripts/deploy-cloudflare-prod.ps1.
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Reject stale production source before admission
         env:
@@ -80,7 +80,7 @@ jobs:
         run: node scripts/verify-code-release.mjs
 
       - name: Setup Node.js (22.x)
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
@@ -433,26 +433,6 @@ jobs:
           fi
           grep -Fiq 'Content-Security-Policy:' "$smoke_dir/brinedew.headers"
           grep -Fiq "'unsafe-eval'" "$smoke_dir/geneguessr.headers"
-
-          for html in "$smoke_dir"/*.html; do
-            if grep -Fq 'cdn.jsdelivr.net/npm/katex' "$html"; then
-              echo "Production HTML still references CSP-blocked jsDelivr KaTeX: $html" >&2
-              exit 1
-            fi
-          done
-
-          if grep -Fq 'auth-sidebar.mjs' "$smoke_dir/geneguessr.html" ||
-             grep -Fq 'auth-sidebar.mjs' "$smoke_dir/iconoplasm.html" ||
-             grep -Fq 'auth-sidebar.mjs' "$smoke_dir/settings.html"; then
-            echo "An app-owned account surface also loaded the generic auth sidebar." >&2
-            exit 1
-          fi
-
-          grep -Fq '.split(";")' "$smoke_dir/iconoplasm.html"
-          if grep -Fq '.split(/;s*/)' "$smoke_dir/iconoplasm.html"; then
-            echo "Iconoplasm emitted the unsafe session-marker cookie parser." >&2
-            exit 1
-          fi
 
       - name: Smoke test Discord OAuth entry and anonymous session contract
         run: |

@@ -36,11 +36,8 @@ jobs:
             exit 1
           fi
 
-      # Bump actions/checkout @v4 -> @v7 and actions/setup-node @v4 -> @v6
-      # (2026 current majors). The setup-node bump also lets us drop
-      # `cache: "npm"` and install with pnpm below, matching package.json.
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # This workflow rotates the live ICONOPLASM_ADMIN_TOKEN in two Workers.
       # Use pnpm to match package.json#packageManager ("pnpm@11.0.9") and
@@ -49,7 +46,7 @@ jobs:
       # moment someone adds a JS preflight it would silently install with
       # the wrong lockfile.
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 

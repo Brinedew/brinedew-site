@@ -20,6 +20,9 @@ export async function syncStaticImportVersions(staticRoot, modulePath, consumerP
     if (next === source && !source.includes(`${specifier}?v=${version}`)) {
       throw new Error(`Unable to synchronize ${modulePath} import in ${consumerPath}`)
     }
+    // Prettier takes about half a second on app.js; an unchanged version
+    // needs no reformat (4.2 s of every build, 2026-10-29).
+    if (next === source) continue
     const formatted = await format(next, { ...(await resolveConfig(consumer)), filepath: consumer })
     if (formatted !== source) await writeFile(consumer, formatted, "utf8")
   }

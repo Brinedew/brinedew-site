@@ -15,11 +15,14 @@ import { recordCompactDiscoveryBatch } from "./discovery-compact-service.js"
 import { drainSharedDiscoveryDeliveries } from "./discovery-shared-delivery.js"
 import { readSharedDiscoveryOrdinal } from "./discovery-compact-state.js"
 
-// B-716 working workload for the compact discovery path: 2,000 savers making
-// 20,000 qualified encounters. Both acknowledgement models are measured: one
-// batch per saver (2,000 batches) and the worst case of ten separately
-// acknowledged saves per saver (20,000 batches). Real D1 receipts prove the
-// first; an in-memory SQLite sweep proves the second without spending CI time.
+// B-716 sized the compact discovery path for 2,000 savers making 20,000
+// qualified encounters. Both acknowledgement models are measured: one batch per
+// saver and the worst case of ten separately acknowledged saves per saver. Real
+// D1 receipts prove the first; an in-memory SQLite sweep proves the second.
+// Every receipt below is an exact per-saver constant, so 300 savers (three
+// drain pages of 128) prove the same linear cost as 2,000; the full 2,000 took
+// 80 s of every CI run (2026-10-28) and proved nothing more.
+const SAVERS = 300
 
 const SYMBOLS = Array.from({ length: 10 }, (_, index) => `GENE${String(index).padStart(2, "0")}`)
 const dictionary = createDiscoveryOrdinalDictionary(
@@ -81,7 +84,7 @@ function measuredDb(db, receipts) {
 }
 
 test(
-  "real D1 prints exact per-saver row receipts for the 2,000-saver envelope",
+  "real D1 prints exact per-saver row receipts for the saver envelope",
   { timeout: 600000 },
   async () => {
     const req = createRequire(import.meta.url)
@@ -106,7 +109,6 @@ test(
       const receipts = []
       const measured = measuredDb(db, receipts)
       const startedAt = Date.now()
-      const SAVERS = 2_000
       for (let user = 0; user < SAVERS; user++) {
         await recordCompactDiscoveryBatch(measured, {
           userId: `saver-${user}`,
@@ -263,54 +265,50 @@ class D1Like {
   }
 }
 
-test(
-  "the full 2,000-saver / 20,000-encounter workload converges exactly",
-  { timeout: 300000 },
-  async () => {
-    const db = new D1Like()
-    for (let user = 0; user < 2000; user++) {
-      await recordCompactDiscoveryBatch(db, {
-        userId: `saver-${user}`,
-        batchId: `device-${user}:1`,
-        dictionary,
-        encounters: encountersFor(user),
-      })
-    }
-    const users = await db
-      .prepare(
-        "SELECT COUNT(*) AS users, SUM(member_count) AS members FROM icono_discovery_user_state_v2",
-      )
-      .first()
-    assert.deepEqual([Number(users.users), Number(users.members)], [2000, 20000])
-    let drained = 0
-    for (;;) {
-      const result = await drainSharedDiscoveryDeliveries(db, { limit: 128 })
-      drained += result.drained
-      if (result.drained < 128) break
-    }
-    assert.equal(drained, 2000)
-    const shared = await readSharedCompactState(db)
-    for (let ordinal = 0; ordinal < SYMBOLS.length; ordinal++) {
-      const summary = readSharedDiscoveryOrdinal(shared, ordinal)
-      assert.deepEqual(
-        { discoverers: summary.discoverer_count, encounters: summary.encounter_count },
-        { discoverers: 2000, encounters: 2000 },
-      )
-    }
-    console.log(
-      "B764_FULL_WORKLOAD_RECEIPT",
-      JSON.stringify({ savers: 2000, encounters: 20000, drained }),
+test("the full saver workload converges exactly", { timeout: 300000 }, async () => {
+  const db = new D1Like()
+  for (let user = 0; user < SAVERS; user++) {
+    await recordCompactDiscoveryBatch(db, {
+      userId: `saver-${user}`,
+      batchId: `device-${user}:1`,
+      dictionary,
+      encounters: encountersFor(user),
+    })
+  }
+  const users = await db
+    .prepare(
+      "SELECT COUNT(*) AS users, SUM(member_count) AS members FROM icono_discovery_user_state_v2",
     )
-  },
-)
+    .first()
+  assert.deepEqual([Number(users.users), Number(users.members)], [SAVERS, SAVERS * 10])
+  let drained = 0
+  for (;;) {
+    const result = await drainSharedDiscoveryDeliveries(db, { limit: 128 })
+    drained += result.drained
+    if (result.drained < 128) break
+  }
+  assert.equal(drained, SAVERS)
+  const shared = await readSharedCompactState(db)
+  for (let ordinal = 0; ordinal < SYMBOLS.length; ordinal++) {
+    const summary = readSharedDiscoveryOrdinal(shared, ordinal)
+    assert.deepEqual(
+      { discoverers: summary.discoverer_count, encounters: summary.encounter_count },
+      { discoverers: SAVERS, encounters: SAVERS },
+    )
+  }
+  console.log(
+    "B764_FULL_WORKLOAD_RECEIPT",
+    JSON.stringify({ savers: SAVERS, encounters: SAVERS * 10, drained }),
+  )
+})
 
 test(
-  "the 20,000 individually acknowledged saves worst case stays linear per batch",
+  "the individually acknowledged saves worst case stays linear per batch",
   { timeout: 600000 },
   async () => {
     const db = new D1Like()
     const startedAt = Date.now()
-    for (let saver = 0; saver < 2000; saver++) {
+    for (let saver = 0; saver < SAVERS; saver++) {
       for (let save = 0; save < 10; save++) {
         const symbol = SYMBOLS[save]
         await recordCompactDiscoveryBatch(db, {
@@ -335,15 +333,15 @@ test(
         "SELECT SUM(member_count) AS members, COUNT(*) AS users FROM icono_discovery_user_state_v2",
       )
       .first()
-    assert.equal(Number(state.users), 2000)
-    assert.equal(Number(state.members), 2000 * 10)
+    assert.equal(Number(state.users), SAVERS)
+    assert.equal(Number(state.members), SAVERS * 10)
     const outbox = await db
       .prepare("SELECT COUNT(*) AS n FROM icono_discovery_shared_delivery_outbox_v2")
       .first()
-    assert.equal(Number(outbox.n), 20000)
+    assert.equal(Number(outbox.n), SAVERS * 10)
     console.log(
       "B764_WORST_CASE_RECEIPT",
-      JSON.stringify({ batches: 20000, elapsed_ms: elapsedMs }),
+      JSON.stringify({ batches: SAVERS * 10, elapsed_ms: elapsedMs }),
     )
   },
 )

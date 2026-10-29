@@ -4,11 +4,9 @@ on:
   pull_request:
     branches:
       - main
-      - v5
   push:
     branches:
       - main
-      - v5
   workflow_dispatch:
 
 jobs:
@@ -61,31 +59,31 @@ jobs:
           echo "reuse=$reuse" >> "$GITHUB_OUTPUT"
           echo "Reusing a pull request run's verdict for tree ${tree:-unknown}: $reuse"
 
-  build-and-test:
+  # Decides once for the whole run whether the change touches only notes, and
+  # names the tree it tests. A blobless clone has every commit and tree, which
+  # is all git diff needs, in a few seconds instead of the 45 s a full clone took.
+  scope:
     needs: tested-tree
     if: ${{ !cancelled() && needs.tested-tree.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
-    # A clean run takes 11-16 minutes. Without a limit GitHub waits 6 hours: on
-    # 2026-10-09 a hung browser E2E held main's test run, and every production
-    # deploy queued behind it ("Require successful tests for the exact deployed commit").
     timeout-minutes: 30
     permissions:
       contents: read
       actions: read
+    outputs:
+      notes_only: ${{ steps.scope.outputs.notes_only }}
+      tree: ${{ steps.scope.outputs.tree }}
     steps:
-      # Bump actions/checkout @v6 -> @v7 and actions/cache @v5 -> @v6 (2026
-      # current majors). setup-node @v6 is already the latest. Dependabot
-      # version-updates covers npm dependencies; this project explicitly pins
-      # GitHub Actions to majors instead of SHA so Dependabot can PR drift.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          filter: blob:none
 
       # Notes fast path: a change that only edits notes (content/, except the
       # Iconoplasm app pages in content/apps/) on top of a commit whose own run
       # passed changes no code, so the code has already passed the full suite.
       # It still type-checks and builds the whole site, which is what a note
-      # can break, and skips the ~15 minutes of repository and browser tests.
+      # can break, and skips the repository and browser tests.
       # Since 2026-10-03 those tests had doubled the owner's save-to-live time
       # (Obsidian Git push to deploy) from about 10 to about 20 minutes.
       # Requiring the base run's success keeps the release gate whole: a notes
@@ -100,6 +98,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
           notes_only=false
           if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ -n "$BASE_SHA" ] && ! printf '%s' "$BASE_SHA" | grep -qE '^0+$'; then
             changed="$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA" || true)"
@@ -123,62 +122,71 @@ jobs:
           echo "notes_only=$notes_only" >> "$GITHUB_OUTPUT"
           echo "Notes-only change on a passing base: $notes_only (base $BASE_SHA)"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+  # The checks every change needs, notes included: published downloads stay
+  # untouched, types and formatting pass, and the whole site builds.
+  checks:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.0.9 --activate
-          pnpm config set minimumReleaseAge 1440
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Protect previously published extension downloads
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/verify-iconoplasm-release-history.mjs
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - uses: ./.github/actions/setup
 
-      - name: Cache pnpm dependencies
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
+      # The build syncs the shared Iconoplasm assets first, which check reads.
+      - name: Build exact HEAD
+        run: pnpm run build
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --config.block-exotic-subdeps=false
-
-      - name: Install Quartz plugins
-        run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
-
-      - name: Verify checked-in Iconoplasm publisher authority
-        run: node scripts/run-tests.mjs iconoplasm-extension.publisher-authority.test.js
-
-      - name: Sync shared Iconoplasm assets
-        run: pnpm run sync:iconoplasm-shared
-
-      - name: Reproduce a newly added public extension package from this commit
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
+      # The build regenerates checked-in files (the extension's catalog
+      # contract, Studio import versions, synced shared assets). A commit whose
+      # copies are stale would pass every later step on the rebuilt ones.
+      - name: Build leaves every checked-in file as committed
+        run: git diff --exit-code --stat
 
       - name: Check types and style
         run: pnpm run check
+
+      - name: Reproduce a newly added public extension package from this commit
+        run: node scripts/verify-iconoplasm-release-history.mjs --verify-new-package
+
+  # The repository suite in two halves on two runners (node --test-shard deals
+  # the files out in turn). One runner took 324 s on 2026-10-28 behind about
+  # 4 minutes of setup, and the browser tests then waited for it.
+  tests:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.notes_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
 
       - name: Build exact HEAD before topology tests
         run: pnpm run build
 
       - name: Test
         id: tests
-        if: ${{ steps.scope.outputs.notes_only != 'true' }}
         shell: bash
+        env:
+          TEST_SHARD: ${{ matrix.shard }}/2
         run: |
           set +e
           pnpm test > "$RUNNER_TEMP/repository-tests.log" 2>&1
@@ -198,58 +206,103 @@ jobs:
           PYTHON
           exit "$test_status"
 
-      # Browser E2E in the runner's installed Chrome. A run takes only the files
-      # its change can break, plus one swept by run number
-      # (scripts/select-e2e.mjs): all 21 together took 588 s on 2026-10-16, and
-      # production deploys wait for main's run. A manual run, or a change to
-      # the harness, the dependencies or CI, takes them all.
-      # The step's limit stops a hung browser. No --test-timeout: Node applies
-      # it to each whole file too, and geneguessr-direct-structures alone runs
-      # about 310 s.
-      - name: Browser E2E
-        if: ${{ steps.scope.outputs.notes_only != 'true' }}
-        timeout-minutes: 15
-        env:
-          BASE_SHA: ${{ github.event_name != 'workflow_dispatch' && (github.event.pull_request.base.sha || github.event.before) || '' }}
-        run: |
-          files="$(node scripts/select-e2e.mjs --base "$BASE_SHA" --rotate "$GITHUB_RUN_NUMBER")"
-          echo "E2E files: $files"
-          node --test $files
-
-      - name: Upload E2E screenshots and measurements
-        if: ${{ always() && steps.scope.outputs.notes_only != 'true' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-${{ github.sha }}
-          path: artifacts/e2e
-          if-no-files-found: warn
-          retention-days: 7
-
       - name: Preserve complete test output
         if: ${{ always() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: repository-tests-${{ github.sha }}
+          name: repository-tests-${{ github.sha }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/repository-tests.log
           if-no-files-found: error
           retention-days: 3
 
-      # Last on purpose: only a run whose every step passed records its tree,
-      # which the tested-tree job above reads after the squash merge. HEAD is
-      # GitHub's merge of the PR with main, the tree the merge will land.
-      - name: Record the tree this pull request run tested
-        id: tree
-        if: ${{ success() && github.event_name == 'pull_request' }}
-        shell: bash
+  # Browser E2E in the runner's installed Chrome, in two halves like the
+  # repository suite. A run takes only the files its change can break, plus one
+  # swept by run number (scripts/select-e2e.mjs): all 21 together took 588 s on
+  # 2026-10-16. A manual run, or a change to the harness, the dependencies or
+  # CI, takes them all.
+  # The step's limit stops a hung browser. No --test-timeout: Node applies it
+  # to each whole file too, and geneguessr-direct-structures alone runs about
+  # 310 s.
+  e2e:
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.notes_only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: ./.github/actions/setup
+
+      - name: Build exact HEAD
+        run: pnpm run build
+
+      - name: Browser E2E
+        timeout-minutes: 15
+        env:
+          BASE_SHA: ${{ github.event_name != 'workflow_dispatch' && (github.event.pull_request.base.sha || github.event.before) || '' }}
+          SHARD: ${{ matrix.shard }}/2
         run: |
-          git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/tested-tree"
-          echo "tree=$(cat "$RUNNER_TEMP/tested-tree")" >> "$GITHUB_OUTPUT"
+          files="$(node scripts/select-e2e.mjs --base "$BASE_SHA" --rotate "$GITHUB_RUN_NUMBER")"
+          echo "E2E files: $files"
+          node --test --test-shard="$SHARD" $files
+
+      - name: Upload E2E screenshots and measurements
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-${{ github.sha }}-${{ matrix.shard }}
+          path: artifacts/e2e
+          if-no-files-found: warn
+          retention-days: 7
+
+  # The one required check. Branch protection names build-and-test, so the
+  # lanes above can change without touching the rule. It passes when the
+  # tested-tree job reused a verdict, or when every lane this change needs
+  # passed. A pull request run that passes records its tree for that reuse;
+  # HEAD is GitHub's merge of the PR with main, the tree the merge will land.
+  build-and-test:
+    needs: [tested-tree, scope, checks, tests, e2e]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every lane
+        shell: bash
+        env:
+          REUSE: ${{ needs.tested-tree.outputs.reuse }}
+          SCOPE: ${{ needs.scope.result }}
+          NOTES_ONLY: ${{ needs.scope.outputs.notes_only }}
+          CHECKS: ${{ needs.checks.result }}
+          TESTS: ${{ needs.tests.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "reuse=$REUSE scope=$SCOPE notes_only=$NOTES_ONLY checks=$CHECKS tests=$TESTS e2e=$E2E"
+          if [ "$REUSE" = true ]; then exit 0; fi
+          [ "$SCOPE" = success ] && [ "$CHECKS" = success ] || exit 1
+          if [ "$NOTES_ONLY" = true ]; then exit 0; fi
+          [ "$TESTS" = success ] && [ "$E2E" = success ]
+
+      - name: Record the tree this pull request run tested
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          TREE: ${{ needs.scope.outputs.tree }}
+        run: printf '%s\n' "$TREE" > "$RUNNER_TEMP/tested-tree"
 
       - name: Upload the tested tree
-        if: ${{ success() && github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v7
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: tested-tree-${{ steps.tree.outputs.tree }}
+          name: tested-tree-${{ needs.scope.outputs.tree }}
           path: ${{ runner.temp }}/tested-tree
           if-no-files-found: error
           retention-days: 7
