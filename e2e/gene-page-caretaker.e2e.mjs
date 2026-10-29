@@ -139,6 +139,9 @@ test("every reader sees a gene's caretaker on its page", async (t) => {
             insideRail: box.left >= rail.left - 1 && box.right <= rail.right + 1,
             railOverflow: railEl.scrollWidth - railEl.clientWidth,
             chips: document.querySelectorAll("[data-icono-caretaker-open]").length,
+            // The line grows a phone's toolbar by a row after the skeleton, which
+            // can't know about it; that is only fine while the toolbar is below the fold.
+            toolbarBelowFold: innerWidth > 720 || rail.top + scrollY > innerHeight,
             // Phones: the card ends just under its footer (up to 114 px of empty
             // card at 360 px before 2026-10-29).
             emptyCardBelowSheet:
@@ -162,6 +165,7 @@ test("every reader sees a gene's caretaker on its page", async (t) => {
             insideRail: true,
             railOverflow: 0,
             chips: own ? 1 : 0,
+            toolbarBelowFold: true,
             emptyCardBelowSheet: 0,
           },
           where,
