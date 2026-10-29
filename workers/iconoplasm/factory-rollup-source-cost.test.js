@@ -6,16 +6,15 @@ import test from "node:test"
 import { rebuildGenerationRequestFactoryOptionRollupsBatch } from "../iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 
-// The seed takes most of this test's time: it puts 10,000 portraits in one
-// style, and the style-card triggers rebuild that style's card for every
-// published row, about 2 ms each here. Seeding and the sparse phase's delete
-// took 70 s on a laptop and over 120 s on a CI runner (2026-10-28), while the
-// queries under test take under 0.2 s. The largest real style had 42
-// portraits on the 2026-10-26 copy, so the triggers cost production nothing
-// like this; the limit only has to leave a slow runner room.
+// 1,000 portraits in the measured style beside 2,000 in another. The largest
+// real style had 42 portraits on the 2026-10-26 copy, so this is still 24
+// times production. The read bounds below scale with the seed: a query that
+// touches the unrelated style reads 2,000 more rows and fails them. The seed
+// used to be 10,000 beside 20,000; the style-card triggers made that seed alone
+// cost over 2 minutes of every CI run (2026-10-28) for the same verdict.
 test(
   "factory totals, previews and ranking share one source read beside unrelated growth",
-  { timeout: 300000 },
+  { timeout: 60000 },
   async (t) => {
     const require = createRequire(import.meta.url)
     const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -70,10 +69,10 @@ test(
         await db.batch(definitions.slice(offset, offset + 20).map(({ sql }) => db.prepare(sql)))
       await db
         .prepare(
-          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<30000)
+          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<3000)
       INSERT INTO icono_portrait_assets(gene_symbol,asset_sha256,vision_id,emulsion_id,status,created_at,r2_key_full,r2_key_thumb)
-      SELECT 'G'||n,printf('%064x',n),CASE WHEN n<=10000 THEN 'anima-v1-1' ELSE 'anima-v1-2' END,
-      CASE WHEN n<=10000 THEN 'A1-1' ELSE 'A1-2' END,'approved','2026-09-01','full','thumb' FROM ids`,
+      SELECT 'G'||n,printf('%064x',n),CASE WHEN n<=1000 THEN 'anima-v1-1' ELSE 'anima-v1-2' END,
+      CASE WHEN n<=1000 THEN 'A1-1' ELSE 'A1-2' END,'approved','2026-09-01','full','thumb' FROM ids`,
         )
         .run()
       await db
@@ -102,9 +101,9 @@ test(
         ).results
         assert.equal(state.length, 1)
         const row = state[0]
-        assert.equal(row.image_count, 10000)
-        assert.equal(row.live_count, density === "dense" ? 3333 : 0)
-        assert.equal(row.score, density === "dense" ? 9998 : 0)
+        assert.equal(row.image_count, 1000)
+        assert.equal(row.live_count, density === "dense" ? 333 : 0)
+        assert.equal(row.score, density === "dense" ? 1003 : 0)
         assert.equal(row.vote_h_index, density === "dense" ? 6 : 0)
         assert.deepEqual(
           JSON.parse(row.preview_assets_json).map((asset) => asset.gene_symbol),
@@ -113,18 +112,18 @@ test(
         // Both bounds reject the former three-source query. The materialization
         // hint alone regressed sparse data; both populations must stay covered.
         // The per-gene example ranking (B-896) is one sort of the selected
-        // portraits, measured at exactly 4 rows each: 40,000 here, in both
+        // portraits, measured at exactly 4 rows each: 4,000 here, in both
         // populations and on the repeat.
         assert.ok(
-          receipt.meta.rows_read < (density === "dense" ? 135000 : 122000),
+          receipt.meta.rows_read < (density === "dense" ? 13500 : 12100),
           JSON.stringify(receipt.meta),
         )
         assert.equal(receipt.meta.rows_written, 3)
         t.diagnostic(
           JSON.stringify({
             density,
-            selectedAssets: 10000,
-            unrelatedAssets: 20000,
+            selectedAssets: 1000,
+            unrelatedAssets: 2000,
             reads: receipt.meta.rows_read,
             writes: receipt.meta.rows_written,
           }),
@@ -140,7 +139,8 @@ test(
         ])
         const repeated = meter.finish()
         assert.equal(repeated.rows_written, 0, JSON.stringify(repeated))
-        assert.ok(repeated.rows_read < 200000, JSON.stringify(repeated))
+        // 17,358 dense and 16,025 sparse on 2026-10-29.
+        assert.ok(repeated.rows_read < 18000, JSON.stringify(repeated))
         assert.equal(
           (
             await db
