@@ -30,7 +30,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=2e8c57fa45dbe7b8"
+} from "./home-play-strip.js?v=79e05fa3cae40588"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -48,7 +48,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips } from "./candidate-strip.js?v=06cec6e8e7de16ba"
+import { installCandidateStrips } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -3525,7 +3525,17 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         title: "Want more cards? Hover over gene names on other websites.",
         note: "When you are logged in, your Iconoplasm add-on will record discoveries in the archive above.",
         steps: [],
-        actions: [],
+        // Somewhere to go next (owner, 2026-10-29): one Wikipedia table of 453
+        // genes, each row a CD name, its other names and what it does, with
+        // no photos. Chosen over 100 other gene pages for lighting up from the
+        // first screen.
+        actions: [
+          {
+            href: "https://en.wikipedia.org/wiki/List_of_human_clusters_of_differentiation",
+            label: "Wikipedia's List of human clusters of differentiation",
+            plain: true,
+          },
+        ],
       }
     }
     if (browser && browser.isMobile && browser.family !== "firefox") {
@@ -3614,11 +3624,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<a class="' +
         (action.subtle
           ? "icono-toolbar-link icono-install-link icono-install-link--subtle"
-          : "icono-button icono-button--primary icono-install-link") +
+          : action.plain
+            ? "icono-button icono-install-link"
+            : "icono-button icono-button--primary icono-install-link") +
         '" href="' +
         esc(action.href) +
         '" target="_blank" rel="noopener noreferrer">' +
         esc(action.label || "Open") +
+        (action.plain ? '<span aria-hidden="true">↗</span>' : "") +
         "</a>"
       )
     }
@@ -3851,8 +3864,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // (B-1173), with the add-on or without it, until they have found all four
   // (owner, 2026-10-28). The starters among their finds (guestFinds, read
   // before the feed's first page) are face up. A catalogue that cannot draw
-  // the starters gets the install card. onCount(n) gets the reader's finds
-  // for the "Your discoveries" tab.
+  // the starters gets the install card. onCount(n, symbol) gets the reader's
+  // finds for the "Your discoveries" tab, and the starter just found.
   //
   // With no finds the strip is the whole tab: the page takes its layout so
   // the starters' feed never shows and then jumps away. With finds
@@ -3939,7 +3952,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             // The same browser-local shelf as a gene page visit: no request.
             websiteGuestDiscoveries.remember(symbol)
             have.add(symbol)
-            onCount(have.size)
+            onCount(have.size, symbol)
           },
           onOpen: function () {
             var steps = appendHomeInstallCard(container)
@@ -9815,7 +9828,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       },
       onPage: function (_payload, segment) {
         syncCrawlableNextLink(_payload, segment)
-        if (segment.startIndex === 0) {
+        // A find on the strip redraws the gallery under it (countGuestFinds);
+        // the strip and the cards around it stay as they are.
+        if (segment.startIndex === 0 && !document.querySelector("[data-icono-home-play]")) {
           var auxiliary = document.getElementById("icono-home-auxiliary")
           auxiliary.hidden = false
           if (useClassicGallery || galleryState.authenticated || galleryState.sharedDiscoveries) {
@@ -9907,12 +9922,30 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       window.history[push ? "pushState" : "replaceState"](state, "", visibleUrl)
     }
 
-    function countGuestFinds(count) {
+    function countGuestFinds(count, symbol) {
       var main = document.getElementById("icono-main")
       if (main) main.classList.remove("icono-page-main--lead-pending")
       if (disposed) return
       galleryState.guestDiscoveryCount = count
       syncCollectionChrome()
+      if (symbol) showGuestFind(symbol)
+    }
+
+    // A starter found on the strip joins the reader's gallery under it the
+    // same moment, first, as readGuestFinds orders it on the next visit. With
+    // no finds before, there is no gallery: the four cards on the strip are
+    // the reader's collection so far.
+    function showGuestFind(symbol) {
+      if (guestFinds.indexOf(symbol) !== -1) return
+      var hadGallery = guestFinds.length > 0
+      guestFinds = [symbol].concat(guestFinds)
+      if (!hadGallery || !galleryState.ready || currentUser || galleryState.sharedDiscoveries)
+        return
+      galleryState.discoveryEntries = guestDiscoveryEntries()
+      galleryState.sortedDiscoveries = galleryState.discoveryEntries.slice()
+      galleryState.discoveredCount = galleryState.sortedDiscoveries.length
+      syncCollectionChrome()
+      void feedController.reset({ offset: 0, cursor: "", page: 1 })
     }
 
     // The strip's links open other sites in a new tab. A signed-out reader

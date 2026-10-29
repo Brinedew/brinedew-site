@@ -4415,15 +4415,24 @@ html[saved-theme="dark"] .icono-play-check {
 
 /* The add-on on Wikipedia and the UCSC Genome Browser, cut to the cards'
    7:9, each in its browser window. For a reader with the add-on, the window
-   and the page's name under it are one link. */
+   and the page's name under it are one link. The windows sit in the gene
+   page's candidate strip: side by side where both fit, and on a phone one
+   window with the edge of the next, as wide as a candidate tile. */
 .icono-play-sites {
   flex: 1 1 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.icono-play-sites-track {
+  display: flex;
+  align-items: flex-start;
   gap: 0.6rem;
+  padding-block: 0.2rem;
+  touch-action: pan-y pinch-zoom;
 }
 
 .icono-play-site {
+  flex: 0 0 calc(50% - 0.3rem);
   display: grid;
   align-content: start;
   gap: 0.5rem;
@@ -4431,6 +4440,13 @@ html[saved-theme="dark"] .icono-play-check {
   margin: 0;
   color: inherit;
   text-decoration: none;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 640px) {
+  .icono-play-site {
+    flex-basis: clamp(16rem, 78%, 17.5rem);
+  }
 }
 
 .icono-play-site .icono-play-window > img {
@@ -4498,8 +4514,8 @@ a.icono-play-site:focus-visible .icono-play-site-label {
     font-size: 1.05rem;
   }
 
-  /* Two windows side by side leave about 170 px each: the address keeps
-     the room that the window controls would take. */
+  /* A phone's window is about 280 px wide: the address keeps the room that
+     the window controls would take. */
   .icono-play-site .icono-play-dots {
     display: none;
   }
@@ -6398,7 +6414,7 @@ a.icono-clan-ae:hover {
 }
 
 .icono-candidate-strip:not(.is-strip-ready) .icono-candidate-strip-progress,
-.icono-candidate-strip:has([data-icono-strip-nav][hidden]) .icono-candidate-strip-progress {
+.icono-candidate-strip.is-strip-still .icono-candidate-strip-progress {
   display: none;
 }
 

@@ -5,6 +5,8 @@
 // up in the Archive below, and the find counts the same moment. Under the
 // four cards, more card backs fade into the way to find the rest.
 
+import { installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
+
 // The signed-out Archive's four starters, one line each.
 // The owner asked for a sentence per gene on 2026-10-27 and approved these.
 export const HOME_STARTERS = Object.freeze([
@@ -181,8 +183,13 @@ export function homePlayActionMarkup(action) {
   }
   html += '<p class="icono-install-note">' + esc(action.note) + "</p>"
   if (action.sites) {
+    // The gene page's sideways strip (candidate-strip.js): side by side on a
+    // computer, one window and the edge of the next on a phone (owner,
+    // 2026-10-29: side by side on a phone they were unreadable).
     html +=
-      '<div class="icono-play-sites">' +
+      '<div class="icono-play-sites icono-candidate-strip">' +
+      '<div class="icono-candidate-strip-viewport" data-icono-strip-viewport>' +
+      '<div class="icono-play-sites-track">' +
       SITES.map((site) => {
         const picture =
           '<span class="icono-play-window">' +
@@ -202,6 +209,8 @@ export function homePlayActionMarkup(action) {
               '</span><span aria-hidden="true">↗</span></span></a>'
           : '<div class="icono-play-site">' + picture + "</div>"
       }).join("") +
+      "</div></div>" +
+      '<div class="icono-candidate-strip-progress" aria-hidden="true"><span data-icono-strip-progress></span></div>' +
       "</div>"
   }
   const label = glyphMarkup(action.glyph) + "<span>" + esc(action.label) + "</span>"
@@ -312,6 +321,7 @@ export function mountHomePlayStrip(container, options) {
   for (const card of root.querySelectorAll(".icono-play-slot-front > *")) {
     options.onCardMounted(card)
   }
+  installSwipeStrip(root.querySelector(".icono-play-sites"))
 
   // Once the install steps are open under the strip, the button has done its
   // job; the note and the two sites stay.
