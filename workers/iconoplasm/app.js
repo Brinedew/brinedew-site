@@ -249,14 +249,6 @@ async function refuseCrossSiteCookieMutation(c, next) {
   return next()
 }
 
-// ICONOPLASM_SCHEMA_TRANSITION=1 (the reader-recovery containment) pauses
-// every D1 writer.
-async function outsideMaintenance(c, next) {
-  if (c.env?.ICONOPLASM_SCHEMA_TRANSITION === "1")
-    return c.json({ error: "The site is in a database maintenance window" }, 503)
-  return next()
-}
-
 export function createIconoplasmApp({
   legacy,
   publishGene,
@@ -390,7 +382,6 @@ export function createIconoplasmApp({
   app.post(
     "/api/iconoplasm/admin/portraits/register",
     factoryAuth,
-    outsideMaintenance,
     zValidator("json", registerSchema),
     shedBatchWork(
       (c) => c.req.valid("json").criticality,
@@ -471,7 +462,6 @@ export function createIconoplasmApp({
   app.post(
     "/api/iconoplasm/admin/portraits/placeholders",
     factoryAuth,
-    outsideMaintenance,
     zValidator("json", placeholdersSchema),
     shedBatchWork(
       () => "sheddable_plus",
@@ -500,7 +490,6 @@ export function createIconoplasmApp({
   app.post(
     "/api/iconoplasm/admin/publication/republish",
     factoryAuth,
-    outsideMaintenance,
     zValidator(
       "json",
       z.object({
@@ -535,7 +524,6 @@ export function createIconoplasmApp({
   app.put(
     "/api/iconoplasm/admin/genes/:symbol/text",
     factoryAuth,
-    outsideMaintenance,
     bodyLimit({
       maxSize: 64 * 1024,
       onError: (c) => c.json({ ok: false, code: "BODY_TOO_LARGE" }, 413),
