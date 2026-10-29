@@ -249,7 +249,8 @@ async function refuseCrossSiteCookieMutation(c, next) {
   return next()
 }
 
-// A data_maintenance release pauses every D1 writer.
+// ICONOPLASM_SCHEMA_TRANSITION=1 (the reader-recovery containment) pauses
+// every D1 writer.
 async function outsideMaintenance(c, next) {
   if (c.env?.ICONOPLASM_SCHEMA_TRANSITION === "1")
     return c.json({ error: "The site is in a database maintenance window" }, 503)

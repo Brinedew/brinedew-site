@@ -112,7 +112,7 @@ is, and does not depend on which isolate asks. Building it scans `proteins` once
   limit is 2 MB.
 - `workers/lib/protein-store.js` creates the table, its one row and its three
   triggers on first use, in one batch. A normal deploy applies no migration to
-  this database, and the maintenance release refuses a migration file that has
+  this database, and the release refuses a migration file that has
   no reviewed cost-plan entry, so there is deliberately no file in `migrations/`
   for it.
 - Freshness is automatic. A trigger on `proteins` clears the stored pool and

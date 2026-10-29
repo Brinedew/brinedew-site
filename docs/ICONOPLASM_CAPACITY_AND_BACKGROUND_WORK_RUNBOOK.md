@@ -85,19 +85,16 @@ pending or the toml's `crons` differ from the installed schedules. The same
 script verifies the installed triggers equal the toml's after the last Worker
 deploy and fails the release otherwise. The toml owns the trigger set: record a
 trigger change there, never by hand on the provider. `scripts/verify-code-release.mjs` refuses the push with
-`CODE_RELEASE_REQUIRES_MAINTENANCE` when the changes since the installed
-revision include an unapplied migration that is not reviewed as online, or a
-change to `cloudflare/deployment-topology.json` or
-`cloudflare/iconoplasm-crawler-policy.json`. It also refuses while a schema
-transition or reader recovery is active.
+`MIGRATION_NOT_ONLINE` when the changes since the installed revision include
+an unapplied migration that is not reviewed as online. It also refuses while a
+schema transition or reader recovery is active. Every release reconciles the
+crawler policy (`cloudflare/iconoplasm-crawler-policy.json`) and the Worker
+routes, so a change to either ships with ordinary code.
 
-For any other reviewed data or topology change, dispatch that same workflow
-with `data_maintenance=true`. This is the only path that pauses the
-application, applies reviewed migrations that are not online
-(`scripts/apply-online-d1-migrations.mjs --maintenance`, with the same price
-and size guards), and reconciles topology. It is intentionally explicit because those operations consume
-the shared account allowance and can pause application work. It is not a
-routine code-release fallback.
+There is no paused release. A schema change that no single migration can make
+online ships as several online ones: add the new shape, move readers and
+writers to it, then drop the old one. Each is priced and guarded like any other
+(`scripts/apply-online-d1-migrations.mjs`).
 
 Record source revision, exact CI result, provider deployment, activated
 revision, and a fresh user-visible operation separately. If a push refuses,
@@ -133,9 +130,8 @@ the Iconoplasm repository).
 
 ## Current inspection commands
 
-For explicit data or topology maintenance, dispatch the production workflow
-with `data_maintenance=true`. Read actual D1 query and row counts from the
-provider when diagnosing exhaustion; a synthetic capacity model cannot
+Read actual D1 query and row counts from the provider when diagnosing
+exhaustion; a synthetic capacity model cannot
 establish current visitor demand or release readiness.
 
 Validate architecture ownership:

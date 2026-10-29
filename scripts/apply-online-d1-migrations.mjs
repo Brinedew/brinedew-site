@@ -1,17 +1,15 @@
-// B-847: reviewed online D1 migrations apply on the ordinary release.
-//
-// A migration that both the running code and the new code tolerate (dropping
-// objects nothing reads, adding defaulted columns, backfilling a
-// version-checked accelerator, CREATE INDEX IF NOT EXISTS) no longer needs the
-// paused maintenance protocol: D1 serializes queries per database, so readers
-// never see a half state. The review marks such a migration `"online": true`
-// in cloudflare/operation-cost-migration-plan.json together with its cost
+// B-847: reviewed D1 migrations apply on the ordinary release, with the app
+// live. Every migration must be one that both the running code and the new
+// code tolerate (dropping objects nothing reads, adding defaulted columns,
+// backfilling a version-checked accelerator, CREATE INDEX IF NOT EXISTS): D1
+// serializes queries per database, so readers never see a half state. The
+// review marks such a migration `"online": true` in
+// cloudflare/operation-cost-migration-plan.json together with its cost
 // prediction and optional size guards. This step runs before the Worker
 // deploy; a refusal stops the release before anything changes, and the
-// installed code keeps serving. Migrations without `online` need the paused
-// maintenance release (`data_maintenance=true`), which runs this same step with
-// `--maintenance` once the application is paused: the same review, price and
-// guards, without the online requirement (B-1067).
+// installed code keeps serving. A change that no single migration can make
+// online ships as several: add the new shape, move readers and writers to it,
+// then drop the old one.
 import { execFileSync } from "node:child_process"
 import { readFileSync, readdirSync } from "node:fs"
 import { pathToFileURL } from "node:url"
@@ -55,7 +53,7 @@ function isReviewedHistoricalMigration(resource, name, applied) {
   )
 }
 
-export function planOnlineMigrations({ manifest, files, applied, maintenance = false }) {
+export function planOnlineMigrations({ manifest, files, applied }) {
   if (manifest?.schema !== "iconoplasm.migrationCostPlan.v1" || !manifest.migrations)
     throw new Error("COST_MIGRATION_PLAN_REQUIRED")
   const pending = []
@@ -73,8 +71,7 @@ export function planOnlineMigrations({ manifest, files, applied, maintenance = f
       const key = `${resource}/${name}`
       const reviewed = manifest.migrations[key]
       if (!reviewed) throw new Error(`COST_MIGRATION_NOT_REVIEWED: ${key}`)
-      if (reviewed.online !== true && !maintenance)
-        throw new Error(`CODE_RELEASE_REQUIRES_MAINTENANCE: ${key}`)
+      if (reviewed.online !== true) throw new Error(`MIGRATION_NOT_ONLINE: ${key}`)
       requirePrediction(reviewed.prediction, key)
       total.rows_read += reviewed.prediction.rows_read
       total.rows_written += reviewed.prediction.rows_written
@@ -185,7 +182,6 @@ async function main() {
     manifest,
     files: sourceFiles(),
     applied: await readApplied({ accountId, token, ids }),
-    maintenance: process.argv.includes("--maintenance"),
   })
   if (!plan.pending.length || process.argv.includes("--plan-only")) {
     console.log(

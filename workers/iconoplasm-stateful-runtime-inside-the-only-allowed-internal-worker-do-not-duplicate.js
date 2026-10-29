@@ -18370,8 +18370,8 @@ export async function handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefu
     return json({ error: "Not found" }, 404, { "Cache-Control": "no-store" })
   }
 
-  // A maintenance release pauses the application here while its reviewed
-  // schema changes apply, so no request races them.
+  // The reader-recovery containment (ICONOPLASM_SCHEMA_TRANSITION=1) pauses
+  // the application here; only its own exact portrait reads get through.
   if (env.ICONOPLASM_SCHEMA_TRANSITION === "1") {
     return json({ code: "ICONOPLASM_SCHEMA_TRANSITION" }, 503, {
       "Cache-Control": "no-store",

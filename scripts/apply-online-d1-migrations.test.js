@@ -16,8 +16,7 @@ import {
 //
 // Failure modes, written before the code:
 // 1. An unreviewed pending migration applies.
-// 2. A reviewed migration that is not declared online applies without the
-//    maintenance protocol.
+// 2. A reviewed migration that is not declared online applies.
 // 3. One database is migrated before another database's refusal is known.
 // 4. A pending file sorts before an already-applied one (history diverged or
 //    out of order) and wrangler applies it anyway.
@@ -65,7 +64,7 @@ test("reviewed online migrations are planned in file order across databases", ()
   assert.deepEqual(plan.resources, ["iconoplasm"])
 })
 
-test("an unreviewed or maintenance-only pending migration refuses before anything applies", () => {
+test("an unreviewed or not-online pending migration refuses before anything applies", () => {
   assert.throws(
     () =>
       planOnlineMigrations({
@@ -94,7 +93,7 @@ test("an unreviewed or maintenance-only pending migration refuses before anythin
         files: { iconoplasm: ["0112_rebuild.sql"] },
         applied: { iconoplasm: new Set() },
       }),
-    /CODE_RELEASE_REQUIRES_MAINTENANCE: iconoplasm\/0112_rebuild.sql/,
+    /MIGRATION_NOT_ONLINE: iconoplasm\/0112_rebuild.sql/,
   )
 })
 

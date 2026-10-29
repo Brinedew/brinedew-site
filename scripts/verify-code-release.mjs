@@ -5,13 +5,12 @@ import { ONLINE_MIGRATION_DATABASES } from "./apply-online-d1-migrations.mjs"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
-// Wrangler route/config edits ship with the tested code. Data migrations and
-// the named account policy/topology owners require a maintenance release,
-// except reviewed online migrations, which apply-online-d1-migrations.mjs runs
-// before the Worker deploy (B-847). The cost plan itself is ordinary code: that
-// step validates every pending entry before anything applies.
-const MAINTENANCE_PATH =
-  /^(?:cloudflare\/(?:deployment-topology|iconoplasm-crawler-policy)\.json$)|\.sql$/i
+// Wrangler route/config edits and the account policy owners ship with the
+// tested code; the release reconciles them. A data migration ships only when
+// it is already applied or reviewed online, which apply-online-d1-migrations.mjs
+// runs before the Worker deploy (B-847). The cost plan itself is ordinary code:
+// that step validates every pending entry before anything applies.
+const MIGRATION_PATH = /\.sql$/i
 const MIGRATION_BINDINGS = Object.freeze({
   migrations: "DB",
   "workers/benchmark/migrations": "DB",
@@ -40,8 +39,7 @@ export async function readAppliedChangedMigrations({
   for (const path of changedPaths) {
     const binding = migrationBinding(path)
     if (!binding) continue
-    if (!existsSync(new URL(`../${path}`, import.meta.url)))
-      throw new Error("CODE_RELEASE_REQUIRES_MAINTENANCE")
+    if (!existsSync(new URL(`../${path}`, import.meta.url))) throw new Error("MIGRATION_NOT_ONLINE")
     const rows = byBinding.get(binding) || []
     rows.push({ path, name: path.slice(path.lastIndexOf("/") + 1) })
     byBinding.set(binding, rows)
@@ -125,11 +123,11 @@ export function verifyCodeReleaseScope({
   if (
     changedPaths.some(
       (path) =>
-        MAINTENANCE_PATH.test(path) &&
+        MIGRATION_PATH.test(path) &&
         (!migrationBinding(path) || (!appliedMigrations.has(path) && !onlineMigrations.has(path))),
     )
   )
-    throw new Error("CODE_RELEASE_REQUIRES_MAINTENANCE")
+    throw new Error("MIGRATION_NOT_ONLINE")
   return { installed_sha: installed, head_sha: headSha, changed_paths: changedPaths }
 }
 
