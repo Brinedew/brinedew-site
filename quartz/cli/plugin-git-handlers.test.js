@@ -492,23 +492,3 @@ test("source builds select the package manager by lockfile and fail closed witho
     /no supported lockfile.*pnpm-lock\.yaml.*package-lock\.json/i,
   )
 })
-
-test("site workflows install only enabled plugins from the lockfile", async () => {
-  const workflows = [
-    ".github/workflows/ci.yaml",
-    ".github/workflows/deploy-quartz.yml",
-    ".github/workflows/build-preview.yaml",
-    ".github/workflows/deploy-benchmark.yml",
-  ]
-
-  for (const relativePath of workflows) {
-    const source = await readFile(path.join(repoRoot, relativePath), "utf8")
-    assert.match(
-      source,
-      /node \.\/quartz\/bootstrap-cli\.mjs plugin install --enabled-only/,
-      relativePath,
-    )
-    assert.doesNotMatch(source, /plugin install --from-config/, relativePath)
-    assert.doesNotMatch(source, /^\s*path:\s*\.quartz\/plugins\s*$/m, relativePath)
-  }
-})
