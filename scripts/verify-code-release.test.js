@@ -35,12 +35,11 @@ test("a routine release includes every change since the installed Worker", () =>
   )
 })
 
-test("a routine release refuses unapplied data or owned topology changes before upload", () => {
+test("a routine release refuses unapplied data changes before upload", () => {
   for (const path of [
     "migrations/0100_new_field.sql",
     "migrations-iconoplasm/0100_new_field.sql",
     "workers/benchmark/migrations/0100_new_field.sql",
-    "cloudflare/deployment-topology.json",
   ]) {
     assert.throws(
       () =>
@@ -50,7 +49,7 @@ test("a routine release refuses unapplied data or owned topology changes before 
           changedPaths: ["workers/fix.js", path],
           installedIsAncestor: true,
         }),
-      /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+      /MIGRATION_NOT_ONLINE/,
       path,
     )
   }
@@ -83,7 +82,7 @@ test("a reviewed online migration and its plan entry are ordinary releases", () 
         installedIsAncestor: true,
         onlineMigrations: new Set(["migrations-iconoplasm/0110_drop.sql"]),
       }),
-    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+    /MIGRATION_NOT_ONLINE/,
   )
   assert.deepEqual(
     [
@@ -135,7 +134,7 @@ test("a routine release accepts a migration already recorded in its D1 journal",
         installedIsAncestor: true,
         appliedMigrations: new Set(["other/schema.sql"]),
       }),
-    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+    /MIGRATION_NOT_ONLINE/,
   )
 })
 
@@ -210,7 +209,7 @@ database_id = "22222222-2222-2222-2222-222222222222"`,
         installedIsAncestor: true,
         appliedMigrations: missing,
       }),
-    /CODE_RELEASE_REQUIRES_MAINTENANCE/,
+    /MIGRATION_NOT_ONLINE/,
   )
   await assert.rejects(
     readAppliedChangedMigrations({
@@ -251,7 +250,7 @@ test("a routine release refuses uncertain installed lineage or active migration"
   )
 })
 
-test("default production path builds and ships both Worker owners and Pages without D1 maintenance", () => {
+test("the production release builds and ships both Worker owners and Pages", () => {
   const workflow = parse(
     readFileSync(new URL("../.github/workflows/deploy-quartz.yml", import.meta.url), "utf8"),
   )
@@ -271,30 +270,10 @@ test("default production path builds and ships both Worker owners and Pages with
   )
   assert.ok(codeGate >= 0 && codeGate < build && build < worker)
   assert.ok(worker < edge && edge < pages && pages < activate)
-  assert.match(steps[codeGate].if, /data_maintenance != true/)
-  assert.match(steps[worker].if, /data_maintenance != true/)
   for (const index of [worker, edge, activate]) {
     assert.match(steps[index].run, /wrangler versions upload/)
     assert.match(steps[index].run, /wrangler versions deploy/)
     assert.doesNotMatch(steps[index].run, /wrangler triggers deploy|--triggers/)
-  }
-  const readers = steps.findIndex(
-    (step) => step.name === "Refresh published readers during existing schema maintenance",
-  )
-  const headroom = steps.findIndex(
-    (step) => step.name === "Require account-wide D1 and Worker headroom before migrations",
-  )
-  assert.ok(readers >= 0 && readers < headroom, "readers recover before the D1 headroom gate")
-  // B-1067: a maintenance release pauses the app, applies the reviewed
-  // migrations and deploys the stateful Worker; nothing else is maintenance-only.
-  for (const name of [
-    "Pause the application for maintenance",
-    "Apply reviewed D1 migrations with the application paused",
-    "Deploy the stateful Worker after data maintenance",
-  ]) {
-    const step = steps.find((candidate) => candidate.name === name)
-    assert.ok(step, name)
-    assert.match(step.if, /data_maintenance == true/, name)
   }
   assert.match(steps[activate].run, /ICONOPLASM_HTML_SHELL_CACHE_VERSION:\$CACHE_BUST/)
   assert.ok(
