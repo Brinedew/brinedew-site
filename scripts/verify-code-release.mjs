@@ -5,13 +5,6 @@ import { ONLINE_MIGRATION_DATABASES } from "./apply-online-d1-migrations.mjs"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
-// On 2026-10-29 the repository's history was rewritten to remove a personal
-// identifier, so every commit after 2026-06-17 got a new SHA with the same
-// tree. The installed revision Cloudflare still names maps to its rewritten
-// twin here. Delete this entry once a release has installed a rewritten SHA.
-const REWRITTEN_REVISIONS = Object.freeze({
-  "7752229d78a0ec65ec57696f01eb2be25dd7b44b": "34f39bc20a94e24a7583baa33b0c8c1bce07822e",
-})
 // Wrangler route/config edits and the account policy owners ship with the
 // tested code; the release reconciles them. A data migration ships only when
 // it is already applied or reviewed online, which apply-online-d1-migrations.mjs
@@ -139,11 +132,7 @@ export function verifyCodeReleaseScope({
 async function main() {
   const headSha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
   if (headSha !== process.env.GITHUB_SHA) throw new Error("CODE_RELEASE_HEAD_UNKNOWN")
-  const liveState = await readIconoplasmReleaseState()
-  const state = {
-    ...liveState,
-    cache_version: REWRITTEN_REVISIONS[liveState.cache_version] || liveState.cache_version,
-  }
+  const state = await readIconoplasmReleaseState()
   const installed = state.cache_version
   const ancestor = SHA.test(installed || "")
     ? spawnSync("git", ["merge-base", "--is-ancestor", installed, headSha], {
