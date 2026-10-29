@@ -145,6 +145,4 @@ Mobile publishing is a separate release track, not a rename of the desktop cards
 - Edge Android advertises mobile extensions, but Iconoplasm still needs a real install-path verification before the site should promise a live mobile Edge install.
 - Chrome Android does not have the normal Chrome Web Store extension install path. Do not show Chrome Android users desktop sideload instructions.
 
-AMO-specific listing copy lives in:
-
-- `iconoplasm-extension/store-assets/AMO-LISTING-COPY.md`
+The store listings (copy, store IDs, Chrome's privacy answers) live in the Linear document [Store listings](https://linear.app/brinedew/document/store-listings-chrome-edge-firefox-copy-ids-privacy-answers-eb72e92530d2), not in this public repo.
