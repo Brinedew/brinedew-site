@@ -226,6 +226,8 @@ test("1, 2, 3: a swap moves both roles in one step, once, and starts both cooldo
   const h = harness(t)
   await h.claim("MFNG", ALICE)
   await h.claim("WEE1", BOB)
+  assert.deepEqual(h.settled, ["MFNG", "WEE1"], "each gene page shows its new caretaker")
+  h.settled.length = 0
 
   const offer = (await h.page("MFNG", BOB)).request
   assert.equal(offer.available, true)
@@ -299,7 +301,11 @@ test("1, 2, 3: a swap moves both roles in one step, once, and starts both cooldo
       ["accepted", BOB],
     ],
   )
-  assert.deepEqual(h.settled, [], "no supervote moved, so no election ran")
+  assert.deepEqual(
+    h.settled.sort(),
+    ["MFNG", "WEE1"],
+    "both gene pages show the swapped caretakers",
+  )
 })
 
 test("1, 4: a handover gives the gene to someone with none; the other requests for it end quietly", async (t) => {
@@ -570,6 +576,7 @@ test("8: accepting a swap takes both supervotes out of their elections", async (
   const h = harness(t)
   await h.claim("MFNG", ALICE)
   await h.claim("WEE1", BOB)
+  h.settled.length = 0
   h.db.database.exec(
     `UPDATE icono_caretaker_assignments
         SET supervote_asset_sha256 = '${"a".repeat(64)}', supervote_direction = 1,

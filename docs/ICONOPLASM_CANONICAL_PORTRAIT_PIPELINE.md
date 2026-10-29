@@ -16,7 +16,10 @@ Iconoplasm publishes two objects on Bunny:
 - `genes/v3/<SYMBOL>.json` is the whole published record of one gene: the
   projected record, the winning portrait, the complete candidate pool and
   `published_at`. The record carries the shown manifestation prose and never
-  the Tags (the caretaker panel promises they stay private). One pure builder
+  the Tags (the caretaker panel promises they stay private). It also names the
+  gene's caretaker (`caretaker`: Discord name, Discord picture and start date,
+  or null) whenever the role is active or suspended, as `/caretakers` does, so
+  every reader sees them at no Worker cost. One pure builder
   (`buildStableGeneObject`, `workers/lib/iconoplasm-stable-gene-object.js`) makes it,
   and `publishIconoplasmGeneStableObject` in the stateful runtime writes it.
   Whoever changes a gene rebuilds its stable gene object in the same request:
@@ -24,6 +27,8 @@ Iconoplasm publishes two objects on Bunny:
     (`POST /api/iconoplasm/admin/portraits/register`, Hono, `workers/iconoplasm/app.js`),
     up to 8 genes and 100 portraits a call (the laptop sends 4 and 50);
   - **a vote or supervote** rebuilds after the response;
+  - **a caretaker role change** (claim, accept, end, swap, handover, erasure)
+    rebuilds every gene whose caretaker changed;
   - **the rebuild route** (`POST /api/iconoplasm/admin/publication/republish`)
     serves the bulk sweep (`scripts/republish-iconoplasm-gene-objects.mjs`) and
     the catalogue run's repairs.

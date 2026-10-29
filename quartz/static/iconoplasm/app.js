@@ -1388,11 +1388,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  // A picture through our avatar proxy, or Discord's own address as the gene
+  // object and /caretakers carry it (no Worker request per face).
+  function caretakerAvatarAllowed(url) {
+    return (
+      url.indexOf("/api/avatar?src=") === 0 ||
+      /^https:\/\/cdn\.discordapp\.com\/(avatars|embed\/avatars)\//.test(url)
+    )
+  }
+
   function renderCaretakerIdentityMarkup(caretaker, className) {
     var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
     var username = String(profile.username || "").trim()
     var avatarUrl = String(profile.avatar_url || "").trim()
-    if (!username || avatarUrl.indexOf("/api/avatar?src=") !== 0) return ""
+    if (!username || !caretakerAvatarAllowed(avatarUrl)) return ""
     return (
       '<div class="icono-caretaker-identity ' +
       esc(className || "") +
@@ -1406,9 +1415,47 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
+  // The gene's caretaker, for every reader: picture, name and start date, as a
+  // link to the /caretakers list (the mock the owner approved on 2026-10-29).
+  // It sits after the star and the printer and, on a bar too narrow for it, takes
+  // its own line above them (fitCanonicalToolbar). Lost in the October move to the
+  // stable gene object until the object named them.
+  function renderGeneCaretakerMarkup(caretaker) {
+    var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
+    var username = String(profile.username || "").trim()
+    var avatarUrl = String(profile.avatar_url || "").trim()
+    if (!username || !caretakerAvatarAllowed(avatarUrl)) return ""
+    var since = profile.since ? new Date(profile.since + "T00:00:00Z") : null
+    var sinceText =
+      since && !isNaN(since.getTime())
+        ? "Caretaker since " +
+          since.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "UTC",
+          })
+        : "Caretaker"
+    return (
+      '<a class="icono-gene-caretaker" href="/caretakers" data-icono-nav data-icono-gene-caretaker>' +
+      '<img src="' +
+      esc(avatarUrl) +
+      '" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer">' +
+      '<span class="icono-gene-caretaker__text"><span class="icono-gene-caretaker__name">' +
+      esc(username) +
+      '</span><span class="icono-gene-caretaker__since">' +
+      esc(sinceText) +
+      "</span></span></a>"
+    )
+  }
+
   function syncViewerCaretakerToolbarIdentity(container, isCaretaker) {
     var actions = container && container.querySelector(".icono-canonical-toolbar-actions")
     if (!actions || !currentUser) return
+    // The caretaker sees their own chip, the door to their tools, instead of the
+    // line every other reader sees.
+    var byline = container.querySelector("[data-icono-gene-caretaker]")
+    if (byline) byline.hidden = !!isCaretaker
     var existing = actions.querySelector(".icono-caretaker-identity--toolbar")
     if (!isCaretaker) {
       if (existing && existing.getAttribute("data-icono-viewer-caretaker") === "true") {
@@ -6348,8 +6395,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>' +
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
       renderCanonicalToolbarMetaMarkup(g) +
+      renderGeneCaretakerMarkup(g.caretaker) +
       '<div class="icono-canonical-toolbar-actions">' +
-      renderCaretakerIdentityMarkup(g.caretaker, "icono-caretaker-identity--toolbar") +
       // B-838: More menu. Wide bars show its items inline; narrow bars collapse them
       // behind the ... button (native popover, no JS toggling).
       '<button type="button" class="icono-button icono-button--icon icono-toolbar-more" popovertarget="icono-toolbar-menu-' +
@@ -11082,11 +11129,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!rail.isConnected || !rail.clientWidth) return
       // Measured start-aligned: a row that overflows its start edge has no
       // scrollWidth to show for it.
-      rail.classList.remove("is-collapsed")
+      rail.classList.remove("is-collapsed", "is-stacked")
       rail.classList.add("is-measuring")
+      var meta = rail.querySelector(".icono-canonical-toolbar-meta")
+      var actions = rail.querySelector(".icono-canonical-toolbar-actions")
       var overflows = function () {
-        return rail.scrollWidth > rail.clientWidth + 1
+        return (
+          rail.scrollWidth > rail.clientWidth + 1 ||
+          // A stacked bar wraps, so a row that is still too long shows as the
+          // actions dropping below the star instead of as overflow.
+          (!!meta && !!actions && actions.offsetTop >= meta.offsetTop + meta.offsetHeight)
+        )
       }
+      // The caretaker's line goes first, then the rarer actions fold.
+      var byline = rail.querySelector("[data-icono-gene-caretaker]:not([hidden])")
+      if (overflows() && byline) rail.classList.add("is-stacked")
       if (overflows()) rail.classList.add("is-collapsed")
       rail.classList.remove("is-measuring")
     }

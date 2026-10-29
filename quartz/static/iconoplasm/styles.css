@@ -897,6 +897,75 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: none;
 }
 
+/* The gene's caretaker, for every reader (the approved mock, 2026-10-29): after
+   the star and the printer on a wide bar; on a bar too narrow for it, its own
+   line above them (.is-stacked, set by fitCanonicalToolbar), so the name is
+   never dropped. */
+.icono-gene-caretaker {
+  display: flex;
+  /* Never squeezed on one line: a bar too short for it stacks it instead. */
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-inline-start: var(--icono-space-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.icono-gene-caretaker[hidden] {
+  display: none;
+}
+
+.icono-gene-caretaker img {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.icono-gene-caretaker__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-family: "IBM Plex Mono", monospace;
+  line-height: 1.25;
+}
+
+.icono-gene-caretaker__name {
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--dark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icono-gene-caretaker__since {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.icono-gene-caretaker:hover .icono-gene-caretaker__name,
+.icono-gene-caretaker:focus-visible .icono-gene-caretaker__name {
+  text-decoration: underline;
+}
+
+.icono-gene-toolbar-rail.is-stacked {
+  flex-wrap: wrap;
+}
+
+.icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker {
+  order: -1;
+  /* Edge to edge of the bar: its own width plus the bar's padding it reaches into. */
+  box-sizing: border-box;
+  flex: 0 0 calc(100% + 2 * var(--icono-space-2));
+  margin: calc(-1 * var(--icono-space-2)) calc(-1 * var(--icono-space-2)) 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
+}
+
 .icono-gene-toolbar-rail.is-measuring .icono-canonical-toolbar-actions {
   justify-content: flex-start;
 }

@@ -106,14 +106,14 @@ const OPEN_ROLE_SQL = `status IN ('pending_acceptance', 'active', 'suspended')`
 
 // The election input for one gene, as election readers select it:
 // asset_sha256, direction, active (1 while the supervote counts) and the
-// role's status. `symbolSql` is the SQL that names the gene (a parameter or a
+// role's status, with the role's account and start for the gene object. `symbolSql` is the SQL that names the gene (a parameter or a
 // column).
 // Every open role's supervote, for a join on gene_symbol.
 export const CARETAKER_SUPERVOTES_SQL = `SELECT supervote_asset_sha256 AS asset_sha256,
          supervote_direction AS direction,
          CASE WHEN supervote_asset_sha256 IS NOT NULL
                AND status IN ('active', 'suspended') THEN 1 ELSE 0 END AS active,
-         status AS assignment_status, gene_symbol
+         status AS assignment_status, gene_symbol, account_id, started_at
     FROM icono_caretaker_assignments
    WHERE ${OPEN_ROLE_SQL}`
 

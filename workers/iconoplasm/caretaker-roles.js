@@ -39,8 +39,9 @@ export const ROLE_COLUMNS = `caretaker_assignment_id, gene_symbol, account_id, s
 
 // A role that ends while its supervote names one of the gene's images takes
 // that vote out of the election (it counts only while the role is open). The
-// gene's vote version advances in the same batch, and the caller re-runs the
-// election for the genes in `reElect`.
+// gene's vote version advances in the same batch. A role change returns
+// `republish`, the genes whose shown caretaker or election changed; the caller
+// re-runs their election and rewrites their gene objects, which name the caretaker.
 export function endedSupervoteBump(db, symbol, roleId, version) {
   return geneVoteVersionBumpStatement(db, symbol, {
     whenSql: `EXISTS (SELECT 1 FROM icono_caretaker_assignments
@@ -309,7 +310,7 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
         status: existing.status,
         assignment_version: Number(existing.assignment_version),
       },
-      reElect: [],
+      republish: [],
     }
   const availability = await readClaimAvailability(db, {
     geneLocator,
@@ -407,14 +408,6 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
     if (!isConstraintError(error)) throw error
     throw claimUnavailable()
   }
-  const previousRole = previous
-    ? await first(
-        db,
-        `SELECT supervote_asset_sha256 FROM icono_caretaker_assignments
-          WHERE caretaker_assignment_id = ?`,
-        previous.caretaker_assignment_id,
-      )
-    : null
   return {
     result: {
       ok: true,
@@ -423,7 +416,9 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
       assignment_version: 1,
       gene_revision: 0,
     },
-    reElect: previousRole?.supervote_asset_sha256 ? [previous.canonical_symbol] : [],
+    republish: previous
+      ? [gene.canonical_symbol, previous.canonical_symbol]
+      : [gene.canonical_symbol],
   }
 }
 
@@ -516,6 +511,12 @@ export function changeRoleStatement(
     )
 }
 
+// Gene pages show an active or suspended caretaker (as /caretakers does), so
+// only accepting or ending a role changes what readers see.
+const SHOWN = new Set(["active", "suspended"])
+const changesShownCaretaker = (transition) =>
+  transition.from.some((status) => SHOWN.has(status)) !== SHOWN.has(transition.to)
+
 // `extraStatements` run in the same batch, after the change; each must guard
 // itself on the change having applied.
 export async function changeRole(db, input, { extraStatements = () => [] } = {}) {
@@ -568,8 +569,7 @@ export async function changeRole(db, input, { extraStatements = () => [] } = {})
   return {
     changed,
     role,
-    reElect:
-      changed && role.status === "ended" && role.supervote_asset_sha256 ? [role.gene_symbol] : [],
+    republish: changed && changesShownCaretaker(transition) ? [role.gene_symbol] : [],
     result: {
       ok: true,
       caretaker_assignment_id: role.caretaker_assignment_id,
@@ -607,12 +607,12 @@ export async function changeOwnRole(db, { geneLocator, roleId, action, accountId
 
 // B-987, B-1065 B2b: a person who asks to be erased stops looking after their
 // gene at once. Their texts stay with the gene (the erasure rule keeps content,
-// and an erased author shows as "Removed account"). Returns the genes whose
-// election lost the person's supervote.
+// and an erased author shows as "Removed account"). Returns the gene whose
+// object must be rewritten without them.
 export async function endRolesOfErasedAccount(db, accountId, now) {
   const role = await openRoleOfAccount(db, accountId)
   if (!role) return []
-  const { reElect } = await changeRole(db, {
+  const { republish } = await changeRole(db, {
     roleId: role.caretaker_assignment_id,
     action: role.status === "pending_acceptance" ? "cancel" : "end",
     expectedVersion: role.assignment_version,
@@ -621,5 +621,5 @@ export async function endRolesOfErasedAccount(db, accountId, now) {
     reason: "account_erasure_requested",
     policy: LEAVE_POLICY,
   })
-  return reElect
+  return republish
 }
