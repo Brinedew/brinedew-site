@@ -1372,13 +1372,6 @@ function normalizeDiscoveryTrigger(raw) {
   return null
 }
 
-function normalizeBooleanQueryFlag(raw) {
-  const value = String(raw || "")
-    .trim()
-    .toLowerCase()
-  return value === "1" || value === "true" || value === "yes" || value === "on"
-}
-
 function normalizeDiscoveryDwellMs(raw) {
   const dwellMs = optionalInt(raw)
   if (dwellMs == null) return null
@@ -2643,35 +2636,6 @@ function discoveryFacts(row) {
     first_discovered_at: row.first_discovered_at,
     last_encountered_at: row.last_encountered_at,
     encounter_count: row.encounter_count,
-  }
-}
-
-function mapGeneDiscoveryRow(row) {
-  const weightKg = Number(row?.weight_kg)
-  const ageYears = Number(row?.age_years)
-  return {
-    gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-    full_name: sanitizeText(row?.full_name || "", 255) || "",
-    first_discovered_at: sanitizeText(row?.first_discovered_at || "", 64) || "",
-    last_encountered_at: sanitizeText(row?.last_encountered_at || "", 64) || "",
-    encounter_count: Math.max(0, Number.parseInt(String(row?.encounter_count || "0"), 10) || 0),
-    first_source: sanitizeText(row?.first_source || "", 64) || "",
-    last_source: sanitizeText(row?.last_source || "", 64) || "",
-    first_trigger: sanitizeText(row?.first_trigger || "", 64) || "",
-    last_trigger: sanitizeText(row?.last_trigger || "", 64) || "",
-    first_dwell_ms: optionalInt(row?.first_dwell_ms),
-    last_dwell_ms: optionalInt(row?.last_dwell_ms),
-    weight_kg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
-    age_years: Number.isFinite(ageYears) && ageYears >= 0 ? ageYears : null,
-    popularity_score: wikiPageviewsForSymbol(row?.gene_symbol || ""),
-    image_upvotes: Math.max(0, Number(row?.image_upvotes || 0) || 0),
-    image_downvotes: Math.max(0, Number(row?.image_downvotes || 0) || 0),
-    image_score: Number(row?.image_score || 0) || 0,
-    published_at: sanitizeText(row?.published_at || "", 64) || "",
-    asset_created_at: sanitizeText(row?.asset_created_at || "", 64) || "",
-    asset_sha256: normalizeSha256(row?.asset_sha256 || "") || "",
-    image_width: optionalInt(row?.image_width),
-    image_height: optionalInt(row?.image_height),
   }
 }
 
@@ -10499,49 +10463,6 @@ async function rebuildSharedGeneDiscoveryRollup(env) {
   }
 }
 
-// Card metadata for compact shelf rows. Discovery fields stay in charge; the
-// catalog/essence/rollup joins only fill identity, measurements and live votes.
-async function enrichGeneDiscoveryRows(env, rows) {
-  if (!rows.length) return []
-  const requested = [...new Set(rows.map((row) => row.gene_symbol))].sort()
-  const metadata = new Map()
-  for (let offset = 0; offset < requested.length; offset += 250) {
-    const chunk = requested.slice(offset, offset + 250)
-    const result = await env.ICONOPLASM_DB.prepare(
-      `SELECT
-         gc.gene_symbol,
-         gc.full_name AS catalog_full_name,
-         ge.weight_kg,
-         ge.age_years,
-         COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-         COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-         COALESCE(gr.live_score, 0) AS image_score,
-         gr.live_created_at AS published_at,
-         gr.live_created_at AS asset_created_at,
-         gr.current_asset_sha256 AS asset_sha256,
-         384 AS image_width,
-         512 AS image_height
-       FROM icono_gene_catalog gc
-       LEFT JOIN icono_gene_essence ge
-         ON ge.gene_symbol = gc.gene_symbol
-       LEFT JOIN icono_admin_gene_rollup gr
-         ON gr.gene_symbol = gc.gene_symbol
-       WHERE gc.gene_symbol IN (SELECT value FROM json_each(?))`,
-    )
-      .bind(JSON.stringify(chunk))
-      .all()
-    for (const row of Array.isArray(result?.results) ? result.results : []) {
-      metadata.set(String(row.gene_symbol || ""), {
-        ...row,
-        full_name: iconoplasmGeneName(row.catalog_full_name, normalizeSymbol(row.gene_symbol)),
-      })
-    }
-  }
-  return rows.map((row) =>
-    mapGeneDiscoveryRow({ ...(metadata.get(row.gene_symbol) || {}), ...row }),
-  )
-}
-
 // The shelf as compact rows (symbol, first/last times, counts), before the
 // per-gene metadata join. Windows page these and enrich only what they return.
 async function compactShelfBaseRows(env, { userId } = {}) {
@@ -10558,48 +10479,40 @@ async function compactShelfBaseRows(env, { userId } = {}) {
   return compactShelfRowsFromChronology(chronology)
 }
 
-async function compactShelfRows(env, { userId, isAdmin = false, limit = null } = {}) {
-  const rows = await compactShelfBaseRows(env, { userId })
-  const bounded =
-    limit == null
-      ? rows
-      : rows.slice(0, Math.max(1, Math.min(10000, Number.parseInt(String(limit), 10) || 5000)))
-  return enrichGeneDiscoveryRows(env, bounded)
-}
-
-async function enrichCompactDiscoveryRowsWithClanOrigins(env, rows) {
-  if (!rows.length) return []
-  const originBySymbol = new Map()
+// A reader's shelf as clan tiles: each gene's name, its clans, and the card
+// icono_publish_state names, which is the card its gene page shows. Genes the
+// catalogue retired drop out, as they do from the home shelf. One read of
+// three primary keys per gene.
+//
+// Chesterton's fence: this used to read the card from icono_admin_gene_rollup,
+// a copy that only admin actions rebuilt. On 2026-10-29 it showed an old card
+// for 160 genes and no portrait at all for 591 live ones.
+async function clanShelfRows(env, userId) {
+  const rows = (await compactShelfBaseRows(env, { userId })).slice(0, 10000)
+  const facts = new Map()
   const symbols = [...new Set(rows.map((row) => row.gene_symbol).filter(Boolean))]
   for (let offset = 0; offset < symbols.length; offset += 250) {
-    const chunk = symbols.slice(offset, offset + 250)
     const result = await env.ICONOPLASM_DB.prepare(
-      `SELECT gene_symbol, aesthetics_origin_json
-       FROM icono_gene_essence
-       WHERE gene_symbol IN (SELECT value FROM json_each(?))`,
+      `SELECT gc.gene_symbol, gc.full_name, ge.aesthetics_origin_json,
+              ps.current_asset_sha256 AS asset_sha256
+         FROM icono_gene_catalog gc
+         LEFT JOIN icono_gene_essence ge ON ge.gene_symbol = gc.gene_symbol
+         LEFT JOIN icono_publish_state ps ON ps.gene_symbol = gc.gene_symbol
+        WHERE gc.gene_symbol IN (SELECT value FROM json_each(?))`,
     )
-      .bind(JSON.stringify(chunk))
+      .bind(JSON.stringify(symbols.slice(offset, offset + 250)))
       .all()
     for (const row of Array.isArray(result?.results) ? result.results : []) {
-      originBySymbol.set(normalizeSymbol(row?.gene_symbol || ""), row?.aesthetics_origin_json)
+      const symbol = normalizeSymbol(row.gene_symbol || "")
+      facts.set(symbol, {
+        gene_symbol: symbol,
+        full_name: iconoplasmGeneName(row.full_name, symbol),
+        aesthetics_origin_json: sanitizeText(row.aesthetics_origin_json || "[]", 4096) || "[]",
+        asset_sha256: normalizeSha256(row.asset_sha256 || "") || "",
+      })
     }
   }
-  return rows.map((row) => ({
-    ...row,
-    aesthetics_origin_json: sanitizeText(originBySymbol.get(row.gene_symbol) || "[]", 4096) || "[]",
-  }))
-}
-
-async function listUserGeneDiscoveries(
-  env,
-  { userId, limit = 5000, order = "newest", seed = null } = {},
-) {
-  if (!env.ICONOPLASM_DB) return []
-  const userIdNorm = normalizeUserId(userId || "")
-  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const rows = await compactShelfRows(env, { userId: userIdNorm, isAdmin, limit })
-  return sortDiscoveryRowsForOrder(rows, normalizeIconoplasmHomeOrder(order, "newest"), seed)
+  return rows.map((row) => facts.get(row.gene_symbol)).filter(Boolean)
 }
 
 const ACCOUNT_GALLERY_WINDOW_SCHEMA = "iconoplasm.accountGalleryWindow.v2"
@@ -10895,66 +10808,6 @@ async function countSharedGeneDiscoveries(env) {
   if (!env.ICONOPLASM_DB) return 0
   const shared = await readSharedCompactState(env.ICONOPLASM_DB)
   return compactSharedSummaries(shared).length
-}
-
-async function listAllCatalogGeneDiscoveriesForAdmin(
-  env,
-  { userId, limit = 5000, order = "newest", seed = null } = {},
-) {
-  if (!env.ICONOPLASM_DB) return []
-  const userIdNorm = normalizeUserId(userId || "")
-  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(10000, Number.parseInt(String(limit || "5000"), 10) || 5000),
-  )
-  // The admin show-all shelf sits on the homepage critical path. Wrapping these
-  // key joins in upper(...) forced full scans and a temp B-tree sort in prod,
-  // which is why Pokedex mode got stuck on "Loading your collection...".
-  const rows = await env.ICONOPLASM_DB.prepare(
-    `SELECT
-       gc.gene_symbol,
-       gc.full_name AS catalog_full_name,
-       ge.weight_kg,
-       ge.age_years,
-       COALESCE(gr.live_upvotes, 0) AS image_upvotes,
-       COALESCE(gr.live_downvotes, 0) AS image_downvotes,
-       COALESCE(gr.live_score, 0) AS image_score,
-       gr.live_created_at AS published_at,
-       gr.live_created_at AS asset_created_at,
-       gr.current_asset_sha256 AS asset_sha256
-     FROM icono_gene_catalog gc
-     LEFT JOIN icono_gene_essence ge
-       ON ge.gene_symbol = gc.gene_symbol
-     LEFT JOIN icono_admin_gene_rollup gr
-       ON gr.gene_symbol = gc.gene_symbol
-     ORDER BY gc.gene_symbol ASC
-     LIMIT ?`,
-  )
-    .bind(cleanedLimit)
-    .all()
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const state = await readCompactUserStateForRequest(env, {
-    userId: userIdNorm,
-  })
-  const discovered = new Map()
-  if (state) {
-    const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
-    for (const row of compactShelfRowsFromChronology(chronology)) {
-      discovered.set(row.gene_symbol, row)
-    }
-  }
-  return sortDiscoveryRowsForOrder(
-    (Array.isArray(rows?.results) ? rows.results : []).map((row) =>
-      mapGeneDiscoveryRow({
-        ...(discovered.get(String(row.gene_symbol || "")) || {}),
-        ...row,
-        full_name: iconoplasmGeneName(row.catalog_full_name, normalizeSymbol(row.gene_symbol)),
-      }),
-    ),
-    normalizeIconoplasmHomeOrder(order, "newest"),
-    seed,
-  )
 }
 
 // Guest storage keeps membership symbols, not events. A merge converges into
@@ -16106,125 +15959,8 @@ function wikiPageviewsForSymbol(symbol) {
   return Number(ICONOPLASM_WIKI_PAGEVIEWS[key] || 0)
 }
 
-function compareNullableTextDesc(a, b) {
-  return String(b || "").localeCompare(String(a || ""))
-}
-
 function compareNullableTextAsc(a, b) {
   return String(a || "").localeCompare(String(b || ""))
-}
-
-function compareNullableNumberDescWithNullBottom(left, right) {
-  const leftValue = Number(left)
-  const rightValue = Number(right)
-  const leftPresent = Number.isFinite(leftValue)
-  const rightPresent = Number.isFinite(rightValue)
-  if (!leftPresent && !rightPresent) return 0
-  if (!leftPresent) return 1
-  if (!rightPresent) return -1
-  return rightValue - leftValue
-}
-
-function compareNullableNumberAscWithNullBottom(left, right) {
-  const leftValue = Number(left)
-  const rightValue = Number(right)
-  const leftPresent = Number.isFinite(leftValue)
-  const rightPresent = Number.isFinite(rightValue)
-  if (!leftPresent && !rightPresent) return 0
-  if (!leftPresent) return 1
-  if (!rightPresent) return -1
-  return leftValue - rightValue
-}
-
-function compareDiscoveryNewestFallback(left, right) {
-  return (
-    compareNullableTextDesc(left.first_discovered_at, right.first_discovered_at) ||
-    compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
-  )
-}
-
-function compareDiscoveryPopularityFallback(left, right) {
-  return (
-    Number(right.popularity_score || 0) - Number(left.popularity_score || 0) ||
-    Number(right.image_score || 0) - Number(left.image_score || 0) ||
-    Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-    compareNullableTextDesc(
-      left.published_at || left.asset_created_at,
-      right.published_at || right.asset_created_at,
-    ) ||
-    compareDiscoveryNewestFallback(left, right)
-  )
-}
-
-function discoveryRandomRank(seed, symbol) {
-  const input = `${seed || "iconoplasm"}|${normalizeSymbol(symbol) || ""}`
-  let hash = 2166136261
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
-function sortDiscoveryRowsForOrder(rows, order, seed = null) {
-  const sorted = Array.isArray(rows) ? rows.slice() : []
-  sorted.sort((left, right) => {
-    if (order === "votes") {
-      return (
-        Number(right.image_score || 0) - Number(left.image_score || 0) ||
-        Number(right.image_upvotes || 0) - Number(left.image_upvotes || 0) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
-    if (order === "popularity") {
-      return compareDiscoveryPopularityFallback(left, right)
-    }
-    if (order === "heaviest") {
-      return (
-        compareNullableNumberDescWithNullBottom(left.weight_kg, right.weight_kg) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
-    if (order === "lightest") {
-      return (
-        compareNullableNumberAscWithNullBottom(left.weight_kg, right.weight_kg) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
-    if (order === "oldest") {
-      return (
-        compareNullableNumberDescWithNullBottom(left.age_years, right.age_years) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
-    if (order === "youngest") {
-      return (
-        compareNullableNumberAscWithNullBottom(left.age_years, right.age_years) ||
-        compareDiscoveryPopularityFallback(left, right)
-      )
-    }
-    if (order === "symbol") {
-      return compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
-    }
-    if (order === "shortest") {
-      const leftName = String(left.full_name || left.gene_symbol || "").trim()
-      const rightName = String(right.full_name || right.gene_symbol || "").trim()
-      return (
-        leftName.length - rightName.length ||
-        compareNullableTextAsc(leftName, rightName) ||
-        compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
-      )
-    }
-    if (order === "random") {
-      return (
-        discoveryRandomRank(seed, left.gene_symbol) -
-          discoveryRandomRank(seed, right.gene_symbol) ||
-        compareNullableTextAsc(left.gene_symbol, right.gene_symbol)
-      )
-    }
-    return compareDiscoveryNewestFallback(left, right)
-  })
-  return sorted
 }
 
 function clearSharedD1CostCaches() {
@@ -18841,7 +18577,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               order: requestedOrder,
               ...(requestedSeed ? { seed: requestedSeed } : {}),
               discoveries: [],
-              discovered_symbols: [],
               discovered_count: 0,
             },
             200,
@@ -18850,64 +18585,25 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
       }
       const userId = normalizeUserId(sessionUser.user_id)
-      const showAllRequested = normalizeBooleanQueryFlag(url.searchParams.get("show_all"))
-      if (url.searchParams.get("shape") === "compact" && !showAllRequested) {
-        // B-885: the bare shelf. The home page joins every sort field from
-        // the published catalog it already downloads and sorts locally, so
-        // this reads only the chronology: no per-gene enrichment join (which
-        // was ~4.6 D1 rows per gene on every non-newest home view) and no
-        // server sort. Newest first, the order the page shows by default.
-        const compactRows = (await compactShelfBaseRows(env, { userId }))
-          .map(discoveryFacts)
-          .reverse()
-        return done(
-          "discoveries_me",
-          json(
-            {
-              ok: true,
-              authenticated: true,
-              shape: "compact",
-              user: { id: userId, username: sessionUser.username || null },
-              order: requestedOrder,
-              ...(requestedSeed ? { seed: requestedSeed } : {}),
-              discoveries: compactRows,
-              discovered_count: compactRows.length,
-            },
-            200,
-            { "Cache-Control": "no-store" },
-          ),
-        )
-      }
-      const showAllApplied = showAllRequested && (await isIconoplasmAdmin(request, env))
-      const discoveries = showAllApplied
-        ? await listAllCatalogGeneDiscoveriesForAdmin(env, {
-            userId,
-            limit: 10000,
-            order: requestedOrder,
-            seed: requestedSeed,
-          })
-        : await listUserGeneDiscoveries(env, {
-            userId,
-            order: requestedOrder,
-            seed: requestedSeed,
-          })
+      // B-885: the bare shelf. The home page joins every sort field from the
+      // published catalog it already downloads and sorts locally, so this reads
+      // only the chronology: no per-gene join and no server sort. Newest first,
+      // the order the page shows by default.
+      const compactRows = (await compactShelfBaseRows(env, { userId }))
+        .map(discoveryFacts)
+        .reverse()
       return done(
         "discoveries_me",
         json(
           {
             ok: true,
             authenticated: true,
-            user: {
-              id: userId,
-              username: sessionUser.username || null,
-            },
+            shape: "compact",
+            user: { id: userId, username: sessionUser.username || null },
             order: requestedOrder,
             ...(requestedSeed ? { seed: requestedSeed } : {}),
-            discoveries,
-            show_all_requested: showAllRequested,
-            show_all_applied: showAllApplied,
-            discovered_symbols: discoveries.map((row) => row.gene_symbol).filter(Boolean),
-            discovered_count: discoveries.length,
+            discoveries: compactRows,
+            discovered_count: compactRows.length,
           },
           200,
           { "Cache-Control": "no-store" },
@@ -20117,14 +19813,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       const userId = normalizeUserId(sessionUser.user_id)
       // The authoritative compact chronology is the membership/order source.
       // Never fall back to the retired per-hover table on this whole-shelf view.
-      const discoveryRows = await enrichCompactDiscoveryRowsWithClanOrigins(
-        env,
-        await compactShelfRows(env, {
-          userId,
-          isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
-          limit: 10000,
-        }),
-      )
+      const discoveryRows = await clanShelfRows(env, userId)
       // Scalability: a long-time player can have ~10k discoveries spanning
       // hundreds of clans. Keep the per-clan true count, but only ship a small
       // preview of member portraits per clan (portrait + symbol only) so the payload
@@ -20260,14 +19949,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           )
         }
         const userId = normalizeUserId(sessionUser.user_id)
-        const memberRows = await enrichCompactDiscoveryRowsWithClanOrigins(
-          env,
-          await compactShelfRows(env, {
-            userId,
-            isAdmin: iconoplasmDiscoveryUserIsConfiguredAdmin(env, userId),
-            limit: 10000,
-          }),
-        )
+        const memberRows = await clanShelfRows(env, userId)
         const membersPortraitBase = portraitBase(url, env)
         const singles = []
         const multis = []

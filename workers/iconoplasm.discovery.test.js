@@ -79,14 +79,6 @@ class D1Like {
         age_years REAL,
         leakage_percent REAL
       );
-      CREATE TABLE icono_admin_gene_rollup (
-        gene_symbol TEXT PRIMARY KEY,
-        live_upvotes INTEGER NOT NULL DEFAULT 0,
-        live_downvotes INTEGER NOT NULL DEFAULT 0,
-        live_score INTEGER NOT NULL DEFAULT 0,
-        live_created_at TEXT,
-        current_asset_sha256 TEXT
-      );
     `)
   }
   prepare(sql) {
@@ -138,11 +130,6 @@ async function buildEnv() {
       "INSERT INTO icono_gene_essence (gene_symbol, full_name, weight_kg, age_years, leakage_percent) VALUES (?, ?, ?, ?, ?)",
     )
     .run("TP53", "Tumor protein p53", 53.1, 44, 12)
-  db.raw
-    .prepare(
-      "INSERT INTO icono_admin_gene_rollup (gene_symbol, live_upvotes, live_score, live_created_at, current_asset_sha256) VALUES (?, ?, ?, ?, ?)",
-    )
-    .run("TP53", 3, 3, "2025-04-01T00:00:01Z", "a".repeat(64))
   const gatewayEnv = {
     ICONOPLASM_DB: db,
     SESSION_SECRET: TEST_SESSION_SECRET,
@@ -459,7 +446,6 @@ test("discoveries me returns the compact shelf with exact first/last and counts"
   assert.equal(tp53.encounter_count, 2)
   assert.equal(tp53.first_discovered_at, "1970-01-01T00:16:40Z")
   assert.equal(tp53.last_encountered_at, "1970-01-01T00:16:50Z")
-  assert.equal(tp53.full_name, "Tumor protein p53")
   const egfr = payload.discoveries.find((row) => row.gene_symbol === "EGFR")
   assert.equal(egfr.encounter_count, 1)
 })
@@ -468,7 +454,7 @@ test("passive discovery reads never manufacture starter membership", async () =>
   const env = await buildEnv()
   const first = await invoke(get("/api/iconoplasm/discoveries/me", { cookie: READER }), env)
   const firstPayload = await first.json()
-  assert.deepEqual(firstPayload.discovered_symbols, [])
+  assert.deepEqual(firstPayload.discoveries, [])
   assert.equal(await compactRowCount(env), 0)
   await invoke(get("/api/iconoplasm/discoveries/me", { cookie: READER }), env)
   assert.equal(await compactRowCount(env), 0)
@@ -492,26 +478,6 @@ test("the hourly symbol publisher reads compact shared state", async () => {
     await env.gatewayEnv.KV.get("iconoplasm:shared-gene-discovery-symbols:v1"),
   )
   assert.deepEqual(published.symbols, ["TP53"])
-})
-
-test("admins may show the full catalog while non-admins cannot", async () => {
-  const env = await buildEnv()
-  const adminRequest = new Request(
-    "https://iconoplasm.brinedew.bio/api/iconoplasm/discoveries/me?show_all=1",
-    {
-      method: "GET",
-      headers: { Cookie: READER, Authorization: "Bearer admin-token" },
-    },
-  )
-  const payload = await (await invoke(adminRequest, env)).json()
-  assert.equal(payload.show_all_requested, true)
-  assert.equal(payload.show_all_applied, true)
-  assert.equal(payload.discoveries.length, CATALOG.length)
-  assert.ok(payload.discovered_symbols.includes("FURIN"))
-  const nonAdmin = await (
-    await invoke(get("/api/iconoplasm/discoveries/me?show_all=1", { cookie: READER }), env)
-  ).json()
-  assert.equal(nonAdmin.show_all_applied, false)
 })
 
 // B-887 step 5: the hourly publisher named EVERY shared discovery each run

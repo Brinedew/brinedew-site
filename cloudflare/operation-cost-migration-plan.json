@@ -14,20 +14,5 @@
     "kv_deletes": 0,
     "kv_lists": 0
   },
-  "migrations": {
-    "iconoplasm/0146_vote_identity_one_key_and_admin_gallery_indexes.sql": {
-      "online": true,
-      "prediction": {
-        "rows_read": 100000,
-        "rows_written": 5000,
-        "requests": 1
-      },
-      "guards": [
-        {
-          "sql": "SELECT COUNT(*) AS votes FROM icono_image_votes",
-          "max": 2500
-        }
-      ]
-    }
-  }
+  "migrations": {}
 }
