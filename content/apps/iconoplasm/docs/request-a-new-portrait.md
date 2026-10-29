@@ -36,7 +36,7 @@ Your request goes into the free queue, which is open to members of the brinedew.
 2. The **Free queue** tab opens. Each card is one style. It has four portraits drawn in that style, the style number, and the number of blots drawn in it so far.
    ![[iconoplasm-free-queue.webp|The dialog that opens from the Add portraits button, on the Free queue tab]]
 3. Click a style card to request a portrait in that style. The card's corner shows how many you have requested, for example **1 requested**. Click **Request random** in the bottom right to let the queue pick a style.
-4. Click the star under a card to keep that style in **Favorites**. On the **Favorites** tab, **Request all favorites** requests one portrait in each of them.
+4. Click the star under a card to keep that style in **Favorites**. Once you have a favorite, **Request all favorites** appears in the bottom left and requests one portrait in each of them.
 5. Your request appears under **Waiting** in the **Inbox** in the right sidebar. When its portraits are drawn, it moves to **Ready**: click it to open the gene and see them among its candidates.
 
 ## 4. Vote on candidates
