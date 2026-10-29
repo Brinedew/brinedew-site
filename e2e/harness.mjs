@@ -55,10 +55,24 @@ export async function startSite() {
   return { server, origin: `http://127.0.0.1:${server.address().port}` }
 }
 
+// Pages here load under the production hostname, so Cloudflare's Web Analytics
+// beacon counted every CI run as a visitor: US "visits" rose with the CI runs
+// to about 130 on 2026-10-29, nearly all on the Iconoplasm homepage. Every context
+// answers the beacon locally; a test that watches it registers its own route,
+// which wins.
+const BEACON = /^https:\/\/(static\.)?cloudflareinsights\.com\//
+
 // Locally without Chrome this is a skip; CI always has it.
 export async function launchChrome(t) {
   try {
-    return await chromium.launch({ channel: "chrome" })
+    const browser = await chromium.launch({ channel: "chrome" })
+    const newContext = browser.newContext.bind(browser)
+    browser.newContext = async (options) => {
+      const context = await newContext(options)
+      await context.route(BEACON, (route) => route.fulfill({ status: 204, body: "" }))
+      return context
+    }
+    return browser
   } catch (error) {
     if (!process.env.CI) {
       t.skip(`Chrome is not available: ${error.message}`)
