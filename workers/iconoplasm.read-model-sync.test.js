@@ -234,7 +234,6 @@ test("admin read-model sync honors skip flags and publishes nothing (B-898)", as
       body: JSON.stringify({
         symbols: ["TP53"],
         skip_vote_summaries: true,
-        skip_gene_rollups: true,
         skip_vision_rollups: true,
         skip_dashboard: true,
       }),
@@ -275,7 +274,6 @@ test("batched vision sync atomically refreshes the request-picker projection", a
       body: JSON.stringify({
         vision_ids: ["anima-v1-18"],
         skip_vote_summaries: true,
-        skip_gene_rollups: true,
         skip_dashboard: true,
       }),
     }),
@@ -336,7 +334,6 @@ test("admin sync reads transactional counts without rebuilding catalogue history
       body: JSON.stringify({
         symbols: ["TP53"],
         skip_vote_summaries: true,
-        skip_gene_rollups: true,
         skip_vision_rollups: true,
       }),
     }),
