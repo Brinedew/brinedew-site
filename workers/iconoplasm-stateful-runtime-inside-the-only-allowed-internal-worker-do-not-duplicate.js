@@ -111,6 +111,7 @@ import {
   readGeneVoteSnapshots,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
+import { readAdminGallery } from "./iconoplasm/admin-gallery.js"
 import {
   GENE_VOTE_VERSION_SQL,
   VOTE_DAILY_BUDGET_EXHAUSTED,
@@ -12275,14 +12276,15 @@ export async function fetchAssetStateRows(env, requestedSymbols = null) {
      ),
      scoped_votes AS (
        SELECT
-         iv.candidate_ref,
+         iv.gene_symbol,
+         iv.asset_sha256,
          COALESCE(SUM(CASE WHEN iv.vote_value = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
          COALESCE(SUM(CASE WHEN iv.vote_value = -1 THEN 1 ELSE 0 END), 0) AS downvotes,
          COALESCE(SUM(iv.vote_value), 0) AS score
        FROM scoped_assets a
-       CROSS JOIN icono_image_votes iv INDEXED BY sqlite_autoindex_icono_image_votes_1
-       WHERE iv.candidate_ref = 'a:' || a.gene_symbol || '|' || a.asset_sha256
-       GROUP BY iv.candidate_ref
+       CROSS JOIN icono_image_votes iv
+       WHERE iv.gene_symbol = a.gene_symbol AND iv.asset_sha256 = a.asset_sha256
+       GROUP BY iv.gene_symbol, iv.asset_sha256
      )
      SELECT
        sa.gene_symbol,
@@ -12308,7 +12310,7 @@ export async function fetchAssetStateRows(env, requestedSymbols = null) {
        COALESCE(v.score, 0) AS image_score
      FROM scoped_assets sa
      LEFT JOIN scoped_votes v
-       ON v.candidate_ref = ('a:' || sa.gene_symbol || '|' || sa.asset_sha256)
+       ON v.gene_symbol = sa.gene_symbol AND v.asset_sha256 = sa.asset_sha256
      ORDER BY sa.gene_symbol ASC, sa.asset_sha256 ASC`,
   )
     .bind(JSON.stringify(wantedSymbols))
@@ -15417,35 +15419,6 @@ function normalizeAdminGalleryLimit(raw) {
   return Math.max(1, Math.min(120, Number.parseInt(String(raw || "60"), 10) || 60))
 }
 
-function adminGalleryCountCacheKey(mode, filter) {
-  return `${normalizeAdminGalleryMode(mode)}:${normalizeAdminGalleryFilter(filter)}`
-}
-
-async function cachedAdminGalleryTotal(env, { mode, filter } = {}) {
-  if (!env?.ICONOPLASM_DB) return null
-  try {
-    const row = await env.ICONOPLASM_DB.prepare(
-      `SELECT total
-       FROM icono_admin_gallery_count_cache
-       WHERE count_key = ?
-       LIMIT 1`,
-    )
-      .bind(adminGalleryCountCacheKey(mode, filter))
-      .first()
-    if (!row) return null
-    return Math.max(0, Number(row.total || 0) || 0)
-  } catch {
-    return null
-  }
-}
-
-async function countAdminGalleryRows(env, sql, params) {
-  const row = await env.ICONOPLASM_DB.prepare(sql)
-    .bind(...params)
-    .first()
-  return Math.max(0, Number(row?.total_rows || 0) || 0)
-}
-
 async function fetchAdminCoverage(env) {
   if (!env.ICONOPLASM_DB) {
     return { total: 0, zero: 0, one: 0, two_to_five: 0, six_plus: 0 }
@@ -15475,6 +15448,8 @@ async function fetchAdminCoverage(env) {
   }
 }
 
+// B-1188: the gallery reads each page by index and its facts from where they
+// are true; workers/iconoplasm/admin-gallery.js says how and why.
 async function fetchAdminGallery(
   env,
   url,
@@ -15483,272 +15458,22 @@ async function fetchAdminGallery(
   if (!env.ICONOPLASM_DB) {
     return { page: 1, limit: 0, total: 0, count: 0, mode: "live", rows: [] }
   }
-
-  await ensureAdminReadModelsReady(env)
-
-  const cleanedPage = normalizeAdminGalleryPage(page)
-  const cleanedLimit = normalizeAdminGalleryLimit(limit)
-  const cleanedFilter = normalizeAdminGalleryFilter(filter)
-  const cleanedSort = normalizeAdminGallerySort(sort)
-  const cleanedMode = normalizeAdminGalleryMode(mode)
-  const queryNorm = String(query || "")
-    .trim()
-    .toUpperCase()
-    .slice(0, 64)
-  const offset = (cleanedPage - 1) * cleanedLimit
   const base = portraitBase(url, env)
-
-  const sharedWhereParts = []
-  const params = []
-  if (queryNorm) {
-    sharedWhereParts.push("(gr.search_symbol LIKE ? OR gr.search_full_name LIKE ?)")
-    params.push(`%${queryNorm}%`, `%${queryNorm}%`)
-  }
-  if (cleanedMode === "all") {
-    const whereParts = sharedWhereParts.slice()
-    whereParts.push("COALESCE(pa.asset_sha256, '') <> ''")
-    if (cleanedFilter === "mismatch") {
-      whereParts.push("COALESCE(gr.current_asset_missing, 0) = 1")
-    } else if (cleanedFilter === "pinned") {
-      whereParts.push("COALESCE(gr.admin_override, 0) = 1")
-    } else if (cleanedFilter === "missing") {
-      whereParts.push("1 = 0")
-    } else if (cleanedFilter === "stale") {
-      whereParts.push("COALESCE(pa.is_stale, 0) = 1")
-    }
-    const whereClause = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
-
-    let orderClause = "pa.gene_symbol ASC, COALESCE(vs.score, 0) DESC, pa.created_at DESC"
-    if (cleanedSort === "votes") {
-      orderClause =
-        "COALESCE(vs.score, 0) DESC, COALESCE(vs.upvotes, 0) DESC, pa.gene_symbol ASC, pa.created_at DESC"
-    } else if (cleanedSort === "recency") {
-      orderClause = "pa.created_at DESC, pa.gene_symbol ASC, pa.asset_sha256 ASC"
-    } else if (cleanedSort === "mismatch") {
-      orderClause =
-        "COALESCE(gr.current_asset_missing, 0) DESC, COALESCE(pa.is_stale, 0) DESC, pa.gene_symbol ASC, COALESCE(vs.score, 0) DESC"
-    }
-
-    const allResp = await env.ICONOPLASM_DB.prepare(
-      `
-       SELECT
-          pa.gene_symbol AS gene_symbol,
-          gr.full_name,
-         pa.asset_sha256 AS asset_sha256,
-         COALESCE(pa.status, 'draft') AS status,
-         COALESCE(pa.autopick_eligible, 1) AS autopick_eligible,
-         COALESCE(pa.is_stale, 0) AS is_stale,
-         COALESCE(pa.is_legacy, 0) AS is_legacy,
-         pa.vision_id,
-         pa.artist_tag,
-         pa.artist_name,
-         pa.created_at,
-         COALESCE(vs.upvotes, 0) AS upvotes,
-         COALESCE(vs.downvotes, 0) AS downvotes,
-         COALESCE(vs.score, 0) AS score,
-         CASE WHEN COALESCE(gr.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END AS is_live,
-         COALESCE(gr.admin_override, 0) AS admin_override,
-         COALESCE(gr.current_asset_missing, 0) AS has_mismatch,
-         COALESCE(gr.candidate_count, 0) AS candidate_count,
-         COALESCE(gr.approved_count, 0) AS approved_count,
-         COALESCE(gr.rejected_count, 0) AS rejected_count,
-         COALESCE(gr.stale_count, 0) AS stale_count,
-         COALESCE(gr.legacy_count, 0) AS legacy_count,
-         COALESCE(gr.total_assets, 0) AS total_assets
-       FROM icono_portrait_assets pa
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-        LEFT JOIN icono_admin_gene_rollup gr
-          ON gr.gene_symbol = pa.gene_symbol
-       ${whereClause}
-       ORDER BY ${orderClause}
-       LIMIT ? OFFSET ?`,
-    )
-      .bind(...params, cleanedLimit, offset)
-      .all()
-
-    const allRows = Array.isArray(allResp?.results) ? allResp.results : []
-    const cachedTotal = queryNorm
-      ? null
-      : await cachedAdminGalleryTotal(env, { mode: cleanedMode, filter: cleanedFilter })
-    const allTotal =
-      cachedTotal ??
-      (await countAdminGalleryRows(
-        env,
-        `SELECT COUNT(*) AS total_rows
-         FROM icono_portrait_assets pa
-         LEFT JOIN icono_admin_gene_rollup gr
-           ON gr.gene_symbol = pa.gene_symbol
-         ${whereClause}`,
-        params,
-      ))
-
-    return {
-      page: cleanedPage,
-      limit: cleanedLimit,
-      total: allTotal,
-      count: allRows.length,
-      mode: cleanedMode,
-      rows: allRows.map((row) => ({
-        gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-        full_name: sanitizeText(row?.full_name || "", 255) || "",
-        asset_sha256: normalizeSha256(row?.asset_sha256 || "") || null,
-        candidate_count: Number(row?.candidate_count || 0),
-        approved_count: Number(row?.approved_count || 0),
-        rejected_count: Number(row?.rejected_count || 0),
-        stale_count: Number(row?.stale_count || 0),
-        legacy_count: Number(row?.legacy_count || 0),
-        total_assets: Number(row?.total_assets || 0),
-        status: sanitizeText(row?.status || "", 32) || "draft",
-        autopick_eligible: Number(row?.autopick_eligible || 0) > 0,
-        is_stale: Number(row?.is_stale || 0) > 0,
-        is_legacy: Number(row?.is_legacy || 0) > 0,
-        is_live: Number(row?.is_live || 0) > 0,
-        admin_override: Number(row?.admin_override || 0) > 0,
-        has_mismatch: Number(row?.has_mismatch || 0) > 0,
-        current_asset_missing: Number(row?.has_mismatch || 0) > 0,
-        missing: false,
-        has_stale: Number(row?.is_stale || 0) > 0,
-        vision_id: sanitizeText(row?.vision_id || "", 255) || "",
-        artist_tag: sanitizeText(row?.artist_tag || "", 255) || "",
-        artist_name: sanitizeText(row?.artist_name || "", 255) || "",
-        image_upvotes: Number(row?.upvotes || 0),
-        image_downvotes: Number(row?.downvotes || 0),
-        image_score: Number(row?.score || 0),
-        small_url: adminPortraitUrl(base, row?.asset_sha256 || "", "small"),
-        medium_url: adminPortraitUrl(base, row?.asset_sha256 || "", "medium"),
-        full_url: adminPortraitUrl(base, row?.asset_sha256 || "", "full"),
-        updated_at: sanitizeText(row?.created_at || "", 64) || "",
-      })),
-    }
-  }
-
-  const whereParts = sharedWhereParts.slice()
-  if (cleanedFilter === "mismatch") {
-    whereParts.push("COALESCE(gr.current_asset_missing, 0) = 1")
-  } else if (cleanedFilter === "pinned") {
-    whereParts.push("COALESCE(gr.admin_override, 0) = 1")
-  } else if (cleanedFilter === "missing") {
-    whereParts.push("COALESCE(gr.candidate_count, 0) = 0")
-  } else if (cleanedFilter === "stale") {
-    whereParts.push("COALESCE(gr.stale_count, 0) > 0")
-  }
-  const whereClause = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : ""
-
-  let orderClause = "gr.gene_symbol ASC"
-  if (cleanedSort === "votes") {
-    orderClause =
-      "COALESCE(gr.leader_score, gr.live_score, 0) DESC, COALESCE(gr.leader_upvotes, gr.live_upvotes, 0) DESC, gr.gene_symbol ASC"
-  } else if (cleanedSort === "recency") {
-    orderClause =
-      "COALESCE(gr.updated_at, gr.leader_created_at, gr.last_asset_at, '') DESC, gr.gene_symbol ASC"
-  } else if (cleanedSort === "mismatch") {
-    orderClause =
-      "COALESCE(gr.current_asset_missing, 0) DESC, COALESCE(gr.stale_count, 0) DESC, gr.gene_symbol ASC"
-  }
-
-  const resp = await env.ICONOPLASM_DB.prepare(
-    `
-     SELECT
-        gr.gene_symbol AS gene_symbol,
-        gr.full_name,
-       gr.candidate_count,
-       gr.approved_count,
-       gr.rejected_count,
-       gr.stale_count,
-       gr.legacy_count,
-       gr.total_assets,
-       gr.last_asset_at,
-       gr.current_asset_sha256 AS live_sha,
-       gr.admin_override,
-       gr.updated_at AS live_updated_at,
-       gr.live_vision_id,
-       gr.live_artist_tag,
-       gr.live_artist_name,
-       gr.live_upvotes,
-       gr.live_downvotes,
-       gr.live_score,
-       gr.live_status,
-       gr.live_is_stale,
-       gr.live_is_legacy,
-       gr.leader_asset_sha256 AS leader_sha,
-       gr.leader_vision_id,
-       gr.leader_artist_tag,
-       gr.leader_artist_name,
-       gr.leader_created_at,
-       gr.leader_upvotes,
-       gr.leader_downvotes,
-       gr.leader_score,
-       gr.current_asset_missing AS has_mismatch
-      FROM icono_admin_gene_rollup gr
-     ${whereClause}
-     ORDER BY ${orderClause}
-     LIMIT ? OFFSET ?`,
+  return readAdminGallery(
+    env.ICONOPLASM_DB,
+    {
+      page: normalizeAdminGalleryPage(page),
+      limit: normalizeAdminGalleryLimit(limit),
+      filter: normalizeAdminGalleryFilter(filter),
+      sort: normalizeAdminGallerySort(sort),
+      mode: normalizeAdminGalleryMode(mode),
+      query: String(query || "")
+        .trim()
+        .toUpperCase()
+        .slice(0, 64),
+    },
+    { portraitUrl: (sha, rendition) => adminPortraitUrl(base, sha || "", rendition) },
   )
-    .bind(...params, cleanedLimit, offset)
-    .all()
-
-  const rows = Array.isArray(resp?.results) ? resp.results : []
-  const cachedTotal = queryNorm
-    ? null
-    : await cachedAdminGalleryTotal(env, { mode: cleanedMode, filter: cleanedFilter })
-  const total =
-    cachedTotal ??
-    (await countAdminGalleryRows(
-      env,
-      `SELECT COUNT(*) AS total_rows
-       FROM icono_admin_gene_rollup gr
-       ${whereClause}`,
-      params,
-    ))
-
-  return {
-    page: cleanedPage,
-    limit: cleanedLimit,
-    total,
-    count: rows.length,
-    mode: cleanedMode,
-    rows: rows.map((row) => ({
-      gene_symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-      full_name: sanitizeText(row?.full_name || "", 255) || "",
-      candidate_count: Number(row?.candidate_count || 0),
-      approved_count: Number(row?.approved_count || 0),
-      rejected_count: Number(row?.rejected_count || 0),
-      stale_count: Number(row?.stale_count || 0),
-      legacy_count: Number(row?.legacy_count || 0),
-      total_assets: Number(row?.total_assets || 0),
-      live_sha: normalizeSha256(row?.live_sha || "") || null,
-      admin_override: Number(row?.admin_override || 0) > 0,
-      live_vision_id: sanitizeText(row?.live_vision_id || "", 255) || "",
-      live_artist_tag: sanitizeText(row?.live_artist_tag || "", 255) || "",
-      live_artist_name: sanitizeText(row?.live_artist_name || "", 255) || "",
-      live_upvotes: Number(row?.live_upvotes || 0),
-      live_downvotes: Number(row?.live_downvotes || 0),
-      live_score: Number(row?.live_score || 0),
-      live_status: sanitizeText(row?.live_status || "", 32) || "",
-      live_small_url: adminPortraitUrl(base, row?.live_sha || "", "small"),
-      live_medium_url: adminPortraitUrl(base, row?.live_sha || "", "medium"),
-      leader_sha: normalizeSha256(row?.leader_sha || "") || null,
-      leader_vision_id: sanitizeText(row?.leader_vision_id || "", 255) || "",
-      leader_artist_tag: sanitizeText(row?.leader_artist_tag || "", 255) || "",
-      leader_artist_name: sanitizeText(row?.leader_artist_name || "", 255) || "",
-      leader_upvotes: Number(row?.leader_upvotes || 0),
-      leader_downvotes: Number(row?.leader_downvotes || 0),
-      leader_score: Number(row?.leader_score || 0),
-      leader_small_url: adminPortraitUrl(base, row?.leader_sha || "", "small"),
-      leader_medium_url: adminPortraitUrl(base, row?.leader_sha || "", "medium"),
-      has_mismatch: Number(row?.has_mismatch || 0) > 0,
-      current_asset_missing: Number(row?.has_mismatch || 0) > 0,
-      has_stale: Number(row?.stale_count || 0) > 0,
-      missing: Number(row?.candidate_count || 0) === 0,
-      updated_at:
-        sanitizeText(
-          row?.live_updated_at || row?.leader_created_at || row?.last_asset_at || "",
-          64,
-        ) || "",
-    })),
-  }
 }
 
 async function fetchAdminGeneDetail(env, url, rawSymbol) {
@@ -15759,15 +15484,17 @@ async function fetchAdminGeneDetail(env, url, rawSymbol) {
 
   await ensureAdminReadModelsReady(env)
 
+  // The card and the pin as published, not icono_admin_gene_rollup's copy of
+  // them, which drifted (B-1188).
   const info = await env.ICONOPLASM_DB.prepare(
     `SELECT
-       gr.gene_symbol,
-       gr.full_name,
-       gr.current_asset_sha256 AS live_sha,
-       gr.admin_override,
-       gr.updated_at AS live_updated_at
-     FROM icono_admin_gene_rollup gr
-     WHERE gr.gene_symbol = ?`,
+       gc.full_name,
+       ps.current_asset_sha256 AS live_sha,
+       ps.admin_override,
+       ps.updated_at AS live_updated_at
+     FROM (SELECT ?1 AS gene_symbol) g
+     LEFT JOIN icono_gene_catalog gc ON gc.gene_symbol = g.gene_symbol
+     LEFT JOIN icono_publish_state ps ON ps.gene_symbol = g.gene_symbol`,
   )
     .bind(symbol)
     .first()

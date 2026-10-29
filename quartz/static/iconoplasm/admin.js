@@ -9817,11 +9817,13 @@
           state.assets.length +
           (state.galleryMode === "all" ? " cards shown" : " genes shown") +
           "</span>",
-        "<span>total " + esc(String(data.total || state.assets.length)) + "</span>",
+        typeof data.total === "number" ? "<span>total " + esc(String(data.total)) + "</span>" : "",
         "<span>filter " + esc(String(els.status.value || "all")) + "</span>",
         "<span>sort " + esc(String(els.stale.value || "name")) + "</span>",
         "<span>mode " + esc(activeModeLabel()) + "</span>",
-      ].join(" &middot; ")
+      ]
+        .filter(Boolean)
+        .join(" &middot; ")
       renderTable()
       if (
         state.selectedGene &&
