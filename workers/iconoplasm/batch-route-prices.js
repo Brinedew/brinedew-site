@@ -78,7 +78,12 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_caretaker_switch_cooldown: critical(OWN_ACTION),
   admin_discord_switches: critical(OWN_ACTION),
   admin_ingest: perItem("items", BATCH_PRICES.portrait),
-  admin_overview: owner(CATALOGUE_READ),
+  // B-1188: a few hundred rows while no card is broken and every gene has a
+  // candidate. Otherwise it scans the cards, then the catalogue, for the genes
+  // behind those counts, at about 2 rows a gene until it has found them
+  // (admin-gallery-cost.test.js measured 10,880 rows on 20,000 genes). Both
+  // scans to the end of the 2026-10-29 copy's 19,400 genes: about 80,000.
+  admin_overview: owner({ rows_written: 0, rows_read: 100_000 }),
   admin_coverage: owner(CATALOGUE_READ),
   admin_public_stats_audit: owner(CATALOGUE_READ),
   admin_canon_audit: owner(CATALOGUE_READ),
