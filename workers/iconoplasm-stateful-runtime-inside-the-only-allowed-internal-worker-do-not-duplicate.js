@@ -14144,9 +14144,10 @@ async function iconoExistingAssetsBatch(env, rawItems) {
 
 async function fetchAdminRecentEvents(env, { limit = 40 } = {}) {
   if (!env.ICONOPLASM_DB) return []
+  // event_limit=0 asks for none.
   const cleanedEventLimit = Math.max(
     0,
-    Math.min(200, Number.parseInt(String(limit || "40"), 10) || 40),
+    Math.min(200, Number.parseInt(String(limit ?? 40), 10) || 0),
   )
   if (cleanedEventLimit === 0) return []
   const eventResp = await env.ICONOPLASM_DB.prepare(
@@ -15001,81 +15002,139 @@ async function ensureAdminReadModelsReady(env) {
   }
 }
 
+// B-1188: the admin home, from the tables that are true. Gene counts come from
+// icono_admin_dashboard_summary, which migration 0147's triggers keep from the
+// catalogue, the portraits and the cards; cards, stale and legacy portraits
+// from icono_asset_summary_counts (B-744); pins from their index. The attention
+// list reads the stale and pinned indexes, and looks for broken or missing
+// genes only while a count says there are some: each is a scan of the
+// catalogue (about 39,000 rows read on the 2026-10-29 copy) that stops at the
+// twelfth gene it finds.
+const ADMIN_ATTENTION_LIMIT = 12
+const ATTENTION_ELIGIBLE = `COALESCE(pa.autopick_eligible, 1) = 1
+  AND COALESCE(pa.status, 'draft') <> 'rejected' AND pa.asset_sha256 <> ''`
+
 async function fetchAdminOverview(env, { eventLimit = 12 } = {}) {
   if (!env.ICONOPLASM_DB) {
     return { summary: null, attention: [], recent_events: [] }
   }
+  const db = env.ICONOPLASM_DB
+  const symbols = (result) =>
+    (Array.isArray(result?.results) ? result.results : []).map((row) => row.gene_symbol)
 
-  await ensureAdminReadModelsReady(env)
-  const [summaryRow, attentionResp] = await Promise.all([
-    env.ICONOPLASM_DB.prepare(
-      `SELECT *
-       FROM icono_admin_dashboard_summary
-       WHERE summary_key = ?
-       LIMIT 1`,
-    )
+  const [genes, assets, pinnedResult, staleResult] = await Promise.all([
+    db
+      .prepare(`SELECT * FROM icono_admin_dashboard_summary WHERE summary_key = ? LIMIT 1`)
       .bind(ADMIN_DASHBOARD_SUMMARY_KEY)
       .first(),
-    env.ICONOPLASM_DB.prepare(
-      `SELECT
-         gr.gene_symbol,
-         gr.current_asset_missing,
-         gr.candidate_count,
-         gr.stale_count,
-         gr.admin_override
-       FROM icono_gene_catalog gc
-       JOIN icono_admin_gene_rollup gr
-         ON gr.gene_symbol = gc.gene_symbol
-       WHERE gr.current_asset_missing = 1
-          OR gr.candidate_count = 0
-          OR gr.stale_count > 0
-          OR gr.admin_override = 1
-       ORDER BY
-         CASE
-           WHEN gr.current_asset_missing = 1 THEN 100
-           WHEN gr.candidate_count = 0 THEN 90
-           WHEN gr.stale_count > 0 THEN 70
-           WHEN gr.admin_override = 1 THEN 50
-           ELSE 0
-         END DESC,
-         gr.gene_symbol ASC
-       LIMIT 12`,
-    ).all(),
+    db
+      .prepare(
+        `SELECT catalog_published_live_portraits, stale_assets, legacy_assets
+           FROM icono_asset_summary_counts WHERE summary_key = 'default'`,
+      )
+      .first(),
+    db
+      .prepare(
+        `SELECT ps.gene_symbol, COALESCE(ps.current_asset_sha256, '') <> '' AS has_card
+           FROM icono_publish_state ps INDEXED BY idx_icono_publish_state_pinned
+           CROSS JOIN icono_gene_catalog gc ON gc.gene_symbol = ps.gene_symbol
+          WHERE ps.admin_override = 1
+          ORDER BY ps.gene_symbol`,
+      )
+      .all(),
+    db
+      .prepare(
+        `SELECT pa.gene_symbol, COUNT(*) AS stale
+           FROM icono_portrait_assets pa INDEXED BY idx_icono_portrait_assets_stale
+           CROSS JOIN icono_gene_catalog gc ON gc.gene_symbol = pa.gene_symbol
+          WHERE pa.is_stale = 1
+          GROUP BY pa.gene_symbol
+          ORDER BY pa.gene_symbol
+          LIMIT ?`,
+      )
+      .bind(ADMIN_ATTENTION_LIMIT)
+      .all(),
   ])
-
-  const attention = (Array.isArray(attentionResp?.results) ? attentionResp.results : []).map(
-    (row) => {
-      const currentAssetMissing = Number(row?.current_asset_missing || 0) > 0
-      const candidateCount = Number(row?.candidate_count || 0)
-      const staleCount = Number(row?.stale_count || 0)
-      const adminOverride = Number(row?.admin_override || 0) > 0
-      let kind = ""
-      if (currentAssetMissing) kind = "drift"
-      else if (candidateCount === 0) kind = "missing"
-      else if (staleCount > 0) kind = "stale"
-      else if (adminOverride) kind = "override"
-      return {
-        symbol: normalizeSymbol(row?.gene_symbol || "") || "",
-        kind,
-        stale_assets: staleCount,
-      }
-    },
+  const geneCount = Number(genes?.genes || 0)
+  const brokenCount = Number(genes?.drift || 0)
+  const missingCount = Number(genes?.zero_candidates || 0)
+  const withLive = Number(assets?.catalog_published_live_portraits || 0)
+  const pinned = Array.isArray(pinnedResult?.results) ? pinnedResult.results : []
+  const staleBySymbol = new Map(
+    (Array.isArray(staleResult?.results) ? staleResult.results : []).map((row) => [
+      row.gene_symbol,
+      Number(row.stale || 0),
+    ]),
   )
+
+  const broken =
+    brokenCount > 0
+      ? await db
+          .prepare(
+            `SELECT ps.gene_symbol FROM icono_publish_state ps
+               CROSS JOIN icono_gene_catalog gc ON gc.gene_symbol = ps.gene_symbol
+              WHERE COALESCE(ps.current_asset_sha256, '') <> ''
+                AND NOT EXISTS (SELECT 1 FROM icono_portrait_assets b
+                                 WHERE b.gene_symbol = ps.gene_symbol
+                                   AND b.asset_sha256 = ps.current_asset_sha256)
+              ORDER BY ps.gene_symbol
+              LIMIT ?`,
+          )
+          .bind(Math.min(ADMIN_ATTENTION_LIMIT, brokenCount))
+          .all()
+          .then(symbols)
+      : []
+  // Broken cards can fill the list; then the bare genes are not looked for.
+  const room = ADMIN_ATTENTION_LIMIT - broken.length
+  const missing =
+    missingCount > 0 && room > 0
+      ? await db
+          .prepare(
+            `SELECT gc.gene_symbol FROM icono_gene_catalog gc
+              WHERE NOT EXISTS (SELECT 1 FROM icono_portrait_assets pa
+                                 WHERE pa.gene_symbol = gc.gene_symbol AND ${ATTENTION_ELIGIBLE})
+              ORDER BY gc.gene_symbol
+              LIMIT ?`,
+          )
+          .bind(Math.min(room, missingCount))
+          .all()
+          .then(symbols)
+      : []
+
+  // Worst first, as the copy ranked them: a broken card, no candidate, stale
+  // portraits, a pin. A gene shows once, under its worst.
+  const attention = []
+  const seen = new Set()
+  for (const [kind, list] of [
+    ["drift", broken],
+    ["missing", missing],
+    ["stale", [...staleBySymbol.keys()]],
+    ["override", pinned.map((row) => row.gene_symbol)],
+  ])
+    for (const symbol of list) {
+      if (attention.length >= ADMIN_ATTENTION_LIMIT || seen.has(symbol)) continue
+      seen.add(symbol)
+      attention.push({
+        symbol: normalizeSymbol(symbol || "") || "",
+        kind,
+        stale_assets: staleBySymbol.get(symbol) || 0,
+      })
+    }
 
   const recentEvents = await fetchAdminRecentEvents(env, { limit: eventLimit })
 
   return {
     summary: {
-      genes: Number(summaryRow?.genes || 0),
-      with_live: Number(summaryRow?.with_live || 0),
-      overrides: Number(summaryRow?.overrides || 0),
-      drift: Number(summaryRow?.drift || 0),
-      current_asset_missing: Number(summaryRow?.current_asset_missing || 0),
-      missing: Number(summaryRow?.missing || 0),
-      no_live: Number(summaryRow?.no_live || 0),
-      stale_assets: Number(summaryRow?.stale_assets || 0),
-      legacy_assets: Number(summaryRow?.legacy_assets || 0),
-      updated_at: sanitizeText(summaryRow?.updated_at || "", 64) || "",
+      genes: geneCount,
+      with_live: withLive,
+      overrides: pinned.filter((row) => Number(row.has_card) === 1).length,
+      drift: brokenCount,
+      current_asset_missing: brokenCount,
+      missing: missingCount,
+      no_live: Math.max(0, geneCount - withLive),
+      stale_assets: Number(assets?.stale_assets || 0),
+      legacy_assets: Number(assets?.legacy_assets || 0),
+      updated_at: sanitizeText(genes?.updated_at || "", 64) || "",
     },
     attention,
     recent_events: recentEvents,
