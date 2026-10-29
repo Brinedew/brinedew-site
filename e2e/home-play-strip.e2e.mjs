@@ -276,6 +276,9 @@ const siteRow = (page) =>
     ready: row.classList.contains("is-strip-ready"),
     still: row.classList.contains("is-strip-still"),
     screen: document.documentElement.clientWidth,
+    edge: Math.round(
+      row.querySelector("[data-icono-strip-viewport]").getBoundingClientRect().right,
+    ),
     windows: [...row.querySelectorAll(".icono-play-site")].map((site) => {
       const box = site.getBoundingClientRect()
       return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width) }
@@ -347,7 +350,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       // 1. The strip, not the install card or the starters' feed.
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
       assert.equal(await page.$("[data-icono-home-install-card]"), null, "install card shown too")
-      assert.equal(await title(page), "Hover any gene symbol")
+      assert.equal(await title(page), "Tutorial: Hover over any gene symbol")
       const bar = await windowBar(page)
       assert.equal(bar.address, new URL(HOST).host)
       assert.deepEqual(await faceUp(page), [], "a starter was face up before a find")
@@ -552,7 +555,7 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
         userAgent: UA.android,
       })
       await page.waitForSelector("[data-icono-home-play]", { timeout: 20_000 })
-      assert.equal(await title(page), "Tap any gene symbol")
+      assert.equal(await title(page), "Tutorial: Tap any gene symbol")
       await page.tap(pill("CD4"))
       // 8. The first tap stays on the Archive and turns the card.
       assert.equal(new URL(page.url()).pathname, "/")
@@ -585,13 +588,20 @@ test("a first-time visitor finds genes on the Archive strip", async (t) => {
       // 15. The two sites are a swipe row, not two shrunken windows.
       const row = await siteRow(page)
       assert.ok(row.ready && !row.still, `the sites are not a swipe row: ${JSON.stringify(row)}`)
-      const [first, second] = row.windows
-      assert.ok(first.width >= 250, `a ${first.width} px window on a ${row.screen} px phone`)
-      assert.equal(second.top, first.top, "the windows stack instead of sitting in a row")
-      assert.ok(
-        second.left < row.screen && second.left + second.width > row.screen,
-        `the second window doesn't peek in from the edge: ${JSON.stringify(row)}`,
-      )
+      // Enough of the second window shows to read as a picture, down to a
+      // 360 px phone (a 16rem floor once left it 26 px there: a border).
+      for (const width of [PHONE.viewport.width, 360]) {
+        await page.setViewportSize({ width, height: PHONE.viewport.height })
+        const row = await siteRow(page)
+        const [first, second] = row.windows
+        assert.ok(first.width >= 220, `a ${first.width} px window on a ${row.screen} px phone`)
+        assert.equal(second.top, first.top, "the windows stack instead of sitting in a row")
+        assert.ok(
+          row.edge - second.left >= 48 && second.left + second.width > row.edge,
+          `the second window doesn't peek in from the edge: ${JSON.stringify(row)}`,
+        )
+      }
+      await page.setViewportSize(PHONE.viewport)
       await page.$eval("[data-icono-play-next]", (element) =>
         element.scrollIntoView({ block: "center", behavior: "instant" }),
       )

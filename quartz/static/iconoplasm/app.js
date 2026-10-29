@@ -30,7 +30,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=f9af82615dd8b68d"
+} from "./home-play-strip.js?v=731614436a2f875c"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -2713,7 +2713,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var isAuthenticated = !!(currentUser || (collectionState && collectionState.authenticated))
     var title = isAuthenticated ? "No genes discovered yet" : "Your browser shelf is empty"
     var body = isAuthenticated
-      ? "Hover a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
+      ? "Hover over a gene in the extension for about a second, then come back here. Your shelf will fill itself in."
       : "Open a gene dossier and it will stay in this browser until you sign in."
     var support = isAuthenticated
       ? "You can still search any symbol above while the first discoveries come in."
@@ -12778,7 +12778,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=56697e8514454382").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=52f32ac90d5dc752").then(
         function (module) {
           diagramStudio = module
           return module

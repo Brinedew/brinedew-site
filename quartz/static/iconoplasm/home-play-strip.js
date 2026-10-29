@@ -309,7 +309,7 @@ export function mountHomePlayStrip(container, options) {
   root.innerHTML =
     '<section class="icono-card icono-guest-login-card icono-play-card">' +
     '<div class="icono-home-auth-title icono-guest-login-card-title" role="heading" aria-level="2" data-icono-play-title>' +
-    (hover ? "Hover" : "Tap") +
+    (hover ? "Tutorial: Hover over" : "Tutorial: Tap") +
     " any gene symbol</div>" +
     '<div class="icono-play-window">' +
     windowBarMarkup(win.location.host) +
