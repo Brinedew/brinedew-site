@@ -712,7 +712,7 @@ function blotStorageFake(reads, servedKey) {
   }
 }
 
-// B-898 Stage 1, step B: the site gene detail (live and reader-recovery), the
+// B-898 Stage 1, step B: the site gene detail, the
 // public media envelope, the public image resolver and the blot-upload source
 // record resolve a gene from the same stable object as the blot route. Failure
 // modes these tests have to cover, written before the handlers changed:

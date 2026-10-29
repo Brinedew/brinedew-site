@@ -186,11 +186,8 @@ allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 [vars]
 # B-832: error reporting (public ingest key; rate-limited to 300 events/hour in Sentry).
 SENTRY_DSN = "https://44c29985415416cc070584965dcd686c@o4512140355239936.ingest.us.sentry.io/4512142881259520"
-ICONOPLASM_SCHEMA_TRANSITION = "0"
-ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
 # B-995 kill switch: "1" makes the taggerizer route answer 503 and hides the editor buttons.
 ICONOPLASM_TAGGERIZER_DISABLED = "0"
-ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 # ARCHITECTURE FENCE [IPD-001]: Bunny is the healthy-path direct portrait
@@ -348,11 +345,8 @@ destination_address = "brinedew@proton.me"
 allowed_sender_addresses = ["noreply@brinedew.bio", "contact@brinedew.bio"]
 
 [env.staging.vars]
-ICONOPLASM_SCHEMA_TRANSITION = "0"
-ICONOPLASM_SCHEMA_TRANSITION_MODE = "normal"
 # B-995 kill switch: "1" makes the taggerizer route answer 503 and hides the editor buttons.
 ICONOPLASM_TAGGERIZER_DISABLED = "0"
-ICONOPLASM_MIGRATION_ORIGIN_RUN_ID = ""
 ICONOPLASM_D1_DATABASE_STORAGE_HARD_LIMIT_BYTES_DO_NOT_SET_CASUALLY = "500000000"
 ICONOPLASM_D1_DATABASE_STORAGE_TARGET_PERCENT_DO_NOT_SET_CASUALLY = "80"
 # ARCHITECTURE FENCE [IPD-001]: staging must exercise the same Bunny-primary,

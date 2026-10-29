@@ -56,27 +56,11 @@ Those fixtures prove rendering and interaction, not restoration of production
 candidate data. Fresh unmodified production checks remain required after the
 normal deployment succeeds.
 
-## Maintenance reader recovery
+## When the database is down
 
-While the stateful Worker carries `ICONOPLASM_SCHEMA_TRANSITION=1`,
-`scripts/deploy-iconoplasm-reader-recovery.mjs` may set
-`ICONOPLASM_SCHEMA_TRANSITION_MODE=reader-recovery`
-(`workers/b742-quarantine-gene-shell-inside-the-only-allowed-stateful-worker-do-not-duplicate.js`).
-That mode permits only GET/HEAD reads for exact content-addressed portrait
-renditions. Portrait bytes use the existing storage adapter so first-party
-delivery remains available when Bunny is unreachable from the reader's network.
-Reader recovery performs no image selection, publication repair or D1 lookup.
-
-Gene pages are not part of it. The containment deploy keeps the asset bytes
-already serving production, which hold one static document per published gene,
-so a gene page costs no Worker request and carries its own canonical URL in a
-maintenance window as in normal service. A `/gene/` path with no document has
-no page to give: containment keeps no 404 page, so it reaches the Worker, which
-answers 404.
-
-A gene's card is drawn from its stable object on the CDN, which the page reads directly;
-the Worker serves none of it. Candidate images, caretaker identity, voting,
-generation, authoring, and other mutation routes remain behind the
-schema-transition response. Reader recovery restores reading, not full service:
-full service requires the admitted migration, normal stateful Worker activation,
-background-capacity release, and fresh live acceptance.
+Gene pages are static. The asset layer holds one document per published gene,
+so a gene page costs no Worker request and reads no D1, and it carries its own
+canonical URL. A gene's card is drawn from its stable object on the CDN, which
+the page reads directly; the Worker serves none of it. So when D1 is down or out
+of its daily allowance, readers still get every gene page and card. Votes,
+generation, caretaker saves and the other writes fail until D1 is back.
