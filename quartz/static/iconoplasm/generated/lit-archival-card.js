@@ -623,8 +623,9 @@ function normalizeCardModelHandwriting(payload) {
 }
 function splitStylePairColumns(stylePairs) {
   var pairs = Array.isArray(stylePairs) ? stylePairs.slice(0, 7) : [];
-  if (pairs.length <= 4) return [pairs];
-  return [pairs.slice(0, 4), pairs.slice(4, 7)];
+  if (pairs.length <= 2) return [pairs];
+  var half = Math.ceil(pairs.length / 2);
+  return [pairs.slice(0, half), pairs.slice(half)];
 }
 function stylePairTemplate(pair) {
   var safePair = asObject(pair);

@@ -236,30 +236,30 @@ function toolbarFit() {
   }
 }
 
-// Runs in the page: each handwritten note on the lead card that covers the ink of
-// a printed option, as "note over OPTION".
+// Runs in the page: each handwritten note on the lead card that covers a printed
+// option's letters, as "note over option". The words are drawn, not text, so the
+// letters are taken as the middle half of the option's line; a note that only
+// grazes the line, as "female" does above SOLUBLE, is fine.
 function notesOverPrintedWords() {
   const card = document.querySelector(".icono-gene-lead-card")
-  const words = [...card.querySelectorAll(".icono-label-option")].flatMap((option) => {
-    const range = document.createRange()
-    range.selectNodeContents(option)
-    return [...range.getClientRects()]
-      .filter((box) => box.width && box.height)
-      .map((box) => ({ box, text: option.textContent.trim() }))
+  const words = [...card.querySelectorAll(".icono-label-option")].map((option) => {
+    const box = option.getBoundingClientRect()
+    const inset = box.height / 4
+    return {
+      name: option.className.match(/icono-label-option--(\S+)/)?.[1] ?? "option",
+      left: box.left,
+      right: box.right,
+      top: box.top + inset,
+      bottom: box.bottom - inset,
+    }
   })
   return [...card.querySelectorAll(".icono-label-hand-note")]
     .filter((note) => note.textContent.trim() && note.checkVisibility())
     .flatMap((note) => {
       const n = note.getBoundingClientRect()
       return words
-        .filter(
-          ({ box }) =>
-            n.left < box.right - 1 &&
-            n.right > box.left + 1 &&
-            n.top < box.bottom - 1 &&
-            n.bottom > box.top + 1,
-        )
-        .map(({ text }) => `${note.textContent.trim()} over ${text}`)
+        .filter((w) => n.left < w.right && n.right > w.left && n.top < w.bottom && n.bottom > w.top)
+        .map((w) => `${note.textContent.trim()} over ${w.name}`)
     })
 }
 
