@@ -108,7 +108,9 @@ import {
   geneElectionReceipt,
   importGeneVotes,
   projectGeneElection,
+  READER_VOTES_ITEM_LIMIT,
   readGeneVoteSnapshots,
+  readReaderVotes,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
 import { readAdminGallery, readAdminGeneFacts } from "./iconoplasm/admin-gallery.js"
@@ -21249,6 +21251,42 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    // The signed-in reader's own votes on the portraits a page shows, so a FIT
+    // they gave last week is lit when they come back. The page already has the
+    // public tallies from the published gene object; this reads only the
+    // reader's rows, one index probe per named portrait. A guest costs no D1.
+    if (path === "/api/iconoplasm/votes/mine" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("votes_mine_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("votes_mine_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const rawItems = Array.isArray(p?.items) ? p.items : null
+      if (!rawItems || rawItems.length > READER_VOTES_ITEM_LIMIT)
+        return done(
+          "votes_mine_400",
+          json({ error: `items must be a list of at most ${READER_VOTES_ITEM_LIMIT}` }, 400),
+        )
+      const items = []
+      for (const item of rawItems) {
+        const symbol = normalizeSymbol(item?.symbol || "")
+        const assetSha = normalizeSha256(item?.asset_sha256 || "")
+        if (symbol && assetSha) items.push({ symbol, asset_sha256: assetSha })
+      }
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : ""
+      const votes = userId ? await readReaderVotes(env.ICONOPLASM_DB, { userId, items }) : []
+      return done(
+        "votes_mine",
+        json({ ok: true, authenticated: Boolean(userId), votes }, 200, {
+          "Cache-Control": "no-store",
+        }),
       )
     }
 

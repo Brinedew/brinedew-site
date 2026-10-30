@@ -3168,6 +3168,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     currentUserIsIconoAdmin = !!(currentUser && currentUser.is_admin)
     var currentUserId = String((currentUser && (currentUser.id || currentUser.user_id)) || "")
     hasResolvedAuthState = true
+    readerVotes.sync()
     if (previousHadUser !== !!currentUser) {
       invalidateImageEditProviders()
       resetImageEditDialogState()
@@ -4762,10 +4763,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     if (!existing) return
     wireVoteBox(existing, card.getAttribute("data-icono-symbol"), assetSha, {
-      // Cost fence: gallery cards can appear by the dozen on first paint and on lazy-load.
-      // Personalized vote state is useful, but not worth a per-card snapshot storm before
-      // the visitor actually tries to vote. The shared runtime fetches the snapshot before
-      // submitting a click, so correctness is preserved while idle page load stays quiet.
+      // Cost fence: gallery cards appear by the dozen on first paint and on lazy-load, so no
+      // card asks for its own snapshot. The reader's own votes come from one /votes/mine
+      // request per batch of cards (readerVotes), and a vote's reply carries the tally.
       deferSnapshot: true,
     })
   }
@@ -4927,9 +4927,168 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return IconoCardShared.voteBoxMarkup(extraAttrs, options)
   }
 
+  // The signed-in reader's own FIT and MISFIT votes on the portraits the page shows. The
+  // tallies come from the published gene object, which can't know who is reading, so
+  // without this a FIT the reader gave last week shows as unmarked, and pressing it again
+  // looks like a first vote. One POST to /votes/mine per batch of boxes (a gene page's lead
+  // and strip, a chunk of gallery cards) once sign-in has resolved; a guest sends nothing.
+  // A box rebuilt later (a winner swap) takes the vote already known without asking, and a
+  // vote on one box shows on every other box of the same portrait.
+  var readerVotes = (function () {
+    var ITEM_LIMIT = 100
+    var known = new Map()
+    var handles = new Map()
+    var queued = new Set()
+    var asked = new Set()
+    var userKey = ""
+    var timer = null
+    var firstQueuedAt = 0
+
+    function keyOf(symbol, assetSha) {
+      return (
+        normalizedSymbol(symbol) +
+        "|" +
+        String(assetSha || "")
+          .trim()
+          .toLowerCase()
+      )
+    }
+
+    function liveHandles(key) {
+      var live = (handles.get(key) || []).filter(function (handle) {
+        return handle.boxes.some(function (box) {
+          return box.isConnected
+        })
+      })
+      if (live.length) handles.set(key, live)
+      else handles.delete(key)
+      return live
+    }
+
+    function show(key, snapshotFor, source) {
+      var live = liveHandles(key)
+      for (var i = 0; i < live.length; i++) {
+        var handle = live[i]
+        if (handle === source || handle.state.pending) continue
+        handle.setSnapshot(snapshotFor(handle), { notify: false })
+      }
+    }
+
+    function showVote(key, vote) {
+      show(key, function (handle) {
+        return Object.assign({}, handle.state.snapshot, { user_vote: vote })
+      })
+    }
+
+    // Gallery cards get their boxes one by one as each gene arrives from the CDN, so the
+    // question waits for 300 ms without a new box (2 s at most): a window of 24 cards
+    // then costs one request, not one per few cards.
+    function schedule() {
+      var now = Date.now()
+      if (!firstQueuedAt) firstQueuedAt = now
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(flush, Math.max(0, Math.min(300, firstQueuedAt + 2000 - now)))
+    }
+
+    function flush() {
+      timer = null
+      firstQueuedAt = 0
+      if (!hasResolvedAuthState) return
+      var keys = Array.from(queued).filter(function (key) {
+        return liveHandles(key).length > 0
+      })
+      queued.clear()
+      // A signed-out reader has no votes, so a vote this device remembers from an
+      // ended session goes dark until they sign in again.
+      if (!currentUser) {
+        keys.forEach(function (key) {
+          showVote(key, 0)
+        })
+        return
+      }
+      for (var start = 0; start < keys.length; start += ITEM_LIMIT) {
+        ask(keys.slice(start, start + ITEM_LIMIT))
+      }
+    }
+
+    function ask(keys) {
+      var askedFor = userKey
+      keys.forEach(function (key) {
+        asked.add(key)
+      })
+      fetchJSON("/api/iconoplasm/votes/mine", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: keys.map(function (key) {
+            var cut = key.indexOf("|")
+            return { symbol: key.slice(0, cut), asset_sha256: key.slice(cut + 1) }
+          }),
+        }),
+      })
+        .then(function (data) {
+          if (askedFor !== userKey || !data || !data.authenticated) return
+          var votes = new Map()
+          ;(Array.isArray(data.votes) ? data.votes : []).forEach(function (row) {
+            votes.set(keyOf(row.symbol, row.asset_sha256), Number(row.vote || 0))
+          })
+          keys.forEach(function (key) {
+            // A press while the question was on its way is newer than the answer.
+            if (known.has(key)) return
+            var vote = votes.get(key) || 0
+            known.set(key, vote)
+            showVote(key, vote)
+          })
+        })
+        .catch(function (err) {
+          // No retry: the boxes keep what this device remembers.
+          console.warn("[Iconoplasm] reader votes unavailable:", err)
+        })
+    }
+
+    return {
+      register: function (handle, symbol, assetSha) {
+        if (!handle) return
+        var key = keyOf(symbol, assetSha)
+        handles.set(key, (handles.get(key) || []).concat([handle]))
+        if (known.has(key)) showVote(key, known.get(key))
+        else if (!asked.has(key)) {
+          queued.add(key)
+          schedule()
+        }
+      },
+      remember: function (source, symbol, assetSha, snapshot) {
+        var key = keyOf(symbol, assetSha)
+        known.set(key, Number((snapshot && snapshot.user_vote) || 0))
+        queued.delete(key)
+        show(
+          key,
+          function () {
+            return snapshot
+          },
+          source,
+        )
+      },
+      // Sign-in resolved or changed: a new reader's votes are asked for afresh.
+      sync: function () {
+        var id = currentUser ? String(currentUser.id || currentUser.user_id || "signed-in") : ""
+        if (id !== userKey) {
+          userKey = id
+          known.clear()
+          asked.clear()
+          handles.forEach(function (_list, key) {
+            queued.add(key)
+          })
+        }
+        if (queued.size) schedule()
+      },
+    }
+  })()
+
   function wireVoteBox(box, symbolValue, assetShaValue, options) {
     var opts = options || {}
-    return IconoCardShared.wireVoteBox(box, {
+    var handle = IconoCardShared.wireVoteBox(box, {
       symbol: symbolValue,
       assetSha: assetShaValue,
       visionId: opts.visionId || "",
@@ -4941,6 +5100,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       authenticated: !!opts.authenticated,
       apiBaseUrl: API,
       onSnapshot: function (snapshot, state) {
+        readerVotes.remember(handle, symbolValue, assetShaValue, snapshot)
         if (typeof opts.onSnapshot === "function") opts.onSnapshot(snapshot, state)
       },
       onAuthRequired: function (_error, sourceControl) {
@@ -4967,6 +5127,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         showCandidateDeleteNotice({ document: document, message: message, durationMs: 7000 })
       },
     })
+    readerVotes.register(handle, symbolValue, assetShaValue)
+    return handle
   }
 
   function wireBrickVoteBoxes(cards) {
@@ -5515,8 +5677,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .trim()
       .toUpperCase()
     var portrait = (genePayload && genePayload.portrait) || {}
+    var leadSha = String(portrait.asset_sha256 || "").toLowerCase()
+    var published = Array.isArray(genePayload && genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates
+      : []
+    var leadTally = null
+    for (var t = 0; t < published.length && !leadTally; t++) {
+      var candidate = published[t]
+      if (candidate && String(candidate.asset_sha256 || "").toLowerCase() === leadSha) {
+        leadTally = candidate
+      }
+    }
     return wireVoteBoxGroup(boxes, symbol, portrait.asset_sha256, {
       deferSnapshot: true,
+      publicTally: leadTally,
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
       onVoteCommitted: function (data) {

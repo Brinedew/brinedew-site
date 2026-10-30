@@ -239,6 +239,12 @@ election reads about 2 rows per eligible candidate, a snapshot about 9.
 The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
 
+A signed-in reader's own votes reach the gene page and the gallery through
+`/votes/mine`: one request per batch of the portraits that the page shows (at
+most 100), one probe of the vote table's (gene, asset, user) identity per
+portrait. TP53's 72 portraits read 74 rows. The public tallies come from the
+published gene object, so a guest's page sends no vote request at all.
+
 A print copy is painted in the reader's browser when they press its button;
 publication renders nothing for it and no server stores one.
 
@@ -252,14 +258,15 @@ serves an older blot.
 
 Automatic promotion uses one ranking rule everywhere it chooses a leader:
 
-1. highest vote score
-2. non-legacy before legacy
-3. highest upvote count
-4. newest `created_at`
-5. existing current asset only as a stability fallback
-6. lowest asset SHA as the final deterministic fallback
+1. highest weighted score: the vote score plus the caretaker's supervote (10 either way)
+2. highest vote score
+3. non-legacy before legacy
+4. highest upvote count
+5. newest `created_at`
+6. existing current asset only as a stability fallback
+7. lowest asset SHA as the final deterministic fallback
 
-The existing current asset is not protected from an equally voted newer asset. If a newer portrait has the same score and upvote count, it becomes canonical. The only durable "do not move this automatically" protection is `admin_override = 1` in `icono_publish_state`.
+The existing current asset is not protected from an equally voted newer asset. If a newer portrait has the same score and upvote count, it becomes canonical. This is on purpose: a portrait that is new from the workstation should easily replace an old default image (owner, 2026-10-31). Don't make the card's portrait win ties. The only durable "do not move this automatically" protection is `admin_override = 1` in `icono_publish_state`.
 
 Stale, rejected and auto-pick-ineligible candidates never win. Keep `electGeneAuthorityWinner` and the admin read-model leader SQL in the same order. If they drift, the admin view names one leader while the election publishes another.
 
