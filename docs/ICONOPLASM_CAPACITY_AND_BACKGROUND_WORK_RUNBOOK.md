@@ -267,11 +267,21 @@ The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-po
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
   coverage, assets, storage audit, repair scope, the gallery listing).
 
+A vote is critical, but the winner change it causes is sheddable_plus: once
+the `electionsDue` job sees batch work's share of the UTC day spent, it records
+the day in `icono_publication_shed_days`, and until 00:00 UTC a winner change
+marks its gene due (1 row) instead of projecting it (9 rows). The job elects
+the due genes after the reset, by their price. Details and costs:
+`ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, "Shed days".
+
 A price's unit is a D1 row, the provider's own meter, which counts every index
 entry and trigger write behind a statement. It is not a statement count: the
-provider allows 1,000 D1 calls per invocation and counts a batch as one. That
-call limit is the only bound on statements; there is no statement budget of
-our own. Measured prices say where they were
+provider allows 1,000 D1 calls per invocation and counts a batch as one. (D1's
+limits page lists 50 for the free plan, but the Workers limits page allows
+1,000 calls to Cloudflare's own services, and production requests have made 89
+D1 calls without failing: the request record, 2026-10-27 to 30.) That call
+limit is the only bound on statements; there is no statement budget of our
+own. Measured prices say where they were
 measured; the estimates in `batch-route-prices.js` are labelled as estimates
 and are replaced by a `d1QueriesAdaptiveGroups` measurement when one exists.
 

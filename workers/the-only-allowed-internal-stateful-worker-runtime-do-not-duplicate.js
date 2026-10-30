@@ -310,6 +310,7 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { createIconoplasmApp } from "./iconoplasm/app.js"
 import { accountD1Usage } from "./iconoplasm/operation-cost-account-usage.js"
+import { sweepDeferredElectionsForScheduled } from "./iconoplasm/votes/deferred-elections.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
   reconcileDeliveredRequestFulfillments,
@@ -1818,6 +1819,9 @@ export default {
         caretakerGeneRequests: () => deliverPendingCaretakerGeneRequestNotifications(env),
         archive: () => archiveColdIconoplasmPublishEvents(env),
         canonRepair: () => repairCanonInvariantsForScheduled(env),
+        // B-1147: marks the UTC day shed once batch work's share is spent, and
+        // otherwise elects the genes whose winner change waited, by their price.
+        electionsDue: () => sweepDeferredElectionsForScheduled(env),
       })
       if (background.handled) {
         const result = background.result

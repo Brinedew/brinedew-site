@@ -13950,11 +13950,21 @@ async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
 // election error is logged and the next vote re-elects; a publish failure
 // leaves a winner change to the Actions publisher (the projection wrote a
 // `publish` event) and a count-only change to the next vote on the gene.
-async function electGeneAfterVote(env, symbol, { reason } = {}) {
+//
+// B-1147: `shedable` (votes and supervotes): on a UTC day whose batch share is
+// spent, a winner change is marked due instead (projection code "SHED") and
+// the gene isn't republished, because the gene object's builder would project
+// the winner itself; workers/iconoplasm/votes/deferred-elections.js elects it
+// after the reset. A vote that keeps the winner republishes as on any day.
+// Erasure and role changes stay immediate: they change whose name a reader
+// sees. Any other rebuild of a due gene (an upload, the publisher) projects its
+// winner as on any day; the sweep then finds it unchanged and clears the mark.
+async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}) {
   try {
     const { projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {
       actor: GENE_VOTE_ELECTION_ACTOR,
       reason,
+      shedable,
     })
     return projection
   } catch (error) {
@@ -13966,9 +13976,9 @@ async function electGeneAfterVote(env, symbol, { reason } = {}) {
   }
 }
 
-export async function settleGeneAfterVote(env, ctx, symbol, { reason } = {}) {
-  const projection = await electGeneAfterVote(env, symbol, { reason })
-  republishGeneAfterResponse(env, ctx, symbol)
+export async function settleGeneAfterVote(env, ctx, symbol, { reason, shedable = false } = {}) {
+  const projection = await electGeneAfterVote(env, symbol, { reason, shedable })
+  if (projection?.code !== "SHED") republishGeneAfterResponse(env, ctx, symbol)
   return projection
 }
 
@@ -14000,7 +14010,7 @@ async function setIconoplasmVote(
     admit,
   })
   if (!vote.ok) return vote
-  if (vote.changed) await settleGeneAfterVote(env, ctx, symbol, { reason })
+  if (vote.changed) await settleGeneAfterVote(env, ctx, symbol, { reason, shedable: true })
   const [entry] = await iconoVoteSnapshots(env, {
     userId,
     items: [{ symbol, asset_sha256: assetSha256, vision_id: vote.resolved_vision_id }],
@@ -20999,7 +21009,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           expectedSupervoteVersion,
         })
         if (result?.changed && !result?.replayed) {
-          await settleGeneAfterVote(env, ctx, symbol, { reason: "caretaker_supervote" })
+          await settleGeneAfterVote(env, ctx, symbol, {
+            reason: "caretaker_supervote",
+            shedable: true,
+          })
         }
         return done(
           "caretaker_supervote",
