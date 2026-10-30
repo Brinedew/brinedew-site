@@ -13961,12 +13961,12 @@ async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
 // winner as on any day; the sweep then finds it unchanged and clears the mark.
 async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}) {
   try {
-    const { projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {
+    const { election, projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {
       actor: GENE_VOTE_ELECTION_ACTOR,
       reason,
       shedable,
     })
-    return projection
+    return { ...projection, vote_version: election?.version ?? null }
   } catch (error) {
     console.warn("Iconoplasm vote election deferred to the next vote", {
       symbol,
@@ -13976,23 +13976,9 @@ async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}
   }
 }
 
-//
-// `returnGene` (the vote route): when the winner changed, the gene object is
-// rewritten before the response instead of after it, and comes back as
-// `gene`, so the voter's page shows the new winner at once. It costs no extra
-// request: the same republish runs, only earlier.
-export async function settleGeneAfterVote(
-  env,
-  ctx,
-  symbol,
-  { reason, shedable = false, returnGene = false } = {},
-) {
+export async function settleGeneAfterVote(env, ctx, symbol, { reason, shedable = false } = {}) {
   const projection = await electGeneAfterVote(env, symbol, { reason, shedable })
   if (projection?.code === "SHED") return projection
-  if (returnGene && projection?.changed) {
-    const receipt = await republishGene(env, symbol, { includeObject: true })
-    return { ...projection, gene: receipt?.object || null }
-  }
   republishGeneAfterResponse(env, ctx, symbol)
   return projection
 }
@@ -14012,7 +13998,6 @@ async function setIconoplasmVote(
     candidateImageId = null,
     reason,
     admit = true,
-    returnGene = false,
   } = {},
 ) {
   const vote = await setGeneVote(env.ICONOPLASM_DB, {
@@ -14027,13 +14012,20 @@ async function setIconoplasmVote(
   })
   if (!vote.ok) return vote
   const settled = vote.changed
-    ? await settleGeneAfterVote(env, ctx, symbol, { reason, shedable: true, returnGene })
+    ? await settleGeneAfterVote(env, ctx, symbol, { reason, shedable: true })
     : null
   const [entry] = await iconoVoteSnapshots(env, {
     userId,
     items: [{ symbol, asset_sha256: assetSha256, vision_id: vote.resolved_vision_id }],
   })
-  return { ...vote, snapshot: entry?.snapshot || null, gene: settled?.gene || null }
+  // B-1147: the portrait this vote made the winner, and the gene's vote version
+  // it was elected at. The voter's page already holds every candidate, so it
+  // shows the winner from this alone, about a second before the republish
+  // (after the response, as always) reaches the gene object.
+  const winner = settled?.changed
+    ? { asset_sha256: settled.to_asset_sha256, vote_version: settled.vote_version }
+    : null
+  return { ...vote, snapshot: entry?.snapshot || null, winner }
 }
 
 // Many votes at once on one gene (an image edit's inherited upvotes, a
@@ -15958,17 +15950,10 @@ const STABLE_GENE_OBJECT_MAX_PASSES = 3
  * passes in all. After the last pass the vote that moved the version is left
  * to its own republish.
  */
-// `includeObject` adds the object written to the receipt (`object`), for a
-// caller that hands it to the reader who caused the rewrite.
 export async function publishIconoplasmGeneStableObject(
   env,
   symbolValue,
-  {
-    portraitAssetSha256 = null,
-    objects = null,
-    readManifestation = null,
-    includeObject = false,
-  } = {},
+  { portraitAssetSha256 = null, objects = null, readManifestation = null } = {},
 ) {
   const symbol = normalizeSymbol(symbolValue)
   if (!symbol) throw new Error("A symbol is required to publish a gene")
@@ -16019,7 +16004,6 @@ export async function publishIconoplasmGeneStableObject(
     stable: { key: stable.key, hash: stable.hash, size: stable.size },
     published_at: geneObject.published_at,
     ...(republishedAfterVote ? { republished_after_vote: true } : {}),
-    ...(includeObject ? { object: geneObject } : {}),
   }
 }
 
@@ -21220,7 +21204,6 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         userId,
         voteValue: requested,
         reason: "vote_auto_promote",
-        returnGene: true,
       })
       if (!vote.ok) {
         // A spent daily budget says when voting is back: the seconds to 00:00:00 UTC (the
@@ -21260,8 +21243,8 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             candidate_image_id: vote.candidate_image_id,
             user_id: userId,
             snapshot: vote.snapshot,
-            // B-1147: the gene object as rewritten, when this vote moved the winner.
-            ...(vote.gene ? { gene: vote.gene } : {}),
+            // B-1147: the new winner, when this vote moved it.
+            ...(vote.winner ? { winner: vote.winner } : {}),
           },
           200,
           { "Cache-Control": "no-store" },

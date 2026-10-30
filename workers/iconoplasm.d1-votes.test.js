@@ -682,16 +682,14 @@ test("5: a failed stable-object publish never fails a committed vote", async (t)
   assert.equal(result.status, 200)
   assert.equal(result.payload.snapshot.image_upvotes, 1)
   assert.equal(result.payload.snapshot.user_vote, 1)
-  // B-1147: a vote that moves the winner republishes before its response, so
-  // the voter's page can show the new winner; a failed one answers without
-  // the gene object and leaves nothing to run afterwards.
-  assert.equal(result.ctx.promises.length, 0)
-  assert.equal(Object.hasOwn(result.payload, "gene"), false)
-  assert.equal(
-    db.log.filter((entry) => /catalog_full_name/.test(entry.sql)).length,
-    1,
-    "the republish was attempted once",
+  assert.equal(result.ctx.promises.length, 1, "the vote scheduled exactly one republish")
+  assert.ok(
+    db.log.some((entry) => /catalog_full_name/.test(entry.sql)),
+    "the republish was attempted",
   )
+  // B-1147: the reply names the new winner whatever the publish does, so the
+  // voter's page shows it.
+  assert.equal(result.payload.winner.asset_sha256, sha("b"))
   // The winner change was still projected, with its publication-affecting
   // event, so the Actions publisher repairs the stable object.
   assert.equal(current(db, "TP53"), sha("b"))
@@ -2384,11 +2382,12 @@ test("34: on a shed day a vote is written at once and its winner change waits fo
   assert.deepEqual(due(), [])
 })
 
-// 35. A vote that moves a gene's winner (B-1147) answers without the gene
-// object as rewritten, so the voter's page keeps the old winner until a
-// reload; the object it hands back differs from the one stored, or the page's
-// reader refuses it; or a vote that keeps the winner waits for a republish.
-test("35: a vote that moves the winner hands back the gene object it rewrote", async (t) => {
+// 35. A vote that moves a gene's winner (B-1147) doesn't name it, so the
+// voter's page keeps the old winner until a reload; the page's own build of
+// the new winner drifts from the object the republish writes (a field the
+// builder's winnerPortrait copies and the reader's withWinner doesn't, the
+// pool order, the voted portrait's counts); or the reply waits for Bunny.
+test("35: a vote that moves the winner names it, and the page's build of it is the object the republish writes", async (t) => {
   const network = new FakeNetwork()
   network.install()
   t.after(() => network.restore())
@@ -2403,31 +2402,61 @@ test("35: a vote that moves the winner hands back the gene object it rewrote", a
     ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
     ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
   }
-  const voteOn = (asset, userId) =>
-    callApi(
+  const voteOn = async (asset, userId, value) => {
+    const result = await callApi(
       db,
       "/api/iconoplasm/votes/set",
-      { symbol: "TP53", asset_sha256: asset, vote_value: 1 },
+      { symbol: "TP53", asset_sha256: asset, vote_value: value },
       { user: { user_id: userId }, env: { bindings } },
     )
+    assert.equal(result.status, 200, JSON.stringify(result.payload))
+    // The republish never holds the reply: it runs after the response.
+    assert.equal(result.ctx.promises.length, 1)
+    await Promise.all(result.ctx.promises)
+    return result
+  }
+  const stored = () =>
+    JSON.parse(Buffer.from(network.objects.get(stableGeneObjectKey("TP53"))).toString("utf8"))
 
-  const moved = await voteOn(sha("b"), "reader-1")
-  assert.equal(moved.status, 200, JSON.stringify(moved.payload))
+  // A vote that keeps the winner names none.
+  const held = await voteOn(sha("a"), "reader-1", 1)
+  assert.equal(held.payload.winner, undefined)
+  // a: +1 -1, still ahead of b on upvotes; the page loads this object.
+  assert.equal((await voteOn(sha("a"), "reader-2", -1)).payload.winner, undefined)
+  const page = stored()
+  assert.equal(page.portrait.asset_sha256, sha("a"))
+
+  // a second downvote moves the winner to b, a portrait nobody voted on here.
+  const moved = await voteOn(sha("a"), "reader-3", -1)
   assert.equal(current(db, "TP53"), sha("b"))
-  assert.equal(moved.payload.gene.portrait.asset_sha256, sha("b"))
-  assert.equal(moved.ctx.promises.length, 0, "the republish ran before the response")
-  const stored = JSON.parse(
-    Buffer.from(network.objects.get(stableGeneObjectKey("TP53"))).toString("utf8"),
-  )
-  assert.deepEqual(moved.payload.gene, stored)
-  const reader = createIconoplasmPublicationReader({ fetchImpl: () => assert.fail("no fetch") })
-  assert.equal(reader.fromStableGene(moved.payload.gene, "TP53").symbol, "TP53")
-  assert.equal(reader.fromStableGene(moved.payload.gene, "BRCA1"), null)
+  const written = stored()
+  assert.deepEqual(moved.payload.winner, {
+    asset_sha256: sha("b"),
+    vote_version: written.vote_version,
+  })
 
-  // A vote that keeps the winner: no object, and the republish runs after the
-  // response as before.
-  const held = await voteOn(sha("b"), "reader-2")
-  assert.equal(held.status, 200)
-  assert.equal(held.payload.gene, undefined)
-  assert.equal(held.ctx.promises.length, 1)
+  // The page's own build, from the object it holds and the reply, is the
+  // object the republish wrote: same winner fields, same pool order and
+  // flags, the voted portrait's new counts. Only the media addresses differ
+  // in form (the reader serves them from the CDN).
+  const reader = createIconoplasmPublicationReader({ fetchImpl: () => assert.fail("no fetch") })
+  const predicted = reader.withWinner(page, moved.payload.winner, {
+    ...moved.payload.snapshot,
+    asset_sha256: moved.payload.asset_sha256,
+  })
+  const withoutMedia = ({ hero_url, medium_url, small_url, ...rest }) => rest
+  assert.deepEqual(withoutMedia(predicted.portrait), withoutMedia(written.portrait))
+  assert.match(predicted.portrait.medium_url, new RegExp(`${sha("b")}/medium\\.webp$`))
+  assert.equal(predicted.vote_version, written.vote_version)
+  const pool = (gene) =>
+    gene.portrait_candidates.map((entry) => [
+      entry.asset_sha256,
+      entry.is_current,
+      entry.image_upvotes,
+      entry.image_downvotes,
+      entry.image_score,
+      entry.weighted_score,
+    ])
+  assert.deepEqual(pool(predicted), pool(written))
+  assert.equal(reader.withWinner(page, { asset_sha256: sha("z"), vote_version: 9 }), null)
 })

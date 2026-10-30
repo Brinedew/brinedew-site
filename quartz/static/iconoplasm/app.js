@@ -59,7 +59,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=8a0392a30b2ed55a"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=fd5a190b9585cb17"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -5517,25 +5517,31 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
       onVoteCommitted: function (data) {
-        showWinnerAfterVote(container, data && data.gene)
+        showWinnerAfterVote(container, data)
       },
     })
   }
 
-  // B-1147: a vote that moved the gene's winner brings the gene object back as
-  // the Website just rewrote it. The page swaps in what names the winner (the
-  // lead card, the toolbar's star, print copy and edit action, the candidate
-  // strip) at once, as a reload would. Open tabs, the caretaker editor and
-  // unsent comments stay. A reply older than the page's object changes nothing,
-  // so two quick votes can't show the first one's winner last. Keyboard focus
-  // goes back to the button the reader pressed, now rebuilt.
-  function showWinnerAfterVote(container, stableGene) {
+  // B-1147: a vote that moved the gene's winner names it in its reply, and the
+  // page already holds every candidate, so it swaps in what names the winner
+  // (the lead card, the toolbar's star, print copy and edit action, the
+  // candidate strip) at once, as a reload after the republish would. Open tabs,
+  // the caretaker editor and unsent comments stay. A reply older than the
+  // page's object changes nothing, so two quick votes can't show the first
+  // one's winner last. Keyboard focus goes back to the button the reader
+  // pressed, now rebuilt.
+  function showWinnerAfterVote(container, reply) {
     var current = container && container._iconoGenePayload
     var reader = window.IconoplasmPublicationReader
-    if (!stableGene || !current || !container.isConnected) return
-    if (!reader || typeof reader.fromStableGene !== "function") return
-    var updated = reader.fromStableGene(stableGene, current.symbol)
-    if (!updated || Number(updated.vote_version || 0) < Number(current.vote_version || 0)) return
+    var winner = reply && reply.winner
+    if (!winner || !current || !container.isConnected) return
+    if (!reader || typeof reader.withWinner !== "function") return
+    if (Number(winner.vote_version || 0) < Number(current.vote_version || 0)) return
+    var tally = reply.snapshot
+      ? Object.assign({}, reply.snapshot, { asset_sha256: reply.asset_sha256 })
+      : null
+    var updated = reader.withWinner(current, winner, tally)
+    if (!updated) return
     portraitDetailCache[normalizedSymbol(updated.symbol)] = updated
     var focused = document.activeElement
     var focusBox =
@@ -5627,7 +5633,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         visionId: box.getAttribute("data-icono-vision-id") || "",
         candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
         onVoteCommitted: function (data) {
-          showWinnerAfterVote(container, data && data.gene)
+          showWinnerAfterVote(container, data)
         },
       })
       if (group) groups.push(group)
@@ -12910,7 +12916,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=dd9e4436d8b0b7a2").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=fb72acbc89ff6f42").then(
         function (module) {
           diagramStudio = module
           return module

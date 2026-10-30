@@ -503,15 +503,62 @@ export function createIconoplasmPublicationReader(options = {}) {
     return { card_snapshot_version: stable.version, publication_source: "stable_v3" }
   }
 
-  // B-1147: a gene object the Website handed back itself (a vote that moved the
-  // winner returns the object it just wrote), checked and given its media
-  // addresses like one read from the CDN. Null when it isn't this gene's.
-  function fromStableGene(value, symbol) {
-    const key = normalizedSymbol(symbol)
-    return key && validStableGene(value, key) ? withImmutableMedia(value) : null
+  // B-1147: the gene as its object will read once a vote has made `winner`
+  // ({ asset_sha256, vote_version }, from the vote's reply) the winner, built
+  // from the candidate the object already holds, field for field as the
+  // builder's winnerPortrait (workers/lib/iconoplasm-stable-gene-object.js)
+  // does. `tally` (the reply's snapshot of the voted portrait) brings that
+  // candidate's counts up to date. The republish that writes the real object
+  // lands about a second later. Null when the candidate isn't in this object.
+  function withWinner(record, winner, tally = null) {
+    const pick = (value) => String(value || "").toLowerCase()
+    const winnerSha = pick(winner?.asset_sha256)
+    const pool = Array.isArray(record?.portrait_candidates) ? record.portrait_candidates : []
+    const candidate = HASH.test(winnerSha)
+      ? pool.find((entry) => pick(entry?.asset_sha256) === winnerSha)
+      : null
+    if (!candidate) return null
+    const votedSha = pick(tally?.asset_sha256)
+    const counted = (entry) =>
+      votedSha && pick(entry.asset_sha256) === votedSha
+        ? {
+            ...entry,
+            image_upvotes: Number(tally.image_upvotes || 0),
+            image_downvotes: Number(tally.image_downvotes || 0),
+            image_score: Number(tally.image_score || 0),
+            weighted_score: Number(tally.weighted_score ?? tally.image_score ?? 0),
+          }
+        : entry
+    const rest = pool.filter((entry) => entry !== candidate)
+    return withImmutableMedia({
+      ...record,
+      vote_version: Number(winner.vote_version ?? record.vote_version) || 0,
+      portrait: {
+        status: "published",
+        hero_url: candidate.full_url,
+        medium_url: candidate.medium_url,
+        small_url: candidate.small_url,
+        width: candidate.width ?? null,
+        height: candidate.height ?? null,
+        asset_sha256: candidate.asset_sha256,
+        candidate_image_id: candidate.candidate_image_id,
+        vision_id: candidate.vision_id,
+        emulsion_id: candidate.emulsion_id,
+        emulsion_label: candidate.emulsion_label,
+        sample_label: candidate.sample_label,
+        sample_number: candidate.sample_number,
+        sample_text_hash: candidate.sample_text_hash,
+        artist_id: candidate.artist_id,
+      },
+      // The winner leads the pool, as in the builder's reading order.
+      portrait_candidates: [candidate, ...rest].map((entry) => ({
+        ...counted(entry),
+        is_current: entry === candidate,
+      })),
+    })
   }
 
-  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex, fromStableGene }
+  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex, withWinner }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
