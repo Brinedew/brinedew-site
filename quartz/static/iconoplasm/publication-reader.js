@@ -503,7 +503,15 @@ export function createIconoplasmPublicationReader(options = {}) {
     return { card_snapshot_version: stable.version, publication_source: "stable_v3" }
   }
 
-  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex }
+  // B-1147: a gene object the Website handed back itself (a vote that moved the
+  // winner returns the object it just wrote), checked and given its media
+  // addresses like one read from the CDN. Null when it isn't this gene's.
+  function fromStableGene(value, symbol) {
+    const key = normalizedSymbol(symbol)
+    return key && validStableGene(value, key) ? withImmutableMedia(value) : null
+  }
+
+  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex, fromStableGene }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()
