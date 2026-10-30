@@ -98,53 +98,31 @@ function firstParagraph(text, max) {
 
 const avatar = (value) => discordAvatarSource(value) || ""
 
-// Canonical portrait updates people caused. A new candidate that wins only
-// because it is the newest of a tie (nobody had voted) is not one; it shows
-// under new candidates instead.
+// Every gene whose canonical portrait at the end of the day differs from the
+// one it had when the day began. Readers see the new face on the gene page
+// whatever caused it: a vote, a caretaker's choice, or a new candidate that
+// won a tie nobody had voted on (mistake 30). Winners with votes come first.
 async function canonicalUpdates(db, events) {
   const byGene = new Map()
   for (const event of events) {
     if (event.action !== "publish") continue
     const current = byGene.get(event.gene_symbol)
-    if (current) {
-      current.to = event.to_asset_sha256
-      current.human ||= event.actor !== "vote_authority"
-    } else
+    if (current) current.to = event.to_asset_sha256
+    else
       byGene.set(event.gene_symbol, {
         symbol: event.gene_symbol,
         from: event.from_asset_sha256,
         to: event.to_asset_sha256,
-        human: event.actor !== "vote_authority",
       })
   }
   const changed = [...byGene.values()].filter((g) => g.from && g.to && g.from !== g.to)
   if (!changed.length) return []
   const scores = await scoresOf(
     db,
-    changed.flatMap((g) => [
-      [g.symbol, g.from],
-      [g.symbol, g.to],
-    ]),
-  )
-  const supervoted = new Set(
-    rows(
-      await db
-        .prepare(
-          `SELECT gene_symbol, supervote_asset_sha256 FROM icono_caretaker_assignments
-            WHERE status IN ('active', 'suspended') AND supervote_asset_sha256 IS NOT NULL`,
-        )
-        .all(),
-    ).map((row) => `${row.gene_symbol}:${row.supervote_asset_sha256}`),
+    changed.map((g) => [g.symbol, g.to]),
   )
   const score = (symbol, sha) => scores.get(`${symbol}:${sha}`) || 0
   return changed
-    .filter(
-      (g) =>
-        g.human ||
-        supervoted.has(`${g.symbol}:${g.to}`) ||
-        supervoted.has(`${g.symbol}:${g.from}`) ||
-        score(g.symbol, g.to) > score(g.symbol, g.from),
-    )
     .sort(
       (a, b) => score(b.symbol, b.to) - score(a.symbol, a.to) || a.symbol.localeCompare(b.symbol),
     )
