@@ -10541,15 +10541,15 @@
       if (paused) box.setAttribute("data-icono-vote-paused", "");
       else box.removeAttribute("data-icono-vote-paused");
       if (upBtn) {
-        upBtn.disabled = pending;
         upBtn.classList.toggle("active", userVote === 1);
-        if (paused) upBtn.setAttribute("aria-disabled", "true");
+        upBtn.toggleAttribute("data-icono-vote-pending", pending);
+        if (paused || pending) upBtn.setAttribute("aria-disabled", "true");
         else upBtn.removeAttribute("aria-disabled");
       }
       if (downBtn) {
-        downBtn.disabled = pending;
         downBtn.classList.toggle("active", userVote === -1);
-        if (paused) downBtn.setAttribute("aria-disabled", "true");
+        downBtn.toggleAttribute("data-icono-vote-pending", pending);
+        if (paused || pending) downBtn.setAttribute("aria-disabled", "true");
         else downBtn.removeAttribute("aria-disabled");
       }
       var qcBlock = box.closest ? box.closest(".icono-label-qc-block") : null;
@@ -10757,6 +10757,7 @@
         });
       }
       function submitVote(voteValue, sourceControl) {
+        if (state.pending) return;
         if (pauseActive()) {
           reportVoteFailure(pause.message, null);
           return;

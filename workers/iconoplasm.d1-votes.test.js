@@ -86,6 +86,8 @@ import {
 } from "./iconoplasm/votes/vote-guards.js"
 import { PUBLICATION_AFFECTING_ACTIONS } from "./iconoplasm-catalog-dispatch.js"
 import { secondsUntilCloudflareDailyReset } from "./lib/cloudflare-availability.js"
+import { stableGeneObjectKey } from "./lib/iconoplasm-published-objects.js"
+import { createIconoplasmPublicationReader } from "../quartz/static/iconoplasm/publication-reader.js"
 import {
   BOT_TOKEN,
   CHANNEL_ID,
@@ -680,10 +682,15 @@ test("5: a failed stable-object publish never fails a committed vote", async (t)
   assert.equal(result.status, 200)
   assert.equal(result.payload.snapshot.image_upvotes, 1)
   assert.equal(result.payload.snapshot.user_vote, 1)
-  assert.equal(result.ctx.promises.length, 1, "the vote scheduled exactly one republish")
-  assert.ok(
-    db.log.some((entry) => /catalog_full_name/.test(entry.sql)),
-    "the republish was attempted",
+  // B-1147: a vote that moves the winner republishes before its response, so
+  // the voter's page can show the new winner; a failed one answers without
+  // the gene object and leaves nothing to run afterwards.
+  assert.equal(result.ctx.promises.length, 0)
+  assert.equal(Object.hasOwn(result.payload, "gene"), false)
+  assert.equal(
+    db.log.filter((entry) => /catalog_full_name/.test(entry.sql)).length,
+    1,
+    "the republish was attempted once",
   )
   // The winner change was still projected, with its publication-affecting
   // event, so the Actions publisher repairs the stable object.
@@ -2375,4 +2382,52 @@ test("34: on a shed day a vote is written at once and its winner change waits fo
   assert.deepEqual(due(), ["TP53"])
   assert.equal((await sweepDeferredElections(db, { usage: sample(), now: after })).elected, 1)
   assert.deepEqual(due(), [])
+})
+
+// 35. A vote that moves a gene's winner (B-1147) answers without the gene
+// object as rewritten, so the voter's page keeps the old winner until a
+// reload; the object it hands back differs from the one stored, or the page's
+// reader refuses it; or a vote that keeps the winner waits for a republish.
+test("35: a vote that moves the winner hands back the gene object it rewrote", async (t) => {
+  const network = new FakeNetwork()
+  network.install()
+  t.after(() => network.restore())
+  const db = new SqliteD1()
+  seedGene(db, "TP53")
+  seedAsset(db, "TP53", sha("a"), { createdAt: "2026-01-02 00:00:00" })
+  seedAsset(db, "TP53", sha("b"), { createdAt: "2026-01-01 00:00:00" })
+  seedPublished(db, "TP53", sha("a"))
+  const bindings = {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: STORAGE_ZONE,
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: STORAGE_PASSWORD,
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  }
+  const voteOn = (asset, userId) =>
+    callApi(
+      db,
+      "/api/iconoplasm/votes/set",
+      { symbol: "TP53", asset_sha256: asset, vote_value: 1 },
+      { user: { user_id: userId }, env: { bindings } },
+    )
+
+  const moved = await voteOn(sha("b"), "reader-1")
+  assert.equal(moved.status, 200, JSON.stringify(moved.payload))
+  assert.equal(current(db, "TP53"), sha("b"))
+  assert.equal(moved.payload.gene.portrait.asset_sha256, sha("b"))
+  assert.equal(moved.ctx.promises.length, 0, "the republish ran before the response")
+  const stored = JSON.parse(
+    Buffer.from(network.objects.get(stableGeneObjectKey("TP53"))).toString("utf8"),
+  )
+  assert.deepEqual(moved.payload.gene, stored)
+  const reader = createIconoplasmPublicationReader({ fetchImpl: () => assert.fail("no fetch") })
+  assert.equal(reader.fromStableGene(moved.payload.gene, "TP53").symbol, "TP53")
+  assert.equal(reader.fromStableGene(moved.payload.gene, "BRCA1"), null)
+
+  // A vote that keeps the winner: no object, and the republish runs after the
+  // response as before.
+  const held = await voteOn(sha("b"), "reader-2")
+  assert.equal(held.status, 200)
+  assert.equal(held.payload.gene, undefined)
+  assert.equal(held.ctx.promises.length, 1)
 })
