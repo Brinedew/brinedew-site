@@ -779,6 +779,8 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
       escapeHtml(note) +
       '" class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' +
       escapeHtml(categoryKey || "unselected") +
+      '" data-sex="' +
+      escapeHtml(note) +
       '">' +
       escapeHtml(note) +
       "</div>"
