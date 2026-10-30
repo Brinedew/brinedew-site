@@ -240,10 +240,13 @@ The vote snapshot (`/votes/snapshot`) reads D1: the named gene's summaries,
 the caller's own vote on exactly the named asset and the caretaker row.
 
 A signed-in reader's own votes reach the gene page and the gallery through
-`/votes/mine`: one request per batch of the portraits that the page shows (at
-most 100), one probe of the vote table's (gene, asset, user) identity per
-portrait. TP53's 72 portraits read 74 rows. The public tallies come from the
-published gene object, so a guest's page sends no vote request at all.
+`/votes/mine`, which names genes, not portraits: one request per gene page
+whatever its portrait count, and one per window of gallery cards. It reads the
+reader's votes on the named genes through the `(user_id, gene_symbol)` index
+(migration 0150), about 2 rows per vote that they hold there: 4 rows for a
+reader with 2 votes on TP53, however many portraits or other people's votes
+TP53 has. The public tallies come from the published gene object, so a guest's
+page sends no vote request at all.
 
 A print copy is painted in the reader's browser when they press its button;
 publication renders nothing for it and no server stores one.

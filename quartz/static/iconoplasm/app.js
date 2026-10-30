@@ -4930,16 +4930,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // The signed-in reader's own FIT and MISFIT votes on the portraits the page shows. The
   // tallies come from the published gene object, which can't know who is reading, so
   // without this a FIT the reader gave last week shows as unmarked, and pressing it again
-  // looks like a first vote. One POST to /votes/mine per batch of boxes (a gene page's lead
-  // and strip, a chunk of gallery cards) once sign-in has resolved; a guest sends nothing.
-  // A box rebuilt later (a winner swap) takes the vote already known without asking, and a
-  // vote on one box shows on every other box of the same portrait.
+  // looks like a first vote. The page asks /votes/mine for the reader's votes by gene, not
+  // by portrait: a gene page sends one request whether the gene has 3 portraits or 3,000,
+  // and a window of gallery cards sends one. Nothing is asked before sign-in has resolved,
+  // and a guest sends nothing. A box rebuilt later (a winner swap) takes the vote already
+  // known without asking, and a vote on one box shows on every other box of its portrait.
   var readerVotes = (function () {
-    var ITEM_LIMIT = 100
+    var GENE_LIMIT = 100
     var known = new Map()
+    var pressed = new Set()
     var handles = new Map()
     var queued = new Set()
     var asked = new Set()
+    var answered = new Set()
     var userKey = ""
     var timer = null
     var firstQueuedAt = 0
@@ -4954,6 +4957,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       )
     }
 
+    function symbolOf(key) {
+      return key.slice(0, key.indexOf("|"))
+    }
+
     function liveHandles(key) {
       var live = (handles.get(key) || []).filter(function (handle) {
         return handle.boxes.some(function (box) {
@@ -4963,6 +4970,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (live.length) handles.set(key, live)
       else handles.delete(key)
       return live
+    }
+
+    function keysOfGene(symbol) {
+      var keys = []
+      handles.forEach(function (_list, key) {
+        if (symbolOf(key) === symbol && liveHandles(key).length) keys.push(key)
+      })
+      return keys
     }
 
     function show(key, snapshotFor, source) {
@@ -4981,8 +4996,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
 
     // Gallery cards get their boxes one by one as each gene arrives from the CDN, so the
-    // question waits for 300 ms without a new box (2 s at most): a window of 24 cards
-    // then costs one request, not one per few cards.
+    // question waits for 300 ms without a new gene (2 s at most): a window of cards then
+    // costs one request, not one per few cards.
     function schedule() {
       var now = Date.now()
       if (!firstQueuedAt) firstQueuedAt = now
@@ -4994,51 +5009,48 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       timer = null
       firstQueuedAt = 0
       if (!hasResolvedAuthState) return
-      var keys = Array.from(queued).filter(function (key) {
-        return liveHandles(key).length > 0
+      var symbols = Array.from(queued).filter(function (symbol) {
+        return keysOfGene(symbol).length > 0
       })
       queued.clear()
       // A signed-out reader has no votes, so a vote this device remembers from an
       // ended session goes dark until they sign in again.
       if (!currentUser) {
-        keys.forEach(function (key) {
-          showVote(key, 0)
+        symbols.forEach(function (symbol) {
+          keysOfGene(symbol).forEach(function (key) {
+            showVote(key, 0)
+          })
         })
         return
       }
-      for (var start = 0; start < keys.length; start += ITEM_LIMIT) {
-        ask(keys.slice(start, start + ITEM_LIMIT))
+      for (var start = 0; start < symbols.length; start += GENE_LIMIT) {
+        ask(symbols.slice(start, start + GENE_LIMIT))
       }
     }
 
-    function ask(keys) {
+    function ask(symbols) {
       var askedFor = userKey
-      keys.forEach(function (key) {
-        asked.add(key)
+      symbols.forEach(function (symbol) {
+        asked.add(symbol)
       })
       fetchJSON("/api/iconoplasm/votes/mine", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: keys.map(function (key) {
-            var cut = key.indexOf("|")
-            return { symbol: key.slice(0, cut), asset_sha256: key.slice(cut + 1) }
-          }),
-        }),
+        body: JSON.stringify({ symbols: symbols }),
       })
         .then(function (data) {
           if (askedFor !== userKey || !data || !data.authenticated) return
-          var votes = new Map()
           ;(Array.isArray(data.votes) ? data.votes : []).forEach(function (row) {
-            votes.set(keyOf(row.symbol, row.asset_sha256), Number(row.vote || 0))
-          })
-          keys.forEach(function (key) {
+            var key = keyOf(row.symbol, row.asset_sha256)
             // A press while the question was on its way is newer than the answer.
-            if (known.has(key)) return
-            var vote = votes.get(key) || 0
-            known.set(key, vote)
-            showVote(key, vote)
+            if (!pressed.has(key)) known.set(key, Number(row.vote || 0))
+          })
+          symbols.forEach(function (symbol) {
+            answered.add(symbol)
+            keysOfGene(symbol).forEach(function (key) {
+              if (!pressed.has(key)) showVote(key, known.get(key) || 0)
+            })
           })
         })
         .catch(function (err) {
@@ -5051,17 +5063,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       register: function (handle, symbol, assetSha) {
         if (!handle) return
         var key = keyOf(symbol, assetSha)
+        var gene = symbolOf(key)
         handles.set(key, (handles.get(key) || []).concat([handle]))
-        if (known.has(key)) showVote(key, known.get(key))
-        else if (!asked.has(key)) {
-          queued.add(key)
+        if (answered.has(gene) || pressed.has(key)) showVote(key, known.get(key) || 0)
+        else if (!asked.has(gene)) {
+          queued.add(gene)
           schedule()
         }
       },
       remember: function (source, symbol, assetSha, snapshot) {
         var key = keyOf(symbol, assetSha)
         known.set(key, Number((snapshot && snapshot.user_vote) || 0))
-        queued.delete(key)
+        pressed.add(key)
         show(
           key,
           function () {
@@ -5076,9 +5089,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (id !== userKey) {
           userKey = id
           known.clear()
+          pressed.clear()
           asked.clear()
+          answered.clear()
           handles.forEach(function (_list, key) {
-            queued.add(key)
+            queued.add(symbolOf(key))
           })
         }
         if (queued.size) schedule()

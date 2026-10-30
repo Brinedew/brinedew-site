@@ -15,7 +15,7 @@
     "kv_lists": 0
   },
   "migrations": {
-    "iconoplasm/0149_vote_write_trims_and_deferred_elections.sql": {
+    "iconoplasm/0150_reader_votes_by_gene.sql": {
       "online": true,
       "prediction": {
         "rows_read": 10000,

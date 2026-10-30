@@ -4,12 +4,12 @@
 // Oct 21 had put the armoured portrait on the card, but the page drew only the
 // public tallies, so the box showed no vote, and they pressed FIT again to give
 // it. The press took the vote back (fixed in vote-press.e2e.mjs). The page now
-// asks once for the reader's own votes on every portrait it shows.
+// asks once for the reader's own votes on the gene, whatever its portrait count.
 //
 // Ways this can fail, written before the check, at 1280 and 400 px:
 // 1. The reader's FIT on the lead or MISFIT on a strip portrait isn't lit.
-// 2. The page asks once per box (72 requests on TP53) instead of once, or the
-//    one request leaves out a portrait the page shows.
+// 2. The page asks more than once, or names portraits instead of the gene, so
+//    a gene with 1,000 portraits would cost 10 requests a view.
 // 3. A vote that moves the winner rebuilds the card and the strip, and the
 //    rebuilt boxes go dark or ask again.
 // 4. A guest's page asks at all, or shows a vote this device remembers from a
@@ -34,7 +34,7 @@ function createApi(calls, server) {
   return (pathname, request) => {
     if (pathname === "/api/iconoplasm/votes/mine") {
       const body = JSON.parse(request.postData() || "{}")
-      calls.push({ route: "mine", items: body.items })
+      calls.push({ route: "mine", symbols: body.symbols, items: body.items })
       return server.ready.then(() => ({
         ok: true,
         authenticated: true,
@@ -140,11 +140,10 @@ test("a signed-in reader sees their own votes, asked for once per page", async (
       const mine = calls.filter((call) => call.route === "mine")
       assert.equal(mine.length, 1, `${label}: one request for the reader's votes`)
       assert.deepEqual(
-        new Set(mine[0].items.map((item) => `${item.symbol}|${item.asset_sha256}`)),
-        new Set([lead, ...shown].map((asset) => `TP53|${asset}`)),
-        `${label}: the request names every portrait the page shows`,
+        { symbols: mine[0].symbols, items: mine[0].items },
+        { symbols: ["TP53"], items: undefined },
+        `${label}: the request names the gene, not its ${shown.length + 1} portraits`,
       )
-      assert.ok(mine[0].items.length <= 100, `${label}: within the route's 100-item limit`)
 
       // 1.
       votes.votes.set(lead, 1)
