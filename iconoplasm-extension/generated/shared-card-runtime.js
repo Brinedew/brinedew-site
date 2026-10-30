@@ -9890,7 +9890,7 @@
       var note = String(sexNote || "").trim().toLowerCase();
       if (!note) return "";
       var categoryKey = String(selectedCategory || "").trim().toLowerCase();
-      return '<div role="note" aria-label="Character sex: ' + escapeHtml(note) + '" class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '">' + escapeHtml(note) + "</div>";
+      return '<div role="note" aria-label="Character sex: ' + escapeHtml(note) + '" class="icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-' + escapeHtml(categoryKey || "unselected") + '" data-sex="' + escapeHtml(note) + '">' + escapeHtml(note) + "</div>";
     }
     function renderLabLabelAlignmentFieldHtml(molecularAlignment, politicalNote) {
       var molecularKey = String(molecularAlignment || "").trim().toLowerCase();
