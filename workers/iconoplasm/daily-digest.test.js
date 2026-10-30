@@ -1,8 +1,9 @@
 // B-733: the daily digest's day, read from the real migration schema with the
 // cases the rules allow (docs/ICONOPLASM_DAILY_DIGEST.md, mistake 3): a
-// caretaker hopping genes, a takeover by the newest of a tie, a vote flipped
-// back, autosaved and hidden lore, a deleted comment, rows either side of
-// midnight. Its cost must not grow with older history.
+// caretaker hopping genes, a takeover by the newest of a tie (an update like
+// any other), a vote flipped back, autosaved and hidden lore, a deleted
+// comment, rows either side of midnight. Its cost must not grow with older
+// history.
 import assert from "node:assert/strict"
 import { readFileSync, readdirSync } from "node:fs"
 import { createRequire } from "node:module"
@@ -153,12 +154,15 @@ test(
       }
       const { digest, cost } = await read()
 
-      // GENEA: the vote raised the winner. GENED: the owner chose it. GENEB was
-      // a takeover by the newest of a tie; GENEC flipped back; GENEF is tomorrow.
+      // GENEA: the vote raised the winner, so it comes first. GENEB: a new
+      // candidate took over a tie nobody had voted on; it is an update all the
+      // same (mistake 30). GENED: the owner chose it. GENEC flipped back, so
+      // nothing changed; GENEF is tomorrow.
       assert.deepEqual(
         digest.updates.map((u) => [u.symbol, u.from_sha[0], u.to_sha[0]]),
         [
           ["GENEA", "a", "b"],
+          ["GENEB", "c", "d"],
           ["GENED", "1", "2"],
         ],
       )
