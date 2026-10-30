@@ -13,7 +13,7 @@
    body, footer, radius, scrim) is the shared .icono-dialog in styles.css; this
    file only adds what the caretaker record holds. Fonts: IBM Plex Mono for
    everything here, the caretaker's prose included; the card faces (Special
-   Elite, Caveat, League Spartan) stay on the cards. */
+   Elite, Delicious Handrawn, League Spartan) stay on the cards. */
 .icono-caretaker-panel {
   display: flex;
   flex: 1;

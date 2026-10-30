@@ -15,7 +15,7 @@
                         Gene-INDEPENDENT. Defines the fields.
    2) Special Elite   — typewritten molecular values that fill the fields.
                         Monospace typewriter feel; sits inside form slots.
-   3) Caveat          — handwritten teal annotations of human-like traits.
+   3) Delicious Handrawn — handwritten teal annotations of human-like traits.
                         Spills OUT of fields, rotated, for authentic effect.
    + League Spartan 800 — the gene SYMBOL only (TP53, BRCA1). The loud headline.
    --------------------------------------------------------------------------- */
@@ -53,9 +53,9 @@
   font-display: swap;
 }
 @font-face {
-  font-family: "Caveat";
-  src: url("fonts/Caveat-400.woff2") format("woff2"),
-       url("fonts/Caveat-400.ttf") format("truetype");
+  font-family: "Delicious Handrawn";
+  src: url("fonts/DeliciousHandrawn-400.woff2") format("woff2"),
+       url("fonts/DeliciousHandrawn-400.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -66,7 +66,7 @@
   --font-symbol: "League Spartan", "Bahnschrift", "Arial Narrow", sans-serif; /* gene symbol */
   --font-label:  "IBM Plex Mono", ui-monospace, monospace;  /* pre-printed form: labels, titles, instructions */
   --font-type:   "Special Elite", "IBM Plex Mono", monospace; /* typewritten values */
-  --font-hand:   "Caveat", "Segoe Script", cursive;          /* pen annotations */
+  --font-hand:   "Delicious Handrawn", "Segoe Script", cursive; /* pen annotations */
 
   /* ---- 3. CORE PALETTE (warm paper system, from popup.css) --------------- */
   --light:      oklch(96% 0.015 75);    /* #f6efe4  warm cream paper        */

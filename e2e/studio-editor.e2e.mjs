@@ -6,7 +6,7 @@
 // 2. a gene node renders blank while or after its portrait loads (the live
 //    v2 studio showed EGFR and MAP2K1 as empty boxes);
 // 3. the chrome falls back from IBM Plex Sans, or a typewriter or handwriting
-//    face (Special Elite, Caveat) appears in the interface;
+//    face (Special Elite, Delicious Handrawn) appears in the interface;
 // 4. selecting a relationship does not open its Format controls;
 // 5. a Format control changes the panel but not the drawing;
 // 6. undo does not restore the drawing;
@@ -138,7 +138,10 @@ test("the studio is a working diagram editor in the printed-lab skin", async (t)
     report.type = type
     assert.match(type.chrome, /^"?IBM Plex Sans/)
     assert.equal(type.plexLoaded, true)
-    assert.ok(!type.faces.some((face) => /Special Elite|Caveat/i.test(face)), type.faces.join(", "))
+    assert.ok(
+      !type.faces.some((face) => /Special Elite|Delicious Handrawn/i.test(face)),
+      type.faces.join(", "),
+    )
 
     // 2. The template's ten characters all paint; none is a blank box.
     // The template library opens from the toolbar; a double-click inserts.

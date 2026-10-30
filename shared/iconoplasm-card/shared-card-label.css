@@ -52,7 +52,7 @@
   --icono-label-stamp: #a24834;
   --icono-label-pen: var(--accent, #1b7269);
   --icono-label-type: "IBM Plex Mono";
-  --icono-label-hand: "Caveat";
+  --icono-label-hand: "Delicious Handrawn";
   --icono-label-portrait-fr: 29.1%;
   --icono-label-form-fr: 70.9%;
   --icono-label-header-title-fr: 56.2%;
@@ -1698,7 +1698,7 @@
     /* Mobile archival card has four text voices, each with one size:
        - tab symbol: League Spartan
        - typewritten values: Special Elite
-       - handwritten annotations: Caveat
+       - handwritten annotations: Delicious Handrawn
        - labels/captions: IBM Plex Mono
        Do not reintroduce per-field font-size drift inside those voices. */
     --icono-label-mobile-tab-symbol-size: 1.14rem;

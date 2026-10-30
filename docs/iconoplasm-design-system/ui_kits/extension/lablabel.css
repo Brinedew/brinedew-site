@@ -23,7 +23,7 @@
 /* shared atoms */
 .lab-lbl { font-size: calc(11/1450*100cqw); letter-spacing: .14em; text-transform: uppercase; color: rgba(32,18,11,.62); line-height: 1.2; }
 .lab-tv  { font-family: "Special Elite", serif; font-size: calc(27/1450*100cqw); letter-spacing: .02em; line-height: 1; color: #20120b; }
-.lab-hand{ font-family: "Caveat", cursive; color: #2c7a72; font-size: calc(40/1450*100cqw); line-height: .9; display: inline-block; }
+.lab-hand{ font-family: "Delicious Handrawn", cursive; color: #2c7a72; font-size: calc(40/1450*100cqw); line-height: .9; display: inline-block; }
 .lab-cross { position: relative; }
 .lab-cross::after { content:""; position:absolute; left:-.16em; right:-.16em; top:50%;
   border-top: calc(2/1450*100cqw) solid #2c7a72; transform: rotate(-9deg); }
@@ -81,12 +81,12 @@
 .lab-color-row { display: flex; align-items: center; gap: calc(8/1450*100cqw); }
 .lab-sw { width: calc(20/1450*100cqw); height: calc(20/1450*100cqw); border: 1px solid rgba(32,18,11,.45); background: var(--c); flex: 0 0 auto; }
 .lab-hex { font-size: calc(14/1450*100cqw); letter-spacing: .06em; color: rgba(32,18,11,.82); }
-.lab-color-name { font-family: "Caveat", cursive; color: #2c7a72; font-size: calc(30/1450*100cqw); line-height: .9; margin-left: auto; transform: rotate(-2deg); white-space: nowrap; }
+.lab-color-name { font-family: "Delicious Handrawn", cursive; color: #2c7a72; font-size: calc(30/1450*100cqw); line-height: .9; margin-left: auto; transform: rotate(-2deg); white-space: nowrap; }
 .lab-spec-grid { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: calc(12/1450*100cqw); row-gap: calc(9/1450*100cqw); }
 .lab-spec-grid .k { font-size: calc(11/1450*100cqw); letter-spacing: .1em; text-transform: uppercase; color: rgba(32,18,11,.6); }
 .lab-spec-grid .v { font-family: "Special Elite", serif; font-size: calc(20/1450*100cqw); }
 /* all three handwritten spectral notes are the SAME size, and spill rightward */
-.lab-spec-grid .h { grid-column: 1 / -1; font-family: "Caveat", cursive; color: #2c7a72; font-size: calc(26/1450*100cqw); line-height: .8; white-space: nowrap; margin: calc(-4/1450*100cqw) 0 0 calc(40/1450*100cqw); transform: rotate(-2deg); }
+.lab-spec-grid .h { grid-column: 1 / -1; font-family: "Delicious Handrawn", cursive; color: #2c7a72; font-size: calc(26/1450*100cqw); line-height: .8; white-space: nowrap; margin: calc(-4/1450*100cqw) 0 0 calc(40/1450*100cqw); transform: rotate(-2deg); }
 
 /* ===================== RIGHT FORM ===================== */
 .lab-form { display: grid; grid-template-rows: 31.5% 12.2% 41.9% 8.2% 6.2%; min-width: 0; }
@@ -111,7 +111,7 @@
 .lab-vote button { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font-family: "Special Elite", serif; font-size: calc(21/1450*100cqw); letter-spacing: .02em; line-height: 1; color: rgba(32,18,11,.4); }
 .lab-vote button.on { color: #20120b; }
 .lab-qc-inspect { margin-top: calc(6/1450*100cqw); font-size: calc(10/1450*100cqw); letter-spacing: .08em; text-transform: uppercase; color: rgba(32,18,11,.55); line-height: 1.35; }
-.lab-qc-note { margin-top: auto; font-family: "Caveat", cursive; color: #2c7a72; font-size: calc(32/1450*100cqw); line-height: .82; transform: rotate(-3deg); }
+.lab-qc-note { margin-top: auto; font-family: "Delicious Handrawn", cursive; color: #2c7a72; font-size: calc(32/1450*100cqw); line-height: .82; transform: rotate(-3deg); }
 
 /* --- field notes band: category | first noted | mass --- */
 .lab-band { display: grid; grid-template-columns: 49% 22% 29%; }
@@ -122,7 +122,7 @@
 .lab-ell { position: relative; display: inline-block; }
 /* "female" handwritten note: above and to the LEFT of the circled word */
 .lab-cat-fem { position: relative; display: inline-block; }
-.lab-cat-fem .lab-hand-above { position: absolute; top: calc(-30/1450*100cqw); left: calc(-12/1450*100cqw); font-family: "Caveat", cursive; color: #2c7a72; font-size: calc(32/1450*100cqw); transform: rotate(-4deg); white-space: nowrap; pointer-events: none; z-index: 5; }
+.lab-cat-fem .lab-hand-above { position: absolute; top: calc(-30/1450*100cqw); left: calc(-12/1450*100cqw); font-family: "Delicious Handrawn", cursive; color: #2c7a72; font-size: calc(32/1450*100cqw); transform: rotate(-4deg); white-space: nowrap; pointer-events: none; z-index: 5; }
 .lab-noted-line { display: flex; align-items: baseline; gap: calc(12/1450*100cqw); }
 
 /* mass: Special Elite "kDa" is PRIMARY on the baseline (struck); caveat "kg"

@@ -34,8 +34,8 @@
         "display": "swap"
       },
       {
-        "family": "Caveat",
-        "path": "fonts/Caveat-400.woff2",
+        "family": "Delicious Handrawn",
+        "path": "fonts/DeliciousHandrawn-400.woff2",
         "weight": "400",
         "style": "normal",
         "display": "swap"
