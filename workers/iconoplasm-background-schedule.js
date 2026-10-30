@@ -22,6 +22,17 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   // B-896: the style picker's first page on the CDN. Free minutes again, so the
   // gaps are uneven; the page is never more than 20 minutes behind.
   requestPicker: Object.freeze([9, 21, 36, 49]),
+  // B-1147: reads the D1 meter, marks the UTC day shed past batch work's stop,
+  // and otherwise elects the genes whose winner change waited. Every free minute
+  // but 58, so never more than 6 apart: the flag is late by one gap plus the
+  // meter's 2.5 minutes, and at 7,500 votes an hour votes cross the 15,000 rows
+  // between 85% and the wall in about 8 (deferred-elections.js). A new job takes
+  // its minutes from these, keeping the gaps at 6 or less; minute 58 stays free
+  // so the cron string never becomes every minute, which Cloudflare might
+  // rewrite as `*`.
+  electionsDue: Object.freeze([
+    1, 6, 7, 12, 16, 18, 19, 22, 25, 30, 31, 33, 37, 40, 42, 43, 48, 54, 55, 57,
+  ]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({

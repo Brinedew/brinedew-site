@@ -56,6 +56,11 @@ export const BATCH_PRICES = Object.freeze({
   // written, 164 read for a picture in the largest style (42 blots); a style
   // has 1.5 blots on average, so most cost about a tenth of that.
   placeholder: Object.freeze({ rows_written: 2, rows_read: 40 }),
+  // One gene's election after a shed day (votes/deferred-elections.js): a
+  // winner change writes 9 rows (migration 0149) and the gene leaves the due
+  // list, 1 more. Measured in Miniflare (vote-asset-summary-cost.test.js): 24
+  // to 51 read for a gene of 20 candidates; TP53 has 71.
+  vote_election: Object.freeze({ rows_written: 10, rows_read: 300 }),
 })
 
 // The admission's own cost: this minute's row rewritten, and the few minutes

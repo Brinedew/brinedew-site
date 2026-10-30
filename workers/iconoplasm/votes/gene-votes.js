@@ -86,14 +86,28 @@ export function caretakerElectionInput(row) {
   return { asset_sha256: asset, direction, active: true }
 }
 
+// B-1147: on a UTC day whose batch share is spent (icono_publication_shed_days,
+// written by deferred-elections.js), a winner change after a vote is
+// publication work and waits. The election's own read batch asks whether today
+// is shed; a winner change then marks its gene due (1 row, or none when it is
+// already due) instead of projecting (9 rows), in the round trip the
+// projection would have taken, and the sweep elects it after the reset. An
+// election that keeps the winner writes nothing either way. The vote itself
+// was a reader's own action and is already written.
+const SHED_TODAY_SQL = `SELECT EXISTS (
+  SELECT 1 FROM icono_publication_shed_days WHERE day = date('now')) AS shed`
+const MARK_DUE_SQL = `INSERT INTO icono_gene_elections_due (gene_symbol) VALUES (?1)
+  ON CONFLICT (gene_symbol) DO NOTHING`
+
 /**
  * One D1 batch, one consistent snapshot: the gene's eligible candidates with
  * their vote summaries (one pass over the gene's candidate rows, one summary
  * probe each), the caretaker supervote, the published state and the vote
- * version, then the pure election over them.
+ * version, then the pure election over them. `shedable`: an election after a
+ * vote, which also reads whether today is shed (`shed`).
  */
-export async function readGeneElection(db, symbol) {
-  const [candidates, caretaker, state, version] = await db.batch([
+export async function readGeneElection(db, symbol, { shedable = false } = {}) {
+  const [candidates, caretaker, state, version, shedRead] = await db.batch([
     db
       .prepare(
         `SELECT pa.asset_sha256, pa.status, pa.autopick_eligible, pa.is_stale, pa.is_legacy,
@@ -119,6 +133,7 @@ export async function readGeneElection(db, symbol) {
       )
       .bind(symbol),
     db.prepare(`SELECT ${GENE_VOTE_VERSION_SQL} AS version`).bind(symbol),
+    ...(shedable ? [db.prepare(SHED_TODAY_SQL)] : []),
   ])
   const candidateRows = candidates?.results || []
   const summaryRows = candidateRows
@@ -155,6 +170,7 @@ export async function readGeneElection(db, symbol) {
     caretaker: caretakerInput,
     winner: election.winner,
     rows: election.rows,
+    shed: Number(shedRead?.results?.[0]?.shed || 0) === 1,
   }
 }
 
@@ -188,6 +204,10 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
   if (election?.overflow) return outcome("CANDIDATE_SET_EXCEEDS_BOUND")
   if (!to) return outcome("NO_CANDIDATE")
   if (to === from) return outcome("UNCHANGED")
+  if (election?.shed) {
+    await db.prepare(MARK_DUE_SQL).bind(symbol).run()
+    return outcome("SHED")
+  }
   const guard = `${GENE_VOTE_VERSION_SQL} = ?3
     AND EXISTS (
       SELECT 1 FROM icono_portrait_assets
@@ -240,11 +260,17 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
  * Elects and projects one gene. Admin-triggered callers pass `bump: true`:
  * the rows they just changed (a rejection, an unstale, a restored keep) are
  * election inputs, so the version advances before the read and any election
- * that read the older rows can no longer project.
+ * that read the older rows can no longer project. Elections after a vote pass
+ * `shedable: true`: on a shed day a winner change is marked due instead
+ * (projection code "SHED").
  */
-export async function electAndProjectGeneWinner(db, symbol, { actor, reason, bump = false } = {}) {
+export async function electAndProjectGeneWinner(
+  db,
+  symbol,
+  { actor, reason, bump = false, shedable = false } = {},
+) {
   if (bump) await geneVoteVersionBumpStatement(db, symbol).run()
-  const election = await readGeneElection(db, symbol)
+  const election = await readGeneElection(db, symbol, { shedable })
   const projection = await projectGeneElection(db, election, { actor, reason })
   return { election, projection }
 }
@@ -322,58 +348,62 @@ function planGeneVote(request, assetRow, currentRow, sanitizeVisionId) {
 
 // The statements that apply one planned vote. The summary moves by the exact
 // delta: the new value from the request minus the old value read by the
-// UPDATE itself, inside the batch's transaction, before the vote row changes.
-// Two concurrent writes by one user serialize in D1 and each moves the
-// summary by what it actually changed.
+// statement itself, inside the batch's transaction, before the vote row
+// changes. Two concurrent writes by one user serialize in D1 and each moves
+// the summary by what it actually changed.
+//
+// B-1147: one upsert creates or moves the summary row. An insert of an empty
+// row followed by an update wrote the new row twice, 7 rows for a first vote
+// on a portrait instead of 6.
 function geneVoteWriteStatements(db, request, plan) {
   const { symbol, asset, userId } = request
   const next = voteDelta(plan.final_vote_value)
   const prior = `FROM icono_image_votes WHERE gene_symbol = ?1 AND asset_sha256 = ?2 AND user_id = ?3`
-  const statements = []
-  if (plan.asset_exists) {
-    statements.push(
-      db
-        .prepare(
-          `INSERT INTO icono_vote_asset_summary (
-             gene_symbol, asset_sha256, candidate_ref, vision_id, candidate_image_id,
-             upvotes, downvotes, score, vote_count, updated_at
-           ) VALUES (?1, ?2, ?3, ?4, ?5, 0, 0, 0, 0, CURRENT_TIMESTAMP)
-           ON CONFLICT(gene_symbol, asset_sha256) DO NOTHING`,
-        )
-        .bind(
-          symbol,
-          asset,
-          geneVoteCandidateRef(symbol, asset),
-          plan.resolved_vision_id,
-          plan.candidate_image_id,
-        ),
-    )
+  const delta = {
+    up: `?4 - COALESCE((SELECT CASE WHEN vote_value = 1 THEN 1 ELSE 0 END ${prior}), 0)`,
+    down: `?5 - COALESCE((SELECT CASE WHEN vote_value = -1 THEN 1 ELSE 0 END ${prior}), 0)`,
+    score: `?6 - COALESCE((SELECT vote_value ${prior}), 0)`,
+    count: `?7 - COALESCE((SELECT 1 ${prior}), 0)`,
   }
-  statements.push(
-    db
-      .prepare(
-        `UPDATE icono_vote_asset_summary
-            SET upvotes = MAX(0, upvotes + ?4 - COALESCE((SELECT CASE WHEN vote_value = 1 THEN 1 ELSE 0 END ${prior}), 0)),
-                downvotes = MAX(0, downvotes + ?5 - COALESCE((SELECT CASE WHEN vote_value = -1 THEN 1 ELSE 0 END ${prior}), 0)),
-                score = score + ?6 - COALESCE((SELECT vote_value ${prior}), 0),
-                vote_count = MAX(0, vote_count + ?7 - COALESCE((SELECT 1 ${prior}), 0)),
+  const move = `upvotes = MAX(0, upvotes + ${delta.up}),
+                downvotes = MAX(0, downvotes + ${delta.down}),
+                score = score + ${delta.score},
+                vote_count = MAX(0, vote_count + ${delta.count}),
                 vision_id = CASE WHEN ?8 <> '' THEN ?8 ELSE vision_id END,
                 candidate_image_id = COALESCE(?9, candidate_image_id),
-                updated_at = CURRENT_TIMESTAMP
-          WHERE gene_symbol = ?1 AND asset_sha256 = ?2`,
-      )
-      .bind(
-        symbol,
-        asset,
-        userId,
-        next.up,
-        next.down,
-        next.score,
-        next.count,
-        plan.resolved_vision_id,
-        plan.candidate_image_id,
-      ),
-  )
+                updated_at = CURRENT_TIMESTAMP`
+  const binds = [
+    symbol,
+    asset,
+    userId,
+    next.up,
+    next.down,
+    next.score,
+    next.count,
+    plan.resolved_vision_id,
+    plan.candidate_image_id,
+  ]
+  const statements = [
+    plan.asset_exists
+      ? db
+          .prepare(
+            `INSERT INTO icono_vote_asset_summary (
+               gene_symbol, asset_sha256, candidate_ref, vision_id, candidate_image_id,
+               upvotes, downvotes, score, vote_count, updated_at
+             ) VALUES (?1, ?2, ?10, ?8, ?9, MAX(0, ${delta.up}), MAX(0, ${delta.down}),
+                       ${delta.score}, MAX(0, ${delta.count}), CURRENT_TIMESTAMP)
+             ON CONFLICT(gene_symbol, asset_sha256) DO UPDATE SET ${move}`,
+          )
+          .bind(...binds, geneVoteCandidateRef(symbol, asset))
+      : // A removed portrait gets no new summary row; clearing a vote on it still
+        // takes the vote back out of the row it has.
+        db
+          .prepare(
+            `UPDATE icono_vote_asset_summary SET ${move}
+              WHERE gene_symbol = ?1 AND asset_sha256 = ?2`,
+          )
+          .bind(...binds),
+  ]
   statements.push(
     plan.final_vote_value === 0
       ? db
