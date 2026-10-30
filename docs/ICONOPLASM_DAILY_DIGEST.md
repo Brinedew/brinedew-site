@@ -133,7 +133,7 @@ list. 16–20 are the ones the owner left for the agent to find.
     - League Spartan for symbols;
     - Special Elite for what people typed;
     - IBM Plex Mono for printed labels;
-    - teal Caveat for handwritten notes;
+    - teal Delicious Handrawn for handwritten notes;
     - cream paper and ink.
 17. **A fence of the agent's own.** "No names in the picture, because erasure can't rewrite it."
     Nobody asked for it, and it cost the digest its people.
@@ -154,7 +154,7 @@ list. 16–20 are the ones the owner left for the agent to find.
 25. **Not saying whether the render survives real loads.** Every render is tested on empty,
     quiet, normal, 10× and 100× days, and the numbers are reported with it.
 26. **Teal on a printed mark (2026-10-23).** The arrowhead between the old portrait and the new
-    blot was drawn teal. Teal means a handwritten Caveat note; printed marks such as arrows and
+    blot was drawn teal. Teal means a handwritten Delicious Handrawn note; printed marks such as arrows and
     rules are ink.
 
 27. **A candidate tile that contradicted its own update (2026-10-28).** On the 27 October post,

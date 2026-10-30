@@ -14,7 +14,7 @@
   const ARTBOARD_HEIGHT = 512
   // The card's faces, filled in from font-contract.json by
   // scripts/sync-iconoplasm-shared.mjs: [{ family, url, weight }].
-  const FONT_FACES = [{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2","weight":400},{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2","weight":500},{"family":"League Spartan","url":"/static/iconoplasm/fonts/LeagueSpartan-800.woff2","weight":800},{"family":"Special Elite","url":"/static/iconoplasm/fonts/SpecialElite-Regular.woff2","weight":400},{"family":"Caveat","url":"/static/iconoplasm/fonts/Caveat-400.woff2","weight":400}]
+  const FONT_FACES = [{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2","weight":400},{"family":"IBM Plex Mono","url":"/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2","weight":500},{"family":"League Spartan","url":"/static/iconoplasm/fonts/LeagueSpartan-800.woff2","weight":800},{"family":"Special Elite","url":"/static/iconoplasm/fonts/SpecialElite-Regular.woff2","weight":400},{"family":"Delicious Handrawn","url":"/static/iconoplasm/fonts/DeliciousHandrawn-400.woff2","weight":400}]
 
   // Split "a(b, c) d, e" at top-level commas.
   function splitTopLevel(value) {

@@ -262,7 +262,7 @@ test("DO NOT DELETE: extension fonts resolve from the extension runtime on every
     "fonts/IBMPlexMono-Medium.woff2",
     "fonts/LeagueSpartan-800.woff2",
     "fonts/SpecialElite-Regular.woff2",
-    "fonts/Caveat-400.woff2",
+    "fonts/DeliciousHandrawn-400.woff2",
   ])
   for (const face of addedFaces) {
     assert.match(face.source, /^url\("chrome-extension:\/\/unit-test\/fonts\//)

@@ -212,17 +212,17 @@ test("DO NOT DELETE: the extension never mutates the React workstation DOM", () 
 
 test("DO NOT DELETE: Iconoplasm card fonts ship macron-vowel glyph coverage", () => {
   const fontPaths = [
-    "./shared/iconoplasm-card/fonts/Caveat-400.woff2",
+    "./shared/iconoplasm-card/fonts/DeliciousHandrawn-400.woff2",
     "./shared/iconoplasm-card/fonts/IBMPlexMono-Medium.woff2",
     "./shared/iconoplasm-card/fonts/IBMPlexMono-Regular.woff2",
     "./shared/iconoplasm-card/fonts/LeagueSpartan-800.woff2",
     "./shared/iconoplasm-card/fonts/SpecialElite-Regular.woff2",
-    "./quartz/static/iconoplasm/fonts/Caveat-400.woff2",
+    "./quartz/static/iconoplasm/fonts/DeliciousHandrawn-400.woff2",
     "./quartz/static/iconoplasm/fonts/IBMPlexMono-Medium.woff2",
     "./quartz/static/iconoplasm/fonts/IBMPlexMono-Regular.woff2",
     "./quartz/static/iconoplasm/fonts/LeagueSpartan-800.woff2",
     "./quartz/static/iconoplasm/fonts/SpecialElite-Regular.woff2",
-    "./iconoplasm-extension/fonts/Caveat-400.woff2",
+    "./iconoplasm-extension/fonts/DeliciousHandrawn-400.woff2",
     "./iconoplasm-extension/fonts/IBMPlexMono-Medium.woff2",
     "./iconoplasm-extension/fonts/IBMPlexMono-Regular.woff2",
     "./iconoplasm-extension/fonts/LeagueSpartan-800.woff2",

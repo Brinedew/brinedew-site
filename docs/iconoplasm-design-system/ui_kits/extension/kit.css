@@ -98,7 +98,7 @@ html, body { margin: 0; }
 .hc-mcell.human { border-left: 1px solid rgba(74,61,49,.12); padding-left: 12px; }
 .hc-ml { font-family: "IBM Plex Mono", monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; }
 .hc-mv { font-family: "Special Elite", serif; font-size: 15px; opacity: .9; line-height: 1.1; }
-.hc-hv { font-family: "Caveat", cursive; font-size: 22px; color: #2c7a72; line-height: .95; }
+.hc-hv { font-family: "Delicious Handrawn", cursive; font-size: 22px; color: #2c7a72; line-height: .95; }
 
 /* --- BLOT ONLY --- */
 .hc-blot {

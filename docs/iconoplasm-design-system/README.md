@@ -60,7 +60,7 @@ The extension's hover card has three styles that mirror the site: **Simple** (co
 
 `/studio` is a pathway diagram editor in the anatomy of draw.io and BioRender: a title row, menus, a toolbar, a shape library, a Format panel, page tabs and a status bar (B-1045). The owner rejected the first studio redesigns as "advertisement posters" and approved the editor mockup "recolored and retextured for our aesthetic" (2026-10-07). An editor has dozens of controls on screen at once, so its chrome follows two rules of its own:
 
-- **Type:** IBM Plex Sans for every label, menu, button and value, at 12 px with sentence-case labels and tabular numerals. IBM Plex Mono only for codes (a hex colour, a PMID). League Spartan 800 only for gene symbols. No Special Elite or Caveat anywhere in the editor: the owner called the typewriter-and-mono version "atrocious font choices" that "make my eyes bleed" (2026-10-07).
+- **Type:** IBM Plex Sans for every label, menu, button and value, at 12 px with sentence-case labels and tabular numerals. IBM Plex Mono only for codes (a hex colour, a PMID). League Spartan 800 only for gene symbols. No Special Elite or Delicious Handrawn anywhere in the editor: the owner called the typewriter-and-mono version "atrocious font choices" that "make my eyes bleed" (2026-10-07).
 - **Icons:** Lucide line icons (ISC licence, inlined in `diagram-studio-icons.js`) for toolbar and menu commands, because a toolbar of 40 commands can't be told apart by Unicode glyphs. The rest of Iconoplasm stays icon-light (see Iconography).
 - **First-run tour:** driver.js (MIT licence, bundled in `generated/tour-runtime.js` and loaded only when a tour starts) dims the page and lights one control at a time. Its popover wears the same chrome: Plex Sans, cream panel, teal for the forward button (B-1050).
 
@@ -84,7 +84,7 @@ All read-only, provided via the mounted codebase. Not assumed accessible to the 
 - **Live site referenced in code:** `https://iconoplasm.brinedew.bio/`
 - **Brand domain:** `brinedew.bio` (parent studio). Firefox add-on ID `iconoplasm@brinedew.bio`.
 
-Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Regular/Medium), **League Spartan** (800), **Special Elite** (Regular), **Caveat** (400). All real, no substitutions needed.
+Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Regular/Medium), **League Spartan** (800), **Special Elite** (Regular), **Delicious Handrawn** (400). All real, no substitutions needed.
 
 ---
 
@@ -120,7 +120,7 @@ Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Re
 
 **Color.** A warm, low-chroma **paper-and-ink** palette: cream paper (`#f4ede5`), dark-roast ink (`#20120b`), with exactly **one accent** — a muted **teal "pen"** (`#1b7269`) used for handwritten annotations and primary actions. A **rust-red stamp** (`#a24834`) appears sparingly for stamped/QC marks. Beyond that, the only saturated color on any card is the **per-gene color** (server-assigned, unique per gene) used for highlights and the portrait base tint. Optional dark skins exist: **neo-drab** (olive `#171a14` paper + sodium-yellow `#d7b642`) and a near-black **promo stage** (`#161616`).
 
-**Type.** Four voices, strict jobs (see colors_and_type.css): League Spartan 800 = gene symbol; IBM Plex Mono = pre-printed form text; Special Elite = typewritten values; Caveat = handwritten teal notes. Never mix their roles.
+**Type.** Four voices, strict jobs (see colors_and_type.css): League Spartan 800 = gene symbol; IBM Plex Mono = pre-printed form text; Special Elite = typewritten values; Delicious Handrawn = handwritten teal notes. Never mix their roles.
 
 The metaphor decides which voice a text takes. On real lab paperwork, everything printed on the form is in the form's own face, and the typewriter only fills in the blanks (checked 2026-10-05 on the University of Iowa State Hygienic Lab's [Clinical Specimen Test Request Form Instructions](https://shl.uiowa.edu/sites/shl.uiowa.edu/files/2025-04/ClinicalTRFInstructs.pdf): instructions in the printed face, left-aligned, section labels as bold caps, no typewriter text at all). So:
 
@@ -174,7 +174,7 @@ Root:
 - `README.md` — this file.
 - `colors_and_type.css` — fonts, color tokens, type scale, semantic type classes. **Import this first.**
 - `SKILL.md` — Agent-Skills-compatible entry point.
-- `fonts/` — IBM Plex Mono, League Spartan, Special Elite, Caveat (woff2).
+- `fonts/` — IBM Plex Mono, League Spartan, Special Elite, Delicious Handrawn (woff2).
 - `assets/` — Iconoplasm logo / app-icon set.
 - `_ref/` — reference screenshots from the extension store listing (provenance only).
 - `preview/` — Design-System-tab cards (colors, type, components, brand). Each is a small standalone HTML specimen.

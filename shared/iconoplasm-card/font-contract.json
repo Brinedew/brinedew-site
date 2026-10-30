@@ -31,10 +31,10 @@
       "url": "/static/iconoplasm/fonts/SpecialElite-Regular.woff2"
     },
     {
-      "family": "Caveat",
-      "stem": "Caveat-400",
+      "family": "Delicious Handrawn",
+      "stem": "DeliciousHandrawn-400",
       "weight": 400,
-      "url": "/static/iconoplasm/fonts/Caveat-400.woff2"
+      "url": "/static/iconoplasm/fonts/DeliciousHandrawn-400.woff2"
     }
   ],
   "shellFonts": [
