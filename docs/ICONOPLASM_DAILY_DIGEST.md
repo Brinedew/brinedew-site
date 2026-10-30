@@ -21,9 +21,10 @@ Sections appear only when they have something in them, in this order:
    and the portrait that won that day in colour, the same size, with the symbol and the full gene
    name centred under the pair. The winner shows as its blot while the gene still has that
    portrait when the job runs; if a later vote has already replaced it, the winner shows as its
-   own portrait, never as the later one. Only changes people caused
-   count. When nobody has voted on a gene, every candidate ties at zero and the newest one wins.
-   A new candidate taking over like that is not an update; it shows under New candidates.
+   own portrait, never as the later one. Every change of the canonical portrait counts, whatever
+   caused it. When nobody has voted on a gene, every candidate ties at zero and the newest one
+   wins; a new candidate taking over like that changes the face readers see on the gene page, so
+   it is an update too (mistake 30). Winners with votes come first, then the rest by symbol.
 2. **New caretakers.** The person first: Discord avatar and name, the gene they now look after,
    and a handwritten teal "moved from X" when they switched genes.
 3. **Lore.** The gene's blot, the caretaker's avatar and name, and the first lines of the text.
@@ -170,6 +171,14 @@ list. 16–20 are the ones the owner left for the agent to find.
     rows, and a 300-portrait day became a wall of one gene. The owner: "dozens of rows of
     characters no one cares about for a single gene". The default comes from the reader's
     question (three per gene); the budget only bounds the heavy day.
+30. **"Only changes people caused" (2026-10-30).** The first version counted a canonical portrait
+    update only when a vote, a supervote or a person's publish caused it. A new candidate that
+    won a zero-vote tie was filed under New candidates alone. On 29 October the Drain gave TAL1
+    five new portraits at 04:47 UTC, the newest won the tie, and the gene's face changed on the
+    site; the digest showed GIP and SLAMF6 under updates and nothing for TAL1. The owner: "discord
+    daily digests are missing something e.g. TAL1 new canonical gene isn't there". A reader
+    opening TAL1 sees a new portrait; why it won is not the reader's question. Every change
+    between 00:00 and 24:00 is an update now, and the cause only sets the order.
 
 ## Where it lives
 
