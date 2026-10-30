@@ -59,7 +59,7 @@ test("every configured background event invokes exactly its one job, including d
   assert.equal(totals.gallery, 97)
   assert.equal(totals.geneguessrBoard, 144)
   assert.equal(totals.requestPicker, 96)
-  assert.equal(totals.electionsDue, 96)
+  assert.equal(totals.electionsDue, 480)
   assert.equal(totals.archive, 1)
   assert.equal(totals.canonRepair, 1)
 })
@@ -97,10 +97,10 @@ test("background schedules retain bounded cadence and never repeat nightly work 
     }
     if (job === "electionsDue") {
       // The shed-day sweep (B-1147) takes free minutes too: a day is marked shed
-      // at most 17 minutes after batch work's share runs out.
+      // at most 6 minutes (plus the meter's lag) after batch work's share runs out.
       minutes.forEach((minute, i) =>
         assert.ok(
-          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 17,
+          minutes[(i + 1) % minutes.length] + (i === minutes.length - 1 ? 60 : 0) - minute <= 6,
         ),
       )
       continue

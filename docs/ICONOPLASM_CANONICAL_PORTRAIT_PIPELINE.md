@@ -171,9 +171,12 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
 **Shed days (B-1147).** The vote is a reader's own action and runs to
 Cloudflare's wall; the winner change it causes is publication, which stops at
 85% of a D1 meter like other batch work. The `electionsDue` job
-(`workers/iconoplasm/votes/deferred-elections.js`, minutes 7, 22, 37 and 54)
-reads Cloudflare's meter and, once batch work's share of the UTC day is spent,
-records the day in `icono_publication_shed_days`. Step 2 reads that row in its
+(`workers/iconoplasm/votes/deferred-elections.js`, every minute but those of
+other jobs and 58, never 6 minutes apart) reads Cloudflare's meter and, once
+batch work's share of the UTC day is spent, records the day in
+`icono_publication_shed_days`. The flag is late by up to 6 minutes plus the
+meter's lag, so it starts shedding before the wall only while votes write under
+about 8,300 an hour. Step 2 reads that row in its
 own batch. On a shed day a winner change marks its gene in
 `icono_gene_elections_due` (1 row, or none when it already is) instead of
 projecting it (9 rows), and the gene isn't republished, because the publisher

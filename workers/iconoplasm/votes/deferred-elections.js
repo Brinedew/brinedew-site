@@ -15,8 +15,13 @@
 // 2026-10-30). At viral scale many isolates, each asking every 30 s, would
 // spend that and blind batch admission everywhere. This sweep asks once per
 // run and writes the day as shed; a vote reads the flag inside the election
-// batch it already sends (gene-votes.js). The flag is at most one run (17
-// minutes) and the meter's lag behind, which only shifts when shedding starts.
+// batch it already sends (gene-votes.js).
+//
+// The flag is late by up to one gap between runs (6 minutes) plus the meter's
+// lag (about 2.5). Votes alone cross the 15,000 rows between 85% and the wall
+// in that time only above about 1,760 rows a minute, about 8,300 votes an hour
+// at 12.7 rows each; faster than that, the wall comes before the flag, as it
+// would without one. At four runs an hour the flag held only to about 3,600.
 //
 // After the reset the sweep elects the due genes, admitted by their price. The
 // winner change writes a `publish` event, so the Actions publisher republishes
