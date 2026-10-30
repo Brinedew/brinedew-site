@@ -987,8 +987,8 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-sizing: border-box;
   flex: 0 0 calc(100% + 2 * var(--icono-space-2));
   margin: calc(-1 * var(--icono-space-2)) calc(-1 * var(--icono-space-2)) 0;
-  padding: 12px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--dark) 22%, transparent);
+  /* The caretaker and the buttons are one toolbar: space separates them, not a rule. */
+  padding: 12px 16px 4px;
 }
 
 /* Stacked, the caretaker's own button keeps its frame, inside the bar's padding. */

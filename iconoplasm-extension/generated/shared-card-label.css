@@ -2244,8 +2244,13 @@
     block-size: var(--icono-label-mobile-footer-row-height);
     overflow: visible;
     border-top: 1px solid var(--icono-label-rule);
+    /* The card's own edge closes the remarks; a row rule here drew a second line 8px above it. */
+    border-bottom: 0;
   }
 
+  /* Remarks is fine print: one rule above it and the card edge below, like the other
+     rows' labels, with no band around the label and no rule between its two columns
+     (the owner counted five lines here on 2026-10-30). */
   .icono-card--variant-lab-label.icono-card--brick
     .icono-label-dossier-shell
     .icono-label-footer-row
@@ -2253,8 +2258,14 @@
     grid-row: 2;
     border-right: 0;
     border-top: 1px solid var(--icono-label-rule);
-    border-bottom: 1px solid var(--icono-label-rule);
-    padding: 0.32rem 0.8rem 0.16rem;
+    /* Same left edge as the fine print under it. */
+    padding: 0.32rem 0.62rem 0.16rem;
+  }
+
+  .icono-card--variant-lab-label.icono-card--brick
+    .icono-label-dossier-shell
+    .icono-label-footer-copy-side {
+    border-left: 0;
   }
 
   .icono-card--variant-lab-label.icono-card--brick
