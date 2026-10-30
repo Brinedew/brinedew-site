@@ -59,7 +59,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=3da5cf94acec5d3c"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=8a0392a30b2ed55a"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -5516,7 +5516,91 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       deferSnapshot: true,
       visionId: portrait.vision_id || "",
       candidateImageId: portrait.candidate_image_id || 0,
+      onVoteCommitted: function (data) {
+        showWinnerAfterVote(container, data && data.gene)
+      },
     })
+  }
+
+  // B-1147: a vote that moved the gene's winner brings the gene object back as
+  // the Website just rewrote it. The page swaps in what names the winner (the
+  // lead card, the toolbar's star, print copy and edit action, the candidate
+  // strip) at once, as a reload would. Open tabs, the caretaker editor and
+  // unsent comments stay. A reply older than the page's object changes nothing,
+  // so two quick votes can't show the first one's winner last. Keyboard focus
+  // goes back to the button the reader pressed, now rebuilt.
+  function showWinnerAfterVote(container, stableGene) {
+    var current = container && container._iconoGenePayload
+    var reader = window.IconoplasmPublicationReader
+    if (!stableGene || !current || !container.isConnected) return
+    if (!reader || typeof reader.fromStableGene !== "function") return
+    var updated = reader.fromStableGene(stableGene, current.symbol)
+    if (!updated || Number(updated.vote_version || 0) < Number(current.vote_version || 0)) return
+    portraitDetailCache[normalizedSymbol(updated.symbol)] = updated
+    var focused = document.activeElement
+    var focusBox =
+      focused && container.contains(focused)
+        ? focused.closest("[data-icono-candidate-vote-box],[data-icono-gene-vote-box]")
+        : null
+    var focusAttr = focusBox
+      ? focusBox.hasAttribute("data-icono-candidate-vote-box")
+        ? "data-icono-candidate-vote-box"
+        : "data-icono-gene-vote-box"
+      : ""
+    var focusSha = focusBox ? focusBox.getAttribute(focusAttr) : ""
+    var focusButton =
+      focused && focused.hasAttribute("data-icono-vote-down")
+        ? "[data-icono-vote-down]"
+        : "[data-icono-vote-up]"
+    var replace = function (target, markup) {
+      if (!target) return null
+      var template = document.createElement("template")
+      template.innerHTML = markup
+      var next = template.content.firstElementChild
+      if (next) target.replaceWith(next)
+      return next
+    }
+    replace(container.querySelector(".icono-gene-lead-card"), buildGeneLeadCardMarkup(updated))
+    var rail = container.querySelector("[data-icono-canonical-rail]")
+    if (rail) {
+      replace(
+        rail.querySelector(".icono-candidate-toolbar-meta"),
+        renderCanonicalToolbarMetaMarkup(updated),
+      )
+      replace(
+        rail.querySelector(".icono-gene-edit-panel"),
+        renderEditImageActionMarkup("canonical", updated, updated.portrait || {}),
+      )
+    }
+    var viewport = container.querySelector("[data-icono-strip-viewport]")
+    var scrollLeft = viewport ? viewport.scrollLeft : 0
+    replace(container.querySelector(".icono-candidate-gallery"), renderCandidateGallery(updated))
+    wireGeneContent(container, updated)
+    var nextViewport = container.querySelector("[data-icono-strip-viewport]")
+    if (nextViewport) nextViewport.scrollLeft = scrollLeft
+    // A portrait that left the lead card is found in the strip, and the other way round.
+    // The lead card carries a hidden copy of its vote box, so the visible one wins.
+    var refocus = null
+    var refocusSelectors = focusSha
+      ? [
+          "[" + focusAttr + '="' + focusSha + '"] ' + focusButton,
+          '[data-icono-candidate-vote-box="' +
+            focusSha +
+            '"] ' +
+            focusButton +
+            ', [data-icono-gene-vote-box="' +
+            focusSha +
+            '"] ' +
+            focusButton,
+        ]
+      : []
+    for (var s = 0; s < refocusSelectors.length && !refocus; s++) {
+      var found = container.querySelectorAll(refocusSelectors[s])
+      for (var f = 0; f < found.length && !refocus; f++) {
+        if (found[f].getClientRects().length) refocus = found[f]
+      }
+    }
+    if (refocus) refocus.focus({ preventScroll: true })
   }
 
   function wireCandidateVoteBoxes(container, genePayload) {
@@ -5542,6 +5626,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         publicTally: tallies.get(String(candidateAssetSha || "").toLowerCase()) || null,
         visionId: box.getAttribute("data-icono-vision-id") || "",
         candidateImageId: box.getAttribute("data-icono-candidate-image-id") || 0,
+        onVoteCommitted: function (data) {
+          showWinnerAfterVote(container, data && data.gene)
+        },
       })
       if (group) groups.push(group)
     }
@@ -12823,7 +12910,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=52f32ac90d5dc752").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=dd9e4436d8b0b7a2").then(
         function (module) {
           diagramStudio = module
           return module
