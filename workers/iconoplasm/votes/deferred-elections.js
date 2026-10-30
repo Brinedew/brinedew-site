@@ -19,9 +19,10 @@
 //
 // The flag is late by up to one gap between runs (6 minutes) plus the meter's
 // lag (about 2.5). Votes alone cross the 15,000 rows between 85% and the wall
-// in that time only above about 1,760 rows a minute, about 8,300 votes an hour
-// at 12.7 rows each; faster than that, the wall comes before the flag, as it
-// would without one. At four runs an hour the flag held only to about 3,600.
+// in that time only above about 1,760 rows a minute, about 6,700 votes an hour
+// at the 15.7 rows each predicted from 2026-10-27 to 30's receipts; faster than
+// that, the wall comes before the flag, as it would without one. At four runs
+// an hour the flag held only to about 770 rows a minute.
 //
 // After the reset the sweep elects the due genes, admitted by their price. The
 // winner change writes a `publish` event, so the Actions publisher republishes

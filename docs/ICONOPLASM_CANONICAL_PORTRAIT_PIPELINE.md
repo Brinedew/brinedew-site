@@ -176,8 +176,8 @@ other jobs and 58, never 6 minutes apart) reads Cloudflare's meter and, once
 batch work's share of the UTC day is spent, records the day in
 `icono_publication_shed_days`. The flag is late by up to 6 minutes plus the
 meter's lag, so it starts shedding before the wall only while votes write under
-about 8,300 an hour. Step 2 reads that row in its
-own batch. On a shed day a winner change marks its gene in
+about 1,760 rows a minute (about 6,700 votes an hour). Step 2 reads that row in
+its own batch. On a shed day a winner change marks its gene in
 `icono_gene_elections_due` (1 row, or none when it already is) instead of
 projecting it (9 rows), and the gene isn't republished, because the publisher
 would project the winner itself. A vote that keeps the winner republishes as on
