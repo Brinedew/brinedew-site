@@ -783,12 +783,11 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-shadow: none;
 }
 
-/* B-838: the toolbar under the gene card is ONE row at every width. Pattern from
-   Apple HIG and Material 3 toolbar guidance and the Unsplash / Civitai image pages
-   (checked 2026-09-25): one labelled primary on the trailing edge (Add portraits),
-   icon-only secondaries, rarely used actions (Edit portrait, caretaker claim/switch)
-   collapse into a More menu when the bar is narrow, and the metadata truncates
-   instead of pushing anything around. Nothing wraps, nothing scrolls sideways. */
+/* B-1191: the toolbar under the gene card has fixed ends, like YouTube's bar under
+   a video. Star, print and edit start it and Add portraits ends it for every
+   reader; the caretaker and the button to become or ask to become one sit between
+   them, and take their own row above when the bar is too short. Nothing moves when
+   the reader signs in or the gene changes hands, and nothing hides in a menu. */
 /* Breakpoints below query .icono-gene-lead, the existing inline-size container
    whose width is the toolbar's width. (Making the toolbar shell its own container
    collapsed it to 0 px: it is a content-sized flex item.) */
@@ -823,78 +822,48 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: contents;
 }
 
-/* Order in the bar, as in D2: Emulsion: id, star | print, edit ... Switch, Add portraits. */
+/* Start: star, print, edit. Every item in the bar is one 8 px gap from the next. */
 .icono-canonical-toolbar-meta {
   display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--icono-space-2);
-  min-width: 0;
-}
-
-.icono-canonical-toolbar-actions {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--icono-space-2);
-  min-width: 0;
-}
-
-/* The edit button follows the print button; the labelled actions sit at the end.
-   Every item in the bar is one 8 px gap from the next. */
-.icono-toolbar-menu:not(:popover-open) > .icono-gene-edit-panel {
-  order: -1;
-  margin-inline-end: auto;
-}
-
-.icono-gene-toolbar-rail .icono-button--icon {
   flex: none;
+  align-items: center;
+  gap: var(--icono-space-2);
 }
 
-/* Wide bar: the More menu's items sit inline and the ... button is not needed. */
-.icono-toolbar-more {
-  display: none;
-  anchor-name: --icono-toolbar-more;
-}
-
-.icono-toolbar-menu:not(:popover-open) {
+.icono-canonical-toolbar-meta > .icono-gene-edit-panel {
   display: contents;
 }
 
-.icono-toolbar-menu > .icono-gene-edit-panel {
-  width: auto;
+/* Middle: the gene's caretaker and the reader's caretaker button. */
+.icono-gene-toolbar-caretaker {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--icono-space-3);
+  margin-inline-start: var(--icono-space-2);
 }
 
-.icono-toolbar-menu > [data-icono-caretaker-claim-action]:empty {
+.icono-gene-toolbar-caretaker > [data-icono-caretaker-claim-action] {
+  display: contents;
+}
+
+.icono-gene-toolbar-caretaker:not(
+  :has(> .icono-gene-caretaker:not([hidden]), > [data-icono-caretaker-claim-action] > button)
+) {
   display: none;
 }
 
-/* Collapsed (set by fitCanonicalToolbar in app.js when the row does not fit):
-   the More menu holds the rarer actions. */
-.icono-gene-toolbar-rail.is-collapsed .icono-toolbar-more {
-  display: inline-flex;
+/* End: Add portraits, alone. Its auto margin is 0 on a row that overflows, so
+   fitCanonicalToolbar sees the overflow at the row's end. */
+.icono-canonical-toolbar-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--icono-space-2);
+  margin-inline-start: auto;
 }
 
-.icono-gene-toolbar-rail:not(.is-collapsed) .icono-toolbar-more {
-  display: none;
-}
-
-.icono-gene-toolbar-rail.is-collapsed
-  .icono-canonical-toolbar-actions:not(:has(.icono-toolbar-menu button))
-  .icono-toolbar-more {
-  display: none;
-}
-
-.icono-gene-toolbar-rail.is-collapsed .icono-toolbar-menu:not(:popover-open) {
-  display: none;
-}
-
-/* The gene's caretaker, for every reader (the approved mock, 2026-10-29): after
-   the star and the printer on a wide bar; on a bar too narrow for it, its own
-   line above them (.is-stacked, set by fitCanonicalToolbar), so the name is
-   never dropped. */
+/* The gene's caretaker, for every reader (the approved mock, 2026-10-29). */
 .icono-gene-caretaker {
   display: flex;
   /* Never squeezed on one line: a bar too short for it stacks it instead. */
@@ -902,7 +871,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  margin-inline-start: var(--icono-space-2);
   color: inherit;
   text-decoration: none;
 }
@@ -946,19 +914,12 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-decoration: underline;
 }
 
-/* With a caretaker line the bar reads as two groups: this card (star, print, who
-   looks after it) on the left, and what makes images (Edit image, Add portraits)
-   on the right, so the line doesn't split the icons apart. */
-.icono-gene-toolbar-rail:has(> .icono-gene-request-panel > .icono-gene-caretaker:not([hidden]))
-  .icono-canonical-toolbar-actions {
-  flex: 0 0 auto;
-  margin-inline-start: auto;
-}
-
 /* The caretaker's own line is the door to their tools: the same line, framed
-   as a button. */
+   as a button, as tall as the bar's other controls so the row never shifts. */
 .icono-gene-caretaker--own {
-  padding: 4px 12px 4px 4px;
+  box-sizing: border-box;
+  height: var(--icono-control-size);
+  padding: 0 12px 0 3px;
   border: 1px solid var(--gray);
   border-radius: var(--icono-control-radius);
   background: transparent;
@@ -977,103 +938,35 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   text-decoration: none;
 }
 
+/* Stacked (set by fitCanonicalToolbar when the one row does not fit): the
+   caretaker part takes its own row above, and its button takes a row of its own
+   under the name when they don't fit side by side. */
 .icono-gene-toolbar-rail.is-stacked {
   flex-wrap: wrap;
+  row-gap: var(--icono-space-2);
 }
 
-.icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker {
+.icono-gene-toolbar-rail.is-stacked .icono-gene-toolbar-caretaker {
   order: -1;
-  /* Edge to edge of the bar: its own width plus the bar's padding it reaches into. */
-  box-sizing: border-box;
-  flex: 0 0 calc(100% + 2 * var(--icono-space-2));
-  margin: calc(-1 * var(--icono-space-2)) calc(-1 * var(--icono-space-2)) 0;
-  /* The caretaker and the buttons are one toolbar: space separates them, not a rule. */
-  padding: 12px 16px 4px;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  row-gap: var(--icono-space-2);
+  margin: 0;
 }
 
-/* Stacked, the caretaker's own button keeps its frame, inside the bar's padding. */
+.icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker:not(.icono-gene-caretaker--own) {
+  padding: 4px 4px 0;
+}
+
+.icono-gene-toolbar-rail.is-stacked .icono-caretaker-claim-btn {
+  flex: 1 0 auto;
+  justify-content: center;
+}
+
 .icono-gene-toolbar-rail.is-stacked .icono-gene-caretaker--own {
-  flex-basis: 100%;
-  margin: 0;
-  padding: 8px 12px 8px 8px;
-  border: 1px solid var(--gray);
-}
-
-.icono-gene-toolbar-rail.is-measuring .icono-canonical-toolbar-actions {
-  justify-content: flex-start;
-}
-
-.icono-gene-toolbar-rail.is-measuring .icono-gene-edit-panel {
-  margin-inline-end: 0;
-}
-
-/* Nothing in the bar shrinks, so a row that does not fit shows up as overflow
-   and fitCanonicalToolbar folds or drops something instead of squeezing it. */
-.icono-gene-toolbar-rail .icono-canonical-toolbar-meta,
-.icono-gene-toolbar-rail .icono-canonical-toolbar-actions > * {
-  flex-shrink: 0;
-}
-
-/* Open menu: a small list of labelled rows under the ... button. Without anchor
-   positioning support it falls back to the browser's centred popover. */
-.icono-toolbar-menu:popover-open {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 13rem;
-  padding: 0.35rem;
-  border: 1px solid color-mix(in srgb, var(--ui-border) 80%, var(--dark) 20%);
-  border-radius: var(--icono-radius-lg);
-  background: var(--light);
-  color: var(--dark);
-  box-shadow: 0 12px 32px rgba(15, 10, 6, 0.22);
-}
-
-@supports (anchor-name: --a) {
-  .icono-toolbar-menu:popover-open {
-    position-anchor: --icono-toolbar-more;
-    inset: auto;
-    /* Below the ... button, growing leftwards from its right edge. */
-    position-area: block-end span-inline-start;
-    margin: 0.35rem 0 0;
-    position-try-fallbacks: flip-block;
-  }
-}
-
-.icono-toolbar-menu:popover-open :is(.icono-canonical-edit-btn, .icono-button) {
-  justify-content: flex-start;
-  gap: 0.6rem;
-  width: 100%;
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 0;
-  border-radius: var(--icono-control-radius);
-  background: transparent;
-  color: var(--dark);
-  font: 500 0.82rem / 1.2 var(--icono-action-font);
-  text-align: start;
-}
-
-.icono-toolbar-menu:popover-open :is(.icono-canonical-edit-btn, .icono-button):hover {
-  background: color-mix(in srgb, var(--dark) 8%, transparent);
-}
-
-/* Menu rows are text-only, like the platform menus they imitate. */
-.icono-toolbar-menu:popover-open svg {
-  display: none;
-}
-
-/* The edit button's accessible label doubles as its visible menu label. */
-.icono-toolbar-menu:popover-open .icono-canonical-edit-btn .icono-visually-hidden {
-  position: static;
-  width: auto;
+  flex: 1 1 100%;
   height: auto;
-  margin: 0;
-  overflow: visible;
-  clip: auto;
-}
-
-.icono-canonical-toolbar-actions > span:empty {
-  display: none;
+  padding: 8px 12px 8px 8px;
 }
 
 .icono-caretaker-identity__avatar {
@@ -6858,8 +6751,7 @@ a.icono-clan-ae:hover {
 /* Icon-only controls without a frame: the star, print, edit and More buttons. */
 .icono-gene-toolbar-rail .icono-emulsion-favorite-button--toolbar,
 .icono-candidate-footer .icono-emulsion-favorite-button--toolbar,
-.icono-canonical-toolbar-actions .icono-canonical-edit-btn,
-.icono-gene-toolbar-rail .icono-toolbar-more,
+.icono-gene-toolbar-rail .icono-canonical-edit-btn,
 .icono-candidate-icon-btn {
   appearance: none;
   display: inline-flex;
@@ -6882,14 +6774,13 @@ a.icono-clan-ae:hover {
 
 .icono-gene-toolbar-rail .icono-emulsion-favorite-button--toolbar svg,
 .icono-candidate-footer .icono-emulsion-favorite-button--toolbar svg,
-.icono-canonical-toolbar-actions .icono-canonical-edit-btn svg,
+.icono-gene-toolbar-rail .icono-canonical-edit-btn svg,
 .icono-candidate-icon-btn svg {
   width: var(--icono-icon-size);
   height: var(--icono-icon-size);
 }
 
-.icono-canonical-toolbar-actions .icono-canonical-edit-btn:hover:not(:disabled),
-.icono-gene-toolbar-rail .icono-toolbar-more:hover,
+.icono-gene-toolbar-rail .icono-canonical-edit-btn:hover:not(:disabled),
 .icono-candidate-icon-btn:hover,
 .icono-candidate-icon-btn:focus-visible {
   background: color-mix(in srgb, var(--dark) 7%, transparent);
