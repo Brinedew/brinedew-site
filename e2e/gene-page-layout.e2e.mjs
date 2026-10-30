@@ -16,9 +16,9 @@
 // 8. A score shows that isn't the published tally, or shows when it isn't
 //    positive.
 // 9. ⋮ opens nothing, or its menu leaves the window, or Escape leaves it open.
-// 10. The toolbar folds into ⋮ when it fits, or overflows when it doesn't; a ⋮
-//     shows with nothing in it, or none shows while actions are folded; the
-//     folded row still overflows, or squeezes an item (the id cut to "A…").
+// 10. The toolbar gives its caretaker part a row of its own when one row fits,
+//     or keeps one row that overflows; the bar still overflows, or squeezes an
+//     item (a button's label cut short).
 // 11. Ending a drag on a portrait opens the viewer; a second click stacks a
 //     second viewer.
 // 12. A tile loses the asset attribute the caretaker's "Made from version N"
@@ -105,16 +105,26 @@ function layoutProblems() {
   const tiles = [
     ...document.querySelectorAll(".icono-candidate-grid > .icono-candidate-card"),
   ].filter((tile) => box(tile).left >= viewport.left - 1 && box(tile).right <= viewport.right + 1)
-  const rows = [["toolbar", rail]]
+  // A stacked toolbar is two rows: the caretaker part above, the buttons below.
+  const caretakerRow = rail.classList.contains("is-stacked")
+    ? rail.querySelector("[data-icono-toolbar-caretaker]")
+    : null
+  const rows = [["toolbar", rail, caretakerRow]]
+  if (caretakerRow) rows.push(["toolbar's caretaker row", caretakerRow, null])
   tiles.forEach((tile, i) =>
-    rows.push([`tile ${i + 1}`, tile.querySelector(".icono-candidate-footer")]),
+    rows.push([`tile ${i + 1}`, tile.querySelector(".icono-candidate-footer"), null]),
   )
 
-  for (const [rowName, row] of rows) {
+  for (const [rowName, row, apart] of rows) {
     // The vote box is one control: ⇧, the score, ⇩.
     const controls = [
       ...row.querySelectorAll(".icono-vote-box, button, .icono-button, summary"),
-    ].filter((el) => shown(el) && (el.matches(".icono-vote-box") || !el.closest(".icono-vote-box")))
+    ].filter(
+      (el) =>
+        shown(el) &&
+        !(apart && apart.contains(el)) &&
+        (el.matches(".icono-vote-box") || !el.closest(".icono-vote-box")),
+    )
     const centre = controls.length ? box(controls[0]).top + box(controls[0]).height / 2 : 0
 
     for (const el of controls) {
@@ -206,31 +216,19 @@ function layoutProblems() {
   return problems
 }
 
-// Runs in the page: whether the toolbar folds exactly when its full row overflows.
+// Runs in the page: whether the toolbar stacks exactly when its one row overflows.
 function toolbarFit() {
   const rail = document.querySelector(".icono-gene-toolbar-rail")
-  const collapsed = rail.classList.contains("is-collapsed")
-  rail.classList.remove("is-collapsed")
-  rail.classList.add("is-measuring")
-  // A rail whose caretaker line has its own row wraps instead of scrolling, so
-  // the buttons overflow when they drop under the gene's name, not when the rail
-  // grows wider.
-  const meta = rail.querySelector(".icono-canonical-toolbar-meta")
-  const actions = rail.querySelector(".icono-canonical-toolbar-actions")
-  const overflows =
-    rail.scrollWidth > rail.clientWidth + 1 ||
-    (!!meta && !!actions && actions.offsetTop >= meta.offsetTop + meta.offsetHeight)
-  rail.classList.remove("is-measuring")
-  if (collapsed) rail.classList.add("is-collapsed")
-  const more = rail.querySelector(".icono-toolbar-more")
+  const stacked = rail.classList.contains("is-stacked")
+  rail.classList.remove("is-stacked")
+  const overflows = rail.scrollWidth > rail.clientWidth + 1
+  if (stacked) rail.classList.add("is-stacked")
   const clipped = [...rail.querySelectorAll("button")]
     .filter((el) => el.checkVisibility() && el.scrollWidth > el.clientWidth + 1)
     .map((el) => (el.getAttribute("aria-label") || el.textContent).trim().slice(0, 24))
   return {
-    collapsed,
+    stacked,
     overflows,
-    foldable: rail.querySelectorAll(".icono-toolbar-menu button").length > 0,
-    moreShown: !!more && more.checkVisibility(),
     stillOverflows: rail.scrollWidth > rail.clientWidth + 1,
     clipped,
   }
@@ -345,15 +343,9 @@ test("gene page layout: TP53's toolbar and tiles stay on one sizing system", asy
         // 10.
         const fit = await page.evaluate(toolbarFit)
         assert.equal(
-          fit.collapsed,
+          fit.stacked,
           fit.overflows,
-          `${name}: toolbar folded=${fit.collapsed} but overflows=${fit.overflows}`,
-        )
-        assert.equal(
-          fit.moreShown,
-          fit.collapsed && fit.foldable,
-          `${name}: the toolbar's ⋮ shows=${fit.moreShown}, folded=${fit.collapsed}, ` +
-            `something to fold=${fit.foldable}`,
+          `${name}: toolbar stacked=${fit.stacked} but one row overflows=${fit.overflows}`,
         )
         assert.equal(fit.stillOverflows, false, `${name}: the toolbar still overflows`)
         assert.deepEqual(fit.clipped, [], `${name}: toolbar items cut short`)

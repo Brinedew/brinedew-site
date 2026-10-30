@@ -9,8 +9,9 @@
 // Fails if a guest or a signed-in reader, on desktop or a 360, 375 or 400 px
 // phone, doesn't see the caretaker's whole name and start date as a link to
 // /caretakers inside the toolbar; if the caretaker doesn't see the same line, as
-// the one button that opens their tools; if a phone card has empty space under
-// its footer; or if a gene with no caretaker shows one.
+// the one button that opens their tools, reading "Your caretaker panel" (owner,
+// 2026-10-30: their own name didn't say it opens something); if a phone card
+// has empty space under its footer; or if a gene with no caretaker shows one.
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
@@ -159,7 +160,7 @@ test("every reader sees a gene's caretaker on its page", async (t) => {
           seen,
           {
             href: own ? null : "/caretakers",
-            name: CARETAKER.username,
+            name: own ? "Your caretaker panel" : CARETAKER.username,
             nameCut: false,
             since: "Caretaker since Oct 22, 2026",
             insideRail: true,
