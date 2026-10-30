@@ -446,7 +446,7 @@ export default (() => {
   --icono-label-stamp: #a24834;
   --icono-label-pen: var(--accent, #1b7269);
   --icono-label-type: "IBM Plex Mono";
-  --icono-label-hand: "Caveat";
+  --icono-label-hand: "Delicious Handrawn";
   --icono-label-portrait-fr: 29.1%;
   --icono-label-form-fr: 70.9%;
   --icono-label-header-title-fr: 56.2%;
@@ -550,7 +550,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-gene-lead--static-shell .icono-label-specimen-hand-analysis,
 .icono-gene-lead--static-shell .icono-label-hand-note,
 .icono-gene-lead--static-shell .icono-label-qc-note {
-  font-family: "Caveat";
+  font-family: "Delicious Handrawn";
 }
 .icono-gene-lead--static-shell .icono-label-sheet-body {
   height: 100%;

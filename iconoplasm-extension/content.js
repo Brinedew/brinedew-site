@@ -1466,7 +1466,7 @@
       ['500 15px "IBM Plex Mono"', "origin expression"],
       ['800 38px "League Spartan"', "ICONOPLASM"],
       ['400 16px "Special Elite"', "gene identity"],
-      ['400 18px "Caveat"', "character"],
+      ['400 18px "Delicious Handrawn"', "character"],
     ]
     return Promise.allSettled(probes.map(([font, text]) => document.fonts.load(font, text)))
   }

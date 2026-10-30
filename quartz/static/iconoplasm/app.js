@@ -316,7 +316,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var stylesheets = [
       {
         id: "icono-caretaker-manifestations-styles",
-        href: new URL("./caretaker-manifestations.css?v=91feb5192143a3ce", import.meta.url).href,
+        href: new URL("./caretaker-manifestations.css?v=3fc0956e9db82c7e", import.meta.url).href,
       },
       {
         id: "icono-caretaker-supervote-styles",
@@ -1708,7 +1708,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function loadPrintCopyPainter() {
-    var painterUrl = new URL("./generated/blot-painter.js?v=bb31f118da4dfc1f", import.meta.url).href
+    var painterUrl = new URL("./generated/blot-painter.js?v=1811a249fc228d61", import.meta.url).href
     return loadScriptOnce(painterUrl, function () {
       return !!(window.IconoplasmBlot && window.IconoplasmBlot.paint)
     })
@@ -12193,7 +12193,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       : '<span class="icono-clan-acc">' + esc(label) + "</span>"
   }
 
-  // The aesthetic is the family's "look" — rendered in the Caveat teal pen voice
+  // The aesthetic is the family's "look" — rendered in the Delicious Handrawn teal pen voice
   // (handwritten annotation), linking out to aestheticswiki.
   function clanAestheticMarkup(clan) {
     if (!clan || !clan.aesthetic) return ""

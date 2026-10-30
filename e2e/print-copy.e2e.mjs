@@ -42,7 +42,7 @@ const REFERENCE_PAGE = `<!doctype html><html><head><meta charset="utf-8">
 <script src="/static/iconoplasm/generated/shared-card-runtime.js"></script>
 <style>html,body{margin:0;width:384px;height:512px;overflow:hidden;color-scheme:light;
 --light:oklch(96% 0.015 75);--dark:oklch(20% 0.035 50);
---icono-label-type:"IBM Plex Mono";--icono-label-hand:"Caveat"}
+--icono-label-type:"IBM Plex Mono";--icono-label-hand:"Delicious Handrawn"}
 #artboard>.icono-card{width:384px;height:512px;max-width:none;box-sizing:border-box;border:0}</style>
 </head><body><main id="artboard"></main></body></html>`
 
