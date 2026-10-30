@@ -5133,7 +5133,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         toPhysicalCardPx(measuredRect.bottom - infoRect.top),
       )
     }
-    var openBottom = dossierTop + fullInfoHeight + 8
+    // The open card ends where its paper ends: 8 px of bare card under the sheet
+    // showed the sheet's shadow as a second line under the remarks (2026-10-30).
+    var openBottom = dossierTop + fullInfoHeight
     var viewportHeight = Math.ceil(isExpanded ? openBottom : closedBottom)
     card.style.setProperty("--icono-label-mobile-viewport-height", viewportHeight + "px")
   }
