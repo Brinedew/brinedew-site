@@ -13957,7 +13957,8 @@ async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
 // the winner itself; workers/iconoplasm/votes/deferred-elections.js elects it
 // after the reset. A vote that keeps the winner republishes as on any day.
 // Erasure and role changes stay immediate: they change whose name a reader
-// sees.
+// sees. Any other rebuild of a due gene (an upload, the publisher) projects its
+// winner as on any day; the sweep then finds it unchanged and clears the mark.
 async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}) {
   try {
     const { projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {

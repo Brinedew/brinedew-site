@@ -444,13 +444,47 @@ test(
         { elected: 1, promoted: 1 },
       )
       // The run's own reads (the admission ledger, the shed day, the due list)
-      // and its admission row come on top of the gene's price.
+      // fit inside the gene's read price; its admission row is ADMISSION_COST.
       const price = priceOf("vote_election", 1)
       for (const meter of ["rows_written", "rows_read"])
         assert.ok(
-          swept.actual[meter] <= price[meter] + ADMISSION_COST[meter] + 10,
+          swept.actual[meter] <= price[meter] + ADMISSION_COST[meter],
           `${meter}: ${JSON.stringify(swept.actual)}`,
         )
+
+      // Clearing a vote on a portrait whose row is gone takes the vote out of
+      // the summary row it has and creates none.
+      await vote("KRAS", 6, 1)(db)
+      await db
+        .prepare(
+          "DELETE FROM icono_portrait_assets WHERE gene_symbol = 'KRAS' AND asset_sha256 = ?",
+        )
+        .bind(asset(6))
+        .run()
+      const cleared = await measure("clear on a removed portrait", vote("KRAS", 6, 0))
+      assert.equal(cleared.result.ok, true)
+      assert.ok(cleared.actual.rows_written <= 4, JSON.stringify(cleared.actual))
+      const summary = await db
+        .prepare(
+          "SELECT upvotes, downvotes, score, vote_count FROM icono_vote_asset_summary WHERE gene_symbol = 'KRAS' AND asset_sha256 = ?",
+        )
+        .bind(asset(6))
+        .first()
+      assert.deepEqual({ ...summary }, { upvotes: 0, downvotes: 0, score: 0, vote_count: 0 })
+      await db
+        .prepare(
+          "DELETE FROM icono_portrait_assets WHERE gene_symbol = 'KRAS' AND asset_sha256 = ?",
+        )
+        .bind(asset(7))
+        .run()
+      assert.equal((await vote("KRAS", 7, 0)(db)).ok, true)
+      const created = await db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM icono_vote_asset_summary WHERE gene_symbol = 'KRAS' AND asset_sha256 = ?",
+        )
+        .bind(asset(7))
+        .first()
+      assert.equal(created.n, 0)
     } finally {
       schema.close()
       await runtime.dispose()

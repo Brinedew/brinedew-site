@@ -2313,10 +2313,10 @@ test("34: on a shed day a vote is written at once and its winner change waits fo
     (await sweepDeferredElections(db, { usage: usageSample(today, 10_000, now), now })).shed,
     today,
   )
-  assert.equal(
-    (await sweepDeferredElections(db, { usage: null, now })).waiting,
-    "D1_METER_UNAVAILABLE",
-  )
+  assert.deepEqual(await sweepDeferredElections(db, { usage: null, now }), {
+    ok: false,
+    waiting: "D1_METER_UNAVAILABLE",
+  })
   assert.equal(current(db, "TP53"), sha("a"))
 
   // An erasure or role change changes whose name a reader sees: it elects and
@@ -2351,4 +2351,28 @@ test("34: on a shed day a vote is written at once and its winner change waits fo
     await sweepDeferredElections(db, { usage: usageSample(tomorrow, 1_000, after), now: after }),
     { ok: true, elected: 0 },
   )
+
+  // Runs can be a minute apart and overlap. A vote that lands while a run
+  // elects (every vote advances its gene's version) keeps the gene due, and
+  // the next run elects it again.
+  db.sqlite.exec("INSERT INTO icono_gene_elections_due (gene_symbol) VALUES ('TP53')")
+  let raced = false
+  const racing = {
+    prepare(sql) {
+      if (!raced && sql.includes("DELETE FROM icono_gene_elections_due")) {
+        raced = true
+        db.sqlite.exec(
+          "UPDATE icono_gene_vote_version SET version = version + 1 WHERE gene_symbol = 'TP53'",
+        )
+      }
+      return db.prepare(sql)
+    },
+    batch: (statements) => db.batch(statements),
+  }
+  const sample = () => usageSample(tomorrow, 1_000, after)
+  assert.equal((await sweepDeferredElections(racing, { usage: sample(), now: after })).elected, 1)
+  assert.equal(raced, true)
+  assert.deepEqual(due(), ["TP53"])
+  assert.equal((await sweepDeferredElections(db, { usage: sample(), now: after })).elected, 1)
+  assert.deepEqual(due(), [])
 })

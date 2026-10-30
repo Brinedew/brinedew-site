@@ -36,9 +36,27 @@ import { GENE_VOTE_ELECTION_ACTOR, electAndProjectGeneWinner } from "./gene-vote
 // have made 89 D1 calls and succeeded (request record, 2026-10-27 to 30).
 export const DEFERRED_ELECTIONS_PER_RUN = 100
 
+// The due genes with the vote version each had when this run read it. Every
+// vote and supervote advances its gene's version in its own write batch.
+const DUE_SQL = `SELECT due.gene_symbol, COALESCE(v.version, 0) AS version
+                   FROM icono_gene_elections_due AS due
+                   LEFT JOIN icono_gene_vote_version AS v USING (gene_symbol)
+                  ORDER BY due.gene_symbol LIMIT ?1`
+// Runs can be a minute apart and overlap. A mark leaves only while its gene's
+// version is still the one read above, so a vote that marked the gene again
+// while this run elected keeps it due, and the next run elects it once more.
+const CLEAR_SQL = `DELETE FROM icono_gene_elections_due
+                    WHERE gene_symbol IN (
+                      SELECT json_extract(value, '$[0]') FROM json_each(?1)
+                       WHERE json_extract(value, '$[1]') = (
+                         SELECT COALESCE(MAX(version), 0) FROM icono_gene_vote_version
+                          WHERE gene_symbol = json_extract(value, '$[0]')))`
+
 export async function sweepDeferredElections(db, { usage, now = Date.now() } = {}) {
-  // A meter that can't be read stops batch work and marks no day.
-  if (!usage) return { ok: true, waiting: "D1_METER_UNAVAILABLE" }
+  // A meter that can't be read stops batch work and marks no day. It is a
+  // failure, so the scheduled handler logs it: a dead analytics token would
+  // otherwise leave every day unshed and due genes unelected without a word.
+  if (!usage) return { ok: false, waiting: "D1_METER_UNAVAILABLE" }
   const spend = await batchSpendNow(db, usage, "sheddable_plus", now)
   const spent = BATCH_METERS.find((meter) => spend[meter].projected >= spend[meter].stop)
   if (spent) {
@@ -54,12 +72,11 @@ export async function sweepDeferredElections(db, { usage, now = Date.now() } = {
   // A shed day stays shed, so votes never mark a gene while this elects it.
   const [shedToday, due] = await db.batch([
     db.prepare("SELECT 1 AS shed FROM icono_publication_shed_days WHERE day = ?1").bind(usage.day),
-    db
-      .prepare("SELECT gene_symbol FROM icono_gene_elections_due ORDER BY gene_symbol LIMIT ?1")
-      .bind(DEFERRED_ELECTIONS_PER_RUN),
+    db.prepare(DUE_SQL).bind(DEFERRED_ELECTIONS_PER_RUN),
   ])
   if (shedToday?.results?.length) return { ok: true, shed: usage.day }
-  const symbols = (due?.results || []).map((row) => row.gene_symbol)
+  const versions = new Map((due?.results || []).map((row) => [row.gene_symbol, row.version]))
+  const symbols = [...versions.keys()]
   if (!symbols.length) return { ok: true, elected: 0 }
   const admission = await admitBatchWork(db, {
     usage,
@@ -85,10 +102,8 @@ export async function sweepDeferredElections(db, { usage, now = Date.now() } = {
   }
   if (elected.length)
     await db
-      .prepare(
-        "DELETE FROM icono_gene_elections_due WHERE gene_symbol IN (SELECT value FROM json_each(?1))",
-      )
-      .bind(JSON.stringify(elected))
+      .prepare(CLEAR_SQL)
+      .bind(JSON.stringify(elected.map((symbol) => [symbol, versions.get(symbol)])))
       .run()
   return { ok: failed.length === 0, elected: elected.length, promoted, failed }
 }
