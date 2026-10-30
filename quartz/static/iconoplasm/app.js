@@ -10,7 +10,7 @@ import {
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
 import { createRequestInbox } from "./request-inbox.js?v=51582eba3b6b310d"
-import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=155a9d5dde12e030"
+import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
 import {
@@ -739,8 +739,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
               esc(actionLabel) +
               "</button>",
           })
-        // B-838: the claim button may sit in the toolbar's More menu; the dialog moves
-        // next to the toolbar so closing the menu never hides it.
+        // We move the dialog next to the toolbar, outside its row of buttons.
         var dialog = target.querySelector("[data-icono-caretaker-claim-dialog]")
         var dialogHost = container.querySelector("[data-icono-caretaker-claim-dialog-host]")
         if (dialog && dialogHost) dialogHost.replaceChildren(dialog)
@@ -752,8 +751,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         target
           .querySelector("[data-icono-caretaker-claim-open]")
           ?.addEventListener("click", function () {
-            var menu = target.closest("[popover]")
-            if (menu && menu.matches(":popover-open")) menu.hidePopover()
             openDialog(dialog)
             syncClaimSubmitState()
           })
@@ -1351,10 +1348,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return String(rawEmulsionId || "").trim()
   }
 
+  // The toolbar's start: star, print and edit, the same three icons for every
+  // reader, so they never move (B-1191).
   function renderCanonicalToolbarMetaMarkup(genePayload) {
     var portrait = (genePayload && genePayload.portrait) || null
     var emulsionInfo = emulsionDisplayInfo(portrait)
-    if (!emulsionInfo.primary) return '<div class="icono-candidate-toolbar-meta"></div>'
+    if (!emulsionInfo.primary)
+      return '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta"></div>'
     // No "Emulsion: A1-20439" here: the card directly above prints its emulsion
     // number, and the star and printer read as a pair without a divider.
     return (
@@ -1364,6 +1364,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "icono-emulsion-favorite-button--toolbar",
       ) +
       renderPrintCopyButtonMarkup(genePayload) +
+      renderEditImageActionMarkup("canonical", genePayload, portrait || {}) +
       "</div>"
     )
   }
@@ -1399,10 +1400,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   // The gene's caretaker, for every reader: picture, name and start date, as a
   // link to the /caretakers list (the mock the owner approved on 2026-10-29).
-  // It sits after the star and the printer and, on a bar too narrow for it, takes
-  // its own line above them (fitCanonicalToolbar). For the caretaker themself the
+  // It sits after the toolbar's icons and, on a bar too narrow for it, takes its
+  // own line above them (fitCanonicalToolbar). For the caretaker themself the
   // same line is a button, the door to their tools (B-862: a thing you click, like
-  // Reddit's Mod Mode toggle, not a sentence telling you where to go).
+  // Reddit's Mod Mode toggle, not a sentence telling you where to go). It reads
+  // "Your caretaker panel" rather than their own name, so they know it opens
+  // something (owner, 2026-10-30).
   function renderGeneCaretakerMarkup(caretaker, own) {
     var profile = caretaker && typeof caretaker === "object" ? caretaker : {}
     var username = String(profile.username || "").trim()
@@ -1425,7 +1428,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       esc(avatarUrl) +
       '" alt="" width="32" height="32" loading="lazy" decoding="async" referrerpolicy="no-referrer">' +
       '<span class="icono-gene-caretaker__text"><span class="icono-gene-caretaker__name">' +
-      esc(username) +
+      esc(own ? "Your caretaker panel" : username) +
       '</span><span class="icono-gene-caretaker__since">' +
       esc(sinceText) +
       "</span></span>"
@@ -1433,7 +1436,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return own
       ? '<button type="button" class="icono-gene-caretaker icono-gene-caretaker--own"' +
           attributes +
-          ' data-icono-caretaker-open title="Open caretaker tools">' +
+          " data-icono-caretaker-open>" +
           inner +
           "</button>"
       : '<a class="icono-gene-caretaker" href="/caretakers" data-icono-nav' +
@@ -1444,8 +1447,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function syncViewerCaretakerToolbarIdentity(container, isCaretaker) {
-    var actions = container && container.querySelector(".icono-canonical-toolbar-actions")
-    if (!actions || !currentUser) return
+    var slot = container && container.querySelector("[data-icono-toolbar-caretaker]")
+    if (!slot || !currentUser) return
     var line = container.querySelector("[data-icono-gene-caretaker]")
     var own = !!(line && line.hasAttribute("data-icono-caretaker-open"))
     if (!isCaretaker) {
@@ -1473,7 +1476,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       line.insertAdjacentHTML("beforebegin", markup)
       line.remove()
     } else {
-      actions.insertAdjacentHTML("beforebegin", markup)
+      slot.insertAdjacentHTML("afterbegin", markup)
     }
     var mine = container.querySelector("[data-icono-gene-caretaker]")
     mine._iconoReaderLine = readerLine
@@ -5573,10 +5576,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         rail.querySelector(".icono-candidate-toolbar-meta"),
         renderCanonicalToolbarMetaMarkup(updated),
       )
-      replace(
-        rail.querySelector(".icono-gene-edit-panel"),
-        renderEditImageActionMarkup("canonical", updated, updated.portrait || {}),
-      )
     }
     var viewport = container.querySelector("[data-icono-strip-viewport]")
     var scrollLeft = viewport ? viewport.scrollLeft : 0
@@ -6460,10 +6459,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // Menu rows close their menu; the tile menu's copy row opens its form instead.
   document.addEventListener("click", function (event) {
     var item =
-      event.target &&
-      event.target.closest &&
-      event.target.closest(".icono-toolbar-menu button, .icono-candidate-menu > button")
-    var menu = item && item.closest(".icono-toolbar-menu, .icono-candidate-menu")
+      event.target && event.target.closest && event.target.closest(".icono-candidate-menu > button")
+    var menu = item && item.closest(".icono-candidate-menu")
     if (menu && menu.matches(":popover-open")) menu.hidePopover()
   })
 
@@ -6475,22 +6472,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '">' +
       '<div class="icono-gene-toolbar-rail" data-icono-canonical-rail>' +
       '<section class="icono-gene-request-surface icono-gene-request-panel">' +
+      // B-1191: fixed ends, like YouTube's bar under a video. The icons start the
+      // row and Add portraits ends it for every reader; what changes with who is
+      // reading (the gene's caretaker, the button to become or ask to become its
+      // caretaker) sits between them, and on a short bar takes its own row above.
       renderCanonicalToolbarMetaMarkup(g) +
+      '<div class="icono-gene-toolbar-caretaker" data-icono-toolbar-caretaker>' +
       renderGeneCaretakerMarkup(g.caretaker) +
-      '<div class="icono-canonical-toolbar-actions">' +
-      // B-838: More menu. Wide bars show its items inline; narrow bars collapse them
-      // behind the ... button (native popover, no JS toggling).
-      '<button type="button" class="icono-button icono-button--icon icono-toolbar-more" popovertarget="icono-toolbar-menu-' +
-      esc(normalizedSymbol(g.symbol)) +
-      '" aria-label="More actions" title="More actions">' +
-      ICONO_MORE_ICON +
-      "</button>" +
-      '<div class="icono-toolbar-menu" id="icono-toolbar-menu-' +
-      esc(normalizedSymbol(g.symbol)) +
-      '" popover>' +
-      renderEditImageActionMarkup("canonical", g, (g && g.portrait) || {}) +
       "<span data-icono-caretaker-claim-action></span>" +
       "</div>" +
+      '<div class="icono-canonical-toolbar-actions">' +
       renderRequestDialogTriggerMarkup(g.symbol) +
       "</div>" +
       "</section>" +
@@ -6617,10 +6608,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function renderEditImageActionMarkup(source, genePayload, item) {
-    // B-612: guest UI must not expose an edit entry that can only lead to
-    // authenticated provider state. The signed-in refresh path re-renders
-    // this rail through refreshCurrentGeneInteractiveIslands().
-    if (!currentUser) return ""
+    // A guest gets the same button, which asks them to log in (wireGeneEditImagePanel)
+    // as the star beside it does: a button that appeared on sign-in moved the bar
+    // (B-1191). The island is drawn again on sign-in with the signed-in label.
     var symbol = normalizedSymbol(genePayload && genePayload.symbol)
     var sourceItem = item || {}
     var assetSha = String((sourceItem && sourceItem.asset_sha256) || "")
@@ -6638,6 +6628,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var sourceWidth = Number((sourceItem && sourceItem.width) || 0)
     var sourceHeight = Number((sourceItem && sourceItem.height) || 0)
     var label = source === "candidate" ? "Edit candidate portrait" : "Edit portrait"
+    if (!currentUser) label = "Log in to edit portrait"
     return (
       '<section class="icono-gene-request-surface icono-gene-edit-panel">' +
       '<button type="button" class="icono-candidate-action-btn icono-canonical-edit-btn icono-image-edit-open" data-icono-edit-source="' +
@@ -7411,6 +7402,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (buttons[i].getAttribute("data-icono-edit-wired") === "true") continue
       buttons[i].setAttribute("data-icono-edit-wired", "true")
       buttons[i].addEventListener("click", function (event) {
+        if (!currentUser) {
+          openVoteLoginDialog({
+            loginUrl: voteLoginUrl(),
+            returnFocus: event.currentTarget,
+            title: "Log in with Discord to edit portraits",
+          })
+          return
+        }
         openImageEditDialog(sourceFromEditButton(event.currentTarget))
       })
     }
@@ -10768,6 +10767,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-candidate-toolbar-meta icono-canonical-toolbar-meta">' +
       tool +
       tool +
+      tool +
       "</div>" +
       '<div class="icono-canonical-toolbar-actions">' +
       '<div class="icono-skel-tool icono-skel-tool--primary"></div>' +
@@ -11200,33 +11200,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     hydrateServerCandidateActionIslands(container, genePayload)
   }
 
-  // B-1096: the toolbar folds its rarer actions (edit, switch or claim) into the
-  // More menu only when the whole row does not fit, the "priority+" pattern of
-  // GitHub's and Gmail's toolbars. A width breakpoint cannot know which controls
-  // this viewer has: a signed-in caretaker's row is 160 px longer than a guest's.
+  // B-1191: when the one row does not fit, the caretaker part takes its own row
+  // above the buttons, and the buttons stay where they were. A width breakpoint
+  // cannot know how long that part is: a name, a button, both or neither.
   function fitCanonicalToolbar(rail) {
     if (!rail || rail._iconoFitToolbar) return
     var fit = function () {
       if (!rail.isConnected || !rail.clientWidth) return
-      // Measured start-aligned: a row that overflows its start edge has no
-      // scrollWidth to show for it.
-      rail.classList.remove("is-collapsed", "is-stacked")
-      rail.classList.add("is-measuring")
-      var meta = rail.querySelector(".icono-canonical-toolbar-meta")
-      var actions = rail.querySelector(".icono-canonical-toolbar-actions")
-      var overflows = function () {
-        return (
-          rail.scrollWidth > rail.clientWidth + 1 ||
-          // A stacked bar wraps, so a row that is still too long shows as the
-          // actions dropping below the star instead of as overflow.
-          (!!meta && !!actions && actions.offsetTop >= meta.offsetTop + meta.offsetHeight)
-        )
-      }
-      // The caretaker's line goes first, then the rarer actions fold.
-      var byline = rail.querySelector("[data-icono-gene-caretaker]:not([hidden])")
-      if (overflows() && byline) rail.classList.add("is-stacked")
-      if (overflows()) rail.classList.add("is-collapsed")
-      rail.classList.remove("is-measuring")
+      // Nothing in the row shrinks, so a row that is too long overflows.
+      rail.classList.remove("is-stacked")
+      if (rail.scrollWidth > rail.clientWidth + 1) rail.classList.add("is-stacked")
     }
     rail._iconoFitToolbar = fit
     if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe(rail)

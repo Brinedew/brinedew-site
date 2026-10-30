@@ -43,11 +43,6 @@ function isChecked(box) {
   return typeof box.checked === "boolean" ? box.checked : box.hasAttribute("checked")
 }
 
-function closeMenu(target) {
-  const menu = target.closest("[popover]")
-  if (menu && menu.matches(":popover-open")) menu.hidePopover()
-}
-
 // `switchInventoryMarkup(from, to)` is the switch dialog's list of what stays and
 // what is undone (to = null for a gene given away with none taken in return);
 // `capabilitiesMarkup` the first claim's list of what a caretaker can do;
@@ -192,7 +187,6 @@ export function createGeneRequestControls({
     const sync = wireTerms(box, submit)
     let pendingCommandId = null
     target.querySelector("[data-icono-gene-request-open]").addEventListener("click", () => {
-      closeMenu(target)
       openDialog(dialog)
       sync()
     })
