@@ -22,6 +22,10 @@ export const ICONOPLASM_BACKGROUND_MINUTES = Object.freeze({
   // B-896: the style picker's first page on the CDN. Free minutes again, so the
   // gaps are uneven; the page is never more than 20 minutes behind.
   requestPicker: Object.freeze([9, 21, 36, 49]),
+  // B-1147: reads the D1 meter, marks the UTC day shed past batch work's stop,
+  // and otherwise elects the genes whose winner change waited. Free minutes:
+  // never more than 17 apart.
+  electionsDue: Object.freeze([7, 22, 37, 54]),
 })
 
 export const ICONOPLASM_NIGHTLY_MINUTES = Object.freeze({

@@ -168,6 +168,24 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
    between, materializes and writes again from the fresh rows, at most three
    passes. A failed publish never fails the vote.
 
+**Shed days (B-1147).** The vote is a reader's own action and runs to
+Cloudflare's wall; the winner change it causes is publication, which stops at
+85% of a D1 meter like other batch work. The `electionsDue` job
+(`workers/iconoplasm/votes/deferred-elections.js`, minutes 7, 22, 37 and 54)
+reads Cloudflare's meter and, once batch work's share of the UTC day is spent,
+records the day in `icono_publication_shed_days`. Step 2 reads that row in its
+own batch. On a shed day a winner change marks its gene in
+`icono_gene_elections_due` (1 row, or none when it already is) instead of
+projecting it (9 rows), and the gene isn't republished, because the publisher
+would project the winner itself. A vote that keeps the winner republishes as on
+any day. After 00:00 UTC the same job elects up to 100 due genes a run, let in
+by their price (`vote_election` in `batch-admission.js`); each projection's
+`publish` event makes the Actions publisher republish the gene. Each voter sees
+their own vote in their own box meanwhile. Erasure and caretaker role changes
+never wait: they change whose name a reader sees. The vote path never asks
+Cloudflare's analytics itself: its GraphQL API allows 300 queries per 5 minutes
+per token, which isolates asking every 30 s would spend at viral scale.
+
 **Daily vote allowance.** Each person may change 200 votes per UTC day
 (`VOTE_PERSON_DAILY_LIMIT`, `icono_vote_person_day`, migration 0123, B-1065).
 Their reader votes, the votes their image edit or generated candidate brings
@@ -193,17 +211,18 @@ refusals (400, 404, 409, 5xx) never pause a box. The candidate-copy, edit-publis
 generated-candidate and supervote routes answer the same code without a reset
 time, because nothing on those routes waits for it.
 Measured on the full migrated schema
-(`workers/iconoplasm/vote-asset-summary-cost.test.js`): a first vote on an
-asset nobody voted on writes 9 D1 rows, a first vote on a voted asset 7, a
-flip 6, a supervote 13; a winner change adds about 7. One person at the
-allowance writes about 2,000 rows, 2% of the free 100,000.
+(`workers/iconoplasm/vote-asset-summary-cost.test.js`, 2026-10-30): a first
+vote on an asset nobody voted on writes 6 D1 rows, a first vote on a voted
+asset 5, a flip 4, a supervote 3; a winner change adds 9 (6 for portraits
+without a style), an election that keeps the winner 0. One person at the
+allowance writes about 1,200 rows, 1.2% of the free 100,000.
 
 Publishing an image edit imports the edit's inherited upvotes and the
 publisher's own vote in one import. The edit inherits 90% of its source's
 net score (upvotes minus downvotes, never below zero; supervotes are not
 copied), at most 25 (`IMAGE_EDIT_INHERITED_UPVOTE_LIMIT`), however many the
 source holds, so one click spends at most 26 of the publisher's allowance and
-writes about 134 rows.
+writes about 81 rows.
 
 A caretaker supervote (`/api/iconoplasm/caretaker/genes/:symbol/supervote`)
 is the same shape over the caretaker projection tables: compare-and-set on the

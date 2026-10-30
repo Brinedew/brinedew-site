@@ -60,7 +60,9 @@ import {
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
   publishIconoplasmGeneStableObject,
   publishRequestPickerObject,
+  settleGeneAfterVote,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { sweepDeferredElections } from "./iconoplasm/votes/deferred-elections.js"
 import {
   GENE_VOTE_IMPORT_CHUNK,
   electAndProjectGeneWinner,
@@ -2242,4 +2244,111 @@ test("33: copying a candidate adds it to the target gene, checkmarks it for the 
   )
 
   assert.equal((await routeRequest(db, "POST", copyPath, { ...copy("INS"), user: {} })).status, 401)
+})
+
+// 34. On a UTC day whose batch share is spent (B-1147), a vote's winner change
+// still spends the readers' share (it projects or republishes), the vote itself
+// is refused, or a vote that keeps the winner is no longer republished; the
+// sweep elects a due gene while the day is shed, or after the reset leaves it
+// unelected or due; an erasure or role change waits like a vote.
+const usageSample = (day, rowsWritten, at) => ({
+  day,
+  measured_at: at,
+  meter_counted_before: new Date(at).toISOString(),
+  rows_read: 0,
+  rows_written: rowsWritten,
+  requests: 0,
+})
+
+test("34: on a shed day a vote is written at once and its winner change waits for the sweep after the reset", async (t) => {
+  t.mock.method(console, "warn", () => {})
+  const db = new SqliteD1()
+  for (const symbol of ["TP53", "BRCA1", "EGFR"]) {
+    seedGene(db, symbol)
+    seedAsset(db, symbol, sha("a"), { createdAt: "2026-01-02 00:00:00" })
+    seedAsset(db, symbol, sha("b"), { createdAt: "2026-01-01 00:00:00" })
+    seedPublished(db, symbol, sha("a"))
+  }
+  const now = Date.now()
+  const today = new Date(now).toISOString().slice(0, 10)
+
+  // Past batch work's stop (85% of the 100,000 rows written a day) the sweep
+  // marks the day shed and elects nothing.
+  const marked = await sweepDeferredElections(db, { usage: usageSample(today, 86_000, now), now })
+  assert.equal(marked.shed, today)
+  assert.equal(marked.meter, "rows_written")
+
+  const result = await callApi(db, "/api/iconoplasm/votes/set", {
+    symbol: "TP53",
+    asset_sha256: sha("b"),
+    vote_value: 1,
+  })
+  assert.equal(result.status, 200)
+  assert.equal(result.payload.snapshot.user_vote, 1)
+  assert.equal(result.payload.snapshot.image_upvotes, 1)
+  assert.equal(current(db, "TP53"), sha("a"), "the winner change waits")
+  assert.equal(result.ctx.promises.length, 0, "nothing is republished")
+  assert.equal(
+    db.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE gene_symbol = 'TP53'")[0].n,
+    0,
+  )
+  const due = () =>
+    db.rows("SELECT gene_symbol FROM icono_gene_elections_due").map((r) => r.gene_symbol)
+  assert.deepEqual(due(), ["TP53"])
+
+  // A vote that keeps the winner republishes as on any day, so other readers
+  // see its count.
+  const held = await callApi(db, "/api/iconoplasm/votes/set", {
+    symbol: "EGFR",
+    asset_sha256: sha("a"),
+    vote_value: 1,
+  })
+  assert.equal(held.status, 200)
+  assert.equal(held.ctx.promises.length, 1)
+  assert.deepEqual(due(), ["TP53"])
+
+  // A shed day stays shed: a later, lower sample elects nothing, and a meter
+  // that can't be read stops the sweep.
+  assert.equal(
+    (await sweepDeferredElections(db, { usage: usageSample(today, 10_000, now), now })).shed,
+    today,
+  )
+  assert.equal(
+    (await sweepDeferredElections(db, { usage: null, now })).waiting,
+    "D1_METER_UNAVAILABLE",
+  )
+  assert.equal(current(db, "TP53"), sha("a"))
+
+  // An erasure or role change changes whose name a reader sees: it elects and
+  // republishes at once, shed day or not.
+  await vote(db, "BRCA1", sha("b"), "reader-2", 1)
+  const ctx = waitUntilRecorder()
+  await settleGeneAfterVote({ ICONOPLASM_DB: db }, ctx, "BRCA1", {
+    reason: "caretaker_role_erased",
+  })
+  await Promise.all(ctx.promises)
+  assert.equal(current(db, "BRCA1"), sha("b"))
+  assert.equal(ctx.promises.length, 1)
+
+  // After 00:00 UTC the sweep elects the gene once; its `publish` event hands
+  // the gene object to the Actions publisher.
+  const after = Date.parse(`${today}T00:07:00Z`) + 86_400_000
+  const tomorrow = new Date(after).toISOString().slice(0, 10)
+  const swept = await sweepDeferredElections(db, {
+    usage: usageSample(tomorrow, 1_000, after),
+    now: after,
+  })
+  assert.deepEqual(
+    { elected: swept.elected, promoted: swept.promoted, ok: swept.ok },
+    { elected: 1, promoted: 1, ok: true },
+  )
+  assert.equal(current(db, "TP53"), sha("b"))
+  const events = db.rows("SELECT action FROM icono_publish_events WHERE gene_symbol = 'TP53'")
+  assert.equal(events.length, 1)
+  assert.equal(PUBLICATION_AFFECTING_ACTIONS.includes(events[0].action), true)
+  assert.deepEqual(due(), [])
+  assert.deepEqual(
+    await sweepDeferredElections(db, { usage: usageSample(tomorrow, 1_000, after), now: after }),
+    { ok: true, elected: 0 },
+  )
 })
