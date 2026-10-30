@@ -5579,9 +5579,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var nextViewport = container.querySelector("[data-icono-strip-viewport]")
     if (nextViewport) nextViewport.scrollLeft = scrollLeft
     // A portrait that left the lead card is found in the strip, and the other way round.
-    var refocus = focusSha
-      ? container.querySelector("[" + focusAttr + '="' + focusSha + '"] ' + focusButton) ||
-        container.querySelector(
+    // The lead card carries a hidden copy of its vote box, so the visible one wins.
+    var refocus = null
+    var refocusSelectors = focusSha
+      ? [
+          "[" + focusAttr + '="' + focusSha + '"] ' + focusButton,
           '[data-icono-candidate-vote-box="' +
             focusSha +
             '"] ' +
@@ -5590,8 +5592,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             focusSha +
             '"] ' +
             focusButton,
-        )
-      : null
+        ]
+      : []
+    for (var s = 0; s < refocusSelectors.length && !refocus; s++) {
+      var found = container.querySelectorAll(refocusSelectors[s])
+      for (var f = 0; f < found.length && !refocus; f++) {
+        if (found[f].getClientRects().length) refocus = found[f]
+      }
+    }
     if (refocus) refocus.focus({ preventScroll: true })
   }
 

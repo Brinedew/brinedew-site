@@ -86,17 +86,19 @@
   color: var(--icono-reject);
 }
 
-.icono-vote-btn:disabled {
-  cursor: wait;
-  opacity: 0.72;
-}
-
 /* The server said "not now" (the daily vote budget is spent). Dimmer than a pending button, and
    the cursor says "not allowed", not "wait". It is aria-disabled, not disabled, on purpose: the
    button still takes the tap, and the tap shows the reader why. */
 .icono-vote-btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* A vote on its way. Also aria-disabled, never disabled: a disabled button drops keyboard focus,
+   and the reader who pressed it would land at the top of the page. */
+.icono-vote-btn[data-icono-vote-pending] {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .icono-vote-btn.active {

@@ -2094,16 +2094,18 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     // shows the reader why.
     if (paused) box.setAttribute("data-icono-vote-paused", "")
     else box.removeAttribute("data-icono-vote-paused")
+    // A pending box is aria-disabled for the same reason, and because a disabled button drops
+    // keyboard focus: the reader who pressed it would land at the top of the page.
     if (upBtn) {
-      upBtn.disabled = pending
       upBtn.classList.toggle("active", userVote === 1)
-      if (paused) upBtn.setAttribute("aria-disabled", "true")
+      upBtn.toggleAttribute("data-icono-vote-pending", pending)
+      if (paused || pending) upBtn.setAttribute("aria-disabled", "true")
       else upBtn.removeAttribute("aria-disabled")
     }
     if (downBtn) {
-      downBtn.disabled = pending
       downBtn.classList.toggle("active", userVote === -1)
-      if (paused) downBtn.setAttribute("aria-disabled", "true")
+      downBtn.toggleAttribute("data-icono-vote-pending", pending)
+      if (paused || pending) downBtn.setAttribute("aria-disabled", "true")
       else downBtn.removeAttribute("aria-disabled")
     }
     var qcBlock = box.closest ? box.closest(".icono-label-qc-block") : null
@@ -2356,6 +2358,9 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     }
 
     function submitVote(voteValue, sourceControl) {
+      // The buttons stay pressable while a vote or snapshot is on its way (see
+      // setVoteBoxState), so a second press waits for nothing and does nothing.
+      if (state.pending) return
       if (pauseActive()) {
         reportVoteFailure(pause.message, null)
         return
