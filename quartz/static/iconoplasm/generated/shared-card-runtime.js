@@ -10762,80 +10762,76 @@
           reportVoteFailure(pause.message, null);
           return;
         }
-        var ready = cfg.deferSnapshot && !snapshotPrimed ? ensureSnapshot().catch(function() {
-          return null;
-        }) : Promise.resolve();
-        ready.then(function() {
-          var previousSnapshot = cloneSnapshot(state.snapshot);
-          var currentVote = Number(previousSnapshot.user_vote || 0);
-          var requestedVote = Number(voteValue || 0);
-          var nextVote = currentVote === requestedVote ? 0 : requestedVote;
-          state.snapshot = optimisticSnapshot(nextVote);
+        var previousSnapshot = cloneSnapshot(state.snapshot);
+        var currentVote = Number(previousSnapshot.user_vote || 0);
+        var requestedVote = Number(voteValue || 0);
+        var nextVote = currentVote === requestedVote ? 0 : requestedVote;
+        state.snapshot = optimisticSnapshot(nextVote);
+        writeStoredVoteSnapshot(candidateRef, state.snapshot);
+        state.pending = true;
+        notifySnapshot();
+        render();
+        fetchJSON(
+          "/api/iconoplasm/votes/set",
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              candidate_ref: candidateRef,
+              symbol,
+              asset_sha256: assetSha,
+              candidate_image_id: candidateImageId || void 0,
+              vision_id: visionId,
+              vote_value: nextVote
+            })
+          },
+          {
+            apiBaseUrl: cfg.apiBaseUrl,
+            fetchImpl: cfg.fetchImpl
+          }
+        ).then(function(data) {
+          state.authenticated = true;
+          state.snapshot = data && data.snapshot || state.snapshot;
+          snapshotPrimed = true;
           writeStoredVoteSnapshot(candidateRef, state.snapshot);
-          state.pending = true;
           notifySnapshot();
-          render();
-          fetchJSON(
-            "/api/iconoplasm/votes/set",
-            {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                candidate_ref: candidateRef,
-                symbol,
-                asset_sha256: assetSha,
-                candidate_image_id: candidateImageId || void 0,
-                vision_id: visionId,
-                vote_value: nextVote
-              })
-            },
-            {
-              apiBaseUrl: cfg.apiBaseUrl,
-              fetchImpl: cfg.fetchImpl
+          if (typeof cfg.onVoteCommitted === "function") {
+            try {
+              cfg.onVoteCommitted(data, state);
+            } catch (callbackError) {
+              if (typeof cfg.onError === "function") {
+                cfg.onError("vote_committed", callbackError);
+              }
             }
-          ).then(function(data) {
-            state.authenticated = true;
-            state.snapshot = data && data.snapshot || state.snapshot;
+          }
+        }).catch(function(err) {
+          var failureStatus = Number(err && err.status || 0);
+          if (failureStatus === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
+            state.snapshot = previousSnapshot;
             writeStoredVoteSnapshot(candidateRef, state.snapshot);
+            state.authenticated = false;
             notifySnapshot();
-            if (typeof cfg.onVoteCommitted === "function") {
-              try {
-                cfg.onVoteCommitted(data, state);
-              } catch (callbackError) {
-                if (typeof cfg.onError === "function") {
-                  cfg.onError("vote_committed", callbackError);
-                }
-              }
+            if (typeof cfg.onAuthRequired === "function") {
+              cfg.onAuthRequired(err, sourceControl || box);
             }
-          }).catch(function(err) {
-            var failureStatus = Number(err && err.status || 0);
-            if (failureStatus === 401 || err && err.payload && err.payload.code === "AUTH_REQUIRED") {
-              state.snapshot = previousSnapshot;
-              writeStoredVoteSnapshot(candidateRef, state.snapshot);
-              state.authenticated = false;
-              notifySnapshot();
-              if (typeof cfg.onAuthRequired === "function") {
-                cfg.onAuthRequired(err, sourceControl || box);
-              }
-              return;
-            }
-            var refused = failureStatus >= 400 && failureStatus < 500;
-            var failureMessage = voteFailureMessage(err);
-            if (refused) {
-              state.snapshot = previousSnapshot;
-              writeStoredVoteSnapshot(candidateRef, state.snapshot);
-            }
-            if (failureStatus === 429) startPause(err, failureMessage);
-            notifySnapshot();
-            if (typeof cfg.onError === "function") cfg.onError("set", err);
-            reportVoteFailure(failureMessage, err);
-            if (refused) return;
-            return refreshSnapshot();
-          }).finally(function() {
-            state.pending = false;
-            render();
-          });
+            return;
+          }
+          var refused = failureStatus >= 400 && failureStatus < 500;
+          var failureMessage = voteFailureMessage(err);
+          if (refused) {
+            state.snapshot = previousSnapshot;
+            writeStoredVoteSnapshot(candidateRef, state.snapshot);
+          }
+          if (failureStatus === 429) startPause(err, failureMessage);
+          notifySnapshot();
+          if (typeof cfg.onError === "function") cfg.onError("set", err);
+          reportVoteFailure(failureMessage, err);
+          if (refused) return;
+          return refreshSnapshot();
+        }).finally(function() {
+          state.pending = false;
+          render();
         });
       }
       function ensureSnapshot() {

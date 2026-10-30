@@ -13,7 +13,7 @@
 //  4. the message is not announced to a screen reader (role="status"), or it sits outside the
 //     viewport, or another element covers it, so a reader cannot see it;
 //  5. the tick stays lit after the refusal (the vote the server did not take);
-//  6. a refused vote costs more than the one refused request (no second snapshot read);
+//  6. a refused vote costs more than the one refused request (no snapshot read);
 //  7. further taps still reach the server (B-912): three more taps send nothing;
 //  8. a tap on the paused box is silent: each one must put a fresh notice on screen;
 //  9. the paused box looks live: nothing dimmed, no aria-disabled, or the buttons are really
@@ -235,8 +235,8 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
         }
         // 5. The tick is back.
         assert.equal(first.tickLit, false, `${where}: the refused tick must not stay lit`)
-        // 6. One snapshot read to open the deferred box, one refused vote, nothing more.
-        assert.deepEqual(requests, ["snapshot", "set"], `${where}: requests after one tap`)
+        // 6. One refused vote and nothing more: the press reads no snapshot first.
+        assert.deepEqual(requests, ["set"], `${where}: requests after one tap`)
 
         // 9. The box looks paused, and the buttons still take the tap that shows why.
         assert.equal(first.paused, true, `${where}: the refused box must be marked paused`)
@@ -279,7 +279,7 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
           assert.equal(shown.tickLit, false, `${where}: a tap on the paused box lights nothing`)
         }
         assert.equal(await page.locator(NOTICE).count(), 1, `${where}: notices replace, not stack`)
-        assert.deepEqual(requests, ["snapshot", "set"], `${where}: three paused taps send nothing`)
+        assert.deepEqual(requests, ["set"], `${where}: three paused taps send nothing`)
         await animationsFinished(page)
         await page.screenshot({ path: path.join(OUT, `vote-paused-${label}-${consent}.png`) })
 
@@ -305,11 +305,7 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
         const landed = await page.evaluate(measure)
         assert.equal(landed.tickLit, true, `${where}: the vote after the reset must land`)
         assert.equal(landed.notice, null, `${where}: a vote the server took shows no notice`)
-        assert.deepEqual(
-          requests,
-          ["snapshot", "set", "set"],
-          `${where}: exactly one request after the reset`,
-        )
+        assert.deepEqual(requests, ["set", "set"], `${where}: exactly one request after the reset`)
 
         report.push({ where, width, height, live, first, tapsAfter, reopened, landed, requests })
         await context.close()
@@ -353,7 +349,7 @@ test("a 429 with no number stays paused until the page is reloaded, and the sent
     assert.equal((await page.evaluate(measure)).paused, true, "no number, no guess")
     await up.click({ force: true })
     await page.waitForTimeout(300)
-    assert.deepEqual(requests, ["snapshot", "set"], "a paused tap sends nothing")
+    assert.deepEqual(requests, ["set"], "a paused tap sends nothing")
     await page.screenshot({ path: path.join(OUT, "vote-paused-no-number.png") })
 
     // ... and a reload is what clears it: the first tap on the fresh page asks again.
