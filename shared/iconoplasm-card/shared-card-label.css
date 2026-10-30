@@ -1348,6 +1348,15 @@
   top: calc(-5 / 1220 * 100cqw);
 }
 
+/* The f of "female" has a tail that dropped onto the E of TRANSMEMBRANE, and the
+   word read "cemale" (owner, 2026-10-30). Written a quarter em higher, the tail
+   clears the printed word; the top may cross the row's rule, as handwriting does
+   on the paper card. "male" has no tail and stays put. Phones seat the note on
+   the row's rule instead, where the tail falls on blank paper. */
+.icono-label-hand-note--sex[data-sex="female"] {
+  transform: translateY(-0.25em) rotate(-4deg);
+}
+
 .icono-label-hand-note--politics-oncogene,
 .icono-label-hand-note--politics-neutral {
   margin-left: calc(8 / 1220 * 100cqw);

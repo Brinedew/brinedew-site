@@ -194,7 +194,12 @@ function sexNoteTemplate(sexNote, selectedCategory) {
   var noteClass =
     "icono-label-hand-note icono-label-hand-note--sex icono-label-hand-note--sex-" +
     (categoryKey || "unselected")
-  return html`<div role="note" aria-label=${"Character sex: " + note} class=${noteClass}>
+  return html`<div
+    role="note"
+    aria-label=${"Character sex: " + note}
+    class=${noteClass}
+    data-sex=${note}
+  >
     ${note}
   </div>`
 }

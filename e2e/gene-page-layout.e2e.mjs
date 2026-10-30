@@ -239,7 +239,8 @@ function toolbarFit() {
 // Runs in the page: each handwritten note on the lead card that covers a printed
 // option's letters, as "note over option". The words are drawn, not text, so the
 // letters are taken as the middle half of the option's line; a note that only
-// grazes the line, as "female" does above SOLUBLE, is fine.
+// grazes the line is fine. A descender that lands on a letter's top is not, and
+// this box test misses it: "female" read "cemale" on 2026-10-30.
 function notesOverPrintedWords() {
   const card = document.querySelector(".icono-gene-lead-card")
   const words = [...card.querySelectorAll(".icono-label-option")].map((option) => {
