@@ -788,16 +788,27 @@ async function fetchPlatformUsageSnapshot({ apiToken, accountId, startDate, endD
   const kvStorageRows = Array.isArray(account.kvStorageAdaptiveGroups)
     ? account.kvStorageAdaptiveGroups
     : []
-  const kvLatestStorage = kvStorageRows.reduce((latest, row) => {
+  // Cloudflare returns one row per namespace per day, and the free plan's 1 GB
+  // covers the whole account, so the gauge adds up every namespace on the
+  // latest day. Keeping one row showed a 10 KB namespace while production held
+  // 18 GB (B-1157, 2026-10-30).
+  const kvLatestDate = kvStorageRows.reduce((latest, row) => {
     const date = String(row?.dimensions?.date || "")
-    if (!date || date < String(latest?.date || "")) return latest
-    return {
-      date,
-      byteCount: asNumber(row?.max?.byteCount),
-      keyCount: asNumber(row?.max?.keyCount),
-      namespaceId: String(row?.dimensions?.namespaceId || ""),
-    }
-  }, null)
+    return date > latest ? date : latest
+  }, "")
+  const kvLatestStorage = kvLatestDate
+    ? kvStorageRows
+        .filter((row) => String(row?.dimensions?.date || "") === kvLatestDate)
+        .reduce(
+          (total, row) => {
+            total.byteCount += asNumber(row?.max?.byteCount)
+            total.keyCount += asNumber(row?.max?.keyCount)
+            total.namespaceCount += 1
+            return total
+          },
+          { date: kvLatestDate, byteCount: 0, keyCount: 0, namespaceCount: 0 },
+        )
+    : null
 
   const queueDays = Object.create(null)
   for (const row of Array.isArray(account.queueMessageOperationsAdaptiveGroups)
