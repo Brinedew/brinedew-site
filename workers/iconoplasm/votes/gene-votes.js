@@ -666,38 +666,32 @@ function zeroSnapshot(symbol, asset, visionId) {
   }
 }
 
-// The caller's own votes on exactly the named portraits: one probe per
-// [symbol, asset] pair on the vote table's unique (gene_symbol, asset_sha256,
-// user_id) identity, so the rows read follow the list's length, not the
-// reader's history or the portrait's vote count. A retracted vote has no row.
-const READER_VOTES_SQL = `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
-   FROM json_each(?1) AS wanted
-   CROSS JOIN icono_image_votes AS v
-     ON v.gene_symbol = json_extract(wanted.value, '$[0]')
-    AND v.asset_sha256 = json_extract(wanted.value, '$[1]')
-    AND v.user_id = ?2`
-
-// The most portraits one /votes/mine request may name: a gene page's lead and
-// strip, or one chunk of gallery cards. The page splits longer lists.
-export const READER_VOTES_ITEM_LIMIT = 100
+// The most genes one /votes/mine request may name: a gene page names one, a
+// window of gallery cards at most 48.
+export const READER_VOTES_GENE_LIMIT = 100
 
 /**
- * The reader's own nonzero votes on an explicit list of portraits, for pages
- * whose public tallies already come from the published gene object. One
- * statement; a guest (no `userId`) reads nothing.
+ * The reader's own nonzero votes on every portrait of the named genes, for
+ * pages whose public tallies already come from the published gene objects. One
+ * statement, pinned to the vote table's (user_id, gene_symbol) index (migration
+ * 0150; without the pin SQLite walked the gene's votes by everyone):
+ * the rows read follow the reader's own votes on those genes, never the genes'
+ * portrait counts or anyone else's votes. A guest (no `userId`) reads nothing.
  */
-export async function readReaderVotes(db, { userId = "", items = [] } = {}) {
-  if (!userId) return []
-  const pairs = new Map()
-  for (const item of Array.isArray(items) ? items : []) {
-    const symbol = String(item?.symbol || "")
-    const asset = sha(item?.asset_sha256)
-    if (symbol && asset) pairs.set(`${symbol}|${asset}`, [symbol, asset])
-  }
-  if (!pairs.size) return []
+export async function readReaderVotes(db, { userId = "", symbols = [] } = {}) {
+  const genes = [
+    ...new Set((Array.isArray(symbols) ? symbols : []).map((value) => String(value || ""))),
+  ].filter(Boolean)
+  if (!userId || !genes.length) return []
   const { results = [] } = await db
-    .prepare(READER_VOTES_SQL)
-    .bind(JSON.stringify([...pairs.values()]), userId)
+    .prepare(
+      `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
+         FROM json_each(?1) AS wanted
+         CROSS JOIN icono_image_votes AS v INDEXED BY idx_icono_image_votes_user
+           ON v.user_id = ?2
+          AND v.gene_symbol = wanted.value`,
+    )
+    .bind(JSON.stringify(genes), userId)
     .all()
   const votes = []
   for (const row of results) {
@@ -750,7 +744,14 @@ export async function readGeneVoteSnapshots(
   if (userId) {
     statements.push(
       db
-        .prepare(READER_VOTES_SQL)
+        .prepare(
+          `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
+             FROM json_each(?1) AS wanted
+             CROSS JOIN icono_image_votes AS v
+               ON v.gene_symbol = json_extract(wanted.value, '$[0]')
+              AND v.asset_sha256 = json_extract(wanted.value, '$[1]')
+              AND v.user_id = ?2`,
+        )
         .bind(JSON.stringify(pairs.map((item) => [item.symbol, item.asset])), userId),
     )
   }

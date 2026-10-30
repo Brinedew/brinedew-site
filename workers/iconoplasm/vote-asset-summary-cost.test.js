@@ -283,13 +283,15 @@ test(
       )
 
       // A signed-in reader opens TP53 and the page asks for their own votes on
-      // all 72 portraits it shows (TP53 is the heaviest real gene). The reader
-      // has 2000 older votes on other genes, and portrait 1 carries 1001 votes.
+      // the gene. The reader has 2000 older votes on other genes; TP53 carries
+      // 1001 votes by other people. The read must follow the reader's own votes
+      // on TP53 (2), not the gene's portrait count or anyone else's votes.
       // Failure modes:
-      // 1. The planner walks the reader's (user_id, updated_at) index and reads
-      //    their whole history once per portrait: 144,000 rows.
-      // 2. A probe reads every vote on portrait 1: 1001 rows.
-      // 3. A guest reads anything.
+      // 1. The planner walks the reader's whole history: 2000 rows.
+      // 2. The planner walks the gene's votes by everyone: 1000 rows.
+      // 3. A gallery window of 48 genes reads more than the reader's votes on
+      //    them, plus one probe per gene.
+      // 4. A guest reads anything.
       await db
         .prepare(
           `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<2000)
@@ -297,23 +299,24 @@ test(
       SELECT 'a:G'||n||'|'||printf('%064x',n),'G'||n,printf('%064x',n),'','reader',1 FROM ids`,
         )
         .run()
-      const shown = Array.from({ length: 72 }, (_, index) => ({
-        symbol: "TP53",
-        asset_sha256: asset(index + 1),
-      }))
-      const mine = await measure("reader's own votes on 72 portraits", (metered) =>
-        readReaderVotes(metered, { userId: "reader", items: shown }),
+      const mine = await measure("reader's own votes on TP53", (metered) =>
+        readReaderVotes(metered, { userId: "reader", symbols: ["TP53"] }),
       )
       assert.deepEqual(mine.result.map((row) => [row.asset_sha256, row.vote]).sort(), [
         [asset(1), 1],
         [asset(2), -1],
       ])
-      // 74 measured on 2026-10-31: one index probe per portrait, plus the two
-      // rows that hold the reader's votes.
-      assert.ok(mine.actual.rows_read <= 2 * shown.length, JSON.stringify(mine.actual))
+      // An index entry and a table row per vote the reader holds on the gene.
+      assert.ok(mine.actual.rows_read <= 2 * 2 + 1, JSON.stringify(mine.actual))
       assert.equal(mine.actual.rows_written, 0)
+      const window = Array.from({ length: 48 }, (_, index) => `G${index + 1}`)
+      const gallery = await measure("reader's own votes on 48 gallery genes", (metered) =>
+        readReaderVotes(metered, { userId: "reader", symbols: window }),
+      )
+      assert.equal(gallery.result.length, 48)
+      assert.ok(gallery.actual.rows_read <= 2 * 48 + 48, JSON.stringify(gallery.actual))
       const guest = await measure("guest's own votes", (metered) =>
-        readReaderVotes(metered, { userId: "", items: shown }),
+        readReaderVotes(metered, { userId: "", symbols: ["TP53"] }),
       )
       assert.deepEqual(guest.result, [])
       assert.equal(guest.actual.rows_read, 0)
