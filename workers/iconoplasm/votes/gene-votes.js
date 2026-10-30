@@ -666,6 +666,48 @@ function zeroSnapshot(symbol, asset, visionId) {
   }
 }
 
+// The caller's own votes on exactly the named portraits: one probe per
+// [symbol, asset] pair on the vote table's unique (gene_symbol, asset_sha256,
+// user_id) identity, so the rows read follow the list's length, not the
+// reader's history or the portrait's vote count. A retracted vote has no row.
+const READER_VOTES_SQL = `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
+   FROM json_each(?1) AS wanted
+   CROSS JOIN icono_image_votes AS v
+     ON v.gene_symbol = json_extract(wanted.value, '$[0]')
+    AND v.asset_sha256 = json_extract(wanted.value, '$[1]')
+    AND v.user_id = ?2`
+
+// The most portraits one /votes/mine request may name: a gene page's lead and
+// strip, or one chunk of gallery cards. The page splits longer lists.
+export const READER_VOTES_ITEM_LIMIT = 100
+
+/**
+ * The reader's own nonzero votes on an explicit list of portraits, for pages
+ * whose public tallies already come from the published gene object. One
+ * statement; a guest (no `userId`) reads nothing.
+ */
+export async function readReaderVotes(db, { userId = "", items = [] } = {}) {
+  if (!userId) return []
+  const pairs = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    const symbol = String(item?.symbol || "")
+    const asset = sha(item?.asset_sha256)
+    if (symbol && asset) pairs.set(`${symbol}|${asset}`, [symbol, asset])
+  }
+  if (!pairs.size) return []
+  const { results = [] } = await db
+    .prepare(READER_VOTES_SQL)
+    .bind(JSON.stringify([...pairs.values()]), userId)
+    .all()
+  const votes = []
+  for (const row of results) {
+    const vote = Number(row.vote_value || 0)
+    const asset = sha(row.asset_sha256)
+    if (vote && asset) votes.push({ symbol: String(row.gene_symbol), asset_sha256: asset, vote })
+  }
+  return votes
+}
+
 /**
  * Vote snapshots for an explicit item list, in the shape the gene page's vote
  * widget reads: per-asset counts, the caller's own vote, the per-gene vision totals
@@ -708,14 +750,7 @@ export async function readGeneVoteSnapshots(
   if (userId) {
     statements.push(
       db
-        .prepare(
-          `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
-             FROM json_each(?1) AS wanted
-             CROSS JOIN icono_image_votes AS v
-               ON v.gene_symbol = json_extract(wanted.value, '$[0]')
-              AND v.asset_sha256 = json_extract(wanted.value, '$[1]')
-              AND v.user_id = ?2`,
-        )
+        .prepare(READER_VOTES_SQL)
         .bind(JSON.stringify(pairs.map((item) => [item.symbol, item.asset])), userId),
     )
   }

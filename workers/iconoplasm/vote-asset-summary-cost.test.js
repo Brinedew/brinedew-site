@@ -7,6 +7,7 @@ import {
   electAndProjectGeneWinner,
   importGeneVotes,
   readGeneVoteSnapshots,
+  readReaderVotes,
   setGeneVote,
 } from "./votes/gene-votes.js"
 import { setCaretakerSupervote } from "./caretaker/caretaker-supervote.js"
@@ -280,6 +281,42 @@ test(
         (await db.prepare("SELECT COUNT(*) AS n FROM icono_vote_asset_summary").first()).n,
         20003,
       )
+
+      // A signed-in reader opens TP53 and the page asks for their own votes on
+      // all 72 portraits it shows (TP53 is the heaviest real gene). The reader
+      // has 2000 older votes on other genes, and portrait 1 carries 1001 votes.
+      // Failure modes:
+      // 1. The planner walks the reader's (user_id, updated_at) index and reads
+      //    their whole history once per portrait: 144,000 rows.
+      // 2. A probe reads every vote on portrait 1: 1001 rows.
+      // 3. A guest reads anything.
+      await db
+        .prepare(
+          `WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<2000)
+      INSERT INTO icono_image_votes(candidate_ref,gene_symbol,asset_sha256,vision_id,user_id,vote_value)
+      SELECT 'a:G'||n||'|'||printf('%064x',n),'G'||n,printf('%064x',n),'','reader',1 FROM ids`,
+        )
+        .run()
+      const shown = Array.from({ length: 72 }, (_, index) => ({
+        symbol: "TP53",
+        asset_sha256: asset(index + 1),
+      }))
+      const mine = await measure("reader's own votes on 72 portraits", (metered) =>
+        readReaderVotes(metered, { userId: "reader", items: shown }),
+      )
+      assert.deepEqual(mine.result.map((row) => [row.asset_sha256, row.vote]).sort(), [
+        [asset(1), 1],
+        [asset(2), -1],
+      ])
+      // 74 measured on 2026-10-31: one index probe per portrait, plus the two
+      // rows that hold the reader's votes.
+      assert.ok(mine.actual.rows_read <= 2 * shown.length, JSON.stringify(mine.actual))
+      assert.equal(mine.actual.rows_written, 0)
+      const guest = await measure("guest's own votes", (metered) =>
+        readReaderVotes(metered, { userId: "", items: shown }),
+      )
+      assert.deepEqual(guest.result, [])
+      assert.equal(guest.actual.rows_read, 0)
     } finally {
       schema.close()
       await runtime.dispose()

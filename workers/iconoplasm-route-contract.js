@@ -589,6 +589,12 @@ const DECLARED_ROUTES = Object.freeze([
     auth: "first-party-or-extension",
   }),
   iconoplasmApiContract({
+    id: "votes_mine",
+    match: exact("/api/iconoplasm/votes/mine"),
+    methods: POST,
+    auth: "first-party-or-extension",
+  }),
+  iconoplasmApiContract({
     id: "votes_snapshot",
     match: exact("/api/iconoplasm/votes/snapshot"),
     methods: POST,
@@ -959,6 +965,7 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   caretaker_admin_assignment_action: ["site"],
   admin_account_erase: ["ops"],
   votes_set: ["site", "extension", "ops"],
+  votes_mine: ["site"],
   votes_snapshot: ["site", "extension"],
   admin_votes_vision_stats: ["site"],
   admin_votes_vision_previews: ["site"],
