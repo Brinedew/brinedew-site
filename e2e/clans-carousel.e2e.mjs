@@ -154,6 +154,7 @@ function readClan(clan) {
   const focused = document.activeElement?.closest?.(".icono-clan-tile")
   return {
     ready: section.classList.contains("is-strip-ready"),
+    progress: section._iconoCandidateStrip?.api?.scrollProgress() ?? 0,
     frames: frames.length,
     foot: card.querySelector("[data-icono-clan-foot]")?.textContent.trim() || "",
     nextDisabled: !!section.querySelector("[data-icono-strip-next]")?.disabled,
@@ -256,10 +257,17 @@ test("clan members: one sideways strip pages in the next members and keeps a pho
       // and lands on the first new one.
       await page.focus(`.icono-clan[data-clan="${CLAN}"] .icono-clan-track .icono-image-only-link`)
       await page.keyboard.press("End")
-      state = await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1)
+      state = await settle(
+        page,
+        (state) => state.focusIndex === PAGE_SIZE - 1 && state.progress > 0.9,
+      )
       assert.equal(state.focusIndex, PAGE_SIZE - 1, `${name}: End missed the last loaded frame`)
       await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
-      state = await settle(page, (state) => state.frames === PAGE_SIZE * 2)
+      state = await settle(
+        page,
+        (state) => state.frames === PAGE_SIZE * 2 && showsFrame(state, PAGE_SIZE),
+      )
+      await page.waitForTimeout(400)
       assert.equal(state.frames, PAGE_SIZE * 2, `${name}: Next did not append the next page`)
       assert.equal(state.foot, `${TOTAL} recorded`, `${name}: the foot changed while loading`)
       assert.ok(
@@ -277,12 +285,15 @@ test("clan members: one sideways strip pages in the next members and keeps a pho
 
       // The last page appends and the end of the strip disables Next.
       await page.keyboard.press("End")
-      await settle(page, (state) => state.focusIndex === state.frames - 1)
+      await settle(page, (state) => state.focusIndex === state.frames - 1 && state.progress > 0.9)
       await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
       state = await settle(page, (state) => state.frames === TOTAL)
       assert.equal(state.frames, TOTAL, `${name}: the last page did not append`)
       await page.keyboard.press("End")
-      state = await settle(page, (state) => state.focusIndex === TOTAL - 1 && state.nextDisabled)
+      state = await settle(
+        page,
+        (state) => state.focusIndex === TOTAL - 1 && state.nextDisabled && state.progress > 0.9,
+      )
       assert.equal(state.focusIndex, TOTAL - 1, `${name}: End missed the last member`)
       assert.ok(state.nextDisabled, `${name}: Next is still live at the end of the clan`)
 
@@ -340,7 +351,7 @@ test("clan members: a failed page read says so, and the next press tries again",
     })
     await page.focus(`.icono-clan[data-clan="${CLAN}"] .icono-clan-track .icono-image-only-link`)
     await page.keyboard.press("End")
-    await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1)
+    await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1 && state.progress > 0.9)
     await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
     let state = await settle(page, (state) => /Could not load more members/.test(state.foot))
     assert.equal(state.frames, PAGE_SIZE, "a failed read added frames")
