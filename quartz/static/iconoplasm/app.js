@@ -12440,23 +12440,26 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (!root || !root.querySelectorAll) return
     var sections = root.querySelectorAll("[data-icono-clan-carousel]")
     for (var i = 0; i < sections.length; i += 1) {
-      var section = sections[i]
-      if (section.getAttribute("data-icono-clan-wired") === "1") continue
-      var card = section.closest(".icono-clan")
-      if (!card) continue
-      section.setAttribute("data-icono-clan-wired", "1")
-      installSwipeStrip(section, {
-        mountHidden: true,
-        nativePaging: true,
-        hasMore: function () {
-          var page = Number(card.getAttribute("data-page")) || 0
-          var totalPages = Math.max(1, Number(card.getAttribute("data-total-pages")) || 1)
-          return page + 1 < totalPages
-        },
-        loadMore: function () {
-          return clanPageAppend(card)
-        },
-      })
+      // `card` is per strip: a shared var would make every closure read and
+      // load the last card's clan (seen live on TP53's list, 2026-10-31).
+      ;(function (section) {
+        if (section.getAttribute("data-icono-clan-wired") === "1") return
+        var card = section.closest(".icono-clan")
+        if (!card) return
+        section.setAttribute("data-icono-clan-wired", "1")
+        installSwipeStrip(section, {
+          mountHidden: true,
+          nativePaging: true,
+          hasMore: function () {
+            var page = Number(card.getAttribute("data-page")) || 0
+            var totalPages = Math.max(1, Number(card.getAttribute("data-total-pages")) || 1)
+            return page + 1 < totalPages
+          },
+          loadMore: function () {
+            return clanPageAppend(card)
+          },
+        })
+      })(sections[i])
     }
   }
 

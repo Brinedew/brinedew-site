@@ -34,6 +34,10 @@ import {
 } from "./harness.mjs"
 
 const CLAN = "TPR"
+// A second, one-page clan after the first: a shared closure between the two
+// cards would make the first card read and load this one's members (live bug,
+// 2026-10-31).
+const SECOND = "RING"
 const IMAGES = [
   "https://img.brinedew.bio/portraits/v1/00/0075996be28f1ab13aa12caa3b40e12d2ff6b72d36100d9bc1e1544332fd00a9/medium.webp",
   "https://img.brinedew.bio/portraits/v1/84/84fbfc428e095faab0466fce4db3ff5f4ad39795ed9994fa9eaed545a4359564/medium.webp",
@@ -74,6 +78,7 @@ const MEMBERS = SYMBOLS.map((symbol, i) => ({
   has_portrait: true,
   medium_url: IMAGES[i % IMAGES.length],
 }))
+const SECOND_MEMBERS = MEMBERS.slice(8, 12)
 const PAGE_SIZE = 4
 const TOTAL = MEMBERS.length
 const TOTAL_PAGES = Math.ceil(TOTAL / PAGE_SIZE)
@@ -82,8 +87,8 @@ function overview() {
   return {
     ok: true,
     authenticated: true,
-    total_clans: 1,
-    discovered_clan_count: 1,
+    total_clans: 2,
+    discovered_clan_count: 2,
     sealed_count: 0,
     clans: [
       {
@@ -95,31 +100,46 @@ function overview() {
         discovered_count: TOTAL,
         members: MEMBERS.slice(0, PAGE_SIZE),
       },
+      {
+        clan: SECOND,
+        accession: "CL0229",
+        pfam_url: "https://www.ebi.ac.uk/interpro/set/pfam/CL0229/",
+        aesthetic: "Cholo",
+        aesthetic_url: "https://aesthetics.fandom.com/wiki/Cholo",
+        discovered_count: SECOND_MEMBERS.length,
+        members: SECOND_MEMBERS.slice(0, PAGE_SIZE),
+      },
     ],
   }
 }
 
-function membersPage(request) {
+function membersPage(clan, request) {
   const page = Math.max(0, Number(new URL(request.url()).searchParams.get("page") || 0) || 0)
+  const members = clan === SECOND ? SECOND_MEMBERS : MEMBERS
+  const totalPages = Math.max(1, Math.ceil(members.length / PAGE_SIZE))
   return {
     ok: true,
     authenticated: true,
-    clan: CLAN,
-    members: MEMBERS.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
+    clan,
+    members: members.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE),
     page,
     page_size: PAGE_SIZE,
-    total_members: TOTAL,
-    total_pages: TOTAL_PAGES,
+    total_members: members.length,
+    total_pages: totalPages,
   }
 }
 
 function clanApi(failPage = () => false) {
   return (pathname, request) => {
     if (pathname === "/api/iconoplasm/clans") return overview()
-    if (pathname === `/api/iconoplasm/clans/${CLAN}/members`) {
+    const match = pathname.match(/^\/api\/iconoplasm\/clans\/([^/]+)\/members$/)
+    if (match) {
+      const clan = decodeURIComponent(match[1])
       const page = Number(new URL(request.url()).searchParams.get("page") || 0) || 0
-      if (failPage(page)) return new HttpStatus(503, { ok: false, error: "Try later" })
-      return membersPage(request)
+      if (clan === CLAN && failPage(page)) {
+        return new HttpStatus(503, { ok: false, error: "Try later" })
+      }
+      return membersPage(clan, request)
     }
   }
 }
@@ -134,6 +154,7 @@ function readClan(clan) {
   const focused = document.activeElement?.closest?.(".icono-clan-tile")
   return {
     ready: section.classList.contains("is-strip-ready"),
+    progress: section._iconoCandidateStrip?.api?.scrollProgress() ?? 0,
     frames: frames.length,
     foot: card.querySelector("[data-icono-clan-foot]")?.textContent.trim() || "",
     nextDisabled: !!section.querySelector("[data-icono-strip-next]")?.disabled,
@@ -236,10 +257,17 @@ test("clan members: one sideways strip pages in the next members and keeps a pho
       // and lands on the first new one.
       await page.focus(`.icono-clan[data-clan="${CLAN}"] .icono-clan-track .icono-image-only-link`)
       await page.keyboard.press("End")
-      state = await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1)
+      state = await settle(
+        page,
+        (state) => state.focusIndex === PAGE_SIZE - 1 && state.progress > 0.9,
+      )
       assert.equal(state.focusIndex, PAGE_SIZE - 1, `${name}: End missed the last loaded frame`)
       await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
-      state = await settle(page, (state) => state.frames === PAGE_SIZE * 2)
+      state = await settle(
+        page,
+        (state) => state.frames === PAGE_SIZE * 2 && showsFrame(state, PAGE_SIZE),
+      )
+      await page.waitForTimeout(400)
       assert.equal(state.frames, PAGE_SIZE * 2, `${name}: Next did not append the next page`)
       assert.equal(state.foot, `${TOTAL} recorded`, `${name}: the foot changed while loading`)
       assert.ok(
@@ -247,15 +275,25 @@ test("clan members: one sideways strip pages in the next members and keeps a pho
         `${name}: the first new member is not in view after the append`,
       )
       assert.ok(!state.nextDisabled, `${name}: Next is disabled while page 2 is unread`)
+      const second = await page.evaluate(readClan, SECOND)
+      assert.equal(second.frames, PAGE_SIZE, `${name}: the next clan's strip changed`)
+      assert.equal(
+        second.foot,
+        `${SECOND_MEMBERS.length} recorded`,
+        `${name}: the next clan's foot changed`,
+      )
 
       // The last page appends and the end of the strip disables Next.
       await page.keyboard.press("End")
-      await settle(page, (state) => state.focusIndex === state.frames - 1)
+      await settle(page, (state) => state.focusIndex === state.frames - 1 && state.progress > 0.9)
       await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
       state = await settle(page, (state) => state.frames === TOTAL)
       assert.equal(state.frames, TOTAL, `${name}: the last page did not append`)
       await page.keyboard.press("End")
-      state = await settle(page, (state) => state.focusIndex === TOTAL - 1 && state.nextDisabled)
+      state = await settle(
+        page,
+        (state) => state.focusIndex === TOTAL - 1 && state.nextDisabled && state.progress > 0.9,
+      )
       assert.equal(state.focusIndex, TOTAL - 1, `${name}: End missed the last member`)
       assert.ok(state.nextDisabled, `${name}: Next is still live at the end of the clan`)
 
@@ -313,7 +351,7 @@ test("clan members: a failed page read says so, and the next press tries again",
     })
     await page.focus(`.icono-clan[data-clan="${CLAN}"] .icono-clan-track .icono-image-only-link`)
     await page.keyboard.press("End")
-    await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1)
+    await settle(page, (state) => state.focusIndex === PAGE_SIZE - 1 && state.progress > 0.9)
     await page.click(`.icono-clan[data-clan="${CLAN}"] [data-icono-strip-next]`)
     let state = await settle(page, (state) => /Could not load more members/.test(state.foot))
     assert.equal(state.frames, PAGE_SIZE, "a failed read added frames")
