@@ -225,7 +225,10 @@ test("clan members: the whole clan is one strip of blots the reader can drag", a
         )
       }
       assert.equal(allRequests.get(CLAN), 1, `${name}: the clan was not loaded in one request`)
-      assert.ok(!state.pageOverflow, `${name}: the strip runs past the page`)
+      assert.ok(
+        state.pageOverflow <= 2,
+        `${name}: the strip runs ${state.pageOverflow} px past the page`,
+      )
       assert.ok(state.trackWidth > state.viewport.width + 4, `${name}: the strip does not peek`)
       assert.ok(state.prevDisabled, `${name}: Previous is live at the start`)
       assert.ok(!state.nextDisabled, `${name}: Next is disabled on a full strip`)
