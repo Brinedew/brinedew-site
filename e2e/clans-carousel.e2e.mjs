@@ -124,8 +124,8 @@ function clanApi(failPage = () => false) {
   }
 }
 
-function readClan() {
-  const card = document.querySelector(`.icono-clan[data-clan="${CLAN}"]`)
+function readClan(clan) {
+  const card = document.querySelector(`.icono-clan[data-clan="${clan}"]`)
   const section = card.querySelector(".icono-clan-reel")
   const viewport = section.querySelector("[data-icono-strip-viewport]")
   const track = section.querySelector("[data-icono-clan-track]")
@@ -161,10 +161,10 @@ function showsFrame(state, index) {
 
 async function settle(page, settled) {
   const deadline = Date.now() + 5_000
-  let state = await page.evaluate(readClan)
+  let state = await page.evaluate(readClan, CLAN)
   while (!settled(state) && Date.now() < deadline) {
     await page.waitForTimeout(100)
-    state = await page.evaluate(readClan)
+    state = await page.evaluate(readClan, CLAN)
   }
   return state
 }
@@ -207,7 +207,7 @@ test("clan members: one sideways strip pages in the next members and keeps a pho
       await page.waitForTimeout(500)
 
       // 1 and 6: one row, the first frame readable and the next peeking.
-      let state = await page.evaluate(readClan)
+      let state = await page.evaluate(readClan, CLAN)
       assert.equal(state.frames, PAGE_SIZE, `${name}: first page is not four members`)
       assert.ok(state.oneRow, `${name}: members wrap into a grid instead of one row`)
       assert.ok(state.trackWidth > state.viewport.width + 4, `${name}: the strip does not peek`)
@@ -346,7 +346,7 @@ test("clan members: the arrows still load pages when Embla cannot load", async (
       `.icono-clan[data-clan="${CLAN}"] .icono-clan-reel[data-icono-strip-fallback]`,
       { timeout: 30_000 },
     )
-    let state = await page.evaluate(readClan)
+    let state = await page.evaluate(readClan, CLAN)
     assert.equal(state.ready, false, "Embla was not blocked")
     assert.ok(!state.navHidden, "the arrows hid when Embla failed")
     assert.ok(!state.nextDisabled, "Next disabled while more members exist without Embla")
@@ -359,3 +359,4 @@ test("clan members: the arrows still load pages when Embla cannot load", async (
     server.close()
   }
 })
+
