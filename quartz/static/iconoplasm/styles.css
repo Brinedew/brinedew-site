@@ -5990,18 +5990,29 @@ a.icono-clan-ae:hover {
   touch-action: pan-y pinch-zoom;
 }
 
-/* Four members are the first page; the fourth peeks under the right edge at
-   desktop width, and a phone shows one with the edge of the next. */
-.icono-clan-track > .icono-clan-tile {
-  flex: 0 0 clamp(10rem, 26%, 14rem);
-  max-inline-size: none;
+/* The frame is the gene page's strip frame: 16–17.5rem, so the painted blot
+   label is as readable as a candidate portrait and the next frame peeks in on
+   both a desktop and a phone. */
+.icono-clan-blot {
+  flex: 0 0 clamp(16rem, 40%, 17.5rem);
+  display: block;
+  min-inline-size: 0;
   scroll-snap-align: start;
+  background: var(--lightgray);
+  text-decoration: none;
 }
 
-@media (max-width: 640px) {
-  .icono-clan-track > .icono-clan-tile {
-    flex-basis: min(100% - 4rem, 17.5rem);
-  }
+.icono-clan-blot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.icono-clan-blot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .icono-clan-foot-row {
@@ -6037,14 +6048,6 @@ a.icono-clan-ae:hover {
   letter-spacing: 0;
   line-height: 1.35;
   text-transform: none;
-}
-
-/* Clan member tiles reuse the shared design-system blot-only card
-   (.icono-card--variant-image-only / .icono-image-only-*) verbatim -- portrait
-   fitting, the name + symbol caption, and container-query scaling all come from
-   shared-card-label.css. The strip sets each tile's frame width. */
-.icono-clan-tile {
-  min-inline-size: 0;
 }
 
 /* Unfiled (sealed) clans — uniform rust-stamp specimen chips, never ragged */

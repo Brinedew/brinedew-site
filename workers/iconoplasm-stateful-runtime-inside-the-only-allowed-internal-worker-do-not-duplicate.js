@@ -19603,6 +19603,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               full_name: sanitizeText(row?.full_name || "", 255) || "",
               has_portrait: Boolean(assetSha),
               medium_url: assetSha ? adminPortraitUrl(clanPortraitBase, assetSha, "medium") : null,
+              // The page's strip shows the gene's blot (the portrait with its
+              // name and symbol painted in), not the bare portrait.
+              blot_url: `${new URL(request.url).origin}/blot/${encodeURIComponent(symbol)}.webp`,
             })
           }
         }
@@ -19646,12 +19649,13 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
     }
 
     {
-      // Lazy per-clan members: the overview ships only a small preview per clan so
-      // its payload stays bounded for 10k-gene players. When a card pages past the
-      // preview, this endpoint streams one page (a dozen) of that single clan's
-      // discovered members. Cost fence: same per-user indexed read as the overview
-      // (WHERE d.user_id = ?), filtered in memory to one clan -- never a whole-
-      // inventory scan, never an unbounded payload.
+      // Per-clan members: the overview ships only a small preview per clan so its
+      // payload stays bounded for 10k-gene players. When a clan card comes near the
+      // viewport, its strip asks for all=1 and gets every member of that one clan in
+      // one response, so the reader can drag the whole row like a gene page's
+      // candidate strip. Page mode stays for older callers. Cost fence: the same
+      // per-user indexed read as the overview (WHERE d.user_id = ?), filtered in
+      // memory to one clan -- never a whole-inventory scan.
       const clanMembersMatch = path.match(/^\/api\/iconoplasm\/clans\/([^/]+)\/members$/)
       if (clanMembersMatch && request.method === "GET") {
         if (!env.ICONOPLASM_DB) {
@@ -19668,6 +19672,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           return done("clans_overview", json({ error: "Unknown clan" }, 404))
         }
         const PAGE_SIZE = 4
+        const allMembers = url.searchParams.get("all") === "1"
         const requestedPage = Math.max(0, parseInt(url.searchParams.get("page") || "0", 10) || 0)
         const sessionUser = await iconoplasmSessionUser(request, env)
         if (!sessionUser?.user_id) {
@@ -19680,7 +19685,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
                 clan: catalogEntry.clan,
                 members: [],
                 page: 0,
-                page_size: PAGE_SIZE,
+                page_size: allMembers ? 0 : PAGE_SIZE,
                 total_members: 0,
                 total_pages: 0,
               },
@@ -19712,6 +19717,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             full_name: sanitizeText(row?.full_name || "", 255) || "",
             has_portrait: Boolean(assetSha),
             medium_url: assetSha ? adminPortraitUrl(membersPortraitBase, assetSha, "medium") : null,
+            blot_url: `${url.origin}/blot/${encodeURIComponent(symbol)}.webp`,
           }
           // Single-clan proteins are more characteristic of the clan, so they lead.
           if (origins.length === 1) singles.push(member)
@@ -19719,9 +19725,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         }
         const ordered = singles.concat(multis)
         const totalMembers = ordered.length
-        const totalPages = Math.max(1, Math.ceil(totalMembers / PAGE_SIZE))
-        const page = Math.min(requestedPage, totalPages - 1)
-        const members = ordered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+        const totalPages = allMembers ? 1 : Math.max(1, Math.ceil(totalMembers / PAGE_SIZE))
+        const page = allMembers ? 0 : Math.min(requestedPage, totalPages - 1)
+        const members = allMembers
+          ? ordered
+          : ordered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
         return done(
           "clans_overview",
           json(
@@ -19731,7 +19739,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               clan: catalogEntry.clan,
               members,
               page,
-              page_size: PAGE_SIZE,
+              page_size: allMembers ? members.length : PAGE_SIZE,
               total_members: totalMembers,
               total_pages: totalPages,
             },

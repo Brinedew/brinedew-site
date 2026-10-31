@@ -30,7 +30,7 @@ import {
   HOME_PLAY_DOCS_LINE,
   HOME_STARTERS,
   mountHomePlayStrip,
-} from "./home-play-strip.js?v=631c67bbe7adf309"
+} from "./home-play-strip.js?v=731614436a2f875c"
 import {
   buildLoginUrl,
   buildSharedUserPanelMarkup,
@@ -48,7 +48,7 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
-import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=ec154e2807239b2f"
+import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
   installIconoplasmLightbox,
   openIconoplasmImageViewer,
@@ -12199,26 +12199,32 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   /* ─── Rendering: Clans page ─── */
 
-  // A clan member is a discovered gene rendered with the SHARED design-system
-  // blot-only card (the "image-only" variant). We reuse its exact markup + classes
-  // (.icono-card--variant-image-only / .icono-image-only-*) so the portrait fitting,
-  // the gene name (bottom-left) + symbol (bottom-right) caption, and the container-
-  // query type scaling all match the archive cards instead of being reinvented.
-  // The medium portrait is used: a tile can be wider than the small file covers.
-  function renderClanMemberTileMarkup(member) {
+  // A clan member is the gene's published blot: one WebP with the gene's full
+  // name and symbol already painted into the picture (docs/ICONOPLASM_GLOSSARY.md).
+  // The first-party /blot/<SYMBOL>.webp route resolves it from the one stable
+  // gene object, and while a new blot is being drawn it falls back to the bare
+  // portrait. No HTML caption is put over the picture: that would be a card,
+  // not a blot, and its text does not scale the way the painted label does.
+  function renderClanMemberBlotMarkup(member) {
     var item = member || {}
     var symbol = String(item.symbol || "")
     var fullName = String(item.full_name || "").trim() || symbol
-    var photo = candidatePortraitUrl(item, "medium") || candidatePortraitUrl(item, "small")
+    var blotUrl =
+      String(item.blot_url || "").trim() || "/blot/" + encodeURIComponent(symbol) + ".webp"
     return (
-      '<article class="icono-card icono-card--image-tile icono-card--variant-image-only icono-clan-tile" role="listitem">' +
-      buildImageOnlyGeneLinkMarkup(
-        symbol,
-        fullName,
-        photo,
-        ' data-icono-nav title="' + esc(symbol) + '"',
-      ) +
-      "</article>"
+      '<a class="icono-clan-blot" role="listitem" href="/gene/' +
+      encodeURIComponent(symbol) +
+      '" data-icono-nav title="' +
+      escAttr(symbol) +
+      '" aria-label="' +
+      escAttr(symbol + " · " + fullName) +
+      '">' +
+      '<img src="' +
+      escAttr(blotUrl) +
+      '" alt="' +
+      escAttr(symbol + " gene blot") +
+      '" width="768" height="1024" loading="lazy" decoding="async">' +
+      "</a>"
     )
   }
 
@@ -12283,35 +12289,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       : '<span class="icono-clan-ae">' + name + "</span>"
   }
 
-  var ICONO_CLAN_PAGE_SIZE = 4
-
   function escAttr(s) {
     return esc(String(s == null ? "" : s)).replace(/"/g, "&quot;")
   }
 
-  // Foot line: the clan's recorded member count. The arrows beside it load the
-  // next page of members; the strip itself is the carousel, so there is no
-  // page counter to read.
+  // Foot line: the clan's recorded member count.
   function clanFootText(total) {
     return total + " recorded"
   }
 
   // One row per clan: name + accession on the left, the aesthetic pen-mark on
-  // the right, then one sideways strip of member portraits. The overview ships
-  // only the first page (four); the strip fetches later pages when the reader
-  // reaches its end, so a clan with hundreds of discoveries never dumps them
-  // all into one card.
+  // the right, then the gene page's sideways strip filled with the clan's
+  // blots. The overview ships a four-member preview; once the card is near the
+  // viewport the whole clan is loaded, so drag, wheel and keys reach every
+  // member without a page button.
   function renderRevealedClanMarkup(clan) {
     var members = clan && Array.isArray(clan.members) ? clan.members : []
     var discovered = Number(clan && clan.discovered_count) || members.length
-    var totalPages = Math.max(1, Math.ceil(discovered / ICONO_CLAN_PAGE_SIZE))
     var clanName = String((clan && clan.clan) || "")
-    var tiles = members.map(renderClanMemberTileMarkup).join("")
+    var tiles = members.map(renderClanMemberBlotMarkup).join("")
     return (
       '<article class="icono-clan" data-clan="' +
       escAttr(clanName) +
-      '" data-page="0" data-total-pages="' +
-      totalPages +
       '">' +
       '<div class="icono-clan-head"><div class="icono-clan-head-l">' +
       '<div class="icono-clan-nm">' +
@@ -12321,9 +12320,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       "</div>" +
       clanAestheticMarkup(clan) +
       "</div>" +
-      // The gene page's candidate strip pattern (candidate-strip.js): a
-      // peeking row moved by drag, wheel, keys or the two arrows, with the
-      // progress line under it.
+      // The gene page's candidate strip (candidate-strip.js), with the blots as
+      // its frames. The nav stays hidden until the strip is ready, as on a gene
+      // page; it never loads anything.
       '<div class="icono-clan-reel icono-candidate-strip" data-icono-clan-carousel>' +
       '<div class="icono-candidate-strip-viewport" data-icono-strip-viewport role="region" aria-roledescription="carousel" aria-label="' +
       escAttr(clanName + " members") +
@@ -12337,11 +12336,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-clan-foot" data-icono-clan-foot>' +
       clanFootText(discovered) +
       "</div>" +
-      '<div class="icono-candidate-strip-nav icono-clan-strip-nav" data-icono-strip-nav>' +
+      '<div class="icono-candidate-strip-nav icono-clan-strip-nav" data-icono-strip-nav hidden>' +
       '<button type="button" class="icono-button icono-button--icon" data-icono-strip-prev aria-label="Previous members" title="Previous members">' +
       ICONO_STRIP_CHEVRON_LEFT +
       "</button>" +
-      '<button type="button" class="icono-button icono-button--icon" data-icono-strip-next aria-label="More members" title="More members">' +
+      '<button type="button" class="icono-button icono-button--icon" data-icono-strip-next aria-label="Next members" title="Next members">' +
       ICONO_STRIP_CHEVRON_RIGHT +
       "</button>" +
       "</div>" +
@@ -12351,78 +12350,48 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  // The next page of one clan's members, appended to the strip the reader is
-  // already in. Returns true when frames were added. The arrows stay disabled
-  // while the request is out; a failed read says so in the foot and the next
-  // press tries again.
-  function clanPageAppend(card) {
-    if (!card) return Promise.resolve(false)
+  // Load the whole clan once, when its card comes near the viewport. The
+  // preview's four blots become the full strip in one DOM write; then the
+  // shared sideways strip takes over with every frame already in the page,
+  // exactly as it does on a gene page.
+  function hydrateClanCard(card) {
+    if (!card) return
+    if (card.getAttribute("data-icono-clan-hydrated") === "1") return
+    if (card.getAttribute("data-loading") === "1") return
     var clanName = card.getAttribute("data-clan")
     var track = card.querySelector("[data-icono-clan-track]")
-    if (!clanName || !track) return Promise.resolve(false)
-    if (card.getAttribute("data-loading") === "1") return Promise.resolve(false)
-    var page = Number(card.getAttribute("data-page")) || 0
-    var totalPages = Math.max(1, Number(card.getAttribute("data-total-pages")) || 1)
-    if (page + 1 >= totalPages) return Promise.resolve(false)
+    var section = card.querySelector("[data-icono-clan-carousel]")
+    if (!clanName || !track || !section) return
     var foot = card.querySelector("[data-icono-clan-foot]")
-    var previousFoot = foot ? foot.textContent : ""
     card.setAttribute("data-loading", "1")
     track.setAttribute("aria-busy", "true")
-    if (foot) {
-      foot.textContent = "Loading members…"
-      foot.setAttribute("data-state", "loading")
-    }
     return fetchAuthedJSON(
-      "/api/iconoplasm/clans/" + encodeURIComponent(clanName) + "/members?page=" + (page + 1),
+      "/api/iconoplasm/clans/" + encodeURIComponent(clanName) + "/members?all=1",
     )
       .then(function (data) {
-        if (!data || data.ok === false) {
-          if (foot) {
-            foot.textContent = "Could not load more members. Try again."
-            foot.setAttribute("data-state", "error")
-          }
-          return false
-        }
+        if (!data || data.ok === false) throw new Error("members unavailable")
         if (data.authenticated === false) {
           if (foot) {
-            foot.textContent = "Sign in to see more members."
+            foot.textContent = "Sign in to see members."
             foot.setAttribute("data-state", "error")
           }
           return false
         }
         var members = Array.isArray(data.members) ? data.members : []
-        if (!members.length) {
-          if (foot) {
-            foot.textContent = previousFoot
-            foot.removeAttribute("data-state")
-          }
-          return false
-        }
-        var loadedPage = Number(data.page)
-        if (!Number.isFinite(loadedPage) || loadedPage <= page) {
-          var latestPages = Math.max(totalPages, Number(data.total_pages) || totalPages)
-          card.setAttribute("data-total-pages", String(latestPages))
-          if (foot) {
-            foot.textContent = previousFoot
-            foot.removeAttribute("data-state")
-          }
-          return false
-        }
-        track.insertAdjacentHTML("beforeend", members.map(renderClanMemberTileMarkup).join(""))
-        syncImageOnlyLoadState(track)
-        var latestTotalPages = Math.max(totalPages, Number(data.total_pages) || totalPages)
-        var totalMembers = Number(data.total_members) || 0
-        card.setAttribute("data-page", String(loadedPage))
-        card.setAttribute("data-total-pages", String(latestTotalPages))
+        if (!members.length) return false
+        track.innerHTML = members.map(renderClanMemberBlotMarkup).join("")
+        var total = Number(data.total_members) || members.length
         if (foot) {
-          foot.textContent = totalMembers ? clanFootText(totalMembers) : previousFoot
+          foot.textContent = clanFootText(total)
           foot.removeAttribute("data-state")
         }
+        card.setAttribute("data-icono-clan-hydrated", "1")
+        installSwipeStrip(section)
         return true
       })
       .catch(function () {
         if (foot) {
-          foot.textContent = "Could not load more members. Try again."
+          foot.textContent = "Could not load members. Reload to try again."
           foot.setAttribute("data-state", "error")
         }
         return false
@@ -12433,33 +12402,35 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
   }
 
-  // The clan reels are the same sideways strip as a gene's candidate strip.
-  // Each card owns its own strip; pages come in only when the reader reaches
-  // the end of that card's row.
-  function installClanStrips(root) {
+  var iconoClanCardObserver = null
+
+  function observeClanCards(root) {
     if (!root || !root.querySelectorAll) return
-    var sections = root.querySelectorAll("[data-icono-clan-carousel]")
-    for (var i = 0; i < sections.length; i += 1) {
-      // `card` is per strip: a shared var would make every closure read and
-      // load the last card's clan (seen live on TP53's list, 2026-10-31).
-      ;(function (section) {
-        if (section.getAttribute("data-icono-clan-wired") === "1") return
-        var card = section.closest(".icono-clan")
-        if (!card) return
-        section.setAttribute("data-icono-clan-wired", "1")
-        installSwipeStrip(section, {
-          mountHidden: true,
-          nativePaging: true,
-          hasMore: function () {
-            var page = Number(card.getAttribute("data-page")) || 0
-            var totalPages = Math.max(1, Number(card.getAttribute("data-total-pages")) || 1)
-            return page + 1 < totalPages
-          },
-          loadMore: function () {
-            return clanPageAppend(card)
-          },
-        })
-      })(sections[i])
+    var cards = root.querySelectorAll(".icono-clan[data-clan]")
+    if (!cards.length) return
+    if (typeof window.IntersectionObserver !== "function") {
+      for (var i = 0; i < cards.length; i += 1) hydrateClanCard(cards[i])
+      return
+    }
+    if (!iconoClanCardObserver) {
+      iconoClanCardObserver = new IntersectionObserver(
+        function (entries) {
+          for (var index = 0; index < entries.length; index += 1) {
+            if (!entries[index].isIntersecting) continue
+            var card = entries[index].target
+            iconoClanCardObserver.unobserve(card)
+            hydrateClanCard(card)
+          }
+        },
+        // Load when the card is actually on screen, not 600 px early: the strip
+        // installs only on a visible section, and the whole clan arrives before
+        // the reader can drag the four-member preview.
+        { rootMargin: "0px" },
+      )
+    }
+    for (var cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
+      if (cards[cardIndex].getAttribute("data-icono-clan-hydrated") === "1") continue
+      iconoClanCardObserver.observe(cards[cardIndex])
     }
   }
 
@@ -12521,6 +12492,14 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       iconoClansObserver = null
     }
+    if (iconoClanCardObserver) {
+      try {
+        iconoClanCardObserver.disconnect()
+      } catch (_e) {
+        /* ignore */
+      }
+      iconoClanCardObserver = null
+    }
     var head = document.getElementById("icono-clans-head")
     var body = document.getElementById("icono-clans-body")
     var content = document.getElementById("icono-clans-content")
@@ -12556,8 +12535,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var chunk = ""
       for (; idx < end; idx++) chunk += renderRevealedClanMarkup(revealed[idx])
       grid.insertAdjacentHTML("beforeend", chunk)
-      syncImageOnlyLoadState(grid)
-      installClanStrips(grid)
+      observeClanCards(grid)
     }
 
     function finish() {
