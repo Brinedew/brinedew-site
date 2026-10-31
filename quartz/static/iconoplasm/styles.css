@@ -5974,60 +5974,54 @@ a.icono-clan-acc:hover {
 a.icono-clan-ae:hover {
   text-decoration: underline;
 }
-/* Reel: prev arrow, a single page of member tiles, next arrow */
+/* Reel: the gene page's sideways strip pattern (candidate-strip.js), one row
+   of member tiles with the count and the two arrows on a control line under
+   it. No page counter: the arrows load the next page only when the reader
+   reaches the end of the loaded frames. */
 .icono-clan-reel {
-  display: flex;
-  align-items: stretch;
-  gap: 9px;
   margin-top: 12px;
 }
-/* A page is a 2x2 grid of four large portrait tiles; arrows flip to the next /
-   previous four and stretch the full two-row height of the grid. */
-.icono-clan-strip {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  align-content: start;
-  align-items: start;
-  flex: 1;
-  min-width: 0;
-  gap: 10px;
+
+.icono-clan-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding-block: 0.2rem;
+  touch-action: pan-y pinch-zoom;
 }
-.icono-clan-nav {
-  flex: 0 0 auto;
-  width: 34px;
-  align-self: stretch;
+
+/* Four members are the first page; the fourth peeks under the right edge at
+   desktop width, and a phone shows one with the edge of the next. */
+.icono-clan-track > .icono-clan-tile {
+  flex: 0 0 clamp(10rem, 26%, 14rem);
+  max-inline-size: none;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 640px) {
+  .icono-clan-track > .icono-clan-tile {
+    flex-basis: min(100% - 4rem, 17.5rem);
+  }
+}
+
+.icono-clan-foot-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--secondary, var(--darkgray)) 30%, var(--ui-border));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--secondary, var(--darkgray)) 7%, var(--ui-bg));
-  /* Default = the brand UI brown (--secondary). Teal is reserved for hover only. */
-  color: var(--secondary, var(--darkgray));
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    color 0.15s var(--icono-ease-out),
-    border-color 0.15s var(--icono-ease-out),
-    background 0.15s var(--icono-ease-out);
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
 }
-.icono-clan-nav:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--ui-bg));
+
+.icono-clan-foot-row .icono-clan-foot {
+  margin: 0;
 }
-/* Disabled = already on the first / last page. Muted, not removed, so both
-   arrows are always visible and the layout never shifts. */
-.icono-clan-nav:disabled {
-  color: color-mix(in srgb, var(--secondary, var(--darkgray)) 36%, transparent);
-  border-color: color-mix(in srgb, var(--ui-border) 55%, transparent);
-  background: transparent;
-  cursor: default;
+
+.icono-clan-strip-nav {
+  gap: var(--icono-space-2);
 }
+
 .icono-clan-foot {
-  margin-top: 10px;
+  min-width: 0;
   font-family: "IBM Plex Mono", monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -6035,13 +6029,22 @@ a.icono-clan-ae:hover {
   color: color-mix(in srgb, var(--secondary, var(--darkgray)) 70%, transparent);
 }
 
+/* A load or error sentence is read, not stamped: sentence case at the small
+   reading size, and it may wrap beside the arrows. The count keeps the label
+   treatment. */
+.icono-clan-foot[data-state] {
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 /* Clan member tiles reuse the shared design-system blot-only card
    (.icono-card--variant-image-only / .icono-image-only-*) verbatim -- portrait
    fitting, the name + symbol caption, and container-query scaling all come from
-   shared-card-label.css. The only grid-specific rule: fill the 2x2 cell. */
+   shared-card-label.css. The strip sets each tile's frame width. */
 .icono-clan-tile {
-  inline-size: 100%;
-  max-inline-size: 100%;
+  min-inline-size: 0;
 }
 
 /* Unfiled (sealed) clans — uniform rust-stamp specimen chips, never ragged */

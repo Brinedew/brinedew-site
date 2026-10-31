@@ -1,15 +1,23 @@
 // B-1095: a gene's other candidates sit in one sideways strip, so the page is
-// the same height at 3 candidates or 300 and the comments stay a screen away
-// (TP53's two-column grid was 16,035 px tall with 71 candidates). Embla
-// Carousel, the engine behind shadcn/ui's Carousel, moves the track; its wheel
-// plugin turns sideways trackpad swipes into strip movement.
+// the same height at 3 candidates or 300 (TP53's two-column grid was 16,035 px
+// tall with 71 candidates). Embla Carousel, the engine behind shadcn/ui's
+// Carousel, moves the track; its wheel plugin turns sideways trackpad swipes
+// into strip movement.
+//
+// The same strip drives the home tutorial's site windows and a clan's member
+// reel. A strip whose frames are not all in the page yet passes `hasMore` and
+// `loadMore`: the Next arrow then fetches the next page when the press would
+// land on the last loaded frame. `mountHidden` sets the strip up even before
+// it is scrolled into view; `nativePaging` keeps the arrows working while
+// Embla is still loading or if it never arrives.
 //
 // Keys, with focus anywhere in the strip: Left and Right move one frame and
-// bring it to the middle, Up approves and Down rejects the frame in focus, Home and End jump to the
-// ends, Enter opens the frame in the viewer (the frame is a button).
+// bring it to the middle, Up approves and Down rejects the frame in focus (the
+// candidate strip), Home and End jump to the ends, Enter opens the frame in the
+// viewer (the frame is a button or link).
 //
-// Until Embla loads, the strip is a plain native scroller (CSS), so every
-// frame stays reachable even if the module never arrives.
+// Until Embla loads, the strip is a plain native scroller (CSS), so every frame
+// stays reachable even if the module never arrives.
 //
 // B-1101: the strip is the Overview tab's slice of the candidates. In the
 // Candidates tab Embla stands down and the same frames lay out as a full grid;
@@ -32,8 +40,8 @@ function prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
 }
 
-// A frame is any child of the track: candidate cards on a gene page, the
-// example site windows on the home page.
+// A frame is any child of the track: candidate cards on a gene page, a clan's
+// member tiles, the example site windows on the home page.
 function frames(track) {
   return Array.prototype.slice.call(track.children)
 }
@@ -76,16 +84,27 @@ function developImages(track) {
   }
 }
 
-function installStrip(section) {
+function installStrip(section, options) {
+  var opts = options || {}
   var viewport = section.querySelector("[data-icono-strip-viewport]")
   var track = viewport && viewport.firstElementChild
   if (!track) return
-  var state = { api: null, loading: false, startSnap: 0, refresh: null }
+  var state = {
+    api: null,
+    loading: false,
+    startSnap: 0,
+    refresh: null,
+    loadingMore: null,
+  }
   section._iconoCandidateStrip = state
   var nav = section.querySelector("[data-icono-strip-nav]")
   var prev = section.querySelector("[data-icono-strip-prev]")
   var next = section.querySelector("[data-icono-strip-next]")
   var progress = section.querySelector("[data-icono-strip-progress]")
+
+  function moreAvailable() {
+    return typeof opts.hasMore === "function" && !!opts.hasMore()
+  }
 
   // The snap that shows this frame. With align "center" every frame has its
   // own snap except near the ends, where containScroll folds the frames that
@@ -105,14 +124,15 @@ function installStrip(section) {
     var list = frames(track)
     if (!list.length) return
     var clamped = Math.max(0, Math.min(list.length - 1, index))
+    var frame = list[clamped]
     var target =
-      list[clamped].querySelector(".icono-candidate-media-button") ||
-      (list[clamped].matches("a[href], button") ? list[clamped] : null)
+      frame.querySelector(".icono-candidate-media-button") ||
+      (frame.matches("a[href], button") ? frame : frame.querySelector("a[href], button"))
     if (!target) return
     target.focus({ preventScroll: true })
     var api = state.api
     if (!api) {
-      list[clamped].scrollIntoView({ block: "nearest", inline: "center" })
+      frame.scrollIntoView({ block: "nearest", inline: "center" })
       return
     }
     api.scrollTo(snapOf(api, clamped))
@@ -149,13 +169,71 @@ function installStrip(section) {
     vote.classList.add("is-pressed")
   })
 
+  function nativeProgress() {
+    if (!progress) return
+    var max = Math.max(0, track.scrollWidth - viewport.clientWidth)
+    var value = max > 0 ? viewport.scrollLeft / max : 0
+    var shown =
+      track.scrollWidth > 0 ? Math.min(100, (viewport.clientWidth / track.scrollWidth) * 100) : 100
+    progress.style.setProperty("--strip-progress", String(value))
+    progress.style.setProperty("--strip-thumb", shown.toFixed(2) + "%")
+  }
+
+  // Without Embla the strip is still a native scroller. Keep the arrows and
+  // the progress honest there, including "more pages exist but the loaded
+  // frames already fit".
+  function nativeSync() {
+    var more = moreAvailable()
+    var canPrev = viewport.scrollLeft > 1
+    var canNext = viewport.scrollLeft + viewport.clientWidth < track.scrollWidth - 1
+    if (prev) prev.disabled = !canPrev
+    if (next) next.disabled = !(canNext || more)
+    var still = !canPrev && !canNext && !more
+    if (nav) nav.hidden = still
+    section.classList.toggle("is-strip-still", still)
+    nativeProgress()
+  }
+  state.sync = nativeSync
+  state.syncProgress = nativeProgress
+
+  function requestMore() {
+    if (!opts.loadMore || !moreAvailable()) return Promise.resolve(false)
+    if (state.loadingMore) return state.loadingMore
+    var before = frames(track).length
+    state.loadingMore = Promise.resolve()
+      .then(opts.loadMore)
+      .then(function (loaded) {
+        if (loaded) {
+          var firstNew = frames(track)[before]
+          if (state.api) {
+            // Re-measure before finding the first new frame's snap: the snap
+            // list changes when the track grows.
+            state.api.reInit()
+            if (firstNew) state.api.scrollTo(snapOf(state.api, before))
+            if (state.sync) state.sync()
+            if (state.syncProgress) state.syncProgress()
+          } else {
+            if (firstNew) firstNew.scrollIntoView({ block: "nearest", inline: "center" })
+            nativeSync()
+          }
+        }
+        return !!loaded
+      })
+      .catch(function () {
+        return false
+      })
+      .finally(function () {
+        state.loadingMore = null
+      })
+    return state.loadingMore
+  }
+
   // Prev and Next turn a page: the frame nearest the middle moves by as
   // many frames as the strip fits, so a reader with 71 frames isn't
   // clicking 71 times, and a drag that rested between frames still turns
-  // a whole page.
+  // a whole page. At the end of a short strip the next page is fetched.
   function page(direction) {
     var api = state.api
-    if (!api) return
     var list = frames(track)
     if (!list.length) return
     var box = viewport.getBoundingClientRect()
@@ -176,6 +254,23 @@ function installStrip(section) {
         : box.width
     var perPage = Math.max(1, Math.floor(box.width / Math.max(1, step)))
     var to = Math.max(0, Math.min(list.length - 1, nearest + direction * perPage))
+    // The next page is fetched only when this press would land on the last
+    // loaded frame. A reader who swipes instead keeps the loaded frames; the
+    // arrow is already at the end of that row.
+    if (direction > 0 && moreAvailable() && to >= list.length - 1) {
+      requestMore()
+      return
+    }
+    if (!api) {
+      var target = list[to]
+      if (target)
+        target.scrollIntoView({
+          block: "nearest",
+          inline: "center",
+          behavior: prefersReducedMotion() ? "auto" : "smooth",
+        })
+      return
+    }
     api.scrollTo(snapOf(api, to))
   }
   if (prev)
@@ -187,6 +282,17 @@ function installStrip(section) {
       page(1)
     })
 
+  if (opts.nativePaging) {
+    viewport.addEventListener(
+      "scroll",
+      function () {
+        if (!state.api) nativeSync()
+      },
+      { passive: true },
+    )
+    nativeSync()
+  }
+
   developImages(track)
   section.classList.add("is-strip-developing")
 
@@ -196,13 +302,17 @@ function installStrip(section) {
     loadEmbla()
       .then(function (module) {
         state.loading = false
-        if (!section.isConnected || !wantsCarousel(section)) return
+        if (!section.isConnected || !wantsCarousel(section, opts)) return
         create(module)
       })
       .catch(function () {
         state.loading = false
-        // The native scroller stays; nothing is lost but the arrows.
-        if (nav) nav.hidden = true
+        // The native scroller stays. For a strip that fetches more frames the
+        // arrows keep working; otherwise they would be decoration.
+        if (opts.nativePaging) {
+          section.setAttribute("data-icono-strip-fallback", "true")
+          nativeSync()
+        } else if (nav) nav.hidden = true
       })
   }
 
@@ -217,7 +327,7 @@ function installStrip(section) {
   }
 
   state.refresh = function () {
-    if (wantsCarousel(section)) mount()
+    if (wantsCarousel(section, opts)) mount()
     else unmount()
   }
   state.refresh()
@@ -253,9 +363,10 @@ function installStrip(section) {
     // Where the reader is shows in the progress line under the strip, not as
     // a "1-2 / 71" counter (owner, 2026-10-16: the counter is distracting).
     function sync() {
+      var more = moreAvailable()
       if (prev) prev.disabled = !api.canScrollPrev()
-      if (next) next.disabled = !api.canScrollNext()
-      var still = !api.canScrollPrev() && !api.canScrollNext()
+      if (next) next.disabled = !(api.canScrollNext() || more)
+      var still = !api.canScrollPrev() && !api.canScrollNext() && !more
       if (nav) nav.hidden = still
       section.classList.toggle("is-strip-still", still)
       developImages(track)
@@ -274,6 +385,8 @@ function installStrip(section) {
       progress.style.setProperty("--strip-thumb", Math.min(100, shown * 100).toFixed(2) + "%")
     }
 
+    state.sync = sync
+    state.syncProgress = syncProgress
     api.on("select", sync)
     api.on("slidesInView", sync)
     api.on("reInit", sync)
@@ -286,19 +399,21 @@ function installStrip(section) {
 }
 
 // Embla measures the frames and wires dragging only on a shown strip, and the
-// Candidates tab wants the grid, not the carousel.
-function wantsCarousel(section) {
+// Candidates tab wants the grid, not the carousel. A strip that mounts hidden
+// (clan members) is measured even before it scrolls into view.
+function wantsCarousel(section, opts) {
   if (section.closest('[data-icono-gene-selected="candidates"]')) return false
+  if (opts && opts.mountHidden) return true
   return section.checkVisibility ? section.checkVisibility() : !!section.offsetParent
 }
 
 // Safe to call again: a strip already installed only re-checks whether it
 // should be a carousel right now (after a tab switch).
-export function installSwipeStrip(section) {
+export function installSwipeStrip(section, options) {
   if (!section) return
   var state = section._iconoCandidateStrip
   if (state) state.refresh()
-  else installStrip(section)
+  else installStrip(section, options)
 }
 
 export function installCandidateStrips(root) {
