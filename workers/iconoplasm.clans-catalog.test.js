@@ -100,3 +100,59 @@ test("a reader's clan tiles show each gene's published card and catalogue name",
     ]),
   )
 })
+
+// The readers' clan strip is one drag through the whole clan, not a page of
+// four; all=1 is what makes that possible. Failure modes: the response still
+// stops at four, or the strip loses the order or the blot address.
+test("all=1 returns every member of one clan, in the strip's order", async () => {
+  const db = iconoplasmDatabase()
+  const clan = ICONOPLASM_CLAN_CATALOG[0].clan
+  const symbols = ["TP53", "MDM2", "CDKN1A", "BAX", "BBC3", "GADD45A"]
+  for (const [index, symbol] of symbols.entries()) {
+    await db
+      .prepare("INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES (?, ?)")
+      .bind(symbol, `gene ${index}`)
+      .run()
+    await db
+      .prepare(
+        "INSERT INTO icono_gene_essence (gene_symbol, full_name, aesthetics_origin_json) VALUES (?, ?, ?)",
+      )
+      .bind(symbol, `UniProt ${symbol}`, JSON.stringify([clan]))
+      .run()
+  }
+  const env = { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET }
+  const cookie = await sessionCookieFor({ user_id: "reader", username: "reader" })
+  const call = (path, init = {}) =>
+    handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request(`https://iconoplasm.brinedew.bio${path}`, {
+        ...init,
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+      }),
+      env,
+      { waitUntil() {} },
+    )
+  const merged = await call("/api/iconoplasm/discoveries/merge", {
+    method: "POST",
+    body: JSON.stringify({ symbols }),
+  })
+  assert.equal(merged.status, 200)
+
+  const all = await (
+    await call(`/api/iconoplasm/clans/${encodeURIComponent(clan)}/members?all=1`)
+  ).json()
+  assert.equal(all.members.length, symbols.length)
+  assert.equal(all.total_members, symbols.length)
+  assert.equal(all.total_pages, 1)
+  assert.equal(all.page, 0)
+  assert.equal(all.page_size, symbols.length)
+  assert.deepEqual(all.members.map((member) => member.symbol).sort(), symbols.slice().sort())
+  for (const member of all.members) {
+    assert.match(member.blot_url, new RegExp(`/blot/${member.symbol}\\.webp$`))
+  }
+
+  const first = await (
+    await call(`/api/iconoplasm/clans/${encodeURIComponent(clan)}/members`)
+  ).json()
+  assert.equal(first.members.length, 4, "page mode still ships one page")
+  assert.equal(first.total_pages, Math.ceil(symbols.length / 4))
+})
