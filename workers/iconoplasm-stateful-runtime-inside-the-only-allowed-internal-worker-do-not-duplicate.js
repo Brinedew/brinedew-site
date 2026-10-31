@@ -108,7 +108,9 @@ import {
   geneElectionReceipt,
   importGeneVotes,
   projectGeneElection,
+  READER_VOTES_GENE_LIMIT,
   readGeneVoteSnapshots,
+  readReaderVotes,
   setGeneVote,
 } from "./iconoplasm/votes/gene-votes.js"
 import { readAdminGallery, readAdminGeneFacts } from "./iconoplasm/admin-gallery.js"
@@ -21249,6 +21251,38 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           200,
           { "Cache-Control": "no-store" },
         ),
+      )
+    }
+
+    // The signed-in reader's own votes on the genes a page shows, so a FIT
+    // they gave last week is lit when they come back. The page already has the
+    // public tallies from the published gene objects. The request names genes,
+    // not portraits, so its size and its D1 read follow the reader's own votes,
+    // not a gene's portrait count. A guest costs no D1.
+    if (path === "/api/iconoplasm/votes/mine" && request.method === "POST") {
+      if (!env.ICONOPLASM_DB)
+        return done("votes_mine_500", json({ error: "ICONOPLASM_DB binding missing" }, 500))
+      let p
+      try {
+        p = await request.json()
+      } catch {
+        return done("votes_mine_400", json({ error: "Invalid JSON" }, 400))
+      }
+      const named = Array.isArray(p?.symbols) ? p.symbols : null
+      if (!named || named.length > READER_VOTES_GENE_LIMIT)
+        return done(
+          "votes_mine_400",
+          json({ error: `symbols must be a list of at most ${READER_VOTES_GENE_LIMIT}` }, 400),
+        )
+      const symbols = named.map((value) => normalizeSymbol(value || "")).filter(Boolean)
+      const sessionUser = await iconoplasmSessionUser(request, env)
+      const userId = sessionUser?.user_id ? normalizeUserId(sessionUser.user_id) : ""
+      const votes = userId ? await readReaderVotes(env.ICONOPLASM_DB, { userId, symbols }) : []
+      return done(
+        "votes_mine",
+        json({ ok: true, authenticated: Boolean(userId), votes }, 200, {
+          "Cache-Control": "no-store",
+        }),
       )
     }
 

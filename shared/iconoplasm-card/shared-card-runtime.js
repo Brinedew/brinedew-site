@@ -2212,16 +2212,18 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     var snapshotPrimePromise = null
     var candidateRef = "a:" + symbol + "|" + assetSha
     var storedSnapshot = readStoredVoteSnapshot(candidateRef)
-    if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot)
     // The gene's published tally, so a deferred box shows the real score before the
-    // reader votes. It is not a primed snapshot: a vote still fetches the reader's own.
-    else if (cfg.publicTally) {
+    // reader votes. This device's stored copy was written when the reader last voted, so
+    // its counts are as old as that vote: it supplies only the reader's own vote, until
+    // the page asks the server for it.
+    if (cfg.publicTally) {
       var up = Math.max(0, Number(cfg.publicTally.image_upvotes || 0))
       var down = Math.max(0, Number(cfg.publicTally.image_downvotes || 0))
       state.snapshot.image_upvotes = up
       state.snapshot.image_downvotes = down
       state.snapshot.image_score = up - down
-    }
+      if (storedSnapshot) state.snapshot.user_vote = Number(storedSnapshot.user_vote || 0)
+    } else if (storedSnapshot) state.snapshot = cloneSnapshot(storedSnapshot)
     if (cfg.initialSnapshot) state.snapshot = cloneSnapshot(cfg.initialSnapshot)
     var candidateImageId = Number(cfg.candidateImageId || 0)
     if (!Number.isFinite(candidateImageId) || candidateImageId <= 0) candidateImageId = 0
