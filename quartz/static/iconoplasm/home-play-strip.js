@@ -5,7 +5,7 @@
 // up in the Archive below, and the find counts the same moment. Under the
 // four cards, more card backs fade into the way to find the rest.
 
-import { installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
+import { installSwipeStrip } from "./candidate-strip.js?v=ec154e2807239b2f"
 
 // The signed-out Archive's four starters, one line each.
 // The owner asked for a sentence per gene on 2026-10-27 and approved these.
