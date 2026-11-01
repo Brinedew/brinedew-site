@@ -547,3 +547,33 @@ This creates a developmental sequence with three distinguishable molecular event
 The germline demonstrates how selectively this process can operate: it preserves or reactivates OCT4 and NANOG while repressing SOX2 and installing a germline-specific transcriptional network.
 
 One particularly promising research question is whether the lineage-specific transcription factors primarily initiate pluripotency shutdown, while shared chromatin-maintenance machinery subsequently makes that shutdown durable. The TEtra experiments, the OCT4–WNT–PRC2 endoderm experiments and the 2026 ERH study provide three complementary experimental entry points into that problem.
+
+1. **The Role of miR-145 (Xu et al., 2009):**
+    
+    - Correction: While miR-145 directly targets the 3′ UTRs of OCT4, SOX2, and KLF4, functional genetic studies have shown that microRNAs act as **kinetic buffers / noise filters**, not master switches. When the miR-145 or Dicer machinery is knocked out, human ESCs still shut down pluripotency and differentiate in response to lineage signals; they simply display delayed kinetics and noisier, less uniform transitions.
+        
+2. **Promoter Methylation Status (Barrand & Collas, 2010):**
+    
+    - Correction: That 2010 BBRC study suggested OCT4 undergoes promoter methylation while NANOG and SOX2 rely only on H3K27me3. Across broader ENCODE, Roadmap Epigenomics, and modern WGBS data:
+        
+        - Both **OCT4 (POU5F1) and NANOG** promoters undergo dense CpG methylation during terminal somatic differentiation.
+            
+        - **SOX2** remains distinct because its promoter remains unmethylated and H3K4me3-positive or bivalent (H3K4me3/H3K27me3) across several adult somatic niches (e.g., neural stem cells, bronchial epithelium, lens epithelium) where it retains physiological function.
+            
+3. **The Multi-Tiered Pluripotency Transition (Naïve**
+    
+    **`→→`**
+    
+    **Formative
+    
+    ```
+    →→
+    ```
+    
+    Primed):**
+    
+    - Correction: Pluripotency shutdown is not a single leap from preimplantation blastocyst into germ-layer gastrulation. It occurs in two distinct tiers:
+        
+        - **Naïve exit (Pre- to Post-implantation):** Naïve-specific network members (**KLF4, TFCP2L1, ESRRB, ZFP42**) are permanently extinguished during the transition to the formative/primed epiblast.
+            
+        - **Core exit (Gastrulation):** The core factors (**OCT4, SOX2, NANOG**) transition through different super-enhancer usage before being selectively displaced during germ layer specification.
