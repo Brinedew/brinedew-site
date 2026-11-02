@@ -208,11 +208,11 @@ class NotificationStatement {
       this.sql.includes("FROM icono_request_inbox_members membership")
     ) {
       const requesterUserId = String(this.args[0] || "")
-      return {
-        results: this.db.notifications.filter(
-          (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
-        ),
-      }
+      const rows = this.db.notifications.filter(
+        (row) => row.requester_user_id === requesterUserId && row.discord_status === "sent",
+      )
+      const limit = Number(this.args[this.args.length - 1]) || rows.length
+      return { results: rows.slice(0, limit) }
     }
     if (this.sql.includes("FROM icono_generation_requests gr")) {
       const requesterScoped = this.sql.includes("gr.requester_user_id = ?")
@@ -871,6 +871,51 @@ test("a waiting queue over the old 50-request page is returned whole", async () 
   assert.equal(payload.open_count, 57)
   assert.equal(payload.open_requests.length, 57, "not the old 50-request page")
   assert.equal(new Set(payload.open_requests.map((row) => row.gene_symbol)).size, 4)
+})
+
+// One 100-style order produces 100 unread receipts. The old 50-receipt page
+// showed one gene row and said "50 of 100 shown." The page now holds five full
+// orders, so a normal batch arrives whole.
+test("a Ready page over the old 50-receipt page is returned whole", async () => {
+  const shapes = [
+    ["NFKB1", 16],
+    ["CEBPB", 15],
+    ["CXCL8", 14],
+    ["CXCR1", 12],
+  ]
+  const notifications = []
+  let id = 1
+  for (const [geneSymbol, count] of shapes) {
+    for (let index = 0; index < count; index += 1) {
+      notifications.push(
+        notificationRow({
+          id,
+          request_id: id,
+          gene_symbol: geneSymbol,
+          fulfillment_publication_id: `pub-${geneSymbol}-${id}`,
+          notification_key: `request_fulfilled:${id}:` + "a".repeat(64),
+          discord_status: "sent",
+          read_at: null,
+          created_at: `2026-10-18 17:${String(id % 60).padStart(2, "0")}:00`,
+        }),
+      )
+      id += 1
+    }
+  }
+  const db = new NotificationDb(notifications)
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: await signedInAs() },
+      }),
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(payload.unread_count, 57)
+  assert.equal(payload.ready_requests.length, 57, "not the old 50-receipt page")
+  assert.equal(new Set(payload.ready_requests.map((row) => row.gene_symbol)).size, 4)
 })
 
 test("read state is written only inside the authenticated requester's inbox", async () => {

@@ -127,16 +127,31 @@ function mapReadyNotification(row, portraitUrlForAsset) {
   }
 }
 
+// The Ready page carries one row per gene with its previews. It is bounded so a
+// long unread history cannot grow one response, but 50 receipts cut a single
+// 100-style order into a partial gene count ("50 of 100 shown"). 500 covers five
+// full orders; the partial note remains only beyond that.
+export const REQUEST_INBOX_PAGE_LIMIT = 500
+
 export async function readRequestNotificationInbox(
   env,
-  { requesterUserId, limit = 50, openRequests = [], openCount = 0, portraitUrlForAsset } = {},
+  {
+    requesterUserId,
+    limit = REQUEST_INBOX_PAGE_LIMIT,
+    openRequests = [],
+    openCount = 0,
+    portraitUrlForAsset,
+  } = {},
 ) {
   if (!env?.ICONOPLASM_DB) {
     return { ok: false, status: 500, error: "ICONOPLASM_DB binding missing" }
   }
   const requesterId = userId(requesterUserId)
   if (!requesterId) return { ok: false, status: 401, error: "Authentication required" }
-  const safeLimit = Math.max(1, Math.min(50, positiveInteger(limit) || 50))
+  const safeLimit = Math.max(
+    1,
+    Math.min(REQUEST_INBOX_PAGE_LIMIT, positiveInteger(limit) || REQUEST_INBOX_PAGE_LIMIT),
+  )
   // A Ready card is a delivery receipt, not a dump of every row ever marked
   // fulfilled. Historical workstation runs coalesced multiple request IDs
   // onto one portrait, and manual acceptance tests reused old catalogue
