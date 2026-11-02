@@ -226,11 +226,11 @@ class NotificationStatement {
       const source = this.sql.includes("gr.status = 'fulfilled'")
         ? this.db.readyRequests
         : this.db.openRequests
-      return {
-        results: requesterScoped
-          ? source.filter((row) => row.requester_user_id === requesterUserId)
-          : source,
-      }
+      const rows = requesterScoped
+        ? source.filter((row) => row.requester_user_id === requesterUserId)
+        : source
+      const limit = Number(this.args[this.args.length - 1]) || rows.length
+      return { results: rows.slice(0, limit) }
     }
     return { results: [] }
   }
@@ -830,6 +830,49 @@ test("each user sees only their own inbox and waiting requests", async () => {
   assert.equal(otherInbox.open_count, 1)
 })
 
+// The sidebar groups Waiting by gene, so a page of 50 requests said "50 of 57
+// shown" while showing four gene rows and splitting a gene's count. The route
+// now reads the whole waiting queue up to its safety cap.
+test("a waiting queue over the old 50-request page is returned whole", async () => {
+  const shapes = [
+    ["NFKB1", 16],
+    ["CEBPB", 15],
+    ["CXCL8", 14],
+    ["CXCR1", 12],
+  ]
+  const openRequests = []
+  let id = 100
+  for (const [geneSymbol, count] of shapes) {
+    for (let index = 0; index < count; index += 1) {
+      openRequests.push({
+        id,
+        gene_symbol: geneSymbol,
+        requester_user_id: BRINEDEW_USER_ID,
+        request_mode: "random",
+        requested_vision_id: "",
+        request_kind: "new_candidate",
+        status: index % 2 === 0 ? "open" : "delivery_pending",
+        created_at: `2026-10-18 17:${String(id % 60).padStart(2, "0")}:00`,
+      })
+      id += 1
+    }
+  }
+  const db = new NotificationDb([], openRequests)
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications", {
+        headers: { Cookie: await signedInAs() },
+      }),
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
+      { waitUntil() {} },
+    )
+  const payload = await response.json()
+
+  assert.equal(payload.open_count, 57)
+  assert.equal(payload.open_requests.length, 57, "not the old 50-request page")
+  assert.equal(new Set(payload.open_requests.map((row) => row.gene_symbol)).size, 4)
+})
+
 test("read state is written only inside the authenticated requester's inbox", async () => {
   const own = notificationRow({ id: 7, discord_status: "sent" })
   const anotherUser = notificationRow({
@@ -1210,6 +1253,49 @@ test("request inbox shows waiting requests as one entry per gene with its image 
     "the tab counts genes, as Ready does",
   )
   assert.doesNotMatch(markup, /of 7 shown/)
+})
+
+test("a complete waiting queue over 50 requests shows every gene and no partial-count note", async () => {
+  const shapes = [
+    ["NFKB1", 16],
+    ["CEBPB", 15],
+    ["CXCL8", 14],
+    ["CXCR1", 12],
+  ]
+  const openRequests = []
+  let requestId = 1
+  for (const [geneSymbol, count] of shapes) {
+    for (let index = 0; index < count; index += 1) {
+      openRequests.push({
+        request_id: requestId,
+        gene_symbol: geneSymbol,
+        gene_url: `/gene/${geneSymbol}`,
+        created_at: `2026-10-18 17:${String(requestId % 60).padStart(2, "0")}:00`,
+      })
+      requestId += 1
+    }
+  }
+  const inbox = createRequestInbox({
+    fetchJSON: async () => ({
+      ok: true,
+      authenticated: true,
+      unread_count: 0,
+      ready_count: 0,
+      open_count: 57,
+      ready_requests: [],
+      open_requests: openRequests,
+    }),
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+  })
+  await inbox.refresh()
+  const markup = inbox.panelMarkup()
+
+  assert.equal((markup.match(/icono-request-inbox__item--queued/g) || []).length, 4)
+  assert.match(markup, /aria-label="16 images">16</)
+  assert.match(markup, /aria-label="12 images">12</)
+  assert.doesNotMatch(markup, /of 57 shown|shown\./)
 })
 
 // B-1029: a result is seen once its gene page opens, however the person got there.

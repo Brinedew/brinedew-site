@@ -2588,11 +2588,7 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
   }
   const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
   const [openRequests, counts] = await Promise.all([
-    listOpenGenerationRequests(env, {
-      limit: safeLimit,
-      requesterUserId,
-      statuses: ["open", "delivery_pending"],
-    }),
+    listWaitingGenerationRequestRows(env, { requesterUserId }),
     countGenerationRequestInboxStates(env, requesterUserId),
   ])
   const base = portraitBase(new URL("https://iconoplasm.brinedew.bio/"), env)
@@ -2864,6 +2860,31 @@ async function listOpenGenerationRequests(
     orderBy: queueWide ? "gr.queue_turn ASC, gr.id ASC" : "gr.created_at ASC, gr.id ASC",
     limit: cleanedLimit,
   })
+}
+
+// The sidebar's Waiting list shows one row per gene and needs only the gene and
+// its oldest request. Reading the full request rows (joins, prompt, lane key) for
+// every waiting request spent CPU on fields the panel never reads, and the
+// 50-row page cut gene groups in half. This lean read returns the reader's whole
+// waiting queue up to the same 2,000-row safety cap the other open reads use.
+const WAITING_INBOX_REQUEST_LIMIT = 2000
+
+async function listWaitingGenerationRequestRows(env, { requesterUserId = "" } = {}) {
+  if (!env.ICONOPLASM_DB) return []
+  const { whereParts, params } = openGenerationRequestFilters({
+    requesterUserId,
+    statuses: ["open", "delivery_pending"],
+  })
+  const response = await env.ICONOPLASM_DB.prepare(
+    `SELECT gr.id, gr.gene_symbol, gr.created_at
+     FROM icono_generation_requests gr
+     WHERE ${whereParts.join(" AND ")}
+     ORDER BY gr.created_at ASC, gr.id ASC
+     LIMIT ?`,
+  )
+    .bind(...params, WAITING_INBOX_REQUEST_LIMIT)
+    .all()
+  return Array.isArray(response?.results) ? response.results : []
 }
 
 async function listGenerationRequestHistory(
