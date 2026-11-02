@@ -147,7 +147,7 @@ export function createRequestInbox({
     state.loading = true
     state.request_error = false
     var version = ++requestRefreshVersion
-    return fetchJSON("/api/iconoplasm/notifications?limit=50&fresh=" + Date.now(), {
+    return fetchJSON("/api/iconoplasm/notifications?fresh=" + Date.now(), {
       credentials: "include",
       cache: "no-store",
     })
