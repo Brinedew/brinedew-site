@@ -40,7 +40,8 @@ pass those weaker checks.
 Once a day the worker posts yesterday's puzzle result to `#geneguessr`: the gene,
 how many people solved it, the top guesses, and a link to play. When a
 pre-rendered structure image exists it's attached; otherwise the recap posts
-text-only.
+text-only. A day with no guesses at all posts nothing: an empty recap only pings
+the channel, so quiet days stay silent and are never marked posted.
 
 ### Flow
 
@@ -50,6 +51,8 @@ text-only.
   - Logic: [`workers/discord.js`](../workers/discord.js) (`handlePostDailyRecap`)
 - It reads `puzzle_actual:<day>` from KV for the answer, then `getWinnersCount`
   + `getDailyGuessAggregates` from D1 for the stats.
+- When the stats say nobody guessed that day, it returns
+  `skipped: "no_activity"` and stops before loading any image or posting.
 - It tries to load the pre-rendered PNG for the exact puzzle identity:
   `discord-recap-images/v2/<day>/<uniprot>/<render-contract>.png`. If that exact
   object is present → posts text **+ image** (multipart). If absent → posts

@@ -484,6 +484,12 @@ export async function handlePostDailyRecap(env, options = {}) {
     return { ok: true, skipped: "already_posted", day, message_id: recap.message_id || null }
   }
 
+  // A day nobody played has nothing to report. An empty recap only pings the
+  // channel, so quiet days stay silent instead of announcing no activity.
+  if (recap.total_guesses === 0) {
+    return { ok: true, skipped: "no_activity", day }
+  }
+
   let stage = "load_cached_image"
   try {
     const providedScreenshotBytes = options?.screenshotBytes
