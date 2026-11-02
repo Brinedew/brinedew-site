@@ -199,6 +199,7 @@ import {
   reconcileDeliveredRequestFulfillments,
   readRequestNotificationInbox,
   resolveIconoplasmFulfillmentDeliveryPolicy,
+  REQUEST_INBOX_PAGE_LIMIT,
 } from "./iconoplasm-request-notifications.js"
 // One copy for the worker and the browser (B-885): the home page sorts a
 // signed-in shelf by popularity locally, and the published catalog has none.
@@ -2572,7 +2573,11 @@ function mapGenerationRequestRow(row, { portraitBaseUrl = "" } = {}) {
   }
 }
 
-async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}) {
+async function requestNotificationInboxPayload(
+  env,
+  request,
+  { limit = REQUEST_INBOX_PAGE_LIMIT } = {},
+) {
   const sessionUser = await iconoplasmSessionUser(request, env)
   const requesterUserId = normalizeUserId(sessionUser?.user_id || "")
   if (!requesterUserId || isGuestUserId(requesterUserId)) {
@@ -2586,7 +2591,13 @@ async function requestNotificationInboxPayload(env, request, { limit = 50 } = {}
       open_requests: [],
     }
   }
-  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit || "50"), 10) || 50))
+  const safeLimit = Math.max(
+    1,
+    Math.min(
+      REQUEST_INBOX_PAGE_LIMIT,
+      Number.parseInt(String(limit || REQUEST_INBOX_PAGE_LIMIT), 10) || REQUEST_INBOX_PAGE_LIMIT,
+    ),
+  )
   const [openRequests, counts] = await Promise.all([
     listWaitingGenerationRequestRows(env, { requesterUserId }),
     countGenerationRequestInboxStates(env, requesterUserId),
@@ -19275,7 +19286,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
 
     if (path === "/api/iconoplasm/notifications" && request.method === "GET") {
       const payload = await requestNotificationInboxPayload(env, request, {
-        limit: url.searchParams.get("limit") || "50",
+        limit: url.searchParams.get("limit") || String(REQUEST_INBOX_PAGE_LIMIT),
       })
       return done(
         payload.ok ? "request_notifications" : "request_notifications_500",
