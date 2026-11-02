@@ -60,6 +60,10 @@ content/posts/
 content/apps/
 content/index.md
 content/About.md
+# Daily notes at the vault root are Obsidian's own files too. A note saved on
+# 2026-11-01 failed main's format check (CI run 41315653447) over list
+# indentation that Obsidian rewrites.
+content/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md
 content/Attachments/
 content/Templates/
 content/.obsidian/

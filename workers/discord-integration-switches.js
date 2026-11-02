@@ -26,7 +26,7 @@ export const DISCORD_SWITCHES = Object.freeze([
   Object.freeze({
     id: "geneguessr_recap",
     label: "GeneGuessr daily recap",
-    where: "#geneguessr, once a day",
+    where: "#geneguessr, after a day with guesses",
   }),
   Object.freeze({
     id: "blog_feed",
