@@ -17,8 +17,8 @@
 // acknowledgement are each tested, and the image of a recap is bound to its exact target.
 //
 // Failure modes this file proves, each written before the code that fixes it:
-//   D1  a recap says "No guesses were recorded." for a day with guesses, claims a solve that
-//       never happened, or posts the wrong target
+//   D1  a recap posts on a day nobody played, says "No guesses were recorded." for a day with
+//       guesses, claims a solve that never happened, or posts the wrong target
 //   D2  the structure image is posted for the wrong target, or a missing image stops the post
 //       instead of posting text only
 //   D3  a day is posted twice, or a failed post marks the day posted
@@ -277,30 +277,41 @@ test("D1, D2, D3: a recap posts the target, the solvers, the top guesses and the
 
 test("D1, D2: with no image the recap posts as text, and says what was recorded and no more", async () => {
   newWorld()
-  const quiet = "2026-07-10"
   const unsolved = "2026-07-11"
   const solvedByOne = "2026-07-12"
-  for (const day of [quiet, unsolved, solvedByOne]) recordPuzzle(day)
+  for (const day of [unsolved, solvedByOne]) recordPuzzle(day)
   await recordPlayers(unsolved, [guess(OTHER), guess(OTHER)])
   await recordPlayers(solvedByOne, [guess(TARGET)])
 
-  for (const day of [quiet, unsolved, solvedByOne]) assert.equal((await postRecap(day)).status, 200)
+  for (const day of [unsolved, solvedByOne]) assert.equal((await postRecap(day)).status, 200)
 
   assert.deepEqual(
     world.discord.map((post) => [post.multipart, post.image, post.filename]),
     [
       [false, null, null],
       [false, null, null],
-      [false, null, null],
     ],
     "no stored image: a JSON post",
   )
-  const [none, noSolve, one] = world.discord.map((post) => post.payload.content)
-  assert.match(none, /No guesses were recorded\./)
-  assert.doesNotMatch(none, /No solve was recorded|solved it|Top guesses/)
+  const [noSolve, one] = world.discord.map((post) => post.payload.content)
   assert.match(noSolve, /No solve was recorded\./)
+  assert.doesNotMatch(noSolve, /No guesses were recorded|solved it/)
   assert.match(noSolve, /1\. BRCA1/)
   assert.match(one, /1 player solved it!/, "one solver is singular")
+})
+
+test("D1: a day nobody played posts nothing, even when its structure image exists", async () => {
+  newWorld()
+  const day = "2026-07-10"
+  recordPuzzle(day)
+  storeImage(day)
+
+  const quiet = await postRecap(day)
+  assert.equal(quiet.status, 200)
+  assert.equal(quiet.payload.skipped, "no_activity")
+  assert.equal(world.discord.length, 0, "no message is sent")
+  assert.equal(posted(day), null, "the quiet day is not marked posted")
+  assert.equal(world.reads, 0, "the image is never fetched for a silent day")
 })
 
 test("D2: a stored image is only ever the image of that day's exact target", async () => {
@@ -308,6 +319,7 @@ test("D2: a stored image is only ever the image of that day's exact target", asy
   const day = "2026-07-13"
   recordPuzzle(day)
   storeImage(day, OTHER.uniprot)
+  await recordPlayers(day, [guess(TARGET)])
   assert.equal((await postRecap(day)).status, 200)
   assert.equal(world.discord[0].multipart, false, "another protein's image is not posted")
 })
@@ -316,6 +328,7 @@ test("D3: a refused post leaves the day unposted and recorded as failed; the nex
   newWorld({ discordStatus: 403 })
   const day = "2026-07-14"
   recordPuzzle(day)
+  await recordPlayers(day, [guess(TARGET)])
   const refused = await postRecap(day)
   assert.equal(refused.status, 500)
   assert.equal(refused.payload.error, "post_failed")
@@ -347,18 +360,18 @@ test("a recap for a day with no puzzle, or from a caller without the bot token, 
 
 const cron = () => worker.scheduled({ cron: "3 0 * * *" }, world.env, { waitUntil() {} })
 
-test("D4: the 00:03 UTC cron posts yesterday, catches up a missed day, and leaves a posted day alone", async () => {
-  const [yesterday, missed, earlier] = [dayAgo(1), dayAgo(2), dayAgo(3)]
-  newWorld({
-    withKv: { [`discord_summary_posted:${earlier}`]: JSON.stringify({ message_id: "old" }) },
-  })
-  for (const day of [yesterday, missed, earlier]) recordPuzzle(day)
+test("D4: the 00:03 UTC cron posts yesterday, skips a quiet day, and catches up a missed day", async () => {
+  const [yesterday, quiet, missed] = [dayAgo(1), dayAgo(2), dayAgo(3)]
+  newWorld()
+  for (const day of [yesterday, quiet, missed]) recordPuzzle(day)
+  await recordPlayers(yesterday, [guess(TARGET)])
+  await recordPlayers(missed, [guess(OTHER)])
 
   await cron()
 
-  assert.equal(world.discord.length, 2, "yesterday once, and the one missed day")
+  assert.equal(world.discord.length, 2, "yesterday and the missed day; the quiet day is silent")
   assert.ok(posted(yesterday) && posted(missed))
-  assert.equal(posted(earlier).message_id, "old", "an already posted day is left alone")
+  assert.equal(posted(quiet), null, "a quiet day is never marked posted")
 
   await cron()
   assert.equal(world.discord.length, 2, "a second run posts nothing")
@@ -369,6 +382,7 @@ test("D4: the catch-up stops at the first day the game had no puzzle", async () 
   newWorld()
   recordPuzzle(yesterday)
   recordPuzzle(beforeLaunch)
+  await recordPlayers(yesterday, [guess(TARGET)])
   assert.equal(world.kv.has(`puzzle_actual:${noPuzzle}`), false)
 
   await cron()
@@ -383,6 +397,7 @@ test("D4: a failed night is posted by the next night's run", async () => {
   newWorld({ discordStatus: 503 })
   const yesterday = dayAgo(1)
   recordPuzzle(yesterday)
+  await recordPlayers(yesterday, [guess(TARGET)])
   await cron()
   assert.equal(posted(yesterday), null)
   assert.ok(world.kv.has(`discord_summary_post_failure:${yesterday}`))
