@@ -30,10 +30,11 @@ In major evolutionary transitions framework, levels of selection can be defined 
 
 ### Vocabulary conversion table
 
-| Non-technical term | Technical term  | Usage context                                                                                                                            |
-| ------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Aging              | Frailty         | Level 3 (organismal) When talking about phenotypical and anatomic changes in organisms throughout adulthood, detectable with a naked eye |
-| Aging              | Mortality creep | When talking about population mortality rate upward creep, detectable with actuarial data                                                |
-| Aging              | Cell            | when talking about                                                                                                                       |
-|                    |                 |                                                                                                                                          |
+| Non-technical term    | Technical term        | Usage context                                                                                                            |
+| --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Aging                 | Frailty               | A collection of phenotypic and anatomical changes happening in mammals throughout adulthood, detectable with a naked eye |
+| Aging                 | Mortality creep       | An upward feature on the chart of probability of death over time. Detectable with actuarial data                         |
+| Aging                 | Cell                  | when talking about                                                                                                       |
+| Negligible senescence | Flat mortality hazard |                                                                                                                          |
+| Senescence            | Cell senescence       | A descriptive                                                                                                            |
 
