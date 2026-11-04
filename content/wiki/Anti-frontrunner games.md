@@ -1,15 +1,15 @@
 ---
-title: Anti-frontrunner coalitions
+title: Anti-frontrunner games
 tags:
-- content/wiki
+  - content/wiki
 date: 2026-11-04
 draft: true
 aliases:
-- 
+  -
 ---
-# Anti-frontrunner social dynamics
+# Anti-frontrunner games
 
-**"Anti-frontrunner" dynamics** refer to how groups react when one individual visibly pulls ahead in competence, ambition, or status.
+**"Anti-frontrunner" dynamics** happen when groups react to one individual visibly pulling ahead in competence, ambition, or status.
 
 Autistic thinkers frequently struggle to intuitively understand and navigate these dynamics because their default social model is often **meritocratic, object-level, and 1v1** (performance = reward), whereas large human groups operate on **n-player cooperative-adversarial game theory**.
 
