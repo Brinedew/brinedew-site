@@ -21,9 +21,9 @@ Another mistake it's guarding against is protecting against **fitness sign flips
 
 In major evolutionary transitions framework, levels of selection can be defined by de-darwinisation thresholds. When a level has achieved de-darwinization, if it has anti-cheater adaptations that suppress the conflict within agents on the lower level in favor of greater fitness on the higher level.
 
-| Level              | Agents            | Cheaters                                   | Cheater suppression mechanisms                                             |
-| ------------------ | ----------------- | ------------------------------------------ | -------------------------------------------------------------------------- |
-| 1. Genetic         | Genes             | Selfish genetic elements, viruses          | Epigenetic silencing, RNA interference, fair meiosis                       |
-| 2. Cellular        | Cells             | Neoplasms                                  | Unicellular bottleneck, Weismann's barrier, immune surveillance, apoptosis |
-| 3. Organismal      | Organisms, zooids | Defectors, free-riders, worker reproducers | Suicide, worker policing, kin recognition, reciprocity                     |
-| 4. Superorganismal | Colonies          |                                            |                                                                            |
+| Level              | Agents            | Cheaters                                   | Cheater suppression mechanisms                                                                                |
+| ------------------ | ----------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| 1. Genetic         | Genes             | Selfish genetic elements, viruses          | Epigenetic silencing, RNA interference, fair meiosis                                                          |
+| 2. Cellular        | Cells             | Neoplasms                                  | Unicellular bottleneck, Weismann's barrier, immune surveillance, cell extrusion (EDAC), programmed cell death |
+| 3. Organismal      | Organisms, zooids | Defectors, free-riders, worker reproducers | Worker policing, kin recognition, reciprocity, guilt, shame, suicide                                          |
+| 4. Superorganismal | Colonies          |                                            |                                                                                                               |
