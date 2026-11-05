@@ -963,7 +963,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   emulsionFavorites.subscribe(function (state) {
     syncEmulsionFavoriteButtons(document, state && state.changedId)
-    document.dispatchEvent(new CustomEvent("icono-emulsion-favorites-change"))
+    document.dispatchEvent(
+      new CustomEvent("icono-emulsion-favorites-change", { detail: state || null }),
+    )
   })
 
   function publishFailureMessage(error, fallback, resultLabel) {
@@ -8163,6 +8165,84 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
       }
 
+      // The picker's first page is shared by every player and cached for the
+      // whole page session. A style starred after that load (the star under a
+      // gene's portrait, for example) is not on the page, so the Favorites view
+      // must ask the API for the favourites it still cannot name. A favourite
+      // the API does not return (a style that left the picker) is remembered
+      // until the set of favourites changes, so a render never asks twice for
+      // the same missing style.
+      var favoriteOptionsUnavailable = new Set()
+      var favoriteOptionsSignature = ""
+      var favoriteOptionsLoading = null
+
+      function favoriteFamilyIds() {
+        return emulsionFavorites.ids().map(normalizeEmulsionFamilyId).filter(Boolean)
+      }
+
+      function favoriteSignature() {
+        return favoriteFamilyIds().slice().sort().join("|")
+      }
+
+      function missingFavoriteFamilies() {
+        var signature = favoriteSignature()
+        if (signature !== favoriteOptionsSignature) {
+          favoriteOptionsSignature = signature
+          favoriteOptionsUnavailable = new Set()
+        }
+        var known = new Set(requestOptions.map(familyOf))
+        return favoriteFamilyIds().filter(function (id) {
+          return !known.has(id) && !favoriteOptionsUnavailable.has(id)
+        })
+      }
+
+      function loadMissingFavoriteRequestOptions() {
+        var missing = missingFavoriteFamilies()
+        if (!missing.length) return Promise.resolve(requestOptions)
+        if (favoriteOptionsLoading) {
+          return favoriteOptionsLoading.then(function () {
+            return loadMissingFavoriteRequestOptions()
+          })
+        }
+        var signatureAtStart = favoriteOptionsSignature
+        favoriteOptionsLoading = fetchRequestOptionsWithRetry(
+          "/api/iconoplasm/requests/options?scope=favorites",
+        )
+          .then(function (payload) {
+            var favorites = Array.isArray(payload && payload.request_options)
+              ? payload.request_options
+              : []
+            var known = new Set(requestOptions.map(familyOf))
+            var merged = requestOptions.slice()
+            for (var i = 0; i < favorites.length; i++) {
+              var key = familyOf(favorites[i])
+              if (!key || known.has(key)) continue
+              known.add(key)
+              merged.push(favorites[i])
+            }
+            requestOptions = merged
+            requestOptionsByQuery[""] = requestOptions
+            rememberRequestOptions(favorites)
+            // A favourite that changed while the answer was on its way may be
+            // absent from that answer; ask again rather than call it gone.
+            var changedDuringFetch = favoriteSignature() !== signatureAtStart
+            missing.forEach(function (id) {
+              if (!changedDuringFetch && !emulsionFavorites.isPending(id)) {
+                favoriteOptionsUnavailable.add(id)
+              }
+            })
+            return requestOptions
+          })
+          .catch(function () {
+            return requestOptions
+          })
+          .then(function (options) {
+            favoriteOptionsLoading = null
+            return options
+          })
+        return favoriteOptionsLoading
+      }
+
       function ensureRequestOptionsLoaded(query, options) {
         var config = options || {}
         var queryKey = requestOptionsQueryKey(query)
@@ -8620,6 +8700,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         try {
           // Silent: the grid says what happened; no bare "HTTP 503" status.
           loadedOptions = await ensureRequestOptionsLoaded(renderQuery, { silent: true })
+          if (!String(renderQuery || "").trim()) {
+            loadedOptions = await loadMissingFavoriteRequestOptions()
+          }
         } catch (error) {
           results.removeAttribute("aria-busy")
           results.innerHTML =
@@ -8763,9 +8846,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           panel._iconoFavoriteViewsHandler,
         )
       }
-      panel._iconoFavoriteViewsHandler = function () {
+      panel._iconoFavoriteViewsHandler = function (event) {
         paintRequestViews()
         paintRequestFooter()
+        var state = event && event.detail
+        // The star paints at once; the grid waits for the server, so a failed
+        // save never leaves a style in Favorites.
+        if (state && Array.isArray(state.pendingIds) && state.pendingIds.length) return
+        if (state && state.changedId) {
+          favoriteOptionsUnavailable.delete(normalizeEmulsionFamilyId(state.changedId))
+        }
+        if (!dialog || !dialog.open || requestView !== "favorites") return
+        var freeTab = dialog.querySelector('[data-icono-request-tab="free"]')
+        if (!freeTab || freeTab.getAttribute("aria-selected") !== "true") return
+        void renderResultsList()
       }
       document.addEventListener("icono-emulsion-favorites-change", panel._iconoFavoriteViewsHandler)
       if (browse) browse.addEventListener("scroll", maybeLoadMoreRequestOptions, { passive: true })
