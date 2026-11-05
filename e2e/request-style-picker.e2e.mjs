@@ -1151,3 +1151,129 @@ test("a style list that keeps failing offers Try again, which loads it once the 
     await browser.close()
   }
 })
+
+// A style starred after the picker's shared first page was cached (the star
+// under a gene's portrait, for example) must appear in Favorites when the
+// dialog opens again. The first page is the same for every player and never
+// holds every favourite, so the grid asks the API for the ones it cannot name.
+test("a style starred after the picker loaded appears in Favorites", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  mkdirSync(OUT, { recursive: true })
+  try {
+    const [width, height] = VIEWPORTS.find(([, , size]) => size === "desktop")
+    const context = await browser.newContext({ viewport: { width, height } })
+    await context.addInitScript(() => localStorage.setItem("iconoplasm.new-candidate-tab", "free"))
+    const favoriteIds = FAVORITES.slice()
+    let scopeCalls = 0
+    const favoriteOption = (id) => {
+      const slot = /^0-([1-9][0-9]*)$/.exec(id)
+      const label = slot ? slot[1] : id
+      return {
+        vision_id: slot ? `anima-v1-${slot[1]}` : id.toLowerCase(),
+        label,
+        primary_label: label,
+        secondary_label: "",
+        search_text: `${id} ${label}`,
+        emulsion_id: id,
+        emulsion_family_id: id,
+        image_count: 1,
+        live_count: 0,
+        score: 0,
+        vote_h_index: 0,
+        preview_assets: [],
+        canonical_count: 1,
+      }
+    }
+    const api = (pathname, request) => {
+      if (/^\/api\/iconoplasm\/requests\/gene\/[^/]+\/summary$/.test(pathname)) {
+        return { authenticated: true, my_lane_summary: [], gene_lane_summary: [] }
+      }
+      if (pathname === "/api/iconoplasm/emulsion-favorites") {
+        return { favorite_emulsion_ids: favoriteIds }
+      }
+      if (pathname.startsWith("/api/iconoplasm/emulsion-favorites/")) {
+        const id = decodeURIComponent(pathname.split("/").pop())
+        if (request.method() === "PUT" && !favoriteIds.includes(id)) favoriteIds.push(id)
+        if (request.method() === "DELETE") {
+          const at = favoriteIds.indexOf(id)
+          if (at >= 0) favoriteIds.splice(at, 1)
+        }
+        return { ok: true, favorite_emulsion_ids: favoriteIds }
+      }
+      if (pathname === "/api/iconoplasm/requests/options") {
+        if (new URL(request.url()).searchParams.get("scope") === "favorites") {
+          scopeCalls += 1
+          return { request_options: favoriteIds.map(favoriteOption), next_cursor: "" }
+        }
+        return { request_options: OPTIONS, next_cursor: FIRST_CURSOR }
+      }
+      return undefined
+    }
+    await routeProduction(context, origin, api)
+    await routePicker(context, true)
+    await routePortraits(context)
+    const page = await context.newPage()
+    await page.goto(`${HOST}/gene/TP53`)
+    await page.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
+
+    // The picker loads its shared first page once; every initial favourite is
+    // on it, so this open reads no favourite options from the Worker.
+    await openPicker(page)
+    assert.equal(scopeCalls, 0, "the first page already held every favorite")
+    await page.keyboard.press("Escape")
+    await page.waitForSelector(`${DIALOG}:not([open])`, { state: "attached" })
+
+    // Star a style the first page does not hold, as the gene page's portrait
+    // star does, then reopen the picker.
+    const firstPageFamilies = OPTIONS.map((option) => option.emulsion_family_id)
+    const starId = await page.evaluate(
+      ({ favorites, firstPage }) => {
+        const buttons = [...document.querySelectorAll("[data-icono-emulsion-favorite]")]
+        const button = buttons.find((candidate) => {
+          const id = candidate.getAttribute("data-icono-emulsion-favorite")
+          return (
+            id &&
+            candidate.getAttribute("aria-pressed") === "false" &&
+            !favorites.includes(id) &&
+            !firstPage.includes(id)
+          )
+        })
+        return button ? button.getAttribute("data-icono-emulsion-favorite") : ""
+      },
+      { favorites: favoriteIds, firstPage: firstPageFamilies },
+    )
+    assert.ok(starId, "the gene page has no star outside the picker's first page")
+    await page.click(`[data-icono-emulsion-favorite="${starId}"]`)
+    await page.waitForFunction(
+      (id) =>
+        document
+          .querySelector(`[data-icono-emulsion-favorite="${id}"]`)
+          ?.getAttribute("aria-pressed") === "true",
+      starId,
+    )
+
+    await openPicker(page)
+    const label = favoriteOption(starId).label
+    await page.waitForSelector(`[data-icono-request-card='${label}']`, { timeout: 15_000 })
+    const shown = await page.evaluate(() => ({
+      favorites: document
+        .querySelector("[data-icono-request-view='favorites']")
+        ?.textContent.trim(),
+      cards: [...document.querySelectorAll("[data-icono-request-card]")].map((element) =>
+        element.getAttribute("data-icono-request-card"),
+      ),
+    }))
+    assert.equal(shown.favorites, "Favorites 23", "the Favorites count did not include the star")
+    assert.ok(
+      shown.cards.includes(label),
+      `Favorites did not show style ${starId}: ${shown.cards.join(", ")}`,
+    )
+    await page.screenshot({ path: path.join(OUT, "style-picker-star-after-load.png") })
+    await context.close()
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
