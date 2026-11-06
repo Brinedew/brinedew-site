@@ -1,17 +1,18 @@
-// B-818: the one title template for iconoplasm.brinedew.bio. A page is titled
-// "<page> | Iconoplasm"; the home page is the brand page,
-// "Iconoplasm | Mnemonic portraits for 19,000+ human genes", the name the
-// project is known by (the LessWrong post, Google's AI Overview; B-833).
-// The separator is the one the 19k static
-// gene documents already used. Every producer imports this file: the gene
-// documents (scripts/prepare-iconoplasm-edge-assets.mjs), the Quartz pages
+// B-818/B-833: the one title template for iconoplasm.brinedew.bio. A page is
+// titled "<page> | Iconoplasm"; the home page is the brand page,
+// "Iconoplasm | Human genes as anthropomorphic characters", the search phrase
+// the owner uses in the LessWrong introduction (2026-11-06) and the language
+// the failed query used. "Mnemonic portraits" stays in the description and the
+// visible hero tagline. The separator is the one the 19k static gene documents
+// already used. Every producer imports this file: the gene documents
+// (scripts/prepare-iconoplasm-edge-assets.mjs), the Quartz pages
 // (quartz/components/Head.tsx, which also writes og:title and twitter:title),
 // the app's document.title (app.js) and the Worker's gene rewrite. Frontmatter
 // titles of the Iconoplasm pages therefore name the page only, never the site.
 
 export const ICONOPLASM_SITE_NAME = "Iconoplasm"
 export const ICONOPLASM_TITLE_SEPARATOR = " | "
-export const ICONOPLASM_HOME_TITLE = `${ICONOPLASM_SITE_NAME}${ICONOPLASM_TITLE_SEPARATOR}Mnemonic portraits for 19,000+ human genes`
+export const ICONOPLASM_HOME_TITLE = `${ICONOPLASM_SITE_NAME}${ICONOPLASM_TITLE_SEPARATOR}Human genes as anthropomorphic characters`
 
 export function iconoplasmPageTitle(page) {
   const name = String(page ?? "").trim()

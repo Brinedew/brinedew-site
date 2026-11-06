@@ -326,16 +326,17 @@ export default (() => {
       : null
 
     const usesCustomOgImage = ctx.cfg.plugins.emitters.some((e) => e.name === "CustomOgImages")
-    // B-816: Iconoplasm pages unfurl with a real character card instead of the
-    // blog's generic image.
+    // B-816/B-833: Iconoplasm pages unfurl with one stable social card, not a
+    // gene whose canonical portrait can change under the preview cache.
     const siteName = isIconoplasmSite ? "Iconoplasm" : cfg.pageTitle
     const ogImageDefaultPath = isIconoplasmSite
-      ? "https://iconoplasm.brinedew.bio/blot/TP53.webp"
+      ? "https://iconoplasm.brinedew.bio/static/iconoplasm/og/iconoplasm-social-2026-11-06.jpg"
       : `https://${cfg.baseUrl}/static/og-image.png?v=${CACHE_BUST}`
     const ogImageAlt = isIconoplasmSite
-      ? "TP53 drawn as an Iconoplasm character card: a labelled portrait of the gene as a person"
+      ? "TP53, BRCA1 and INS drawn as Iconoplasm anthropomorphic gene characters on a cream lab-card background"
       : description
     const ogImageDefaultExtension = getFileExtension(ogImageDefaultPath)?.slice(1) ?? "png"
+    const ogImageMimeType = ogImageDefaultExtension === "jpg" ? "jpeg" : ogImageDefaultExtension
 
     return (
       <head>
@@ -371,7 +372,7 @@ export default (() => {
             <meta property="og:image" content={ogImageDefaultPath} />
             <meta property="og:image:url" content={ogImageDefaultPath} />
             <meta name="twitter:image" content={ogImageDefaultPath} />
-            <meta property="og:image:type" content={`image/${ogImageDefaultExtension}`} />
+            <meta property="og:image:type" content={`image/${ogImageMimeType}`} />
           </>
         )}
 
