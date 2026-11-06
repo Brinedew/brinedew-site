@@ -3651,6 +3651,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       note: activePanel.note,
       managerUrl: activePanel.managerUrl,
       steps: activePanel.steps,
+      manualInstall: activePanel.manualInstall,
       actions: activePanel.actions || [],
     }
   }
@@ -3891,9 +3892,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // sidebar's Discord Login stays for that. The notes are the docs' and the
   // install card's own words.
   //   Firefox (desktop or Android) and desktop Edge: their add-on store.
-  //   Chrome, Brave and other phone browsers: the install steps under the
-  //     strip, so nothing downloads until the reader presses the download
-  //     button inside them.
+  //   Chrome and Brave: the store listing first; the developer ZIP and its
+  //     steps stay behind the install panel's advanced disclosure.
+  //   Other phone browsers: the install steps under the strip, so nothing
+  //     downloads until the reader presses the download button inside them.
   //   Safari and iPhone: no install path, so what it is and where it works.
   //   The add-on already here: first a sentence saying the page knows it,
   //     then docs step 2's line and the two pages to try it on. Before 2026-10-28 this reader got the
