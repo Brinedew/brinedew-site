@@ -65,7 +65,7 @@ import {
   iconoplasmGenePageTitle,
   iconoplasmPageTitle,
   isIconoplasmGenePageTitle,
-} from "./page-title.js?v=5937348a3d24440c"
+} from "./page-title.js?v=a3e1d196540b97a8"
 globalThis.IconoplasmPublicationReader = iconoplasmPublicationReader
 
 // ARCHITECTURE FENCE [IPD-008]: the domain cookies already carry Iconoplasm

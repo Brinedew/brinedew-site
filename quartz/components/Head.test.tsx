@@ -57,6 +57,9 @@ function renderHead(slug: string, title: string) {
     title: attribute(/<title>([^<]*)<\/title>/),
     ogTitle: attribute(/<meta property="og:title" content="([^"]*)"/),
     twitterTitle: attribute(/<meta name="twitter:title" content="([^"]*)"/),
+    ogImage: attribute(/<meta property="og:image" content="([^"]*)"/),
+    ogImageAlt: attribute(/<meta property="og:image:alt" content="([^"]*)"/),
+    ogImageType: attribute(/<meta property="og:image:type" content="([^"]*)"/),
     headline: jsonLd.headline,
   }
 }
@@ -80,13 +83,21 @@ test("Iconoplasm pages are titled by the one template, everywhere a title appear
     assert.equal(head.twitterTitle, expected, name)
     // 4
     assert.equal(head.headline, page, name)
+    if (isHome) {
+      assert.equal(
+        head.ogImage,
+        "https://iconoplasm.brinedew.bio/static/iconoplasm/og/iconoplasm-social-2026-11-06.jpg",
+      )
+      assert.equal(head.ogImageType, "image/jpeg")
+      assert.match(head.ogImageAlt ?? "", /TP53, BRCA1 and INS/)
+    }
     // 5
     if (!isHome) {
       const heading = readFileSync(file, "utf8").match(/^# (.+)$/m)?.[1]
       assert.equal(heading, page, `${name} h1`)
     }
   }
-  assert.equal(ICONOPLASM_HOME_TITLE, "Iconoplasm | Mnemonic portraits for 19,000+ human genes")
+  assert.equal(ICONOPLASM_HOME_TITLE, "Iconoplasm | Human genes as anthropomorphic characters")
   assert.equal(iconoplasmPageTitle("Privacy Policy"), "Privacy Policy | Iconoplasm")
 })
 
