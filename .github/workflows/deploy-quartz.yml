@@ -62,6 +62,7 @@ jobs:
       - name: Require successful tests for the exact deployed commit
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ICONOPLASM_ALLOW_WORKFLOW_DISPATCH_CI: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: node scripts/wait-for-iconoplasm-release-ci.mjs
 
       - name: Verify the code release against the installed revision

@@ -6,6 +6,10 @@ try {
     repository: process.env.GITHUB_REPOSITORY,
     headSha: process.env.GITHUB_SHA,
     token: process.env.GITHUB_TOKEN,
+    acceptedEvents:
+      process.env.ICONOPLASM_ALLOW_WORKFLOW_DISPATCH_CI === "true"
+        ? ["push", "workflow_dispatch"]
+        : ["push"],
   })
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ci_run_id=${run.id}\n`)
   console.log(`[iconoplasm-release-ci] Build and Test ${run.id} succeeded for ${run.head_sha}`)
