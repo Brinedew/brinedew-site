@@ -3268,6 +3268,37 @@ img-comparison-slider.rendered [slot="second"] {
   padding-top: 0.08rem;
 }
 
+.icono-install-manual {
+  border-top: 1px solid color-mix(in srgb, var(--ui-border) 74%, transparent);
+  padding-top: 0.6rem;
+}
+
+.icono-install-manual > summary {
+  width: fit-content;
+  color: var(--secondary, var(--darkgray));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.icono-install-manual > summary:hover {
+  color: var(--dark);
+}
+
+.icono-install-manual > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.icono-install-manual-content {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  padding-top: 0.65rem;
+}
+
 .icono-install-link {
   text-decoration: none;
 }

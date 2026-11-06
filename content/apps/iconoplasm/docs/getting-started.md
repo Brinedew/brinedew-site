@@ -16,12 +16,12 @@ Steps 1 to 3 happen in your browser, on pages that you already read. Steps 4 to 
 
 ## 1. Install the extension
 
-![[iconoplasm-start-install.webp|The install card on iconoplasm.brinedew.bio, opened in Chrome|416]]
+![[iconoplasm-start-install.webp|Iconoplasm's Chrome Web Store listing in Chrome|416]]
 
 1. Pick your browser.
-2. On Chrome or Brave, click **Download extension file** and follow the five steps under the button.
+2. On Chrome, click **Get Iconoplasm for Chrome**, then **Add to Chrome** and **Add extension** in the [Chrome Web Store](https://chromewebstore.google.com/detail/iconoplasm/hphoofaocpclmdnhknicfpfjleifpppj). On Brave, click **Get Iconoplasm for Brave**, then **Add to Brave** and **Add extension**.
 
-On Firefox or Edge you can install it in one click from the [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/) or [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/iconoplasm/ocfhohjhkflpmaiimgjfobdoogdfpmog) store. It's also available on mobile Firefox.
+On Firefox or Edge you can install it from the [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/) or [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/iconoplasm/ocfhohjhkflpmaiimgjfobdoogdfpmog) store. It's also available on mobile Firefox. The install panel keeps the developer ZIP steps under **Install manually (advanced)**.
 
 ## 2. Read a page as usual
 

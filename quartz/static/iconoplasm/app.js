@@ -135,6 +135,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   // "1" while this browser last saw an image API key on the reader's account,
   // so the Add portraits tabs show at once; the account's answer still decides.
   var ICONO_IMAGE_KEY_HINT_STORAGE_KEY = "iconoplasm.has-image-api-key"
+  var ICONO_EXTENSION_CHROME_LISTING_URL =
+    "https://chromewebstore.google.com/detail/iconoplasm/hphoofaocpclmdnhknicfpfjleifpppj"
   var ICONO_EXTENSION_FIREFOX_LISTING_URL =
     "https://addons.mozilla.org/en-US/firefox/addon/iconoplasm-gene-illustrations/"
   var ICONO_EXTENSION_EDGE_LISTING_URL =
@@ -3351,8 +3353,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         renderHomeInstallCta()
       })
       .catch(function () {
-        // The Chrome and Brave steps say the download link has not loaded, and the
-        // next home render asks again.
+        // The manual Chrome and Brave fallback says the download link has not
+        // loaded, and the next home render asks again.
         iconoInstallState.releaseLoaded = false
       })
   }
@@ -3433,20 +3435,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function buildInstallBrowserPanels(browser, faqUrl) {
     var release = iconoInstallState.release || {}
+    var chromeListingUrl = ICONO_EXTENSION_CHROME_LISTING_URL
     var chromePackageUrl = String(release.chromeDeveloperPackageUrl || "").trim()
     var chromePackageName = chromeDeveloperPackageName(chromePackageUrl)
     var chromePackageBaseName = chromePackageName.replace(/\.zip$/i, "")
-    // The button exists only once the release metadata has named the package.
-    var chromeDownloadStep = chromePackageUrl
+    var chromeManualInstall = chromePackageUrl
       ? {
-          text: "Tap the button above to download the extension zip. Your browser will save it to your Downloads folder:",
+          managerUrl: "chrome://extensions",
           action: {
             href: chromePackageUrl,
             label: "Download extension file",
-            subtle: false,
+            plain: true,
           },
+          steps: [
+            'In your Downloads folder, extract "' + chromePackageName + '".',
+            "In Chrome, open chrome://extensions.",
+            'Turn on the "Developer mode" switch.',
+            'Click "Load unpacked".',
+            'Select the extracted "' +
+              chromePackageBaseName +
+              '" folder, then click "Select Folder".',
+          ],
         }
-      : "The download link has not loaded. Reload this page to get it."
+      : null
     var firefoxListingUrl =
       String(release.firefoxListingUrl || "").trim() || ICONO_EXTENSION_FIREFOX_LISTING_URL
     var edgeListingUrl =
@@ -3455,20 +3466,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       chrome: {
         id: "chrome",
         label: "Chrome",
-        tone: "manual",
+        tone: "store",
         title: "Chrome",
-        note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
-        managerUrl: "chrome://extensions",
+        note: "",
+        managerUrl: "",
         steps: [
-          chromeDownloadStep,
-          'In your Downloads folder, extract "' + chromePackageName + '".',
-          "In Chrome, click the address bar, type chrome://extensions, and press Enter.",
-          'In the top-right corner of chrome://extensions, click the "Developer mode" switch so it is on.',
-          'Click the "Load unpacked" button.',
-          'In the folder picker, select the extracted "' +
-            chromePackageBaseName +
-            '" folder, then click "Select Folder".',
+          {
+            text: "Open the Chrome Web Store page for Iconoplasm:",
+            action: {
+              href: chromeListingUrl,
+              label: "Get Iconoplasm for Chrome",
+              subtle: false,
+            },
+          },
+          'On the store page, click "Add to Chrome", then "Add extension".',
         ],
+        manualInstall: chromeManualInstall,
         actions: [
           {
             href: faqUrl,
@@ -3507,20 +3520,36 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       brave: {
         id: "brave",
         label: "Brave",
-        tone: "manual",
+        tone: "store",
         title: "Brave",
-        note: "Manual installation for the moment. For one-click install, visit this page on Edge or Firefox browsers.",
-        managerUrl: "brave://extensions",
+        note: "",
+        managerUrl: "",
         steps: [
-          chromeDownloadStep,
-          'In your Downloads folder, extract "' + chromePackageName + '".',
-          "In Brave, click the address bar, type brave://extensions, and press Enter.",
-          'In the top-right corner of brave://extensions, click the "Developer mode" switch so it is on.',
-          'Click the "Load unpacked" button.',
-          'In the folder picker, select the extracted "' +
-            chromePackageBaseName +
-            '" folder, then click "Select Folder".',
+          {
+            text: "Open the Chrome Web Store page for Iconoplasm:",
+            action: {
+              href: chromeListingUrl,
+              label: "Get Iconoplasm for Brave",
+              subtle: false,
+            },
+          },
+          'On the store page, click "Add to Brave", then "Add extension".',
         ],
+        manualInstall: chromeManualInstall
+          ? {
+              managerUrl: "brave://extensions",
+              action: chromeManualInstall.action,
+              steps: [
+                'In your Downloads folder, extract "' + chromePackageName + '".',
+                "In Brave, open brave://extensions.",
+                'Turn on the "Developer mode" switch.',
+                'Click "Load unpacked".',
+                'Select the extracted "' +
+                  chromePackageBaseName +
+                  '" folder, then click "Select Folder".',
+              ],
+            }
+          : null,
         actions: [
           {
             href: faqUrl,
@@ -3681,41 +3710,61 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</a>"
       )
     }
-    var stepsHtml = ""
-    for (var i = 0; i < steps.length; i++) {
-      var rawStep = steps[i]
-      var step = String(
-        rawStep && typeof rawStep === "object" ? rawStep.text || "" : rawStep || "",
-      ).trim()
-      if (!step) continue
-      var stepActionHtml =
-        rawStep && typeof rawStep === "object" ? buildInstallActionMarkup(rawStep.action) : ""
-      if (managerUrl && step.indexOf(managerUrl) !== -1) {
-        var escapedUrl = esc(managerUrl)
-        var escapedStep = esc(step)
-        stepsHtml +=
+    function buildInstallStepsMarkup(items, stepsManagerUrl) {
+      var html = ""
+      for (var i = 0; i < items.length; i++) {
+        var rawStep = items[i]
+        var step = String(
+          rawStep && typeof rawStep === "object" ? rawStep.text || "" : rawStep || "",
+        ).trim()
+        if (!step) continue
+        var stepActionHtml =
+          rawStep && typeof rawStep === "object" ? buildInstallActionMarkup(rawStep.action) : ""
+        if (stepsManagerUrl && step.indexOf(stepsManagerUrl) !== -1) {
+          var escapedUrl = esc(stepsManagerUrl)
+          var escapedStep = esc(step)
+          html +=
+            "<li>" +
+            '<span class="icono-install-step-copy">' +
+            escapedStep.replace(
+              escapedUrl,
+              '<code class="icono-install-code">' + escapedUrl + "</code>",
+            ) +
+            (stepActionHtml
+              ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>"
+              : "") +
+            "</span>" +
+            "</li>"
+          continue
+        }
+        html +=
           "<li>" +
           '<span class="icono-install-step-copy">' +
-          escapedStep.replace(
-            escapedUrl,
-            '<code class="icono-install-code">' + escapedUrl + "</code>",
-          ) +
+          esc(step) +
           (stepActionHtml
             ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>"
             : "") +
           "</span>" +
           "</li>"
-        continue
       }
-      stepsHtml +=
-        "<li>" +
-        '<span class="icono-install-step-copy">' +
-        esc(step) +
-        (stepActionHtml
-          ? ' <span class="icono-install-step-action">' + stepActionHtml + "</span>"
-          : "") +
-        "</span>" +
-        "</li>"
+      return html
+    }
+    var stepsHtml = buildInstallStepsMarkup(steps, managerUrl)
+    var manualInstallHtml = ""
+    var manualInstall = model.manualInstall
+    if (manualInstall && manualInstall.action && manualInstall.action.href) {
+      var manualStepsHtml = buildInstallStepsMarkup(
+        Array.isArray(manualInstall.steps) ? manualInstall.steps : [],
+        String(manualInstall.managerUrl || "").trim(),
+      )
+      manualInstallHtml =
+        '<details class="icono-install-manual">' +
+        "<summary>Install manually (advanced)</summary>" +
+        '<div class="icono-install-manual-content">' +
+        buildInstallActionMarkup(manualInstall.action) +
+        (manualStepsHtml ? '<ol class="icono-install-steps">' + manualStepsHtml + "</ol>" : "") +
+        "</div>" +
+        "</details>"
     }
     var actionsHtml = ""
     for (var j = 0; j < actions.length; j++) {
@@ -3766,6 +3815,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       tabNoteHtml +
       primaryActionHtml +
       (stepsHtml ? '<ol class="icono-install-steps">' + stepsHtml + "</ol>" : "") +
+      manualInstallHtml +
       (actionsHtml ? '<div class="icono-install-actions">' + actionsHtml + "</div>" : "") +
       (model.footnote ? '<p class="icono-install-footnote">' + esc(model.footnote) + "</p>" : "") +
       "</div>" +
