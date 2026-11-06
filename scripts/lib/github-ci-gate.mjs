@@ -9,6 +9,7 @@ export async function waitForSuccessfulPushCi({
   headSha,
   token,
   workflow = "ci.yaml",
+  acceptedEvents = ["push"],
   fetchImpl = fetch,
   sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   // Build and Test runs 14 to 16 minutes on main (2026-10-03, with the browser
@@ -20,12 +21,16 @@ export async function waitForSuccessfulPushCi({
   const cleanHeadSha = requireText(headSha, "Git commit SHA")
   const cleanToken = requireText(token, "GitHub Actions token")
   const cleanWorkflow = requireText(workflow, "CI workflow")
+  const cleanAcceptedEvents = [
+    ...new Set(acceptedEvents.map((event) => requireText(event, "CI event"))),
+  ]
+  if (!cleanAcceptedEvents.length) throw new Error("At least one accepted CI event is required")
   const deadline = Date.now() + Math.max(1_000, Number(timeoutMs) || 0)
   const endpoint = new URL(
     `https://api.github.com/repos/${cleanRepository}/actions/workflows/${encodeURIComponent(cleanWorkflow)}/runs`,
   )
   endpoint.searchParams.set("head_sha", cleanHeadSha)
-  endpoint.searchParams.set("event", "push")
+  if (cleanAcceptedEvents.length === 1) endpoint.searchParams.set("event", cleanAcceptedEvents[0])
   endpoint.searchParams.set("per_page", "20")
 
   // One network blip, 5xx or 429 among ~180 polls must not kill a release (the
@@ -70,7 +75,8 @@ export async function waitForSuccessfulPushCi({
     consecutiveTransient = 0
     const payload = await response.json()
     const run = (Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : []).find(
-      (candidate) => candidate?.head_sha === cleanHeadSha && candidate?.event === "push",
+      (candidate) =>
+        candidate?.head_sha === cleanHeadSha && cleanAcceptedEvents.includes(candidate?.event),
     )
     if (run?.status === "completed") {
       if (run.conclusion !== "success") {
