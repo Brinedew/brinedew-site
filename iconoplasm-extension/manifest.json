@@ -3,7 +3,7 @@
   "minimum_chrome_version": "105",
   "name": "Iconoplasm",
   "version": "0.5.11",
-  "description": "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse.",
+  "description": "Iconoplasm is a browser extension that turns every human gene on any web page into an anthropomorphic character.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://iconoplasm.brinedew.bio/*",

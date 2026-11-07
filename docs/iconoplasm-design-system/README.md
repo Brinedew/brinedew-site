@@ -107,7 +107,7 @@ Fonts shipped with the extension and copied into `fonts/`: **IBM Plex Mono** (Re
 **Emoji:** none, ever. **Icons:** almost none — the brand uses *type and the printed grid* as its iconography (see ICONOGRAPHY). 
 
 **Tone examples (verbatim from the codebase):**
-- "Highlights gene symbols on any page with hover cards, portraits, and gene colors. Track your discoveries as you browse."
+- "Iconoplasm is a browser extension that turns every human gene on any web page into an anthropomorphic character."
 - "Iconoplasm gives every human protein-coding gene a unique color identity, then highlights gene symbols automatically as you read the web."
 - "Makes dense biology pages easier to scan." / "Gives repeated genes a visual identity you can learn over time." / "Keeps you from bouncing between the page and a dozen lookup tabs."
 - Field play (insulin card): `FULL NAME insulin` · `FIRST NOTED 1959` *(61 y.o.)* · `MASS ~~kDa~~ 12 kg` · `CATEGORY TRANSMEMBRANE / SOLUBLE` *(female)* — the humor lives in the **handwritten human-trait annotations layered over clinical molecular fields.**
