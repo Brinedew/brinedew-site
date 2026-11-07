@@ -103,8 +103,8 @@
     "crawl-links": {
       "source": "github:quartz-community/crawl-links",
       "resolved": "https://github.com/quartz-community/crawl-links.git",
-      "commit": "43edc6d5182e79bf1b63fed7eb3ba0c7624a1526",
-      "installedAt": "2026-06-03T13:32:35.242Z"
+      "commit": "2673605b9d47a84cc1b0a4a119fe6dfd116b7762",
+      "installedAt": "2026-10-12T09:09:43.656Z"
     },
     "darkmode": {
       "source": "github:quartz-community/darkmode",
