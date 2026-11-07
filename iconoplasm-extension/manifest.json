@@ -3,7 +3,7 @@
   "minimum_chrome_version": "105",
   "name": "Iconoplasm",
   "version": "0.5.11",
-  "description": "Iconoplasm is a browser extension that turns every human gene on any web page into an anthropomorphic character.",
+  "description": "Iconoplasm is a browser extension that shows an anthropomorphic character for every human gene symbol on any web page.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://iconoplasm.brinedew.bio/*",
