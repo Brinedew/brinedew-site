@@ -986,6 +986,7 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   candidate_copy: ["site"],
   admin_ingest: ["workstation"],
   admin_overview: ["site", "workstation"],
+  admin_activity: ["site"],
   admin_coverage: ["site"],
   admin_public_stats_audit: ["workstation"],
   admin_canon_audit: ["workstation"],
