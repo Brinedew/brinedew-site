@@ -740,6 +740,7 @@ const DECLARED_ROUTES = Object.freeze([
   }),
   adminApiContract("admin_ingest", "/ingest", POST),
   adminApiContract("admin_overview", "/overview", GET),
+  adminApiContract("admin_activity", "/activity", GET),
   adminApiContract("admin_coverage", "/coverage", GET),
   adminApiContract("admin_public_stats_audit", "/public-stats/audit", GET),
   adminApiContract("admin_canon_audit", "/canon-audit", GET),

@@ -84,6 +84,9 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   // (admin-gallery-cost.test.js measured 10,880 rows on 20,000 genes). Both
   // scans to the end of the 2026-10-29 copy's 19,400 genes: about 80,000.
   admin_overview: owner({ rows_written: 0, rows_read: 100_000 }),
+  // The activity feed is the owner's own page: it is read in pages of at most
+  // 100 events from newest-first indexes, so it never sheds and never waits.
+  admin_activity: critical(OWN_ACTION),
   admin_coverage: owner(CATALOGUE_READ),
   admin_public_stats_audit: owner(CATALOGUE_READ),
   // B-1188: the gallery's facts for at most 200 named genes, about 30 rows a gene.

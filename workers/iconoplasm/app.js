@@ -33,6 +33,7 @@ import {
 import { batchRouteAdmission, batchRouteSpec } from "./batch-route-prices.js"
 import { matchIconoplasmRouteContract } from "../iconoplasm-route-contract.js"
 import { geneCatalog, portraitAssets } from "./db/schema.js"
+import { listIconoplasmAdminActivity } from "./admin-activity.js"
 import { GeneTextError, listGeneTexts, writeFactoryGeneText } from "./gene-text-write.js"
 import { registerCaretakerRoleRoutes } from "./caretaker-role-routes.js"
 import { registerCaretakerTextRoutes } from "./caretaker-texts.js"
@@ -296,6 +297,11 @@ export function createIconoplasmApp({
       },
       { [BATCH_GATE]: true },
     )
+
+  const requireAdmin = async (c, next) => {
+    if (!(await isAdmin(c.req.raw, c.env))) return c.json({ error: "Unauthorized" }, 403)
+    return next()
+  }
   // Hono's own HTTP answers (a refused bearer token) stay responses. Any other
   // thrown error leaves the app as it is: the Worker's error reporting
   // (withErrorReporting, B-832) sends it to Sentry with its stack, as it did
@@ -366,6 +372,29 @@ export function createIconoplasmApp({
         : {}),
     })
   })
+
+  app.get(
+    "/api/iconoplasm/admin/activity",
+    requireAdmin,
+    shedBatchWork(
+      () => "critical",
+      () => ({ price: { rows_read: 0, rows_written: 0 } }),
+    ),
+    async (c) => {
+      c.header("Cache-Control", "no-store")
+      return c.json({
+        ok: true,
+        ...(await listIconoplasmAdminActivity(c.env, {
+          limit: c.req.query("limit"),
+          before: c.req.query("before"),
+          kinds: c.req.query("kinds"),
+          action: c.req.query("action"),
+          hideAdmins: c.req.query("hide_admins"),
+          hideSystem: c.req.query("hide_system"),
+        })),
+      })
+    },
+  )
 
   /**
    * The factory registers portraits it has already uploaded to the CDN
