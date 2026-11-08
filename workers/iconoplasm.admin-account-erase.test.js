@@ -652,7 +652,9 @@ test("every step's declared weight covers the rows the real schema writes for on
       step.weight >= minimum,
       `${step.id}: weight ${step.weight} is below the ${minimum} rows one changed row writes in ${step.table}`,
     )
-    assert.ok(step.weight <= 12, `${step.id}: weight ${step.weight}`)
+    // 13 instead of 12 since migration 0150's activity index: deleting one
+    // generation request now removes one more index entry.
+    assert.ok(step.weight <= 13, `${step.id}: weight ${step.weight}`)
   }
   assert.ok(ERASURE_MIN_ROW_WRITES >= Math.max(...ERASURE_STEPS.map((step) => step.weight)))
 })
