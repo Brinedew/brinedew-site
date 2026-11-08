@@ -25,7 +25,7 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <button class="tab-btn" id="admin-tab-archive" role="tab" aria-selected="false" aria-controls="panel-archive" tabindex="-1" data-tab="archive">Gallery</button>
       <button class="tab-btn" id="admin-tab-styles" role="tab" aria-selected="false" aria-controls="panel-styles" tabindex="-1" data-tab="styles">Visions</button>
       <button class="tab-btn" id="admin-tab-discord" role="tab" aria-selected="false" aria-controls="panel-discord" tabindex="-1" data-tab="discord">Discord</button>
-      <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Log</button>
+      <button class="tab-btn" id="admin-tab-activity" role="tab" aria-selected="false" aria-controls="panel-activity" tabindex="-1" data-tab="activity">Activity</button>
     </nav>
 
     <!-- ── overview ── -->
@@ -790,24 +790,58 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
       <p class="small" data-discord-switches-status role="status"></p>
     </div>
 
-    <!-- ── log (activity) ── -->
+    <!-- ── activity ── -->
     <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="admin-tab-activity" hidden>
-      <h2>Activity log</h2>
-      <p class="small">Recent changes and admin actions.</p>
-      <div class="log-filters log-filters--spaced-bottom">
-        <button class="toggle-pill active" type="button" data-log-filter="all">All actions</button>
-        <button class="toggle-pill" type="button" data-log-filter="publish">Publish</button>
-        <button class="toggle-pill" type="button" data-log-filter="reject">Reject</button>
-        <button class="toggle-pill" type="button" data-log-filter="rollback">Rollback</button>
-        <button class="toggle-pill" type="button" data-log-filter="unpublish">Unpublish</button>
-        <button class="toggle-pill" type="button" data-log-filter="unstale">Unstale</button>
+      <div class="section-head activity-head">
+        <div>
+          <h2>Activity</h2>
+          <p class="small">What people did on the site, newest first. Admin and automated events are hidden by default so they cannot bury the readers.</p>
+        </div>
+        <button type="button" id="activity-refresh">Refresh</button>
       </div>
-      <div class="controls controls--spaced-bottom">
-        <label>Filter log
-          <input id="activity-filter" type="text" placeholder="publish, reject, TP53..." />
-        </label>
+
+      <div class="activity-controls">
+        <div class="log-filters" id="activity-kinds" role="group" aria-label="Activity type">
+          <button class="toggle-pill active" type="button" data-activity-kind="all" aria-pressed="true">All</button>
+          <button class="toggle-pill" type="button" data-activity-kind="vote" aria-pressed="false">Votes</button>
+          <button class="toggle-pill" type="button" data-activity-kind="comment" aria-pressed="false">Comments</button>
+          <button class="toggle-pill" type="button" data-activity-kind="request" aria-pressed="false">Requests</button>
+          <button class="toggle-pill" type="button" data-activity-kind="caretaker" aria-pressed="false">Caretaker</button>
+          <button class="toggle-pill" type="button" data-activity-kind="artist" aria-pressed="false">Artists</button>
+          <button class="toggle-pill" type="button" data-activity-kind="publish" aria-pressed="false">Publishing</button>
+        </div>
+
+        <div class="log-filters" id="activity-publish-actions" role="group" aria-label="Publishing action" hidden>
+          <button class="toggle-pill active" type="button" data-activity-publish-action="all" aria-pressed="true">All actions</button>
+          <button class="toggle-pill" type="button" data-activity-publish-action="publish" aria-pressed="false">Publish</button>
+          <button class="toggle-pill" type="button" data-activity-publish-action="reject" aria-pressed="false">Reject</button>
+          <button class="toggle-pill" type="button" data-activity-publish-action="rollback" aria-pressed="false">Rollback</button>
+          <button class="toggle-pill" type="button" data-activity-publish-action="unpublish" aria-pressed="false">Unpublish</button>
+          <button class="toggle-pill" type="button" data-activity-publish-action="unstale" aria-pressed="false">Unstale</button>
+        </div>
+
+        <div class="activity-toolbar">
+          <label class="activity-search">Search
+            <input id="activity-search" type="search" placeholder="Person, gene, or action" autocomplete="off" />
+          </label>
+          <label class="activity-toggle">
+            <input id="activity-hide-admins" type="checkbox" checked />
+            <span>Hide admin accounts <span class="mono">brinedew, loweren</span></span>
+          </label>
+          <label class="activity-toggle">
+            <input id="activity-hide-system" type="checkbox" checked />
+            <span>Hide automated activity <span class="mono">drain, vote authority, cron</span></span>
+          </label>
+        </div>
       </div>
-      <div class="activity-feed" id="activity-list"></div>
+
+      <p class="activity-status small" id="activity-status" role="status" aria-live="polite">Open this tab to load activity.</p>
+
+      <div class="activity-list" id="activity-list"></div>
+
+      <div class="activity-more">
+        <button type="button" id="activity-more" hidden>Load older activity</button>
+      </div>
     </div>
 
     <pre class="log" id="action-log">No actions yet.</pre>

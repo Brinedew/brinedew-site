@@ -25,6 +25,19 @@
       ? 12
       : 25
   }
+  function readActivityPreference(name, fallback) {
+    try {
+      var value = window.localStorage.getItem("iconoplasm.admin.activity." + name)
+      return value === null ? fallback : value === "1"
+    } catch (_error) {
+      return fallback
+    }
+  }
+  function saveActivityPreference(name, value) {
+    try {
+      window.localStorage.setItem("iconoplasm.admin.activity." + name, value ? "1" : "0")
+    } catch (_error) {}
+  }
   var state = {
     assets: [],
     overviewSummary: null,
@@ -113,7 +126,19 @@
     costReport: null,
     galleryMode: "live",
     visionSort: { key: "live", dir: "desc" },
-    activityActionFilter: "all",
+    activityKind: "all",
+    activityPublishAction: "all",
+    activityHideAdmins: readActivityPreference("hideAdmins", true),
+    activityHideSystem: readActivityPreference("hideSystem", true),
+    activityQuery: "",
+    activityEvents: [],
+    activityBefore: "",
+    activityHasMore: false,
+    activityLoaded: false,
+    activityLoading: false,
+    activityRequestId: 0,
+    activityPeople: 0,
+    activityError: "",
   }
 
   var els = {
@@ -272,8 +297,14 @@
     visionPageNext: document.getElementById("vision-page-next"),
     visionPageLast: document.getElementById("vision-page-last"),
     stylesNotes: document.getElementById("styles-notes"),
-    activityFilter: document.getElementById("activity-filter"),
     activityList: document.getElementById("activity-list"),
+    activityKinds: document.getElementById("activity-kinds"),
+    activityPublishActions: document.getElementById("activity-publish-actions"),
+    activitySearch: document.getElementById("activity-search"),
+    activityHideAdmins: document.getElementById("activity-hide-admins"),
+    activityHideSystem: document.getElementById("activity-hide-system"),
+    activityStatus: document.getElementById("activity-status"),
+    activityMore: document.getElementById("activity-more"),
     status: document.getElementById("gallery-filter"),
     stale: document.getElementById("gallery-sort"),
     limit: document.getElementById("gallery-limit"),
@@ -430,8 +461,9 @@
       return
     }
     if (tab === "activity") {
-      if (state.overviewSummary) renderActivityFeed()
-      else refreshOverviewSummary()
+      if (state.activityLoaded) renderActivityFeed()
+      else loadActivity()
+      return
     }
   }
 
@@ -783,62 +815,600 @@
     ].join("")
   }
 
-  function activityAccent(action) {
-    var value = String(action || "").toLowerCase()
-    if (value === "publish") return "activity-accent-publish"
-    if (value === "reject") return "activity-accent-reject"
-    if (value === "rollback") return "activity-accent-rollback"
-    if (value === "unpublish") return "activity-accent-unpublish"
-    if (value === "unstale") return "activity-accent-unstale"
-    return ""
+  function activityKindLabel(kind) {
+    var value = String(kind || "")
+    if (value === "vote") return "Vote"
+    if (value === "comment") return "Comment"
+    if (value === "request") return "Request"
+    if (value === "edit") return "Portrait edit"
+    if (value === "caretaker_text") return "Caretaker text"
+    if (value === "caretaker_supervote") return "Caretaker supervote"
+    if (value === "caretaker_request") return "Caretaker request"
+    if (value === "artist") return "Artist"
+    if (value === "publish") return "Publishing"
+    return "Activity"
   }
 
-  function eventMarkup(evt) {
+  function activityKindShort(kind) {
+    var value = String(kind || "")
+    if (value === "vote") return "VOTE"
+    if (value === "comment") return "CMT"
+    if (value === "request") return "REQ"
+    if (value === "edit") return "EDIT"
+    if (value.indexOf("caretaker") === 0) return "CARE"
+    if (value === "artist") return "ART"
+    if (value === "publish") return "PUB"
+    return "ACT"
+  }
+
+  function activityStatusLabel(value) {
+    var text = String(value || "").trim()
+    if (!text) return ""
+    var known = {
+      open: "Open",
+      delivery_pending: "Delivery pending",
+      fulfilled: "Fulfilled",
+      cancelled: "Cancelled",
+      queued: "Queued",
+      running: "Running",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      visible: "Visible",
+      hidden: "Hidden",
+      deleted: "Deleted",
+      pending: "Pending",
+      accepted: "Accepted",
+      rejected: "Rejected",
+      withdrawn: "Withdrawn",
+      void: "Void",
+      expired: "Expired",
+      active: "Active",
+      suspended: "Suspended",
+      ended: "Ended",
+      draft: "Draft",
+      "readers see it": "Readers see it",
+      blocked: "Blocked",
+    }
+    var lower = text.toLowerCase()
+    if (known[lower]) return known[lower]
+    return lower.replaceAll("_", " ").replace(/\b\w/g, function (letter) {
+      return letter.toUpperCase()
+    })
+  }
+
+  function activityAbsolute(value) {
+    var date = new Date(String(value || ""))
+    if (Number.isNaN(date.getTime())) return String(value || "")
+    return (
+      date.toLocaleString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+      }) + " UTC"
+    )
+  }
+
+  function activityClock(value) {
+    var date = new Date(String(value || ""))
+    if (Number.isNaN(date.getTime())) return ""
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "UTC",
+    })
+  }
+
+  function activityDateKey(value) {
+    return String(value || "").slice(0, 10)
+  }
+
+  function activityDateLabel(key) {
+    if (!key) return "Unknown date"
+    var today = new Date().toISOString().slice(0, 10)
+    var yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    var date = new Date(key + "T00:00:00Z")
+    var label = date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    })
+    if (key === today) return "Today · " + label
+    if (key === yesterday) return "Yesterday · " + label
+    return label
+  }
+
+  function activityGeneHtml(gene) {
+    return gene ? ' <span class="activity-gene">' + esc(gene) + "</span>" : ""
+  }
+
+  function activityActorHtml(evt) {
+    return "<strong>" + esc(evt.actor || "Someone") + "</strong>"
+  }
+
+  function activityPublishPhrase(action, geneHtml) {
+    var value = String(action || "")
+    if (value === "publish") return "published a portrait for" + geneHtml
+    if (value === "candidate_added") return "added a portrait candidate to" + geneHtml
+    if (value === "candidate_changed") return "changed the candidate for" + geneHtml
+    if (value === "copy_candidate") return "copied a candidate into" + geneHtml
+    if (value === "edit_candidate") return "edited the candidate for" + geneHtml
+    if (value === "generate_candidate") return "generated a candidate for" + geneHtml
+    if (value === "remove_candidate") return "removed a candidate from" + geneHtml
+    if (value === "gene_blot_materialized") return "drew the blot for" + geneHtml
+    if (value === "gene_card_materialized") return "built the card for" + geneHtml
+    if (value === "manifestation_canonical_changed")
+      return "changed the canonical text for" + geneHtml
+    if (value === "catalog_removed")
+      return geneHtml
+        ? "removed" + geneHtml + " from the catalogue"
+        : "removed a gene from the catalogue"
+    if (value === "catalog_upserted") return "updated" + geneHtml + " in the catalogue"
+    if (value === "rollback") return "rolled back the portrait for" + geneHtml
+    if (value === "unpublish") return "unpublished the portrait for" + geneHtml
+    if (value === "unstale") return "restored the stale portrait for" + geneHtml
+    return "changed the portrait for" + geneHtml
+  }
+
+  function activitySupervotePhrase(action, geneHtml) {
+    var value = String(action || "")
+    if (value === "supervote_set") return "set a caretaker supervote on" + geneHtml
+    if (value === "supervote_moved") return "moved a caretaker supervote on" + geneHtml
+    if (value === "supervote_confirmed") return "confirmed the caretaker supervote on" + geneHtml
+    if (value === "supervote_cleared") return "cleared the caretaker supervote on" + geneHtml
+    if (value === "supervote_asset_invalidated")
+      return "invalidated the caretaker supervote on" + geneHtml
+    if (value === "assignment_projected") return "took over caretaking of" + geneHtml
+    if (value === "assignment_suspended") return "suspended caretaking of" + geneHtml
+    if (value === "assignment_resumed") return "resumed caretaking of" + geneHtml
+    if (value === "assignment_ended") return "ended caretaking of" + geneHtml
+    return "changed caretaking of" + geneHtml
+  }
+
+  function activitySentence(evt) {
+    var actor = activityActorHtml(evt)
+    var gene = activityGeneHtml(evt.gene)
+    var kind = String(evt.kind || "")
+    if (kind === "vote")
+      return (
+        actor + (evt.action === "downvote" ? " downvoted a portrait" : " upvoted a portrait") + gene
+      )
+    if (kind === "comment") return actor + " commented on" + gene
+    if (kind === "request")
+      return (
+        actor +
+        (evt.action === "request_edit"
+          ? " requested an edit of"
+          : " requested a new portrait for") +
+        gene
+      )
+    if (kind === "edit") return actor + " edited a portrait for" + gene
+    if (kind === "caretaker_text") return actor + " saved a caretaker text for" + gene
+    if (kind === "caretaker_supervote")
+      return actor + " " + activitySupervotePhrase(evt.action, gene)
+    if (kind === "caretaker_request") return actor + " asked to take over" + gene
+    if (kind === "artist")
+      return (
+        actor +
+        " suggested blocking artist " +
+        "<strong>" +
+        esc(evt.detail || "unknown") +
+        "</strong>"
+      )
+    if (kind === "publish") return actor + " " + activityPublishPhrase(evt.action, gene)
+    return actor + " " + esc(evt.action || "did something")
+  }
+
+  function activitySubtitle(evt) {
+    var kind = String(evt.kind || "")
+    if (kind === "vote") return evt.vision_id ? "Portrait vote · " + evt.vision_id : "Portrait vote"
+    if (kind === "comment") return evt.detail || activityStatusLabel(evt.status)
+    if (kind === "request")
+      return (
+        "Portrait request · " +
+        (evt.detail === "specific" ? "specific emulsion" : "random") +
+        (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+      )
+    if (kind === "edit")
+      return "Portrait edit" + (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+    if (kind === "caretaker_text")
+      return (
+        "Caretaker text" +
+        (evt.detail ? " · " + evt.detail : "") +
+        (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+      )
+    if (kind === "caretaker_supervote")
+      return "Caretaker supervote" + (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+    if (kind === "caretaker_request")
+      return "Caretaker request" + (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+    if (kind === "artist")
+      return "Artist suggestion" + (evt.status ? " · " + activityStatusLabel(evt.status) : "")
+    if (kind === "publish") return evt.detail || "Publishing"
+    return evt.detail || ""
+  }
+
+  function activityTags(evt) {
+    var tags = ['<span class="activity-chip">' + esc(activityKindLabel(evt.kind)) + "</span>"]
+    if (evt.actor_kind === "admin")
+      tags.push('<span class="activity-chip activity-chip--admin">Admin</span>')
+    if (evt.actor_kind === "system")
+      tags.push('<span class="activity-chip activity-chip--system">Automated</span>')
+    return tags.join("")
+  }
+
+  function activityFacts(evt) {
+    var facts = [["When", activityAbsolute(evt.created_at)]]
+    if (evt.gene) facts.push(["Gene", evt.gene])
+    facts.push(["Kind", activityKindLabel(evt.kind)])
+    if (evt.actor_id) facts.push(["Actor ID", evt.actor_id])
+    if (evt.kind === "vote") facts.push(["Vote", evt.action === "downvote" ? "Downvote" : "Upvote"])
+    if (evt.vision_id) facts.push(["Vision", evt.vision_id])
+    if (evt.asset_sha256) facts.push(["Portrait", shortSha(evt.asset_sha256)])
+    if (evt.status) facts.push(["Status", activityStatusLabel(evt.status)])
+    if (evt.kind === "request" && evt.detail)
+      facts.push(["Mode", evt.detail === "specific" ? "Specific emulsion" : "Random"])
+    if (evt.kind === "caretaker_text" && evt.detail) facts.push(["Text", evt.detail])
+    if (evt.kind === "caretaker_supervote" && evt.detail)
+      facts.push(["Caretaker status", activityStatusLabel(evt.detail)])
+    if (evt.kind === "artist" && evt.detail) facts.push(["Artist", evt.detail])
+    if (evt.kind === "publish" && evt.detail) facts.push(["Reason", evt.detail])
+    return facts
+  }
+
+  function activityDetailMarkup(evt) {
+    var facts = activityFacts(evt)
+      .map(function (fact) {
+        return "<div><dt>" + esc(fact[0]) + "</dt><dd>" + esc(fact[1]) + "</dd></div>"
+      })
+      .join("")
+    var body = evt.body ? '<p class="activity-body">' + esc(evt.body) + "</p>" : ""
+    var actions = []
+    if (evt.gene) {
+      actions.push(
+        '<button type="button" data-activity-gene="' + esc(evt.gene) + '">Open in Gallery</button>',
+      )
+      actions.push(
+        '<a href="/gene/' +
+          encodeURIComponent(evt.gene) +
+          '" target="_blank" rel="noopener">Open gene page</a>',
+      )
+    }
+    return (
+      '<div class="activity-detail">' +
+      '<dl class="activity-facts">' +
+      facts +
+      "</dl>" +
+      body +
+      (actions.length
+        ? '<div class="activity-detail-actions">' + actions.join("") + "</div>"
+        : "") +
+      "</div>"
+    )
+  }
+
+  function activityEventMarkup(evt, openIds) {
+    var avatar = evt.small_url
+      ? '<span class="activity-avatar"><img src="' +
+        esc(evt.small_url) +
+        '" alt="" loading="lazy" width="36" height="36" /></span>'
+      : '<span class="activity-avatar activity-avatar--none" aria-hidden="true">' +
+        esc(activityKindShort(evt.kind)) +
+        "</span>"
     return [
-      '<article class="activity-card">',
-      '<div class="activity-accent ' + activityAccent(evt.action) + '"></div>',
-      '<div class="activity-thumb">',
-      evt.small_url
-        ? '<img src="' +
-          esc(evt.small_url) +
-          '" alt="Event thumbnail" loading="lazy" width="36" height="36" />'
-        : "",
-      "</div>",
-      "<div>",
-      '<div class="activity-title"><strong>' +
-        esc(evt.symbol || "unknown") +
-        "</strong>" +
-        statusPill(evt.action || "event") +
-        "</div>",
-      '<div class="small">' + esc(evt.reason || "") + "</div>",
-      evt.actor ? '<div class="activity-actor">' + esc(evt.actor) + "</div>" : "",
-      "</div>",
-      '<div class="event-meta">' + esc(evt.created_at || "") + "</div>",
+      '<article class="activity-item" data-kind="' + esc(evt.kind) + '">',
+      '<details class="activity-entry" data-event-id="' +
+        esc(evt.id) +
+        '"' +
+        (openIds.has(evt.id) ? " open" : "") +
+        ">",
+      "<summary>",
+      '<time class="activity-time" datetime="' +
+        esc(evt.created_at) +
+        '" title="' +
+        esc(activityAbsolute(evt.created_at)) +
+        '">' +
+        esc(activityClock(evt.created_at)) +
+        "</time>",
+      avatar,
+      '<span class="activity-main">',
+      '<span class="activity-line">' + activitySentence(evt) + "</span>",
+      '<span class="activity-sub">' + esc(activitySubtitle(evt)) + "</span>",
+      "</span>",
+      '<span class="activity-tags">' + activityTags(evt) + "</span>",
+      '<span class="activity-chevron" aria-hidden="true"></span>',
+      "</summary>",
+      activityDetailMarkup(evt),
+      "</details>",
       "</article>",
     ].join("")
   }
 
+  function activityHasFilters() {
+    return Boolean(
+      state.activityKind !== "all" ||
+      state.activityPublishAction !== "all" ||
+      state.activityHideAdmins ||
+      state.activityHideSystem ||
+      state.activityQuery,
+    )
+  }
+
+  function activityEmptyMarkup() {
+    if (state.activityQuery) {
+      return (
+        '<div class="activity-empty"><strong>No loaded activity matches “' +
+        esc(state.activityQuery) +
+        '”.</strong><p class="small">' +
+        (state.activityHasMore
+          ? "Only the newest events are loaded. Load older activity to search further."
+          : "Clear the search to see everything.") +
+        '</p><button type="button" data-activity-clear-search>Clear search</button></div>'
+      )
+    }
+    if (activityHasFilters()) {
+      return (
+        '<div class="activity-empty"><strong>No activity matches these filters.</strong>' +
+        '<p class="small">Admin and automated events are hidden by default so the people stay visible.</p>' +
+        '<button type="button" data-activity-reset>Show all activity</button></div>'
+      )
+    }
+    return (
+      '<div class="activity-empty"><strong>No activity yet.</strong>' +
+      '<p class="small">Votes, comments, portrait requests, caretaker saves and artist suggestions will appear here.</p></div>'
+    )
+  }
+
   function renderActivityFeed() {
     if (state.activeTab !== "activity") return
-    var query = String((els.activityFilter && els.activityFilter.value) || "")
-      .trim()
-      .toLowerCase()
-    var events = (state.recentEvents || []).filter(function (evt) {
-      if (
-        state.activityActionFilter !== "all" &&
-        String(evt.action || "").toLowerCase() !== state.activityActionFilter
-      )
-        return false
+    syncActivityControls()
+    if (!els.activityList) return
+
+    if (!state.activityLoaded && state.activityLoading) {
+      els.activityStatus.textContent = "Loading activity…"
+      els.activityList.innerHTML = Array.from({ length: 5 })
+        .map(function () {
+          return '<div class="activity-skeleton"></div>'
+        })
+        .join("")
+      if (els.activityMore) els.activityMore.hidden = true
+      return
+    }
+
+    if (state.activityError && !state.activityEvents.length) {
+      els.activityStatus.innerHTML = "Activity could not load: " + esc(state.activityError) + " "
+      els.activityList.innerHTML =
+        '<div class="activity-empty"><strong>Activity could not load.</strong>' +
+        '<p class="small">' +
+        esc(state.activityError) +
+        '</p><button type="button" data-activity-retry>Try again</button></div>'
+      if (els.activityMore) els.activityMore.hidden = true
+      return
+    }
+
+    var query = state.activityQuery.trim().toLowerCase()
+    var events = (state.activityEvents || []).filter(function (evt) {
       if (!query) return true
-      return [evt.symbol, evt.action, evt.reason, evt.actor].some(function (value) {
+      return [
+        evt.actor,
+        evt.action,
+        evt.gene,
+        evt.detail,
+        evt.body,
+        evt.kind,
+        activityKindLabel(evt.kind),
+      ].some(function (value) {
         return String(value || "")
           .toLowerCase()
           .includes(query)
       })
     })
+
+    var openIds = new Set()
+    Array.prototype.forEach.call(
+      els.activityList.querySelectorAll("details[open][data-event-id]"),
+      function (node) {
+        openIds.add(node.getAttribute("data-event-id"))
+      },
+    )
+
+    var groups = []
+    var currentKey = ""
+    var currentGroup = null
+    events.forEach(function (evt) {
+      var key = activityDateKey(evt.created_at)
+      if (key !== currentKey) {
+        currentGroup = { key: key, events: [] }
+        groups.push(currentGroup)
+        currentKey = key
+      }
+      currentGroup.events.push(evt)
+    })
+
     els.activityList.innerHTML =
-      events.map(eventMarkup).join("") ||
-      '<article class="activity-card"><div><strong>No matching activity.</strong></div><div></div></article>'
+      groups
+        .map(function (group) {
+          return (
+            '<section class="activity-day" aria-label="' +
+            esc(activityDateLabel(group.key)) +
+            '"><h3>' +
+            esc(activityDateLabel(group.key)) +
+            "</h3>" +
+            group.events
+              .map(function (evt) {
+                return activityEventMarkup(evt, openIds)
+              })
+              .join("") +
+            "</section>"
+          )
+        })
+        .join("") || activityEmptyMarkup()
+
+    var parts = []
+    if (query) {
+      parts.push(
+        events.length +
+          " of " +
+          state.activityEvents.length +
+          " loaded events match “" +
+          query +
+          "”",
+      )
+    } else {
+      parts.push(
+        "Showing " +
+          events.length +
+          " event" +
+          (events.length === 1 ? "" : "s") +
+          (state.activityPeople > 0 ? " · " + state.activityPeople + " people" : ""),
+      )
+    }
+    if (state.activityHideAdmins) parts.push("admin accounts hidden")
+    if (state.activityHideSystem) parts.push("automated activity hidden")
+    if (state.activityError) parts.push("older activity failed to load")
+    if (!state.activityHasMore && events.length) parts.push("end of history")
+    els.activityStatus.textContent = parts.join(" · ")
+
+    if (els.activityMore) {
+      els.activityMore.hidden = !state.activityHasMore
+      els.activityMore.disabled = state.activityLoading
+      els.activityMore.textContent = state.activityLoading
+        ? "Loading older activity…"
+        : state.activityError
+          ? "Retry older activity"
+          : "Load older activity"
+    }
+  }
+
+  function syncActivityControls() {
+    if (els.activityHideAdmins) els.activityHideAdmins.checked = state.activityHideAdmins
+    if (els.activityHideSystem) els.activityHideSystem.checked = state.activityHideSystem
+    if (els.activitySearch && els.activitySearch.value !== state.activityQuery)
+      els.activitySearch.value = state.activityQuery
+    if (els.activityKinds) {
+      els.activityKinds.querySelectorAll("[data-activity-kind]").forEach(function (button) {
+        var selected =
+          String(button.getAttribute("data-activity-kind") || "all") === state.activityKind
+        button.classList.toggle("active", selected)
+        button.setAttribute("aria-pressed", selected ? "true" : "false")
+      })
+    }
+    if (els.activityPublishActions) {
+      els.activityPublishActions.hidden = state.activityKind !== "publish"
+      els.activityPublishActions
+        .querySelectorAll("[data-activity-publish-action]")
+        .forEach(function (button) {
+          var selected =
+            String(button.getAttribute("data-activity-publish-action") || "all") ===
+            state.activityPublishAction
+          button.classList.toggle("active", selected)
+          button.setAttribute("aria-pressed", selected ? "true" : "false")
+        })
+    }
+  }
+
+  function resetActivityFeed() {
+    state.activityEvents = []
+    state.activityBefore = ""
+    state.activityHasMore = false
+    state.activityLoaded = false
+    state.activityError = ""
+  }
+
+  function loadActivity(options) {
+    var append = Boolean(options && options.append)
+    if (state.activityLoading && append) return
+    if (append && !state.activityBefore) return
+    state.activityLoading = true
+    state.activityError = ""
+    var requestId = ++state.activityRequestId
+    if (!append) resetActivityFeed()
+    renderActivityFeed()
+
+    var params = [
+      "limit=50",
+      "kinds=" + encodeURIComponent(state.activityKind),
+      "hide_admins=" + (state.activityHideAdmins ? "1" : "0"),
+      "hide_system=" + (state.activityHideSystem ? "1" : "0"),
+    ]
+    if (state.activityKind === "publish" && state.activityPublishAction !== "all")
+      params.push("action=" + encodeURIComponent(state.activityPublishAction))
+    if (append) params.push("before=" + encodeURIComponent(state.activityBefore))
+
+    apiJson("/activity?" + params.join("&"), { method: "GET" })
+      .then(function (data) {
+        if (requestId !== state.activityRequestId) return
+        var incoming = Array.isArray(data && data.events) ? data.events : []
+        var merged = append ? state.activityEvents.slice() : []
+        var seen = {}
+        merged.forEach(function (evt) {
+          seen[evt.id] = true
+        })
+        incoming.forEach(function (evt) {
+          if (!seen[evt.id]) {
+            merged.push(evt)
+            seen[evt.id] = true
+          }
+        })
+        merged.sort(function (a, b) {
+          if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1
+          return String(b.id).localeCompare(String(a.id))
+        })
+        var people = {}
+        merged.forEach(function (evt) {
+          if (evt.actor_kind === "person") people[evt.actor_id] = true
+        })
+        state.activityEvents = merged
+        state.activityPeople = Object.keys(people).length
+        state.activityBefore = String((data && data.next_before) || "")
+        state.activityHasMore = Boolean(data && data.has_more)
+        state.activityLoaded = true
+      })
+      .catch(function (err) {
+        if (isRequestCanceled(err)) return
+        if (requestId !== state.activityRequestId) return
+        state.activityError = requestErrorMessage(err, "Activity load failed.")
+      })
+      .finally(function () {
+        if (requestId !== state.activityRequestId) return
+        state.activityLoading = false
+        renderActivityFeed()
+      })
+  }
+
+  function setActivityKind(kind) {
+    var value = String(kind || "all")
+    if (value === state.activityKind) return
+    state.activityKind = value
+    state.activityPublishAction = "all"
+    state.activityLoaded = false
+    loadActivity()
+  }
+
+  function setActivityPublishAction(action) {
+    var value = String(action || "all")
+    if (value === state.activityPublishAction) return
+    state.activityPublishAction = value
+    state.activityLoaded = false
+    loadActivity()
+  }
+
+  function resetActivityFilters() {
+    state.activityKind = "all"
+    state.activityPublishAction = "all"
+    state.activityHideAdmins = false
+    state.activityHideSystem = false
+    state.activityQuery = ""
+    saveActivityPreference("hideAdmins", false)
+    saveActivityPreference("hideSystem", false)
+    state.activityLoaded = false
+    loadActivity()
   }
 
   function requestKindLabel(kind) {
@@ -4567,7 +5137,6 @@
       state.overviewAttention = Array.isArray(data.attention) ? data.attention : []
       state.recentEvents = Array.isArray(data.recent_events) ? data.recent_events : []
       renderOverviewSummary()
-      renderActivityFeed()
     } catch (err) {
       if (isRequestCanceled(err)) return
       var message = requestErrorMessage(err, "Overview load failed.")
@@ -10464,16 +11033,51 @@
         return
       }
 
-      var logFilterBtn = ev.target.closest("[data-log-filter]")
-      if (logFilterBtn) {
-        state.activityActionFilter = String(logFilterBtn.getAttribute("data-log-filter") || "all")
-        document.querySelectorAll("[data-log-filter]").forEach(function (btn) {
-          btn.classList.toggle(
-            "active",
-            String(btn.getAttribute("data-log-filter") || "all") === state.activityActionFilter,
-          )
-        })
+      var activityKindBtn = ev.target.closest("[data-activity-kind]")
+      if (activityKindBtn) {
+        setActivityKind(String(activityKindBtn.getAttribute("data-activity-kind") || "all"))
+        return
+      }
+
+      var activityPublishBtn = ev.target.closest("[data-activity-publish-action]")
+      if (activityPublishBtn) {
+        setActivityPublishAction(
+          String(activityPublishBtn.getAttribute("data-activity-publish-action") || "all"),
+        )
+        return
+      }
+
+      if (ev.target.closest("#activity-refresh")) {
+        loadActivity()
+        return
+      }
+
+      if (ev.target.closest("#activity-more")) {
+        loadActivity({ append: true })
+        return
+      }
+
+      if (ev.target.closest("[data-activity-retry]")) {
+        loadActivity()
+        return
+      }
+
+      if (ev.target.closest("[data-activity-reset]")) {
+        resetActivityFilters()
+        return
+      }
+
+      if (ev.target.closest("[data-activity-clear-search]")) {
+        state.activityQuery = ""
+        if (els.activitySearch) els.activitySearch.value = ""
         renderActivityFeed()
+        return
+      }
+
+      var activityGeneBtn = ev.target.closest("[data-activity-gene]")
+      if (activityGeneBtn) {
+        ev.preventDefault()
+        openVisionGene(String(activityGeneBtn.getAttribute("data-activity-gene") || ""))
         return
       }
     })
@@ -10719,8 +11323,27 @@
         flipVisionStats({})
       })
     }
-    if (els.activityFilter) {
-      els.activityFilter.addEventListener("input", renderActivityFeed)
+    if (els.activitySearch) {
+      els.activitySearch.addEventListener("input", function () {
+        state.activityQuery = String(els.activitySearch.value || "")
+        renderActivityFeed()
+      })
+    }
+    if (els.activityHideAdmins) {
+      els.activityHideAdmins.addEventListener("change", function () {
+        state.activityHideAdmins = Boolean(els.activityHideAdmins.checked)
+        saveActivityPreference("hideAdmins", state.activityHideAdmins)
+        state.activityLoaded = false
+        loadActivity()
+      })
+    }
+    if (els.activityHideSystem) {
+      els.activityHideSystem.addEventListener("change", function () {
+        state.activityHideSystem = Boolean(els.activityHideSystem.checked)
+        saveActivityPreference("hideSystem", state.activityHideSystem)
+        state.activityLoaded = false
+        loadActivity()
+      })
     }
     if (els.requestsList) {
       els.requestsList.innerHTML =
