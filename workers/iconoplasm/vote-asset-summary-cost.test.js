@@ -15,12 +15,14 @@ import { createOperationCostD1Meter } from "../test-helpers/d1-row-meter.js"
 import { sweepDeferredElections } from "./votes/deferred-elections.js"
 import { ADMISSION_COST, priceOf } from "./batch-admission.js"
 
-// The most rows one admitted vote-budget unit writes, measured below (6 on
-// 2026-10-30, a first vote on a portrait; 21 before B-1188 and B-1147).
-const VOTE_WORST_CASE_ROWS_WRITTEN = 6
+// The most rows one admitted vote-budget unit writes, measured below (7 on
+// 2026-11-08 with the admin activity index on updated_at; 6 before that index,
+// 21 before B-1188 and B-1147).
+const VOTE_WORST_CASE_ROWS_WRITTEN = 7
 // The most rows one image-edit publish writes (25 inherited votes and the
-// publisher's own, one import), measured below (81 on 2026-10-30).
-const IMAGE_EDIT_PUBLISH_WORST_CASE_ROWS_WRITTEN = 100
+// publisher's own, one import), measured below (107 on 2026-11-08 with the
+// admin activity index on each vote's updated_at; 81 before that index).
+const IMAGE_EDIT_PUBLISH_WORST_CASE_ROWS_WRITTEN = 110
 
 const require = createRequire(import.meta.url)
 const { Miniflare, convertV4MiniflareOptions } = createRequire(
@@ -111,8 +113,8 @@ test(
         }),
       )
       assert.equal(first.result.changed, true)
-      // The allowance row, the vote row and its user index entry, a new
-      // summary row, the version row. The worst case of
+      // The allowance row, the vote row with its user and activity index
+      // entries, a new summary row, the version row. The worst case of
       // VOTE_WORST_CASE_ROWS_WRITTEN below.
       assert.ok(first.actual.rows_read <= 6, JSON.stringify(first.actual))
       assert.ok(
@@ -296,7 +298,7 @@ test(
 // 2. A shed day's election spends more than marking its gene due.
 // 3. The sweep spends more than the price it is admitted by.
 test(
-  "a vote writes 4 to 6 rows, a winner change 9, a shed election 1, and a sweep its price",
+  "a vote writes 4 to 7 rows, a winner change 9, a shed election 1, and a sweep its price",
   { timeout: 120000 },
   async (t) => {
     const runtime = new Miniflare(
@@ -377,14 +379,15 @@ test(
         (metered) =>
           electAndProjectGeneWinner(metered, symbol, { actor: "vote_authority", ...options })
 
-      // Each vote: the allowance row, the vote row and the gene's version; a
-      // first vote on a portrait also creates its summary row.
+      // Each vote: the allowance row, the vote row with its user and activity
+      // index entries, the gene's version; a first vote on a portrait also
+      // creates its summary row.
       const fresh = await measure("first vote on a portrait", vote("TP53", 4, 1))
-      assert.ok(fresh.actual.rows_written <= 6, JSON.stringify(fresh.actual))
+      assert.ok(fresh.actual.rows_written <= 7, JSON.stringify(fresh.actual))
       const again = await measure("vote on a portrait with votes", vote("TP53", 4, 1, "reader2"))
-      assert.ok(again.actual.rows_written <= 5, JSON.stringify(again.actual))
+      assert.ok(again.actual.rows_written <= 6, JSON.stringify(again.actual))
       const flip = await measure("flipped vote", vote("TP53", 4, -1))
-      assert.ok(flip.actual.rows_written <= 4, JSON.stringify(flip.actual))
+      assert.ok(flip.actual.rows_written <= 5, JSON.stringify(flip.actual))
 
       const steady = await measure("election, winner held", elect("TP53"))
       assert.equal(steady.result.projection.code, "UNCHANGED")

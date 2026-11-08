@@ -122,7 +122,7 @@ export const ERASURE_STEPS = Object.freeze(
           WHERE quarantine.request_row_id = icono_generation_requests.id
         )`,
       whereBinds: [U],
-      weight: 12,
+      weight: 13,
       covers: [],
     },
     {
@@ -236,7 +236,7 @@ export const ERASURE_STEPS = Object.freeze(
       key: "rowid",
       where: "user_id = ? AND published_at IS NULL",
       whereBinds: [U],
-      weight: 5,
+      weight: 6,
       covers: [],
     },
     {
@@ -311,7 +311,7 @@ export const ERASURE_STEPS = Object.freeze(
       setBinds: [A],
       where: "user_id = ?",
       whereBinds: [U],
-      weight: 5,
+      weight: 6,
       covers: ["icono_image_votes.user_id"],
     },
     {
@@ -451,7 +451,7 @@ export const ERASURE_STEPS = Object.freeze(
       key: "rowid",
       where: "requester_account_id = ?",
       whereBinds: [A],
-      weight: 5,
+      weight: 6,
       covers: ["icono_caretaker_gene_requests.requester_account_id"],
     },
     {
@@ -463,7 +463,7 @@ export const ERASURE_STEPS = Object.freeze(
       where: "holder_account_id = ?",
       whereBinds: [A],
       scan: true,
-      weight: 5,
+      weight: 6,
       covers: ["icono_caretaker_gene_requests.holder_account_id"],
     },
     {
