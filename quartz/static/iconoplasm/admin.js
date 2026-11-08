@@ -11329,6 +11329,22 @@
         renderActivityFeed()
       })
     }
+    if (els.activityList) {
+      els.activityList.addEventListener(
+        "error",
+        function (ev) {
+          var img = ev.target
+          if (!img || img.tagName !== "IMG") return
+          var avatar = img.closest(".activity-avatar")
+          if (!avatar) return
+          var item = img.closest(".activity-item")
+          avatar.classList.add("activity-avatar--none")
+          avatar.setAttribute("aria-hidden", "true")
+          avatar.textContent = activityKindShort(item ? item.getAttribute("data-kind") : "")
+        },
+        true,
+      )
+    }
     if (els.activityHideAdmins) {
       els.activityHideAdmins.addEventListener("change", function () {
         state.activityHideAdmins = Boolean(els.activityHideAdmins.checked)
