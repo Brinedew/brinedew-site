@@ -1,4 +1,7 @@
 export const DELIVERY_RECONCILIATION_BATCH_SIZE = 50
+const DELIVERY_FAILED_NOTE =
+  "The Discord message could not be delivered; the portrait is published and available on the gene page."
+const DELIVERY_FAILED_AFTER_MS = 24 * 60 * 60 * 1000
 
 // Two bounded ranges use the existing (status, created_at, id) index; splitting
 // equal timestamps avoids SQLite scanning the entire equal-time prefix. Inspect
@@ -39,6 +42,39 @@ export async function reconcileDeliveryBacklog(db) {
       ? { created_at: rows.at(-1).created_at, request_id: rows.at(-1).id }
       : { created_at: "", request_id: 0 }
   const statements = []
+  let abandonedIds = []
+  if (rows.length) {
+    const ids = rows.map((row) => row.id)
+    const receipt = await db
+      .prepare(
+        `SELECT request_id,
+           MAX(CASE WHEN discord_status = 'sent' THEN 1 ELSE 0 END) AS any_sent,
+           MAX(CASE WHEN discord_status IN (
+             'pending', 'sending', 'retry', 'unknown', 'suppressed_not_test_recipient'
+           ) THEN 1 ELSE 0 END) AS any_open,
+           MAX(CASE WHEN discord_status = 'failed' THEN 1 ELSE 0 END) AS any_failed,
+           MAX(COALESCE(discord_last_attempt_at, created_at)) AS last_attempt
+         FROM icono_request_notifications
+         WHERE request_id IN (${ids.map(() => "?").join(",")})
+         GROUP BY request_id`,
+      )
+      .bind(...ids)
+      .all()
+    const cutoff = Date.now() - DELIVERY_FAILED_AFTER_MS
+    abandonedIds = (receipt.results || [])
+      .filter(
+        (state) =>
+          Number(state.any_failed) === 1 &&
+          Number(state.any_open) === 0 &&
+          Number(state.any_sent) === 0,
+      )
+      .filter((state) => {
+        const lastAttempt = Date.parse(String(state.last_attempt || ""))
+        return Number.isFinite(lastAttempt) && lastAttempt <= cutoff
+      })
+      .map((state) => Number(state.request_id))
+      .filter((id) => Number.isSafeInteger(id) && id > 0)
+  }
   // NOT INDEXED still permits INTEGER PRIMARY KEY lookup. Without it SQLite
   // can choose the status index and scan the whole backlog before checking IDs.
   if (rows.length)
@@ -55,6 +91,30 @@ export async function reconcileDeliveryBacklog(db) {
         )
         .bind(...rows.map((row) => row.id)),
     )
+  // A permanently failed Discord DM (a closed inbox) is delivery debt, not a
+  // reading failure. After a day, close the request truthfully: the portrait is
+  // published, the failed notification stays as the record, and a later
+  // workstation resend can still move it to retry and deliver it.
+  let abandonedStatementIndex = -1
+  if (abandonedIds.length) {
+    abandonedStatementIndex = statements.length
+    statements.push(
+      db
+        .prepare(
+          `UPDATE icono_generation_requests NOT INDEXED
+     SET status = 'fulfilled', updated_at = CURRENT_TIMESTAMP,
+         fulfilled_at = COALESCE(fulfilled_at, CURRENT_TIMESTAMP),
+         fulfillment_note = CASE
+           WHEN TRIM(COALESCE(fulfillment_note, '')) = '' THEN ?
+           ELSE fulfillment_note
+         END
+     WHERE id IN (${abandonedIds.map(() => "?").join(",")})
+       AND status = 'delivery_pending'
+     RETURNING id`,
+        )
+        .bind(DELIVERY_FAILED_NOTE, ...abandonedIds),
+    )
+  }
   if (cursor.created_at !== next.created_at || cursor.request_id !== next.request_id)
     statements.push(
       db
@@ -70,6 +130,8 @@ export async function reconcileDeliveryBacklog(db) {
   return {
     ok: true,
     finalized: rows.length ? results[0].results.length : 0,
+    delivered_unnotified:
+      abandonedStatementIndex >= 0 ? results[abandonedStatementIndex].results.length : 0,
     considered: rows.length,
     pending_request_ids: [],
   }
