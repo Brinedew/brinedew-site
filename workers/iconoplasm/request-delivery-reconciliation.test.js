@@ -154,3 +154,95 @@ test(
     }
   },
 )
+
+async function migratedDatabase(t) {
+  const require = createRequire(import.meta.url)
+  const { Miniflare, convertV4MiniflareOptions } = createRequire(
+    require.resolve("wrangler/package.json"),
+  )("miniflare")
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: true,
+      script: "export default {fetch(){return new Response('test')}}",
+      compatibilityDate: "2026-08-01",
+      d1Databases: ["DB"],
+    }),
+  )
+  const schema = new DatabaseSync(":memory:")
+  const db = await runtime.getD1Database("DB")
+  const directory = new URL("../../migrations-iconoplasm/", import.meta.url)
+  for (const file of readdirSync(directory)
+    .filter((name) => name.endsWith(".sql"))
+    .sort())
+    schema.exec(readFileSync(new URL(file, directory), "utf8"))
+  const definitions = schema
+    .prepare(
+      "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+    )
+    .all()
+  for (let i = 0; i < definitions.length; i += 20)
+    await db.batch(definitions.slice(i, i + 20).map(({ sql }) => db.prepare(sql)))
+  for (const { name } of schema
+    .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .all())
+    for (const row of schema.prepare(`SELECT * FROM "${name}"`).all()) {
+      const columns = Object.keys(row)
+      await db
+        .prepare(
+          `INSERT INTO "${name}" (${columns.map((column) => `"${column}"`).join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+        )
+        .bind(...Object.values(row))
+        .run()
+    }
+  schema.close()
+  t.after(() => runtime.dispose())
+  return db
+}
+
+test(
+  "a permanently failed Discord DM closes after a day while retryable and fresh failures stay open",
+  { timeout: 60000 },
+  async (t) => {
+    const db = await migratedDatabase(t)
+    await db
+      .prepare(
+        `INSERT INTO icono_generation_requests(
+           id,gene_symbol,requester_user_id,status,created_at,fulfilled_asset_sha256,fulfilled_at
+         ) VALUES
+           (1,'G1','reader','delivery_pending',datetime('now','-2 days'),printf('%064x',1),datetime('now','-2 days')),
+           (2,'G1','reader','delivery_pending',datetime('now','-2 days'),printf('%064x',1),datetime('now','-2 days')),
+           (3,'G1','reader','delivery_pending',datetime('now','-2 days'),printf('%064x',1),datetime('now','-2 days')),
+           (4,'G1','reader','delivery_pending',datetime('now','-2 days'),printf('%064x',1),datetime('now','-2 days'))`,
+      )
+      .run()
+    await db
+      .prepare(
+        `INSERT INTO icono_request_notifications(
+           notification_key,request_id,requester_user_id,gene_symbol,discord_status,
+           fulfilled_asset_sha256,fulfillment_publication_id,discord_last_attempt_at
+         ) VALUES
+           ('n1',1,'reader','G1','failed',printf('%064x',1),'g1',datetime('now','-2 days')),
+           ('n2',2,'reader','G1','failed',printf('%064x',1),'g2',datetime('now','-1 hour')),
+           ('n3',3,'reader','G1','retry',printf('%064x',1),'g3',datetime('now','-2 days')),
+           ('n4',4,'reader','G1','sent',printf('%064x',1),'g4',datetime('now','-2 days'))`,
+      )
+      .run()
+
+    const result = await reconcileDeliveryBacklog(db)
+
+    assert.equal(result.finalized, 1)
+    assert.equal(result.delivered_unnotified, 1)
+    const rows = await db
+      .prepare("SELECT id,status,fulfillment_note FROM icono_generation_requests ORDER BY id")
+      .all()
+    assert.equal(rows.results[0].status, "fulfilled")
+    assert.match(rows.results[0].fulfillment_note, /could not be delivered/)
+    assert.equal(rows.results[1].status, "delivery_pending")
+    assert.equal(rows.results[2].status, "delivery_pending")
+    assert.equal(rows.results[3].status, "fulfilled")
+    const failed = await db
+      .prepare("SELECT discord_status FROM icono_request_notifications WHERE id=1")
+      .first()
+    assert.equal(failed.discord_status, "failed")
+  },
+)
