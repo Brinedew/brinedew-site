@@ -2952,6 +2952,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var missingTooltipOriginWarnings = Object.create(null)
 
   function resolveHomeLayout() {
+    // Mobile has one supported review surface: the swipeable lit-archival dossier.
+    // A synced desktop masonry setting must not route phones around the wiring that
+    // makes MISFIT/FIT swiping possible.
+    if (isMobileLabelReviewEnabled()) return HOME_LAYOUT_DEFAULT
     var settings = readIconoplasmSettings()
     return (
       String((settings && settings.homeLayout) || HOME_LAYOUT_DEFAULT).trim() || HOME_LAYOUT_DEFAULT
@@ -2976,6 +2980,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function effectiveHomeGridLayout(layout, cardVariant) {
+    if (isMobileLabelReviewEnabled()) return HOME_LAYOUT_DEFAULT
     var resolvedCardVariant = cardVariant || resolveCardVariant()
     if (isImageOnlyCardVariant(resolvedCardVariant)) return "image-only-masonry"
     return layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
@@ -5058,6 +5063,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function resetMobileLabelCardState(card) {
     if (!card) return
+    window.clearTimeout(card.__iconoMobileSwipeSuppressTimer)
+    card.__iconoMobileSwipeSuppressTimer = null
+    card.__iconoMobileSwipeSuppressClick = false
     // Breakpoint exit must restore the canonical specimen footer before desktop
     // geometry is measured. Leaving the mobile-relocated node in the dossier
     // makes the portrait consume the full rail and clips every spectral readout.
@@ -5440,6 +5448,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
     }
 
+    // A drag that starts on a vote button, the dossier tab or a link is still a swipe.
+    // Only the click the browser synthesises after that drag is swallowed; the vote
+    // button's own programmatic click is untrusted and must pass through.
+    function suppressSwipeClick() {
+      card.__iconoMobileSwipeSuppressClick = true
+      window.clearTimeout(card.__iconoMobileSwipeSuppressTimer)
+      card.__iconoMobileSwipeSuppressTimer = window.setTimeout(function () {
+        card.__iconoMobileSwipeSuppressTimer = null
+        card.__iconoMobileSwipeSuppressClick = false
+      }, 400)
+    }
+
+    card.addEventListener(
+      "click",
+      function (event) {
+        if (!card.__iconoMobileSwipeSuppressClick || !event.isTrusted) return
+        card.__iconoMobileSwipeSuppressClick = false
+        event.preventDefault()
+        event.stopPropagation()
+      },
+      true,
+    )
+
     card.addEventListener("click", function (event) {
       if (
         event.target &&
@@ -5487,17 +5518,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (card.getAttribute("data-icono-mobile-expanded") === "true") return
       if (event.pointerType === "mouse") return
       if (event.button != null && event.button !== 0) return
+      window.clearTimeout(card.__iconoMobileSwipeSuppressTimer)
+      card.__iconoMobileSwipeSuppressTimer = null
+      card.__iconoMobileSwipeSuppressClick = false
       var target = event.target
-      if (
-        target &&
-        target.closest &&
-        target.closest(
-          "[data-icono-label-mobile-toggle], [data-icono-vote-box], [data-icono-nav], a",
-        )
-      ) {
-        return
+      // Touch pointers are implicitly captured to the element the finger landed on,
+      // so pointermove still reaches this card from a link, the tab or a vote button.
+      // Capturing to the card here would retarget the following click away from the
+      // control the reader tapped.
+      var startedOnControl =
+        target && target.closest
+          ? target.closest(
+              "[data-icono-label-mobile-toggle], [data-icono-vote-box], [data-icono-brick-vote-box], [data-icono-gene-vote-box], a, button",
+            )
+          : null
+      if (!startedOnControl && typeof card.setPointerCapture === "function") {
+        try {
+          card.setPointerCapture(event.pointerId)
+        } catch (_error) {}
       }
-      if (typeof card.setPointerCapture === "function") card.setPointerCapture(event.pointerId)
       gesture.pointerId = event.pointerId
       gesture.startX = event.clientX
       gesture.startY = event.clientY
@@ -5507,11 +5546,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       card.removeAttribute("data-icono-mobile-swipe-dir")
     })
 
+    // Safari has no Chrome-style directional railing: a slightly diagonal horizontal
+    // swipe is handed to the page scroller and the pointer sequence is cancelled.
+    // Claiming the move with a non-passive touchmove keeps the swipe alive on iOS.
+    function claimHorizontalTouch(event) {
+      if (gesture.pointerId == null || gesture.locked) return
+      if (event.touches && event.touches.length !== 1) return
+      var touch = event.touches && event.touches[0]
+      if (!touch) return
+      var dx = touch.clientX - gesture.startX
+      var dy = touch.clientY - gesture.startY
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+      if (Math.abs(dy) > Math.abs(dx) * 1.15) return
+      if (event.cancelable) event.preventDefault()
+    }
+
+    card.addEventListener("touchmove", claimHorizontalTouch, { passive: false })
+
     card.addEventListener("pointermove", function (event) {
       if (gesture.pointerId !== event.pointerId) return
       var dx = event.clientX - gesture.startX
       var dy = event.clientY - gesture.startY
-      updateMobileLabelSwipeDirection(card, dx)
       if (!gesture.dragging) {
         if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
         if (Math.abs(dy) > Math.abs(dx) * 1.15) {
@@ -5522,6 +5577,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         gesture.dragging = true
       }
       if (gesture.locked) return
+      updateMobileLabelSwipeDirection(card, dx)
       gesture.dx = dx
       card.setAttribute("data-icono-mobile-swiping", "true")
       card.style.setProperty("--icono-label-mobile-swipe-offset", dx + "px")
@@ -5534,7 +5590,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         typeof card.releasePointerCapture === "function" &&
         card.hasPointerCapture(event.pointerId)
       ) {
-        card.releasePointerCapture(event.pointerId)
+        try {
+          card.releasePointerCapture(event.pointerId)
+        } catch (_error) {}
       }
       if (!gesture.dragging) {
         resetGesture()
@@ -5544,11 +5602,27 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var direction = gesture.dx > 0 ? 1 : -1
       if (Math.abs(gesture.dx) >= threshold) commitMobileLabelSwipe(card, direction)
       else clearMobileLabelSwipeState(card)
+      suppressSwipeClick()
+      resetGesture()
+    }
+
+    function cancelPointer(event) {
+      if (gesture.pointerId !== event.pointerId) return
+      if (
+        typeof card.releasePointerCapture === "function" &&
+        card.hasPointerCapture(event.pointerId)
+      ) {
+        try {
+          card.releasePointerCapture(event.pointerId)
+        } catch (_error) {}
+      }
+      // The browser took the gesture back (a scroll on Safari). Never vote on a
+      // gesture the reader did not finish.
       resetGesture()
     }
 
     card.addEventListener("pointerup", finishPointer)
-    card.addEventListener("pointercancel", finishPointer)
+    card.addEventListener("pointercancel", cancelPointer)
   }
 
   function wireMobileLabelCards(cards) {
