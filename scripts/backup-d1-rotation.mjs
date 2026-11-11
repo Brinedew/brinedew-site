@@ -150,21 +150,30 @@ export async function exportD1Database({
       const names = columns.map((c) => c.name)
       let fetched = 0
       let cursor = null
+      let pageLimit = pageSize
       for (;;) {
         let rows
-        if (withoutRowid) {
-          const keys = pk.map((c) => quote(c.name)).join(", ")
-          const where = cursor ? `WHERE (${keys}) > (${pk.map(() => "?").join(", ")})` : ""
-          rows = await remote(
-            `SELECT * FROM ${quote(table.name)} ${where} ORDER BY ${keys} LIMIT ?`,
-            [...(cursor || []), pageSize],
-          )
-        } else {
-          rows = await remote(
-            `SELECT rowid AS __bk_rowid, * FROM ${quote(table.name)}
-             WHERE rowid > ? ORDER BY rowid LIMIT ?`,
-            [cursor ?? Number.MIN_SAFE_INTEGER, pageSize],
-          )
+        try {
+          if (withoutRowid) {
+            const keys = pk.map((c) => quote(c.name)).join(", ")
+            const where = cursor ? `WHERE (${keys}) > (${pk.map(() => "?").join(", ")})` : ""
+            rows = await remote(
+              `SELECT * FROM ${quote(table.name)} ${where} ORDER BY ${keys} LIMIT ?`,
+              [...(cursor || []), pageLimit],
+            )
+          } else {
+            rows = await remote(
+              `SELECT rowid AS __bk_rowid, * FROM ${quote(table.name)}
+               WHERE rowid > ? ORDER BY rowid LIMIT ?`,
+              [cursor ?? Number.MIN_SAFE_INTEGER, pageLimit],
+            )
+          }
+        } catch (error) {
+          if (pageLimit > 25 && /maximum response size limit/i.test(error.message)) {
+            pageLimit = Math.max(25, Math.floor(pageLimit / 2))
+            continue
+          }
+          throw error
         }
         if (!rows.length) break
         const insertColumns = withoutRowid || rowidAlias ? names : ["rowid", ...names]
@@ -182,7 +191,7 @@ export async function exportD1Database({
         fetched += rows.length
         const last = rows[rows.length - 1]
         cursor = withoutRowid ? pk.map((c) => last[c.name]) : last.__bk_rowid
-        if (rows.length < pageSize) break
+        if (rows.length < pageLimit) break
       }
       counts[table.name] = fetched
     }

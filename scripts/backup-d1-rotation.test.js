@@ -218,3 +218,22 @@ test("8: retention drops dumps older than 30 days but keeps the newest two", () 
   pruneBackups(dir, { now, keepDays: 30, keepNewest: 2 })
   assert.deepEqual(readdirSync(dir).sort(), ["c.sqlite.gz", "d.sqlite.gz"])
 })
+
+test("12: a 50 MB response error halves the page size and retries", async () => {
+  const remote = fakeRemote(SCHEMA)
+  seed(remote)
+  const limited = async (sql, params = []) => {
+    const limit = params[params.length - 1]
+    if (limit > 25)
+      throw new Error(
+        "D1_BACKUP_HTTP_400 D1 query result exceeded the maximum response size limit of 50 MB",
+      )
+    return remote.query(sql, params)
+  }
+  const dir = mkdtempSync(path.join(tmpdir(), "d1bk-"))
+  const out = path.join(dir, "x.sqlite")
+  const report = await exportD1Database({ query: limited, outFile: out, pageSize: 200 })
+  assert.equal(report.tables.genes, 25)
+  assert.equal(report.tables.votes, 13)
+  assert.equal(report.integrity, "ok")
+})

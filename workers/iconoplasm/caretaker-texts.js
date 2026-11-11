@@ -25,6 +25,10 @@ import {
   requireStrictSameOriginMutation,
   safeErrorResponse,
 } from "./caretaker/manifestation-authority-http-security.js"
+import {
+  readCaretakerSaveCooldown,
+  reserveCaretakerSaveSlot,
+} from "./caretaker/caretaker-save-cooldown.js"
 import { readCandidateSources } from "./caretaker/manifestation-candidate-sources.js"
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
 import { taggerizerDisabled } from "./caretaker/taggerizer.js"
@@ -193,17 +197,18 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
   if (!assignment) return { enabled: false }
   const steward = assignment.status === "active"
   const page = decodeCursor(cursor)
-  const [factory, lineRows, pageRows, count, current] = await Promise.all([
-    first(
-      db,
-      `SELECT text_id, version, text_sha256, tags, fields_json, readers_see, updated_at
+  const [factory, lineRows, pageRows, count, current, saveCooldown, saveThrottle] =
+    await Promise.all([
+      first(
+        db,
+        `SELECT text_id, version, text_sha256, tags, fields_json, readers_see, updated_at
          FROM icono_gene_texts WHERE gene_symbol = ?`,
-      symbol,
-    ),
-    // Each line with its newest version, which holds the line's state.
-    all(
-      db,
-      `SELECT v.line_id, v.account_id, v.caretaker_assignment_id, v.version_id AS head_id,
+        symbol,
+      ),
+      // Each line with its newest version, which holds the line's state.
+      all(
+        db,
+        `SELECT v.line_id, v.account_id, v.caretaker_assignment_id, v.version_id AS head_id,
               v.readers_see, v.withdrawn_at,
               (SELECT MIN(f.created_at) FROM icono_caretaker_text_versions f
                 WHERE f.line_id = v.line_id) AS created_at
@@ -212,28 +217,39 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
           AND v.version = (SELECT MAX(m.version) FROM icono_caretaker_text_versions m
                             WHERE m.line_id = v.line_id)
         ORDER BY created_at, v.line_id`,
-      symbol,
-    ),
-    all(
-      db,
-      `SELECT ${VERSION_COLUMNS} FROM icono_caretaker_text_versions
+        symbol,
+      ),
+      all(
+        db,
+        `SELECT ${VERSION_COLUMNS} FROM icono_caretaker_text_versions
         WHERE gene_symbol = ?
           AND (? IS NULL OR created_at < ? OR (created_at = ? AND version_id < ?))
         ORDER BY created_at DESC, version_id DESC
         LIMIT ${HISTORY_PAGE + 1}`,
-      symbol,
-      page?.c ?? null,
-      page?.c ?? null,
-      page?.c ?? null,
-      page?.v ?? null,
-    ),
-    first(
-      db,
-      `SELECT COUNT(*) AS total FROM icono_caretaker_text_versions WHERE gene_symbol = ?`,
-      symbol,
-    ),
-    readGeneText(db, symbol),
-  ])
+        symbol,
+        page?.c ?? null,
+        page?.c ?? null,
+        page?.c ?? null,
+        page?.v ?? null,
+      ),
+      first(
+        db,
+        `SELECT COUNT(*) AS total FROM icono_caretaker_text_versions WHERE gene_symbol = ?`,
+        symbol,
+      ),
+      readGeneText(db, symbol),
+      readCaretakerSaveCooldown(env),
+      first(
+        db,
+        "SELECT last_save_at FROM icono_caretaker_save_throttle WHERE account_id = ?",
+        accountId,
+      ),
+    ])
+  const nextSaveMs = Date.parse(saveThrottle?.last_save_at || "") + saveCooldown.seconds * 1000
+  const nextSaveAt =
+    saveCooldown.seconds > 0 && Number.isFinite(nextSaveMs) && nextSaveMs > Date.now()
+      ? new Date(nextSaveMs).toISOString()
+      : null
   const shown = pageRows.slice(0, HISTORY_PAGE)
   const canonicalId = current?.text_id || ""
   const currentRole = (line) =>
@@ -323,6 +339,10 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
   return {
     schema_version: 1,
     enabled: true,
+    // B-1190: the panel waits for next_save_at instead of sending a save the
+    // cooldown would refuse. Both are the account's own times, not another's.
+    save_cooldown_seconds: saveCooldown.seconds,
+    next_save_at: nextSaveAt,
     gene: {
       gene_id: gene.gene_id,
       symbol: gene.canonical_symbol,
@@ -462,6 +482,9 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     }
   }
   const versionId = await versionIdFor(accountId, commandId)
+  // B-1190: read the cooldown before the replay so a retried save also tells the
+  // panel how long a new save would wait.
+  const cooldown = await readCaretakerSaveCooldown(env)
   const saved = await first(
     db,
     `SELECT line_id FROM icono_caretaker_text_versions WHERE version_id = ?`,
@@ -474,7 +497,27 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
       replayed: true,
       manifestation_revision_id: versionId,
       manifestation_id: saved.line_id,
+      save_cooldown_seconds: cooldown.seconds,
     }
+  // B-1190: one save per account per cooldown. The replay above is answered
+  // before this, so an autosave retried with the same command ID still lands.
+  const at = new Date().toISOString()
+  const nextSaveAt =
+    cooldown.seconds > 0 ? new Date(Date.parse(at) + cooldown.seconds * 1000).toISOString() : null
+  const refusal = await reserveCaretakerSaveSlot(db, {
+    accountId,
+    at,
+    seconds: cooldown.seconds,
+  })
+  if (refusal) {
+    const error = authorityError(
+      "CARETAKER_SAVE_COOLDOWN",
+      `Saving too quickly. Your text is safe; it will be saved in ${refusal.retry_after_seconds} second${refusal.retry_after_seconds === 1 ? "" : "s"}.`,
+      429,
+    )
+    error.retryAfterSeconds = refusal.retry_after_seconds
+    throw error
+  }
   // The role's latest line, unless it was withdrawn: new writing after a
   // withdrawal starts a line of its own.
   const latest = await first(
@@ -486,7 +529,6 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     assignment.caretaker_assignment_id,
   )
   const textSha256 = await sha256Hex(prose.bytes)
-  const at = new Date().toISOString()
   // B-1160: the panel saves at every pause into the role's working copy, the
   // newest version, overwritten in place. History keeps a version only where it
   // matters, so a save starts a new one when the working copy is sealed (see
@@ -507,6 +549,8 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
         manifestation_revision_id: latest.version_id,
         manifestation_id: latest.line_id,
         gene,
+        save_cooldown_seconds: cooldown.seconds,
+        next_save_at: nextSaveAt,
       }
   }
   const lineId = latest && !latest.withdrawn_at ? latest.line_id : newLineId()
@@ -554,7 +598,14 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
         .bind(versionId, gene.canonical_symbol),
     )
   await runWrite(db, statements)
-  return { ok: true, manifestation_revision_id: versionId, manifestation_id: lineId, gene }
+  return {
+    ok: true,
+    manifestation_revision_id: versionId,
+    manifestation_id: lineId,
+    gene,
+    save_cooldown_seconds: cooldown.seconds,
+    next_save_at: nextSaveAt,
+  }
 }
 
 // B-1160: is the role's newest version still its working copy? It stays open

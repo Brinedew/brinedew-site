@@ -8,6 +8,7 @@
 import * as z from "zod/mini"
 
 import { deliverPendingCaretakerGeneRequestNotifications } from "../iconoplasm-caretaker-comment-notifications.js"
+import { createCaretakerAccountAgePolicy } from "./caretaker/caretaker-account-age-gate.js"
 import { createCaretakerSwitchPolicy } from "./caretaker/caretaker-switch-cooldown.js"
 import { authorityError } from "./caretaker/manifestation-authority-contract.js"
 import {
@@ -118,6 +119,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
           accountId,
           now: now(),
           switchPolicy: createCaretakerSwitchPolicy(c.env),
+          accountAgePolicy: createCaretakerAccountAgePolicy(c.env),
           session,
         }),
       )
@@ -134,6 +136,7 @@ export function registerCaretakerRoleRoutes(app, { caretakerSession, settleGene 
         body,
         now: now(),
         switchPolicy: createCaretakerSwitchPolicy(c.env),
+        accountAgePolicy: createCaretakerAccountAgePolicy(c.env),
         session,
       })
       await settle(c, republish)

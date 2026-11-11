@@ -200,7 +200,10 @@ export async function readClaimAvailability(db, input) {
 
 // The same, with the two open roles it read: the gene's and the account's. The
 // gene page's request button (B-1137) starts from them.
-export async function readClaimContext(db, { geneLocator, accountId, now, switchPolicy, session }) {
+export async function readClaimContext(
+  db,
+  { geneLocator, accountId, now, switchPolicy, session, accountAgePolicy },
+) {
   const gene = await resolveGene(db, geneLocator)
   const [geneRole, accountRole] = await Promise.all([
     openRoleOfGene(db, gene.canonical_symbol),
@@ -223,9 +226,23 @@ export async function readClaimContext(db, { geneLocator, accountId, now, switch
   let reason = null
   if (geneRole) reason = geneRole.account_id === accountId ? "already_caretaking" : "gene_taken"
   else if (accountRole && !switchFrom) reason = "account_already_caretaking"
+  // B-1190: the emergency account-age gate, when the admin turned it on. It is
+  // checked before the switch cooldown so a too-new account is told the truth.
+  let ageWait = null
+  if (reason == null && typeof accountAgePolicy === "function") {
+    const gate = await accountAgePolicy({ accountId, now })
+    if (gate?.eligible_at && Date.parse(gate.eligible_at) > Date.parse(now)) {
+      reason = "account_too_new"
+      ageWait = {
+        available_at: gate.eligible_at,
+        cooldown_seconds: Math.max(1, Number(gate.min_days) || 1) * 24 * 60 * 60,
+      }
+    }
+  }
   const cooldown =
     reason == null ? await switchCooldown(db, switchPolicy, session, accountId, now) : null
   if (cooldown) reason = "switch_cooldown"
+  const wait = cooldown || ageWait
   const availability = {
     enabled: true,
     gene: { gene_id: gene.gene_id, canonical_symbol: gene.canonical_symbol },
@@ -236,9 +253,7 @@ export async function readClaimContext(db, { geneLocator, accountId, now, switch
       switch_from: switchFrom,
       // B-1027: the page shows the cooldown on the button itself, with its timer and
       // how much of the wait has passed, instead of hiding the button.
-      ...(cooldown
-        ? { available_at: cooldown.available_at, cooldown_seconds: cooldown.cooldown_seconds }
-        : {}),
+      ...(wait ? { available_at: wait.available_at, cooldown_seconds: wait.cooldown_seconds } : {}),
       gene_revision: 0,
       entitlement_policy_version: CARETAKER_ENTITLEMENT_POLICY_VERSION,
       terms: publicTerms(caretakerTerms()),
@@ -292,7 +307,10 @@ export function requireCurrentTerms(body) {
 // now (the old role ends as "caretaker_switched_gene" in the same batch). The
 // partial unique indexes refuse a second open role for the gene or the person,
 // so a race or a stale page ends in 409 and nothing half-written.
-export async function claimGene(db, { geneLocator, accountId, body, now, switchPolicy, session }) {
+export async function claimGene(
+  db,
+  { geneLocator, accountId, body, now, switchPolicy, session, accountAgePolicy },
+) {
   requireCurrentTerms(body)
   const commandId = readCommandId(body)
   const roleId = await roleIdFor(accountId, commandId)
@@ -318,8 +336,21 @@ export async function claimGene(db, { geneLocator, accountId, body, now, switchP
     now,
     switchPolicy,
     session,
+    accountAgePolicy,
   })
   const { claim, gene } = availability
+  if (claim.reason === "account_too_new") {
+    const refusal = authorityError(
+      "CARETAKER_ACCOUNT_TOO_NEW",
+      `This account is too new to become a caretaker. Try again after ${String(claim.available_at || "").slice(0, 10)}.`,
+      403,
+    )
+    refusal.retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((Date.parse(claim.available_at) - Date.parse(now)) / 1000),
+    )
+    throw refusal
+  }
   if (claim.reason === "switch_cooldown") {
     const refusal = authorityError(
       "CARETAKER_SWITCH_COOLDOWN",

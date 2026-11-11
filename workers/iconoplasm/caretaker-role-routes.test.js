@@ -19,7 +19,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
+import { accountsDatabase, iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
 import { caretakerTerms, CARETAKER_ENTITLEMENT_POLICY_VERSION } from "./caretaker-roles.js"
 import { canonicalManifestationFieldsJson } from "./caretaker/manifestation-tags-payload.js"
@@ -447,4 +447,45 @@ test("8: the kill switch and a spent Workers AI allowance answer sentences with 
   )
   assert.equal(response.body.retry_after_seconds, 12 * 3600 + 5)
   assert.equal(response.headers.get("retry-after"), String(12 * 3600 + 5))
+})
+
+test("9: the emergency account-age gate keeps a new account from claiming, and is off by default", async (t) => {
+  const accounts = await accountsDatabase()
+  t.after(() => accounts.database.close())
+  const newAccount = `acct_${"a".repeat(32)}`
+  const createdAt = Date.parse(NOW) - 24 * 60 * 60 * 1000
+  accounts.database
+    .prepare(
+      `INSERT INTO brinedew_accounts (account_id, status, created_at, updated_at)
+       VALUES (?, 'active', ?, ?)`,
+    )
+    .run(newAccount, createdAt, createdAt)
+  const kv = {
+    map: new Map([
+      ["iconoplasm:caretaker-account-age-gate:v1", JSON.stringify({ enabled: true, min_days: 7 })],
+    ]),
+    async get(key) {
+      const raw = this.map.get(key)
+      return raw == null ? null : JSON.parse(raw)
+    },
+    async put(key, value) {
+      this.map.set(key, String(value))
+    },
+  }
+  const h = harness(t, { env: { KV: kv, DB: accounts } })
+  const availability = await h.call("GET", "MFNG/claim", null, { as: newAccount })
+  assert.equal(availability.body.claim.available, false)
+  assert.equal(availability.body.claim.reason, "account_too_new")
+  assert.equal(
+    availability.body.claim.available_at,
+    new Date(createdAt + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  )
+  const refused = await h.claim("MFNG", "claim_new_account_0001", { as: newAccount })
+  assert.equal(refused.status, 403)
+  assert.equal(refused.body.error.code, "CARETAKER_ACCOUNT_TOO_NEW")
+  accounts.database
+    .prepare("UPDATE brinedew_accounts SET created_at = ? WHERE account_id = ?")
+    .run(Date.parse(NOW) - 8 * 24 * 60 * 60 * 1000, newAccount)
+  const allowed = await h.claim("MFNG", "claim_new_account_0002", { as: newAccount })
+  assert.equal(allowed.status, 200)
 })

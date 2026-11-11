@@ -71,6 +71,22 @@ export const ICONOPLASM_ADMIN_HTML = `<!doctype html>
           <button type="submit" class="secondary" data-caretaker-cooldown-save>Save</button>
           <span class="small" data-caretaker-cooldown-status role="status"></span>
         </form>
+        <form class="caretaker-admin__cooldown" data-caretaker-save-cooldown>
+          <label for="caretaker-save-cooldown-seconds">Autosave cooldown</label>
+          <input id="caretaker-save-cooldown-seconds" type="number" min="0" max="3600" step="1" inputmode="numeric" required data-caretaker-save-cooldown-seconds />
+          <span>seconds</span>
+          <button type="submit" class="secondary" data-caretaker-save-cooldown-save>Save</button>
+          <span class="small" data-caretaker-save-cooldown-status role="status"></span>
+        </form>
+        <form class="caretaker-admin__cooldown" data-caretaker-account-age-gate>
+          <label><input type="checkbox" data-caretaker-account-age-enabled /> Require an account age before claiming</label>
+          <label for="caretaker-account-age-days">Minimum age</label>
+          <input id="caretaker-account-age-days" type="number" min="1" max="3650" step="1" inputmode="numeric" required data-caretaker-account-age-days />
+          <span>days</span>
+          <button type="submit" class="secondary" data-caretaker-account-age-save>Save</button>
+          <span class="small" data-caretaker-account-age-status role="status"></span>
+        </form>
+        <p class="small">The account-age gate is off by default. Turn it on during an abuse wave: new accounts cannot claim a gene until they are old enough. It applies to every account alike.</p>
 
         <section class="caretaker-admin__registry" aria-labelledby="caretaker-registry-heading">
           <div class="section-head">
