@@ -152,6 +152,14 @@ import {
   readCaretakerSwitchCooldown,
   writeCaretakerSwitchCooldown,
 } from "./iconoplasm/caretaker/caretaker-switch-cooldown.js"
+import {
+  readCaretakerSaveCooldown,
+  writeCaretakerSaveCooldown,
+} from "./iconoplasm/caretaker/caretaker-save-cooldown.js"
+import {
+  readCaretakerAccountAgeGate,
+  writeCaretakerAccountAgeGate,
+} from "./iconoplasm/caretaker/caretaker-account-age-gate.js"
 import { authorityError } from "./iconoplasm/caretaker/manifestation-authority-contract.js"
 import {
   DISCORD_SWITCHES,
@@ -18930,6 +18938,67 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         })
         return done(
           saved.ok ? "admin_caretaker_switch_cooldown" : "admin_caretaker_switch_cooldown_400",
+          json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+        )
+      }
+    }
+
+    // B-1190: the caretaker autosave cooldown (seconds), owned by
+    // workers/iconoplasm/caretaker/caretaker-save-cooldown.js.
+    if (path === "/api/iconoplasm/admin/caretaker-save-cooldown") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_caretaker_save_cooldown_403", json({ error: "Unauthorized" }, 403))
+      if (request.method === "GET" || request.method === "HEAD") {
+        return done(
+          "admin_caretaker_save_cooldown",
+          json(await readCaretakerSaveCooldown(env), 200, { "Cache-Control": "no-store" }),
+        )
+      }
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_caretaker_save_cooldown_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const sessionUser = await iconoplasmSessionUser(request, env)
+        const saved = await writeCaretakerSaveCooldown(env, {
+          seconds: p?.seconds,
+          updatedBy: sessionUser?.user_id || "admin-token",
+        })
+        return done(
+          saved.ok ? "admin_caretaker_save_cooldown" : "admin_caretaker_save_cooldown_400",
+          json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
+        )
+      }
+    }
+
+    // B-1190: the emergency account-age gate for claiming (off by default),
+    // owned by workers/iconoplasm/caretaker/caretaker-account-age-gate.js.
+    if (path === "/api/iconoplasm/admin/caretaker-account-age-gate") {
+      if (!(await isIconoplasmAdmin(request, env)))
+        return done("admin_caretaker_account_age_gate_403", json({ error: "Unauthorized" }, 403))
+      if (request.method === "GET" || request.method === "HEAD") {
+        return done(
+          "admin_caretaker_account_age_gate",
+          json(await readCaretakerAccountAgeGate(env), 200, { "Cache-Control": "no-store" }),
+        )
+      }
+      if (request.method === "POST") {
+        let p
+        try {
+          p = await request.json()
+        } catch {
+          return done("admin_caretaker_account_age_gate_400", json({ error: "Invalid JSON" }, 400))
+        }
+        const sessionUser = await iconoplasmSessionUser(request, env)
+        const saved = await writeCaretakerAccountAgeGate(env, {
+          enabled: p?.enabled,
+          minDays: p?.min_days,
+          updatedBy: sessionUser?.user_id || "admin-token",
+        })
+        return done(
+          saved.ok ? "admin_caretaker_account_age_gate" : "admin_caretaker_account_age_gate_400",
           json(saved, saved.ok ? 200 : 400, { "Cache-Control": "no-store" }),
         )
       }

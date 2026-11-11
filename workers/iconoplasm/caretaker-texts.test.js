@@ -4,6 +4,7 @@ import test from "node:test"
 import { iconoplasmDatabase } from "../test-helpers/account-erasure-fixture.js"
 import { createIconoplasmApp } from "./app.js"
 import { withdrawCaretakerTextStatements } from "./caretaker-texts.js"
+import { CARETAKER_SAVE_COOLDOWN_KV_KEY } from "./caretaker/caretaker-save-cooldown.js"
 import { writeFactoryGeneText } from "./gene-text-write.js"
 import { fakeBunnyStorage } from "../test-helpers/fake-bunny-storage.js"
 import { readGeneText, withProse } from "../lib/iconoplasm-gene-text.js"
@@ -54,7 +55,7 @@ function assignment(db, { id, accountId, status = "active" }) {
     .run(id, accountId, status, NOW, accountId, NOW, ended ? NOW : null, ended ? "test" : null, NOW)
 }
 
-async function harness(t, { accounts = null } = {}) {
+async function harness(t, { accounts = null, saveCooldownSeconds = 0 } = {}) {
   const db = iconoplasmDatabase()
   db.raw = db.database
   // Every statement the routes prepare, for the read-cost checks.
@@ -66,8 +67,23 @@ async function harness(t, { accounts = null } = {}) {
   }
   t.after(() => db.database.close())
   const published = []
+  // The admin's save cooldown is a KV setting; the harness starts it at 0 so a
+  // test that is not about the cooldown never waits.
+  const kv = {
+    map: new Map([
+      [CARETAKER_SAVE_COOLDOWN_KV_KEY, JSON.stringify({ seconds: saveCooldownSeconds })],
+    ]),
+    async get(key) {
+      const raw = this.map.get(key)
+      return raw == null ? null : JSON.parse(raw)
+    },
+    async put(key, value) {
+      this.map.set(key, String(value))
+    },
+  }
   const env = {
     ICONOPLASM_DB: db,
+    KV: kv,
     ...(accounts ? { DB: accounts } : {}),
     ...fakeBunnyStorage(t).env,
   }
@@ -151,7 +167,7 @@ async function harness(t, { accounts = null } = {}) {
       `UPDATE icono_caretaker_text_versions
           SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '-1 day')`,
     )
-  return { db, env, call, save, versions, chosen, published, nextDay }
+  return { db, env, call, save, versions, chosen, published, nextDay, kv }
 }
 
 test("1, 2, 3: saves number within one line, a retry saves once, and only a save with Tags is drawn from", async (t) => {
@@ -536,4 +552,35 @@ test("13: the caretaker's own day counts, not UTC's", async (t) => {
   assert.equal(h.versions().length, 1, "same day in Bangkok")
   await h.save("A UTC reader's day.", { extra: { utc_offset_minutes: 0 } })
   assert.equal(h.versions().length, 2, "a new day in UTC")
+})
+
+test("14: a save inside the autosave cooldown is refused without losing the text, and a retry still answers", async (t) => {
+  const h = await harness(t, { saveCooldownSeconds: 60 })
+  const commandId = "cmd_cooldown_000000000000000000000001"
+  const first = await h.save("Version one.", { commandId })
+  assert.equal(first.status, 200)
+  assert.equal(first.body.save_cooldown_seconds, 60)
+  assert.ok(Date.parse(first.body.next_save_at) > Date.now(), "the panel is told when to save")
+  const dossier = await h.call("GET", "")
+  assert.equal(dossier.body.save_cooldown_seconds, 60)
+  assert.equal(dossier.body.next_save_at, first.body.next_save_at)
+  const replay = await h.save("Version one.", { commandId })
+  assert.equal(replay.status, 200)
+  assert.equal(replay.body.replayed, true, "a retried autosave is answered, not throttled")
+  const refused = await h.save("Version two.", {
+    commandId: "cmd_cooldown_000000000000000000000002",
+  })
+  assert.equal(refused.status, 429)
+  assert.equal(refused.body.error.code, "CARETAKER_SAVE_COOLDOWN")
+  assert.ok(refused.body.retry_after_seconds >= 1 && refused.body.retry_after_seconds <= 60)
+  assert.equal(h.versions().length, 1, "a refused save writes no version")
+  assert.equal(h.versions()[0].text, "Version one.", "the refused text never landed")
+  h.db.raw
+    .prepare("UPDATE icono_caretaker_save_throttle SET last_save_at = ?")
+    .run("2020-01-01T00:00:00.000Z")
+  const later = await h.save("Version two.", {
+    commandId: "cmd_cooldown_000000000000000000000002",
+  })
+  assert.equal(later.status, 200)
+  assert.equal(h.versions()[0].text, "Version two.", "the same working copy took the later save")
 })

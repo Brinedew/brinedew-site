@@ -76,6 +76,8 @@ export const BATCH_ROUTE_PRICES = Object.freeze({
   admin_diagnostic_matrix: owner(SMALL_WRITE),
   admin_image_edit_prompts: critical(OWN_ACTION),
   admin_caretaker_switch_cooldown: critical(OWN_ACTION),
+  admin_caretaker_save_cooldown: critical(OWN_ACTION),
+  admin_caretaker_account_age_gate: critical(OWN_ACTION),
   admin_discord_switches: critical(OWN_ACTION),
   admin_ingest: perItem("items", BATCH_PRICES.portrait),
   // B-1188: a few hundred rows while no card is broken and every gene has a

@@ -334,7 +334,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       document.head.appendChild(stylesheet)
     }
     caretakerPanelPromise = Promise.all([
-      import("./caretaker-manifestations.js?v=adee4da610e8d36d"),
+      import("./caretaker-manifestations.js?v=b25d6837e4cfea03"),
       import("./caretaker-supervote.js?v=dbf04f8b3796f4cc"),
       import("./caretaker-candidate-sources.js?v=073c623f3c0abe35"),
     ]).then(function (modules) {
@@ -694,6 +694,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return
         }
         if (payload?.enabled && payload.claim?.reason === "switch_cooldown") {
+          renderCaretakerClaimCooldown(target, symbol, payload.claim, function () {
+            target.removeAttribute("data-icono-caretaker-claim-signature")
+            hydrateCaretakerClaimAction(container, genePayload)
+          })
+          return
+        }
+        // B-1190: the emergency account-age gate. Show the date the account may
+        // claim instead of hiding the button with no explanation.
+        if (payload?.enabled && payload.claim?.reason === "account_too_new") {
           renderCaretakerClaimCooldown(target, symbol, payload.claim, function () {
             target.removeAttribute("data-icono-caretaker-claim-signature")
             hydrateCaretakerClaimAction(container, genePayload)

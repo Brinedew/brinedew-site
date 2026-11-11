@@ -936,3 +936,58 @@ test("the Tags helper buttons are hidden when the server switches it off (B-995)
   assert.ok(host.querySelector("[data-icono-caretaker-prose]"))
   assert.equal(host.querySelector("[data-icono-caretaker-taggerize]") === null, true)
 })
+
+test("a save refused by the autosave cooldown keeps the draft and retries with the newest text (B-1190)", async () => {
+  let attempts = 0
+  const bodies = []
+  const { host, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    bodies.push(JSON.parse(init.body))
+    attempts += 1
+    if (attempts === 1)
+      throw Object.assign(new Error("Saving too quickly"), {
+        status: 429,
+        payload: { retry_after_seconds: 1 },
+      })
+    return { manifestation_revision_id: "revision_3" }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(autosaveState(), "Saving…", "a throttled save is a wait, not a failure")
+  // Typing during the wait must not be lost, and must not force a second write:
+  // the refused snapshot is dropped and the retry sends the newest text.
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Fourth body, typed during the wait"
+  prose.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1150))
+  assert.equal(attempts, 2)
+  assert.equal(bodies[1].prose, "Fourth body, typed during the wait")
+  assert.equal(autosaveState(), "Saved")
+})
+
+test("the editor waits for the save cooldown and sends the newest text once (B-1190)", async () => {
+  let attempts = 0
+  const bodies = []
+  const { host, Event, autosaveState } = await mountForAutosave(async (path, init) => {
+    if ((init?.method || "GET") === "GET") return dossier()
+    bodies.push(JSON.parse(init.body))
+    attempts += 1
+    return {
+      manifestation_revision_id: "revision_3",
+      save_cooldown_seconds: 2,
+      next_save_at: new Date(Date.now() + 2000).toISOString(),
+    }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1250))
+  assert.equal(attempts, 1, "the first save lands")
+  assert.equal(autosaveState(), "Saved")
+  const prose = host.querySelector("[data-icono-caretaker-prose]")
+  prose.value = "Fourth body, typed after the first save"
+  prose.dispatchEvent(new Event("input", { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 1300))
+  assert.equal(attempts, 1, "inside the cooldown the editor waits instead of sending")
+  assert.equal(autosaveState(), "Saving…")
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  assert.equal(attempts, 2)
+  assert.equal(bodies[1].prose, "Fourth body, typed after the first save")
+  assert.equal(autosaveState(), "Saved")
+})

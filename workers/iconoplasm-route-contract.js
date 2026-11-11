@@ -679,6 +679,18 @@ const DECLARED_ROUTES = Object.freeze([
     auth: "administrator",
   }),
   iconoplasmApiContract({
+    id: "admin_caretaker_save_cooldown",
+    match: exact("/api/iconoplasm/admin/caretaker-save-cooldown"),
+    methods: GET_POST,
+    auth: "administrator",
+  }),
+  iconoplasmApiContract({
+    id: "admin_caretaker_account_age_gate",
+    match: exact("/api/iconoplasm/admin/caretaker-account-age-gate"),
+    methods: GET_POST,
+    auth: "administrator",
+  }),
+  iconoplasmApiContract({
     id: "admin_discord_switches",
     match: exact("/api/iconoplasm/admin/discord-switches"),
     methods: GET_POST,
@@ -974,6 +986,8 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   admin_diagnostic_matrix: ["site"],
   admin_image_edit_prompts: ["site"],
   admin_caretaker_switch_cooldown: ["site"],
+  admin_caretaker_save_cooldown: ["site"],
+  admin_caretaker_account_age_gate: ["site"],
   admin_discord_switches: ["site"],
   image_edit_providers: ["site"],
   user_emulsion: ["site"],

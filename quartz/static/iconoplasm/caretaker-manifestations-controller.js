@@ -247,6 +247,11 @@ export function createCaretakerManifestationPanel({
 
   async function reload(state, options) {
     const payload = await request(state, "", { method: "GET" })
+    // B-1190: when the server will accept the next save. The panel waits for
+    // that time instead of sending a save the cooldown would refuse.
+    state.saveCooldownSeconds = Number(payload?.save_cooldown_seconds) || 0
+    const nextSaveAt = Date.parse(payload?.next_save_at || "")
+    state.nextSaveAt = Number.isFinite(nextSaveAt) ? nextSaveAt : 0
     state.dossier = normalizedDossier(payload, state.symbol)
     const own = ownManifestation(state.dossier)
     const headRevision = own?.revisions?.find(function (revision) {
@@ -544,10 +549,13 @@ export function createCaretakerManifestationPanel({
     globalThis.clearTimeout(state.autosaveTimer)
     if (state.autosaveFailed) return autosaveIndicator(state, "failed")
     // The save starts in 1.1 s; Google Docs also says "Saving…" from the keystroke.
+    // B-1190: if the server will refuse a save until later, wait here and send the
+    // newest text once. The spinner already says the save is pending.
     autosaveIndicator(state, "saving")
+    const wait = Math.max(1100, Number(state.nextSaveAt || 0) - Date.now())
     state.autosaveTimer = globalThis.setTimeout(function () {
       void autosave(state)
-    }, 1100)
+    }, wait)
   }
 
   async function autosave(state) {
@@ -593,6 +601,9 @@ export function createCaretakerManifestationPanel({
       autosaveIndicator(state, "saved")
       return
     }
+    // B-1190: the server would refuse a save until nextSaveAt. Wait and send the
+    // newest text once instead of a request the cooldown refuses.
+    if (Number(state.nextSaveAt || 0) > Date.now()) return scheduleAutosave(state)
     autosaveIndicator(state, "saving")
     setStatus(state, "")
     state.autosaving = true
@@ -607,6 +618,7 @@ export function createCaretakerManifestationPanel({
         // B-1160: the working copy holds a day of editing in the caretaker's time zone.
         utc_offset_minutes: -new Date().getTimezoneOffset(),
       }
+      let savedResult = null
       if (snapshot.tags.trim()) {
         // B-859 step 3: prose, Tags and "draw new images from this" in one command.
         // B-874: the saved version is what new images are drawn from; there is no
@@ -625,12 +637,16 @@ export function createCaretakerManifestationPanel({
           { preserveDraft: true, refreshPublic: true },
         ))
         if (!saved) throw new Error("Save needs an explicit retry")
+        savedResult = saved
       } else {
         const revision = (job.revision ||= await mutate(state, "/revisions", lineage, {
           preserveDraft: true,
         }))
         if (!revision) throw new Error("Revision save needs an explicit retry")
+        savedResult = revision
       }
+      const nextSaveAt = Date.parse(savedResult?.next_save_at || "")
+      if (Number.isFinite(nextSaveAt)) state.nextSaveAt = nextSaveAt
       state.lastSavedFingerprint = fingerprint
       if (snapshot.prose !== proseBaseline(state, proseControl, tagsControl).prose) {
         state.proseBaseline = { prose: snapshot.prose, fields: snapshot.fieldsJson, fromSave: true }
@@ -650,8 +666,27 @@ export function createCaretakerManifestationPanel({
       } else scheduleAutosave(state)
     } catch (error) {
       globalThis.clearTimeout(state.autosaveTimer)
+      const status = Number(error?.status || 0)
+      // B-1190: the save cooldown refused this save before it landed. The draft
+      // is safe; wait the server's time and try again, without showing "Not saved".
+      if (status === 429) {
+        const retryAfter = Number(
+          error?.payload?.retry_after_seconds ?? error?.payload?.error?.retry_after_seconds ?? 0,
+        )
+        setStatus(state, "")
+        autosaveIndicator(state, "saving")
+        state.autosaveFailed = false
+        state.autosaveRetryable = true
+        // B-1190: the refused snapshot never reached the server. Drop it so the
+        // retry saves the newest editor state: edits typed during the wait
+        // coalesce into one write instead of saving the old text first.
+        state.autosaveJob = null
+        if (retryAfter > 0) state.nextSaveAt = Date.now() + retryAfter * 1000
+        scheduleAutosave(state)
+        return
+      }
       state.autosaveFailed = true
-      if (Number(error?.status) >= 400 && Number(error?.status) < 500) state.autosaveJob = null
+      if (status >= 400 && status < 500) state.autosaveJob = null
       autosaveIndicator(state, "failed")
       state.autosaveRetryable = uncertainFailure(error)
       if (state.autosaveRetryable) scheduleAutosaveRetry(state)
@@ -905,6 +940,8 @@ export function createCaretakerManifestationPanel({
       activeTab: "manifestation",
       autosaveTimer: null,
       lastSavedFingerprint: null,
+      nextSaveAt: 0,
+      saveCooldownSeconds: 0,
     }
     mounted.set(host, state)
     host.hidden = false
