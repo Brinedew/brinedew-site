@@ -26,10 +26,10 @@ const CHROMA_BINS = [
 // grayish colors.
 const HUE_BINS = [
   [0, 7, "red"],
-  [7, 21, "vermilion"],
-  [21, 35, "orange"],
-  [35, 49, "amber"],
-  [49, 62, "gold"],
+  [7, 21, "rosy"],
+  [21, 35, "peach"],
+  [35, 49, "honey"],
+  [49, 62, "golden"],
   [62, 76, "yellow"],
   [76, 90, "lime"],
   [90, 104, "chartreuse"],

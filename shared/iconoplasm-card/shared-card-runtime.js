@@ -2,7 +2,7 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
 ;(function (global) {
   "use strict"
 
-  var ICONO_SHARED_RUNTIME_VERSION = "20260723a"
+  var ICONO_SHARED_RUNTIME_VERSION = "20261112a"
   var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime)
   var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null
   var existingMeta =
@@ -890,10 +890,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
     if (!Number.isFinite(h)) return "unknown"
     h = ((h % 360) + 360) % 360
     if (h < 7 || h >= 353) return "red"
-    if (h < 21) return "vermilion"
-    if (h < 35) return "orange"
-    if (h < 49) return "amber"
-    if (h < 62) return "gold"
+    if (h < 21) return "rosy"
+    if (h < 35) return "peach"
+    if (h < 49) return "honey"
+    if (h < 62) return "golden"
     if (h < 76) return "yellow"
     if (h < 90) return "lime"
     if (h < 104) return "chartreuse"
@@ -977,10 +977,10 @@ import { resolveDisplayedColorName } from "./color-name-db.js"
        because OKHsv→sRGB→standard-HSV shifts the hue angle. */
     var letterHueWords = {
       A: "red",
-      B: "vermilion",
-      C: "orange",
-      D: "amber",
-      E: "gold",
+      B: "rosy",
+      C: "peach",
+      D: "honey",
+      E: "golden",
       F: "yellow",
       G: "lime",
       H: "chartreuse",

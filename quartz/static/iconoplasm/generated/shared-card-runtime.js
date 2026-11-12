@@ -9308,7 +9308,7 @@
   // shared/iconoplasm-card/shared-card-runtime.js
   (function(global) {
     "use strict";
-    var ICONO_SHARED_RUNTIME_VERSION = "20260723a";
+    var ICONO_SHARED_RUNTIME_VERSION = "20261112a";
     var forceSiteOwnership = !!(global && global.__iconoSiteOwnsSharedRuntime);
     var existingShared = global && global.IconoplasmCardShared ? global.IconoplasmCardShared : null;
     var existingMeta = existingShared && existingShared.__meta && typeof existingShared.__meta === "object" ? existingShared.__meta : null;
@@ -9950,10 +9950,10 @@
       if (!Number.isFinite(h)) return "unknown";
       h = (h % 360 + 360) % 360;
       if (h < 7 || h >= 353) return "red";
-      if (h < 21) return "vermilion";
-      if (h < 35) return "orange";
-      if (h < 49) return "amber";
-      if (h < 62) return "gold";
+      if (h < 21) return "rosy";
+      if (h < 35) return "peach";
+      if (h < 49) return "honey";
+      if (h < 62) return "golden";
       if (h < 76) return "yellow";
       if (h < 90) return "lime";
       if (h < 104) return "chartreuse";
@@ -10015,10 +10015,10 @@
       var loeuf = formatMetricNumber(loeufRaw, 3);
       var letterHueWords = {
         A: "red",
-        B: "vermilion",
-        C: "orange",
-        D: "amber",
-        E: "gold",
+        B: "rosy",
+        C: "peach",
+        D: "honey",
+        E: "golden",
         F: "yellow",
         G: "lime",
         H: "chartreuse",
