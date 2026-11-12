@@ -411,6 +411,18 @@ export const ERASURE_STEPS = Object.freeze(
       ],
     },
     {
+      // B-1190: a last-save timestamp is private cooldown state with no public content to retain.
+      id: "caretaker_save_throttle",
+      database: "iconoplasm",
+      table: "icono_caretaker_save_throttle",
+      action: "delete",
+      key: ["account_id"],
+      where: "account_id = ?",
+      whereBinds: [A],
+      weight: 1,
+      covers: ["icono_caretaker_save_throttle.account_id"],
+    },
+    {
       // A caretaker was notified of this person's public comment: the comment stays, so does the
       // delivery, under the anonymous label.
       id: "caretaker_comment_author_names",
