@@ -419,7 +419,7 @@ export const ERASURE_STEPS = Object.freeze(
       key: ["account_id"],
       where: "account_id = ?",
       whereBinds: [A],
-      weight: 1,
+      weight: 2,
       covers: ["icono_caretaker_save_throttle.account_id"],
     },
     {
