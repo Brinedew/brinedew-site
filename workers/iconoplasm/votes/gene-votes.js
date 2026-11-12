@@ -666,6 +666,42 @@ function zeroSnapshot(symbol, asset, visionId) {
   }
 }
 
+// The most genes one /votes/mine request may name: a gene page names one, a
+// window of gallery cards at most 48.
+export const READER_VOTES_GENE_LIMIT = 100
+
+/**
+ * The reader's own nonzero votes on every portrait of the named genes, for
+ * pages whose public tallies already come from the published gene objects. One
+ * statement, pinned to the vote table's (user_id, gene_symbol) index (migration
+ * 0150; without the pin SQLite walked the gene's votes by everyone):
+ * the rows read follow the reader's own votes on those genes, never the genes'
+ * portrait counts or anyone else's votes. A guest (no `userId`) reads nothing.
+ */
+export async function readReaderVotes(db, { userId = "", symbols = [] } = {}) {
+  const genes = [
+    ...new Set((Array.isArray(symbols) ? symbols : []).map((value) => String(value || ""))),
+  ].filter(Boolean)
+  if (!userId || !genes.length) return []
+  const { results = [] } = await db
+    .prepare(
+      `SELECT v.gene_symbol, v.asset_sha256, v.vote_value
+         FROM json_each(?1) AS wanted
+         CROSS JOIN icono_image_votes AS v INDEXED BY idx_icono_image_votes_user
+           ON v.user_id = ?2
+          AND v.gene_symbol = wanted.value`,
+    )
+    .bind(JSON.stringify(genes), userId)
+    .all()
+  const votes = []
+  for (const row of results) {
+    const vote = Number(row.vote_value || 0)
+    const asset = sha(row.asset_sha256)
+    if (vote && asset) votes.push({ symbol: String(row.gene_symbol), asset_sha256: asset, vote })
+  }
+  return votes
+}
+
 /**
  * Vote snapshots for an explicit item list, in the shape the gene page's vote
  * widget reads: per-asset counts, the caller's own vote, the per-gene vision totals
