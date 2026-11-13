@@ -60,7 +60,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
               class="contact-form__textarea"
               name="message"
               required
-              minLength={3}
+              minLength={10}
               rows={6}
               maxLength={5000}
             ></textarea>
@@ -72,6 +72,16 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
               <input
                 type="text"
                 name="website"
+                tabIndex={-1}
+                autocomplete="off"
+                aria-hidden="true"
+              />
+            </label>
+            <label>
+              Affiliation
+              <input
+                type="text"
+                name="affiliation"
                 tabIndex={-1}
                 autocomplete="off"
                 aria-hidden="true"
@@ -107,7 +117,8 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
             data-tone="error"
             role="status"
           >
-            Check your email address and write a message of at least 3 characters.
+            Check your email address and write a message of at least 10 characters (two or more
+            words).
           </p>
           <p
             id="contact-limited"
@@ -265,6 +276,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
     var endpoint = root.getAttribute("data-endpoint") || "/api/contact";
     var status = root.querySelector("[data-contact-form-status]");
     var submit = root.querySelector("[data-contact-form-submit]");
+    var mountedAt = Date.now();
 
     function setStatus(message, tone) {
       if (!status) return;
@@ -299,6 +311,7 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
       var emailInput = form.querySelector("input[name='email']");
       var messageInput = form.querySelector("textarea[name='message']");
       var honeypot = form.querySelector("input[name='website']");
+      var affiliation = form.querySelector("input[name='affiliation']");
 
       var email = emailInput ? String(emailInput.value || "").trim() : "";
       var message = messageInput ? String(messageInput.value || "").trim() : "";
@@ -308,8 +321,8 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
         if (emailInput) emailInput.focus();
         return;
       }
-      if (!message || message.length < 3) {
-        setStatus("Write a message.", "error");
+      if (!message || message.length < 10 || !/\S+\s+\S+/.test(message)) {
+        setStatus("Write a message of at least 10 characters (two or more words).", "error");
         if (messageInput) messageInput.focus();
         return;
       }
@@ -321,6 +334,8 @@ const ContactForm = (opts: ContactFormOptions = {}): QuartzComponent => {
         email: email,
         message: message,
         website: honeypot ? String(honeypot.value || "") : "",
+        affiliation: affiliation ? String(affiliation.value || "") : "",
+        elapsedMs: Math.max(0, Date.now() - mountedAt),
       };
 
       fetch(endpoint, {
