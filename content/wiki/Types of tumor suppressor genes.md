@@ -5,9 +5,9 @@ tags:
 date: 2025-12-09
 draft: true
 vital_level: 3
-class: B
+class: C
 aliases:
-  - 
+  - null
 ---
 # Types of tumor suppressor genes
 

@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2026-09-13
 draft: true
+vital_level: 3
+class: B
 aliases:
   - Mosaic development
   - Regulative development
