@@ -23,20 +23,20 @@ Another mistake it's guarding against is protecting against **fitness sign flips
 
 In major evolutionary transitions framework, levels of selection can be defined by de-darwinisation thresholds. When a level has achieved de-darwinization, if it has anti-cheater adaptations that suppress the conflict within agents on the lower level in favor of greater fitness on the higher level.
 
-| Level              | Agents            | Cheaters                                   | Cheater suppression mechanisms                                                                                |
-| ------------------ | ----------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| 1. Genetic         | Genes             | Selfish genetic elements, viruses          | Epigenetic silencing, RNA interference, fair meiosis                                                          |
-| 2. Cellular        | Cells             | Neoplasms                                  | Unicellular bottleneck, Weismann's barrier, immune surveillance, cell extrusion (EDAC), programmed cell death |
-| 3. Organismal      | Organisms, zooids | Defectors, free-riders, worker reproducers | Worker policing, kin recognition, reciprocity, guilt, shame, suicide                                          |
-| 4. Superorganismal | Colonies          | ?                                          | ?                                                                                                             |
+| Level              | Agents            | Cheaters                                                          | Cheater suppression mechanisms                                                                                |
+| ------------------ | ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 1. Genetic         | Genes             | Selfish genetic elements, viruses                                 | Epigenetic silencing, RNA interference, fair meiosis                                                          |
+| 2. Cellular        | Cells             | Neoplasms                                                         | Unicellular bottleneck, [[weismann-barrier\|Weismann's barrier]], [[immune-surveillance\|immune surveillance]], cell extrusion (EDAC), [[apoptosis\|programmed cell death]] |
+| 3. Organismal      | Organisms, zooids | Defectors, free-riders, worker reproducers                        | Worker policing, kin recognition, reciprocity, guilt, shame, suicide                                          |
+| 4. Superorganismal | Colonies          | Social parasites, brood-robbing colonies, clonal Cape-bee lineages | Nestmate recognition, entrance guarding, brood culling, colony-level selection                                |
 
 ### Vocabulary conversion table
 
 | Non-technical term    | Technical term        | Usage context                                                                                                            |
 | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Aging                 | Frailty               | A collection of phenotypic and anatomical changes happening in mammals throughout adulthood, detectable with a naked eye |
-| Aging                 | Mortality creep       | An upward feature on the chart of probability of death over time. Detectable with actuarial data                         |
-| Aging                 | Cell                  | when talking about                                                                                                       |
-| Negligible senescence | Flat mortality hazard |                                                                                                                          |
-| Senescence            | Cell senescence       | A descriptive                                                                                                            |
+| Aging                 | Mortality creep       | An upward feature on the chart of probability of death over time. Detectable with [[Mortality rate models\|actuarial data]] |
+| Aging                 | Replicative / cellular aging | When talking about somatic lineages losing division capacity in culture ([[hayflick-moorhead-experiment\|Hayflick limit]]) or exhausting [[replicative-credit\|replicative credit]] |
+| Negligible senescence | Flat mortality hazard | Adult mortality risk remaining flat with chronological age rather than rising exponentially                              |
+| Senescence            | [[cellular-senescence\|Cellular senescence]] | A descriptive stress- or damage-induced terminal cell-cycle arrest state (often with [[sasp\|SASP]]), distinct from organismal aging itself |
 

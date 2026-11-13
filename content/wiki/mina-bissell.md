@@ -5,7 +5,7 @@ tags:
 date: 2026-08-25
 draft: true
 vital_level: 3
-class: Stub
+class: Start
 aliases:
 - Mina J. Bissell
 ---
@@ -13,20 +13,26 @@ aliases:
 
 ![Mina Bissell](../Attachments/mina-bissell.jpg)
 
-Mina J. Bissell (born 1940) is an Iranian-American cell biologist, Distinguished Scientist at Lawrence Berkeley National Laboratory, known for demonstrating that tissue architecture and the extracellular matrix (ECM) control gene expression and the malignant phenotype.
+Mina J. Bissell (born 1940) is an Iranian-American cell biologist and Distinguished Scientist at Lawrence Berkeley National Laboratory, famous for proving that three-dimensional tissue architecture and the extracellular matrix (ECM) regulate nuclear gene expression and can dominate the oncogenic phenotype. (At Berkeley, she also recruited [Judith Campisi](judith-campisi.md) in 1990.)
 
-## Dynamic reciprocity and context
+## Dynamic reciprocity (1982)
 
-Against the prevailing view that the malignant phenotype is a cell-autonomous property of the mutated genome, Bissell developed the principle of "dynamic reciprocity": the nucleus and the extracellular matrix communicate continuously, and tissue organization - the three-dimensional context in which a cell sits - is a first-order determinant of what its genes do. Her laboratory's three-dimensional culture models of mammary epithelium showed that normal architecture can suppress, and disrupted architecture can permit, malignant behavior.
+Challenging somatic-mutation reductionism—which treated cancer traits as autonomous consequences of DNA mutations alone—Bissell, H. Glenn Hall, and Gordon Parry (*Journal of Theoretical Biology*, **1982**) formalized the principle of **dynamic reciprocity**. In their model, the extracellular matrix is not passive scaffolding: ECM proteins transmit physical and biochemical signals across transmembrane integrins and the cytoskeleton directly to the nuclear matrix and chromatin to specify cell polarity, differentiation, and gene transcription, while the cell continuously secretes and remodels the ECM in a reciprocal feedback loop.
 
-## Malignant reversion
+## The HMT-3522 system and malignant reversion
 
-The strongest form of this argument came from experiments showing "malignant reversion": breast cancer cells with multiple oncogenic lesions could resume normal, organized behavior when placed in a corrective three-dimensional ECM context or when ECM-signaling pathways were restored - without repairing the underlying mutations. These results established that phenotype depends on genotype plus context, and they remain the standard counterexample to purely genetic determinism in oncogenesis. The mechanotransduction pathway [YAP1](yap-yap1.md)/[TAZ](taz-wwtr1.md), which transmits matrix stiffness to the nucleus, is one of the molecular routes through which this context dependence runs.
+Bissell's laboratory translated dynamic reciprocity into experimental proof using 3D reconstituted basement-membrane cultures and the **HMT-3522** human breast epithelial progression series (spanning non-malignant `S1` cells and tumorigenic `T4-2` cells derived without carcinogens or exogenous viral oncogenes):
+
+- In 2D plastic dishes, normal and malignant cells appear superficially similar; inside physiological 3D laminin-rich matrices, normal `S1` cells self-organize into growth-arrested, polarized mammary acini, whereas `T4-2` cells form disorganized, proliferative tumors.
+- In a landmark 1997 study in the *Journal of Cell Biology*, Valerie Weaver, Bissell, and colleagues showed that treating tumorigenic `T4-2` cells with $\beta_1$-integrin-blocking antibodies (or correcting downstream [EGFR](egfr-erbb1-p00533.md) hyper-signaling) in 3D matrix restored normal polarized acinar architecture and halted malignant proliferation *in vitro* and *in vivo*—**without correcting the underlying genomic lesions**.
+
+These **malignant reversion** experiments remain the canonical demonstration that cellular phenotype equals genotype in tissue context, dovetailing with mechanotransduction pathways ([YAP1](yap-yap1.md)/[TAZ](taz-wwtr1.md)) and ecological views of cancer as failed tissue constraint ([multicellular cooperation](multicellular-cooperation.md)).
 
 ## Honors
 
-Bissell's honors include election to the National Academy of Sciences, the American Academy of Arts and Sciences, and the E. B. Wilson Medal of the American Society for Cell Biology.
+Bissell's honors include election to the National Academy of Sciences and the American Academy of Arts and Sciences, as well as the E. B. Wilson Medal of the American Society for Cell Biology.
 
-## Notes
+## Key works
 
-- Draft stub - maintenance agent to expand with the HMT-3522 model system and the 1981 "dynamic reciprocity" formulation.
+- Bissell, M. J., Hall, H. G., & Parry, G. (1982). How does the extracellular matrix direct gene expression? *Journal of Theoretical Biology*, 99(1), 31–68.
+- Weaver, V. M., Petersen, O. W., Wang, F., Larabell, C. A., Briand, P., Damsky, C., & Bissell, M. J. (1997). Reversion of the malignant phenotype of human breast cells in three-dimensional culture and in vivo by integrin blocking antibodies. *Journal of Cell Biology*.

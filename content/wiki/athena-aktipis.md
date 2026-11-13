@@ -5,7 +5,7 @@ tags:
 date: 2026-08-25
 draft: true
 vital_level: 3
-class: Stub
+class: Start
 aliases:
 - C. Athena Aktipis
 ---
@@ -13,16 +13,22 @@ aliases:
 
 ![Athena Aktipis](../Attachments/athena-aktipis.jpg)
 
-Athena Aktipis is an American evolutionary psychologist and cooperation researcher, professor of psychology at Arizona State University, known for framing cancer as a problem of cellular cheating within [multicellular cooperation](multicellular-cooperation.md) and for her work on human generosity.
+Athena Aktipis is an American evolutionary biologist and psychologist, professor of psychology at Arizona State University, known for framing cancer as somatic cellular cheating within [multicellular cooperation](multicellular-cooperation.md), for modeling cooperation and cheating in spatial agent-based simulations, and for empirical research on human mutual aid.
 
-## Cancer as cheating
+## Cancer as cellular cheating and spatial modeling
 
-Aktipis's central framing treats multicellular life as a cooperative system built on a set of enforceable agreements among cells: restraint of proliferation, respect for the control of cell death, regulated resource use, performance of specialized work, and maintenance of the shared environment. Cancer, in this view, is what happens when cells break these agreements — cheat — and selection among cell lineages amplifies the cheating. Her book *The Cheating Cell: How Evolution Helps Us Understand and Treat Cancer* (2020) developed this framework for a general audience and drew out its implications for prevention and treatment, including the idea of managing tumors as ecological systems of cooperators and defectors.
+Aktipis's central evolutionary-oncology thesis (developed in collaborative syntheses including Aktipis & Nesse, 2013, and expanded in *The Cheating Cell*, 2020) views multicellular organisms as evolutionarily maintained cooperative societies built on cellular agreements: proliferation inhibition, regulated cell death, division of labor, resource allocation, and maintenance of the extracellular environment. Cancer occurs when somatic lineages defect from these rules and win local selection at the organism's expense.
 
-## Human cooperation
+Using spatial agent-based models (such as NetLogo and lattice-based cellular evolutionary simulations), Aktipis and collaborators (including Carlo Maley and Randy Nesse) tested how resource viscosity, apoptosis sensitivity, life-history trade-offs, and secreted public goods govern whether cheater cells invade a tissue or stay policed by cooperators. These simulations show that spatial structure and tissue-architecture constraints—not merely intracellular repair—determine how long a multicellular body suppresses somatic defectors.
 
-Aktipis also studies cooperation in humans. She directs the Human Generosity Project, a large interdisciplinary project combining fieldwork on food-sharing and mutual-aid systems (including Maasai pastoralist osotua networks) with computational modeling of need-based transfer.
+## Institutional building and human cooperation
 
-## Notes
+Aktipis co-founded the Center for Evolution and Cancer at the University of California, San Francisco (with Carlo Maley) and has been a central organizer in the **International Society for Evolution, Ecology, and Cancer (ISEEC)**, serving as Vice President and later President (2022–2025).
 
-- Draft stub — maintenance agent to expand with the AGORA (agent-based model of cancer) project and the International Society for Evolution, Ecology and Cancer.
+Outside oncology, she directs the Human Generosity Project, combining comparative anthropology (such as *osotua* need-based risk pooling among Maasai pastoralists) with agent-based models of mutual aid to study how need-based transfers stabilize cooperation under volatile environmental risk.
+
+## Key works
+
+- Aktipis, C. A., & Nesse, R. M. (2013). Evolutionary foundations for cancer biology. *Evolutionary Applications*.
+- Aktipis, C. A., Boddy, A. M., Gatenby, R. A., Brown, J. S., & Maley, C. C. (2013). Life history trade-offs in cancer evolution. *Nature Reviews Cancer*.
+- Aktipis, A. (2020). *The Cheating Cell: How Evolution Helps Us Understand and Treat Cancer*.

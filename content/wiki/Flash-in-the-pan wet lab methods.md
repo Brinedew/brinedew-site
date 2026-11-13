@@ -134,9 +134,8 @@ Several other prominent wet lab benchwork techniques have followed this exact **
 
 ### Comparison of the Shifts Across Sibling Layers
 
-|                          |                               |                                                      |                                                       |                                                                             |
-| ------------------------ | ----------------------------- | ---------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
 | Taxonomy Layer           | 2006 (Unknown)                | 2016 (Trending Standard)                             | 2026 (Obsolete Due To...)                             | Modern Replacement                                                          |
+| ------------------------ | ----------------------------- | ---------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
 | **Proteomics Prep**      | In-gel digestion              | **FASP** (Spin-filter MWCO)                          | Sample loss; membrane fouling; non-automatable        | **SP3** (Magnetic beads) / **iST**                                          |
 | **Interactomics**        | Co-IP / Y2H                   | **BioID** (BirA*) | Slow kinetics (24 h); spatial blur; toxicity          | **TurboID** (10 min) / **APEX2** (1 min)                                    |
 | **Histology / Clearing** | Physical microtome sectioning | **Active CLARITY** (Electrophoretic rigs)            | Tissue melting; bubble damage; complex pumps          | **Passive clearing cocktails** (CUBIC, Ce3D)                                |
