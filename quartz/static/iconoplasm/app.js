@@ -6914,17 +6914,35 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return false
   }
 
+  function isSelectedImageEditProviderFree() {
+    var raw = imageEditSelectedProvider()
+    var parts = String(raw || "").split(":")
+    var providerId = parts[0] || ""
+    if (!providerId) return false
+    var supported = imageEditDialogState.supportedProviders || []
+    for (var i = 0; i < supported.length; i++) {
+      var sp = supported[i]
+      if (sp && sp.provider_id === providerId) return Boolean(sp.free_queue)
+    }
+    return false
+  }
+
   function updateImageEditButtons() {
     var dialog = ensureImageEditDialog()
     var editButton = dialog.querySelector("[data-icono-image-edit-submit]")
     var publishButton = dialog.querySelector("[data-icono-image-edit-publish]")
+    var isFree = isSelectedImageEditProviderFree()
     if (editButton) {
       editButton.disabled =
         imageEditDialogState.loading ||
-        !imageEditDialogState.encryptionConfigured ||
+        (!imageEditDialogState.encryptionConfigured && !isFree) ||
         !imageEditSelectedProvider() ||
         !imageEditHasAdjustment()
-      editButton.textContent = imageEditDialogState.loading ? "Editing..." : "Edit"
+      editButton.textContent = imageEditDialogState.loading
+        ? isFree
+          ? "Queueing..."
+          : "Editing..."
+        : "Edit"
     }
     if (publishButton) {
       var shouldShowPublish =
@@ -6962,10 +6980,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     var options = []
     supported.forEach(function (sp) {
-      if (!configured[sp.provider_id]) return
+      var isFreeProvider = Boolean(sp && sp.free_queue)
+      if (!isFreeProvider && !configured[sp.provider_id]) return
       ;(sp.model_options || []).forEach(function (m) {
+        var isFreeOption = isFreeProvider || Boolean(m && m.free_queue)
         var value = sp.provider_id + ":" + m.model
-        var label = sp.label + " · " + m.label
+        var label = isFreeOption ? String(m.label || m.model) : sp.label + " · " + m.label
         if (!lastUsedValue && m.last_used) lastUsedValue = value
         options.push({
           value: value,
@@ -7006,7 +7026,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .join("")
       : '<sl-option value="">No saved image editing provider</sl-option>'
     select.disabled = !options.length
-    if (!imageEditDialogState.encryptionConfigured) select.disabled = true
     setImageEditProviderValue(select, selectedValue)
     updateImageEditButtons()
   }
@@ -7063,13 +7082,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         imageEditDialogState.encryptionConfigured = Boolean(
           payload && payload.encryption_configured,
         )
+        var hasFreeOption = (imageEditDialogState.supportedProviders || []).some(function (sp) {
+          return Boolean(
+            sp && sp.free_queue && Array.isArray(sp.model_options) && sp.model_options.length,
+          )
+        })
         imageEditSetStatus(
-          !imageEditDialogState.encryptionConfigured
+          !imageEditDialogState.encryptionConfigured && !hasFreeOption
             ? "Image editing provider storage is not configured."
-            : imageEditDialogState.providers.length
+            : imageEditDialogState.providers.length || hasFreeOption
               ? ""
               : "Set up a saved image editing provider before editing portraits.",
-          imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length
+          (imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length) ||
+            hasFreeOption
             ? ""
             : "warn",
         )
@@ -7319,7 +7344,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.loading = true
     imageEditDialogState.job = null
     updateImageEditButtons()
-    imageEditSetStatus("Editing portrait...", "")
+    imageEditSetStatus(
+      isSelectedImageEditProviderFree() ? "Queueing free edit..." : "Editing portrait...",
+      "",
+    )
     var body = {
       provider_id: providerId,
       source_gene_symbol: source.symbol,
@@ -7335,8 +7363,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       body: JSON.stringify(body),
     })
       .then(function (payload) {
-        var job = payload && payload.job
-        imageEditDialogState.job = job
         if (payload && payload.ok === false && payload.error) {
           // The route returned 502 with an error string in the body. Show
           // the error to the user. The Edit button is re-enabled so they
@@ -7346,6 +7372,24 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           updateImageEditButtons()
           return
         }
+        if (payload && payload.queued) {
+          imageEditDialogState.loading = false
+          imageEditDialogState.job = null
+          imageEditSetStatus(
+            String(
+              payload.message ||
+                "Free edit queued for the workstation. You will be notified in your Request Inbox when it finishes.",
+            ),
+            "success",
+          )
+          if (typeof window.refreshIconoplasmRequestInbox === "function") {
+            window.refreshIconoplasmRequestInbox()
+          }
+          updateImageEditButtons()
+          return
+        }
+        var job = payload && payload.job
+        imageEditDialogState.job = job
         imageEditDialogState.loading = false
         showImageEditResult(job, source)
         updateImageEditButtons()
