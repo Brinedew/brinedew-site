@@ -169,8 +169,8 @@ test("the no-JavaScript contact form returns to /about with its notice showing",
   try {
     const cases = [
       { state: "sent", message: "Hello from the browser check.", limited: false },
-      // Whitespace passes the browser's own `required` check; the worker trims it to nothing.
-      { state: "invalid", message: "   ", limited: false },
+      // Whitespace passes the browser's own `required` + `minlength="10"` check; the worker trims it to nothing.
+      { state: "invalid", message: "          ", limited: false },
       { state: "limited", message: "Hello again.", limited: true },
     ]
     for (const { state, message, limited } of cases) {

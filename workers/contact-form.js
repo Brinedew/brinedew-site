@@ -142,18 +142,20 @@ async function parsePayload(request) {
 }
 
 const BOT_USER_AGENT_RE =
-  /(?:bot|crawler|spider|scraper|teardownbriefs|curl|wget|python-requests|httpx|aiohttp|go-http-client|libwww-perl|headlesschrome|phantomjs)/i
+  /(?:bot|crawler|spider|scraper|teardownbriefs|curl|wget|python-requests|httpx|aiohttp|go-http-client|libwww-perl|phantomjs)/i
 const OUTDATED_CHROME_UA_RE = /\bChrome\/1[0-2]\d\.0\.0\.0\b/i
 const BARE_PROBE_BODY_RE =
   /^(?:test(?:ing)?|hello|hi|ping|check)(?:\s+(?:test|message|123|form))*[.!?\s]*$/i
 const GENERATED_BOT_EMAIL_RE = /^[a-z]+[bcdfghjklmnpqrstvwxz]{4,}[a-z]*\d{2,}@/i
 const SPAM_PITCH_BODY_RE = /\bwhop\.com\b|\$\d+\s+(?:diy|done-for-you|dfy)\b/i
 
-function isLikelyAutomatedBot({ request, payload, fromEmail = null, body = null }) {
+function isHoneypotOrBareProbe(payload, body) {
   const honeypot = sanitizeText(payload?.website || "", 255) || ""
   const secondaryHoneypot = sanitizeText(payload?.affiliation || payload?.company || "", 255) || ""
-  if (honeypot || secondaryHoneypot) return true
+  return Boolean(honeypot || secondaryHoneypot || (body && BARE_PROBE_BODY_RE.test(body)))
+}
 
+function isLikelyAutomatedBot({ request, payload, fromEmail, body }) {
   const rawElapsed = payload?.elapsedMs !== undefined ? payload.elapsedMs : payload?.elapsed_ms
   if (rawElapsed !== undefined && rawElapsed !== null && rawElapsed !== "") {
     const elapsedMs = Number(rawElapsed)
@@ -171,7 +173,7 @@ function isLikelyAutomatedBot({ request, payload, fromEmail = null, body = null 
     return true
   }
 
-  if (body && (BARE_PROBE_BODY_RE.test(body) || SPAM_PITCH_BODY_RE.test(body))) {
+  if (body && SPAM_PITCH_BODY_RE.test(body)) {
     return true
   }
 
@@ -262,16 +264,11 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
     return respond(request, jsonError("Invalid request body", 400, responseHeaders), "invalid")
   }
 
-  // Silent bot-drop: if honeypot, timing, or User-Agent marks this as an
-  // automated submission, accept and ignore without sending mail or writing KV.
-  if (isLikelyAutomatedBot({ request, payload })) {
-    return respond(request, jsonOk({ queued: false, ignored: true }, responseHeaders), "sent")
-  }
-
   const fromEmail = sanitizeText(payload?.email || "", CONTACT_EMAIL_MAX)
   const body = sanitizeText(payload?.message || payload?.body || "", CONTACT_BODY_MAX)
 
-  if (isLikelyAutomatedBot({ request, payload, fromEmail, body })) {
+  // Silent bot-drop for honeypots or bare "Test" probes before length validation.
+  if (isHoneypotOrBareProbe(payload, body)) {
     return respond(request, jsonOk({ queued: false, ignored: true }, responseHeaders), "sent")
   }
 
@@ -292,6 +289,10 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       ),
       "invalid",
     )
+  }
+
+  if (isLikelyAutomatedBot({ request, payload, fromEmail, body })) {
+    return respond(request, jsonOk({ queued: false, ignored: true }, responseHeaders), "sent")
   }
 
   // We do NOT include the visitor's address in the `from` field of the email we
