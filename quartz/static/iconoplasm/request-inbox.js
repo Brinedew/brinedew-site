@@ -14,6 +14,7 @@ export function createRequestInbox({
   ensurePortraitSource,
   resolvePortraitUrl,
   navigate,
+  onOpenEditJob,
   loadCaretakerFilm,
 }) {
   var state = {
@@ -434,13 +435,31 @@ export function createRequestInbox({
         .toUpperCase()
       var notificationId = Number(item.notification_id || 0) || 0
       var requestId = Number(item.request_id || item.id || 0) || 0
-      var key = symbol || "ungrouped:" + (notificationId || requestId || index)
+      var isEdit = item.request_kind === "edit_image"
+      var editJobId = isEdit
+        ? String(item.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
+        : ""
+      var key =
+        isEdit && editJobId
+          ? "edit:" + editJobId
+          : symbol || "ungrouped:" + (notificationId || requestId || index)
       var group = byKey[key]
       if (!group) {
+        var geneUrl = item.gene_url || "/"
+        var editHref =
+          isEdit && editJobId
+            ? geneUrl +
+              (geneUrl.indexOf("?") >= 0 ? "&" : "?") +
+              "edit_job=" +
+              encodeURIComponent(editJobId)
+            : geneUrl
         group = {
           key: key,
           gene_symbol: symbol,
-          gene_url: item.gene_url || "/",
+          gene_url: geneUrl,
+          href: editHref,
+          is_edit: Boolean(isEdit && editJobId),
+          edit_job_id: editJobId,
           expected_size: 0,
           unread: true,
           items: [],
@@ -463,6 +482,7 @@ export function createRequestInbox({
         return (
           item &&
           item.unread === true &&
+          item.request_kind !== "edit_image" &&
           String(item.gene_symbol || "")
             .trim()
             .toUpperCase() === wanted
@@ -542,20 +562,26 @@ export function createRequestInbox({
           : "") +
         "</span>"
     }
+    var isEdit = Boolean(group.is_edit && group.edit_job_id)
+    var countText = isEdit ? "Edit" : String(total)
+    var countAria = isEdit ? "Edit ready" : String(total) + (total === 1 ? " image" : " images")
     return (
       '<a class="icono-request-inbox__item icono-request-inbox__receipt" href="' +
-      escapeHtml(group.gene_url || "/") +
+      escapeHtml(group.href || group.gene_url || "/") +
       '" data-icono-request-receipt data-icono-request-gene-symbol="' +
       escapeHtml(group.gene_symbol || "") +
       '" data-icono-request-notification-ids="' +
       escapeHtml(notificationIds.join(",")) +
+      (isEdit
+        ? '" data-icono-request-kind="edit_image" data-icono-edit-job-id="' +
+          escapeHtml(group.edit_job_id || "")
+        : "") +
       '"><span class="icono-request-inbox__receipt-head"><strong>' +
       escapeHtml(group.gene_symbol || "Gene") +
       '</strong><span class="icono-request-inbox__receipt-count" aria-label="' +
-      escapeHtml(String(total)) +
-      (total === 1 ? " image" : " images") +
+      escapeHtml(countAria) +
       '">' +
-      escapeHtml(String(total)) +
+      escapeHtml(countText) +
       "</span></span>" +
       '<span class="icono-request-inbox__previews" aria-hidden="true">' +
       previewMarkup +
@@ -881,9 +907,21 @@ export function createRequestInbox({
         if (link._iconoRequestInboxWired) return
         link._iconoRequestInboxWired = true
         link.addEventListener("click", function (event) {
-          // Opening the gene page marks its results seen (noteGeneViewed).
+          // Opening the gene page marks candidate results seen; ready edit jobs
+          // open the before/after review modal directly.
           event.preventDefault()
+          var editJobId = link.getAttribute("data-icono-edit-job-id") || ""
+          var geneSymbol = link.getAttribute("data-icono-request-gene-symbol") || ""
           var href = link.getAttribute("href") || "/"
+          if (editJobId && typeof onOpenEditJob === "function") {
+            onOpenEditJob({
+              editJobId: editJobId,
+              geneSymbol: geneSymbol,
+              href: href,
+              link: link,
+            })
+            return
+          }
           if (typeof navigate === "function") {
             navigate(href, link)
           } else {

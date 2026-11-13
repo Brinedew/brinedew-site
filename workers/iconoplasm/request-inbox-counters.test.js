@@ -23,7 +23,7 @@ function database() {
     "ALTER TABLE icono_generation_requests ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN candidate_image_id INTEGER DEFAULT 1",
   )
   db.exec(
-    "ALTER TABLE icono_request_notifications ADD COLUMN fulfillment_group_size INTEGER NOT NULL DEFAULT 1; ALTER TABLE icono_request_notifications ADD COLUMN discord_next_attempt_at TEXT; CREATE INDEX idx_icono_request_notifications_fulfillment_publication ON icono_request_notifications(requester_user_id,fulfillment_publication_id,gene_symbol,discord_status,id)",
+    "ALTER TABLE icono_request_notifications ADD COLUMN fulfillment_group_size INTEGER NOT NULL DEFAULT 1; ALTER TABLE icono_request_notifications ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'new_candidate'; ALTER TABLE icono_request_notifications ADD COLUMN discord_next_attempt_at TEXT; CREATE INDEX idx_icono_request_notifications_fulfillment_publication ON icono_request_notifications(requester_user_id,fulfillment_publication_id,gene_symbol,discord_status,id)",
   )
   db.exec(
     "CREATE INDEX idx_icono_request_notifications_delivery ON icono_request_notifications(discord_status); CREATE INDEX idx_icono_request_notifications_delivery_due ON icono_request_notifications(discord_status); CREATE INDEX idx_icono_request_notifications_delivery_batch ON icono_request_notifications(discord_status)",

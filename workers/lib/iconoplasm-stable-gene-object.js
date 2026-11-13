@@ -322,7 +322,10 @@ export function buildStableGeneObject(
   const catalog = content?.catalog && typeof content.catalog === "object" ? content.catalog : {}
   const essence = content?.essence && typeof content.essence === "object" ? content.essence : {}
   const portraits = (Array.isArray(content?.portraits) ? content.portraits : []).filter(
-    (portrait) => sha(portrait?.asset_sha256) && text(portrait?.status, 32) !== "rejected",
+    (portrait) => {
+      const status = text(portrait?.status, 32)
+      return sha(portrait?.asset_sha256) && status !== "rejected" && status !== "edit_pending"
+    },
   )
   const votes = voteTallies(facts)
   const supervote = activeSupervote(facts)

@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=312747a3355968cb"
+import { createRequestInbox } from "./request-inbox.js?v=c8f670fed9ce201f"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
@@ -1256,6 +1256,15 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     resolvePortraitUrl: portraitDelivery.resolve,
     navigate: function (href, link) {
       navigateTo(href, link)
+    },
+    onOpenEditJob: function (info) {
+      if (!info || !info.editJobId) return
+      var symbol = normalizedSymbol(info.geneSymbol)
+      var route = getRoute()
+      if (symbol && (route.page !== "gene" || normalizedSymbol(route.symbol) !== symbol)) {
+        navigateTo("/gene/" + encodeURIComponent(symbol), info.link || null)
+      }
+      openImageEditJobDialog(info.editJobId, { symbol: symbol })
     },
     // B-996: the caretaker film needs the gene's portrait and molecular
     // weight. Signed-in caretakers only, once per symbol, through the same static
@@ -3217,6 +3226,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     ) {
       refreshCurrentGeneInteractiveIslands()
     }
+    if (currentUser) maybeConsumeEditJobParam()
     return mergeWebsiteGuestDiscoveriesIfSignedIn().then(function (merged) {
       if (merged && currentUser && getRoute().page === "home") render()
       return currentUser
@@ -7054,17 +7064,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
-  function loadImageEditProviders() {
+  function loadImageEditProviders(options) {
+    var opts = options || {}
+    var preserveStatus = Boolean(opts.preserveStatus)
     if (!currentUser) {
       // B-612: never load authenticated provider metadata for a guest.
       imageEditDialogState.providers = []
       imageEditDialogState.supportedProviders = []
       imageEditDialogState.lastUsed = null
-      imageEditSetStatus("Sign in to edit portraits.", "warn")
+      if (!preserveStatus) imageEditSetStatus("Sign in to edit portraits.", "warn")
       renderImageEditProviders()
       return Promise.resolve()
     }
-    imageEditSetStatus("Loading providers...", "")
+    if (!preserveStatus) imageEditSetStatus("Loading providers...", "")
     return fetchImageEditProviders({ op: "image_edit" })
       .then(function (payload) {
         imageEditDialogState.providers = Array.isArray(payload && payload.providers)
@@ -7087,24 +7099,31 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             sp && sp.free_queue && Array.isArray(sp.model_options) && sp.model_options.length,
           )
         })
-        imageEditSetStatus(
-          !imageEditDialogState.encryptionConfigured && !hasFreeOption
-            ? "Image editing provider storage is not configured."
-            : imageEditDialogState.providers.length || hasFreeOption
+        if (!preserveStatus && !imageEditDialogState.job) {
+          imageEditSetStatus(
+            !imageEditDialogState.encryptionConfigured && !hasFreeOption
+              ? "Image editing provider storage is not configured."
+              : imageEditDialogState.providers.length || hasFreeOption
+                ? ""
+                : "Set up a saved image editing provider before editing portraits.",
+            (imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length) ||
+              hasFreeOption
               ? ""
-              : "Set up a saved image editing provider before editing portraits.",
-          (imageEditDialogState.encryptionConfigured && imageEditDialogState.providers.length) ||
-            hasFreeOption
-            ? ""
-            : "warn",
-        )
+              : "warn",
+          )
+        }
         renderImageEditProviders()
       })
       .catch(function (error) {
         imageEditDialogState.providers = []
         imageEditDialogState.encryptionConfigured = false
         renderImageEditProviders()
-        imageEditSetStatus(String((error && error.message) || "Could not load providers."), "error")
+        if (!preserveStatus && !imageEditDialogState.job) {
+          imageEditSetStatus(
+            String((error && error.message) || "Could not load providers."),
+            "error",
+          )
+        }
       })
   }
 
@@ -7382,9 +7401,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             ),
             "success",
           )
-          if (typeof window.refreshIconoplasmRequestInbox === "function") {
-            window.refreshIconoplasmRequestInbox()
-          }
+          void requestInbox.refresh()
           updateImageEditButtons()
           return
         }
@@ -7411,7 +7428,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var result = dialog.querySelector("[data-icono-image-edit-result]")
     var before = dialog.querySelector("[data-icono-image-edit-before]")
     var after = dialog.querySelector("[data-icono-image-edit-after]")
-    if (before) portraitDelivery.bind(before, source.image_url || "")
+    if (before) {
+      var syncBeforeRatio = function () {
+        if (!source.width && before.naturalWidth > 0) source.width = before.naturalWidth
+        if (!source.height && before.naturalHeight > 0) source.height = before.naturalHeight
+        applyImageEditAspectRatio(dialog, source)
+      }
+      before.onload = syncBeforeRatio
+      portraitDelivery.bind(before, source.image_url || "")
+      if (before.complete) syncBeforeRatio()
+    }
     if (after) portraitDelivery.bind(after, portraitAssetRefUrl(job && job.result_asset, "medium"))
     applyImageEditAspectRatio(dialog, source)
     if (job.status === "failed") {
@@ -7422,7 +7448,168 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     if (sourceViewer) sourceViewer.hidden = true
     if (result) result.hidden = false
-    imageEditSetStatus("Edit ready to publish.", "success")
+    imageEditSetStatus(
+      job.published ? "Edit already published." : "Edit ready to publish.",
+      "success",
+    )
+  }
+
+  function openImageEditJobDialog(jobId, options) {
+    var cleanJobId = String(jobId || "").trim()
+    if (!cleanJobId) return
+    if (!currentUser) {
+      if (hasResolvedAuthState) {
+        openVoteLoginDialog({
+          loginUrl: voteLoginUrl(),
+          title: "Log in with Discord to review portrait edits",
+        })
+      }
+      return
+    }
+    var opts = options || {}
+    var requestedSymbol = normalizedSymbol(opts.symbol || "")
+    var dialog = ensureImageEditDialog()
+    var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
+    var result = dialog.querySelector("[data-icono-image-edit-result]")
+    var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
+    var initialSource = {
+      source: "candidate",
+      symbol: requestedSymbol,
+      asset_sha256: "",
+      image_url: String(opts.sourceUrl || "").trim(),
+      candidate_image_id: "",
+      vision_id: "",
+      width: 0,
+      height: 0,
+      adjustments: {},
+    }
+    imageEditDialogState.source = initialSource
+    imageEditDialogState.job = null
+    imageEditDialogState.loading = true
+    setDialogTitle(dialog, "Review portrait edit")
+    if (sourceImg && initialSource.image_url) {
+      portraitDelivery.bind(sourceImg, initialSource.image_url)
+    }
+    if (sourceViewer) sourceViewer.hidden = false
+    if (result) result.hidden = true
+    imageEditSetStatus("Loading edit...", "")
+    renderImageEditContext(initialSource)
+    updateImageEditButtons()
+    openDialog(dialog)
+    loadImageEditProviders({ preserveStatus: true })
+    fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(cleanJobId))
+      .then(function (payload) {
+        var job = payload && payload.job
+        if (!job) throw new Error("Edit job could not be found.")
+        var symbol = normalizedSymbol(job.source_gene_symbol || requestedSymbol)
+        var sourceSha = normalizedAssetSha(job.source_asset_sha256 || "")
+        var cachedGene = symbol ? portraitDetailCache[symbol] || null : null
+        var matchingCandidate = null
+        if (cachedGene && Array.isArray(cachedGene.portrait_candidates)) {
+          matchingCandidate =
+            cachedGene.portrait_candidates.find(function (candidate) {
+              return normalizedAssetSha(candidate && candidate.asset_sha256) === sourceSha
+            }) || null
+        }
+        var source = {
+          source: "candidate",
+          symbol: symbol,
+          asset_sha256: sourceSha,
+          image_url:
+            portraitAssetRefUrl(job.source_asset, "medium") ||
+            (matchingCandidate ? candidatePortraitUrl(matchingCandidate, "medium") : "") ||
+            initialSource.image_url,
+          candidate_image_id:
+            job.source_candidate_image_id != null
+              ? String(job.source_candidate_image_id)
+              : matchingCandidate && matchingCandidate.candidate_image_id != null
+                ? String(matchingCandidate.candidate_image_id)
+                : "",
+          vision_id: String(
+            job.source_vision_id || (matchingCandidate && matchingCandidate.vision_id) || "",
+          ),
+          width: Number((matchingCandidate && matchingCandidate.width) || 0),
+          height: Number((matchingCandidate && matchingCandidate.height) || 0),
+          adjustments: cachedGene
+            ? imageEditSourceAdjustmentContext(
+                cachedGene,
+                matchingCandidate || cachedGene.portrait || {},
+              )
+            : {},
+        }
+        imageEditDialogState.source = source
+        imageEditDialogState.job = job
+        imageEditDialogState.loading = false
+        renderImageEditContext(source)
+        applyImageEditModelConstraints()
+        if (sourceImg) {
+          portraitDelivery.bind(sourceImg, source.image_url || "")
+          sourceImg.alt = symbol + " source portrait"
+        }
+        if (job.status === "queued" || job.status === "running") {
+          if (sourceViewer) sourceViewer.hidden = false
+          if (result) result.hidden = true
+          applyImageEditAspectRatio(dialog, source)
+          imageEditSetStatus("Free edit is still queued for the workstation.", "")
+        } else {
+          showImageEditResult(job, source)
+        }
+        updateImageEditButtons()
+        if (symbol && !cachedGene) {
+          fetchGeneDetail(symbol)
+            .then(function (genePayload) {
+              if (!genePayload || imageEditDialogState.job !== job) return
+              var candidate = Array.isArray(genePayload.portrait_candidates)
+                ? genePayload.portrait_candidates.find(function (item) {
+                    return normalizedAssetSha(item && item.asset_sha256) === sourceSha
+                  }) || null
+                : null
+              source.adjustments = imageEditSourceAdjustmentContext(
+                genePayload,
+                candidate || genePayload.portrait || {},
+              )
+              if (imageEditDialogState.dialog && imageEditDialogState.dialog.open) {
+                var wasShowingResult =
+                  result && !result.hidden && imageEditDialogState.job.status === "succeeded"
+                renderImageEditContext(source)
+                applyImageEditModelConstraints()
+                if (wasShowingResult) {
+                  imageEditSetStatus(
+                    job.published ? "Edit already published." : "Edit ready to publish.",
+                    "success",
+                  )
+                }
+              }
+            })
+            .catch(function () {})
+        }
+      })
+      .catch(function (error) {
+        imageEditDialogState.loading = false
+        imageEditSetStatus(String((error && error.message) || "Could not load edit."), "error")
+        updateImageEditButtons()
+      })
+  }
+
+  function maybeConsumeEditJobParam() {
+    if (!currentUser) return
+    var params
+    try {
+      params = new URLSearchParams(window.location.search || "")
+    } catch (_err) {
+      return
+    }
+    var editJobId = String(params.get("edit_job") || "").trim()
+    if (!editJobId) return
+    params.delete("edit_job")
+    var nextSearch = params.toString()
+    var nextUrl =
+      window.location.pathname + (nextSearch ? "?" + nextSearch : "") + (window.location.hash || "")
+    window.history.replaceState(window.history.state, "", nextUrl)
+    var route = getRoute()
+    openImageEditJobDialog(editJobId, {
+      symbol: route.page === "gene" ? normalizedSymbol(route.symbol) : "",
+    })
   }
 
   function closeImageEditDialog() {
@@ -7489,6 +7676,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         state.loading = false
         updateImageEditButtons()
         seedPublisherVoteSnapshotAfterImageEditPublish(payload)
+        void requestInbox.refresh()
         var root = document.getElementById(ROOT_ID)
         if (root && state.source && state.source.symbol) {
           renderGene(root, state.source.symbol, { forceFresh: true })
@@ -13313,6 +13501,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     ensureMobilePageSwitcher()
     syncPageSwitcher(route)
+    if (route.page === "gene" && currentUser) maybeConsumeEditJobParam()
   }
 
   /* ─── Event delegation for internal links ─── */

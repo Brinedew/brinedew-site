@@ -47,4 +47,5 @@ export const REQUEST_INBOX_MARK_GENE_READ_SQL = `UPDATE icono_request_notificati
     AND requester_user_id = ?
     AND gene_symbol = ?
     AND discord_status = 'sent'
-    AND read_at IS NULL`
+    AND read_at IS NULL
+    AND COALESCE(request_kind, 'new_candidate') <> 'edit_image'`

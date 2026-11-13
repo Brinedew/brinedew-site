@@ -86,6 +86,15 @@ test("rejected portraits leave the pool; stale ones stay but can't win", () => {
   )
   assert.equal(rejected.candidate_count, 1)
   assert.equal(rejected.portrait.asset_sha256, second.asset_sha256)
+  const stagedEdit = buildStableGeneObject(
+    { ...content, portraits: mark({ status: "edit_pending" }) },
+    facts,
+    {
+      now: at,
+    },
+  )
+  assert.equal(stagedEdit.candidate_count, 1)
+  assert.equal(stagedEdit.portrait.asset_sha256, second.asset_sha256)
   const stale = buildStableGeneObject({ ...content, portraits: mark({ is_stale: true }) }, facts, {
     now: at,
   })
