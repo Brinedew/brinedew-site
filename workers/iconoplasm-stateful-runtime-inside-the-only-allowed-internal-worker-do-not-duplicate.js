@@ -2169,7 +2169,7 @@ function normalizeAssetStatus(raw, fallback = "draft") {
   const v = String(raw || "")
     .trim()
     .toLowerCase()
-  if (["draft", "approved", "rejected"].includes(v)) return v
+  if (["draft", "approved", "rejected", "edit_pending"].includes(v)) return v
   return fallback
 }
 
@@ -5626,6 +5626,7 @@ function mapImageEditJobRow(row, baseUrl = "") {
     prompt: sanitizeText(row?.prompt || "", 4000) || "",
     status,
     error: sanitizeText(row?.error || "", 2000) || "",
+    source_asset: portraitAssetRef(baseUrl, sourceAssetSha),
     result_asset_sha256: resultAssetSha,
     result_asset: portraitAssetRef(baseUrl, resultAssetSha),
     published: Boolean(row?.published_at),
@@ -5716,6 +5717,147 @@ async function updateImageEditJobFailed(env, { id, error }) {
   )
     .bind(sanitizeText(error || "", 2000) || "Image edit failed", id)
     .run()
+}
+
+function queuedImageEditRequestIdFromJobId(jobId) {
+  const match = String(jobId || "")
+    .trim()
+    .match(/^request-(\d+)$/)
+  if (!match) return null
+  const id = Number(match[1])
+  return Number.isInteger(id) && id > 0 ? id : null
+}
+
+async function ensureQueuedImageEditJob(
+  env,
+  {
+    requestId,
+    userId,
+    providerId,
+    symbol,
+    assetSha,
+    sourceRow = null,
+    adjustmentsJson = "[]",
+    prompt = "",
+  },
+) {
+  const numericRequestId = Number(requestId || 0)
+  if (!Number.isInteger(numericRequestId) || numericRequestId <= 0) return null
+  const jobId = `request-${numericRequestId}`
+  const existing = await env.ICONOPLASM_DB.prepare(
+    `SELECT * FROM icono_image_edit_jobs WHERE id = ? LIMIT 1`,
+  )
+    .bind(jobId)
+    .first()
+  if (existing) return existing
+  const resolvedSource =
+    sourceRow ||
+    (assetSha
+      ? await sourceImageEditAssetRow(env, { symbol, assetSha256: assetSha }).catch(() => null)
+      : null)
+  const inheritedUpvotes = imageEditInheritedUpvotes({
+    upvotes: resolvedSource?.image_upvotes,
+    downvotes: resolvedSource?.image_downvotes,
+  })
+  const requester = normalizeUserId(userId) || "__system__"
+  try {
+    await insertImageEditJob(env, {
+      id: jobId,
+      user_id: requester,
+      provider_id: normalizeImageEditProviderId(providerId || "") || "comfyui",
+      source_gene_symbol: normalizeSymbol(symbol || "") || "",
+      source_asset_sha256: normalizeSha256(assetSha || "") || "",
+      source_candidate_image_id: optionalInt(resolvedSource?.candidate_image_id),
+      source_vision_id: sanitizeVoteVisionId(resolvedSource?.vision_id || ""),
+      source_upvotes: Math.max(0, Number(resolvedSource?.image_upvotes || 0) || 0),
+      source_downvotes: Math.max(0, Number(resolvedSource?.image_downvotes || 0) || 0),
+      source_score: Number(resolvedSource?.image_score || 0) || 0,
+      adjustments_json: typeof adjustmentsJson === "string" ? adjustmentsJson : "[]",
+      prompt: sanitizeText(prompt || "", 4000) || "",
+      status: "queued",
+      inherited_upvotes: inheritedUpvotes,
+    })
+  } catch (error) {
+    const again = await env.ICONOPLASM_DB.prepare(
+      `SELECT * FROM icono_image_edit_jobs WHERE id = ? LIMIT 1`,
+    )
+      .bind(jobId)
+      .first()
+    if (again) return again
+    throw error
+  }
+  return env.ICONOPLASM_DB.prepare(`SELECT * FROM icono_image_edit_jobs WHERE id = ? LIMIT 1`)
+    .bind(jobId)
+    .first()
+}
+
+async function stageQueuedImageEditFulfillment(env, { intent, preflightRow }) {
+  const symbol =
+    normalizeSymbol(preflightRow?.source_gene_symbol || preflightRow?.gene_symbol || "") || ""
+  const sourceAssetSha = normalizeSha256(preflightRow?.source_asset_sha256 || "") || ""
+  const requesterUserId = normalizeUserId(preflightRow?.requester_user_id || "") || ""
+  const assetSha = normalizeSha256(intent?.fulfilledAssetSha || "") || ""
+  if (!symbol || !assetSha) return null
+
+  const existingAsset = await env.ICONOPLASM_DB.prepare(
+    `SELECT r2_key_full, r2_key_medium, r2_key_thumb, mime, width, height, bytes, status, autopick_eligible
+     FROM icono_portrait_assets
+     WHERE gene_symbol = ? AND asset_sha256 = ?
+     LIMIT 1`,
+  )
+    .bind(symbol, assetSha)
+    .first()
+    .catch(() => null)
+
+  // Keep newly fulfilled edits hidden from public portrait_candidates until
+  // the requester reviews before/after and clicks Publish.
+  if (
+    existingAsset &&
+    String(existingAsset.status || "") !== "approved" &&
+    String(existingAsset.status || "") !== "rejected" &&
+    (String(existingAsset.status || "") !== "edit_pending" ||
+      Number(existingAsset.autopick_eligible ?? 1) !== 0)
+  ) {
+    await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_portrait_assets
+       SET status = 'edit_pending',
+           autopick_eligible = 0
+       WHERE gene_symbol = ? AND asset_sha256 = ?`,
+    )
+      .bind(symbol, assetSha)
+      .run()
+    await publishIconoplasmGeneStableObject(env, symbol).catch(() => null)
+  }
+
+  const jobRow = await ensureQueuedImageEditJob(env, {
+    requestId: intent.requestId,
+    userId: requesterUserId,
+    providerId: intent.providerId || "comfyui",
+    symbol,
+    assetSha: sourceAssetSha,
+    prompt: preflightRow?.request_prompt || "",
+  })
+  if (!jobRow) return null
+  if (String(jobRow.status || "") !== "succeeded") {
+    await updateImageEditJobSucceeded(env, {
+      id: jobRow.id,
+      result_asset_sha256: assetSha,
+      result_r2_key_full: String(
+        existingAsset?.r2_key_full || portraitStorageKey(assetSha, "full"),
+      ),
+      result_r2_key_medium: String(
+        existingAsset?.r2_key_medium || portraitStorageKey(assetSha, "medium"),
+      ),
+      result_r2_key_thumb: String(
+        existingAsset?.r2_key_thumb || portraitStorageKey(assetSha, "small"),
+      ),
+      result_mime: sanitizeText(existingAsset?.mime || "", 80) || "image/webp",
+      result_width: optionalInt(existingAsset?.width),
+      result_height: optionalInt(existingAsset?.height),
+      result_bytes: optionalInt(existingAsset?.bytes),
+    })
+  }
+  return jobRow.id
 }
 
 async function getImageEditJobForUser(env, { id, userId }) {
@@ -7278,6 +7420,24 @@ async function publishImageEditCandidateAsset(env, job, userId) {
     symbol,
     assetSha256: job?.source_asset_sha256 || "",
   })
+  let resolvedVisionId = sanitizeVoteVisionId(job.vision_id || "")
+  if (!resolvedVisionId) {
+    const queuedRequestId = queuedImageEditRequestIdFromJobId(job.id)
+    if (queuedRequestId) {
+      const reqRow = await env.ICONOPLASM_DB.prepare(
+        `SELECT fulfilled_vision_id, requested_vision_id
+         FROM icono_generation_requests
+         WHERE id = ?
+         LIMIT 1`,
+      )
+        .bind(queuedRequestId)
+        .first()
+        .catch(() => null)
+      resolvedVisionId = sanitizeVoteVisionId(
+        reqRow?.fulfilled_vision_id || reqRow?.requested_vision_id || "",
+      )
+    }
+  }
   const editedEmulsionId = imageEditCandidateEmulsionId(sourceRow)
   const sourceSampleLabel = sanitizeText(sourceRow?.sample_label || "", 64) || null
   const sourceSampleNumber = optionalInt(sourceRow?.sample_number)
@@ -7344,7 +7504,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       optionalInt(job.result_width),
       optionalInt(job.result_height),
       optionalInt(job.result_bytes),
-      sanitizeVoteVisionId(job.vision_id || `image-edit:${job.id}`),
+      resolvedVisionId || sanitizeVoteVisionId(`image-edit:${job.id}`),
       editedEmulsionId || null,
       sourceSampleLabel,
       sourceSampleNumber,
@@ -10262,37 +10422,7 @@ export async function fulfillGenerationRequests(
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
         if (normalizeGenerationRequestKind(preflightRow?.request_kind || "") === "edit_image") {
-          const editSourceSymbol =
-            normalizeSymbol(preflightRow?.source_gene_symbol || preflightRow?.gene_symbol || "") ||
-            ""
-          const editSourceAssetSha = normalizeSha256(preflightRow?.source_asset_sha256 || "") || ""
-          const editSourceRow = editSourceAssetSha
-            ? await sourceImageEditAssetRow(env, {
-                symbol: editSourceSymbol,
-                assetSha256: editSourceAssetSha,
-              })
-            : null
-          const editInheritedUpvotes = imageEditInheritedUpvotes({
-            upvotes: editSourceRow?.image_upvotes,
-            downvotes: editSourceRow?.image_downvotes,
-          })
-          const editRequesterUserId = normalizeUserId(preflightRow?.requester_user_id || "") || ""
-          const editJob = {
-            id: `request-${intent.requestId}`,
-            source_gene_symbol: editSourceSymbol,
-            source_asset_sha256: editSourceAssetSha,
-            result_asset_sha256: intent.fulfilledAssetSha,
-            vision_id: intent.fulfilledVisionId,
-            inherited_upvotes: editInheritedUpvotes,
-          }
-          await publishImageEditCandidateAsset(env, editJob, editRequesterUserId || actorNorm)
-          if (editRequesterUserId) {
-            await applyImageEditInheritedVotes(env, null, editJob, editRequesterUserId)
-          }
-          await settleGeneAfterVote(env, null, editSourceSymbol, {
-            reason: "queued_image_edit_fulfilled",
-            shedable: false,
-          }).catch(() => null)
+          await stageQueuedImageEditFulfillment(env, { intent, preflightRow })
         }
         deliveryRequestIds.add(intent.requestId)
         startedDeliveryIds.add(intent.requestId)
@@ -20394,6 +20524,18 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             ),
           )
         }
+        const queuedJob = queuedResult?.request?.id
+          ? await ensureQueuedImageEditJob(env, {
+              requestId: queuedResult.request.id,
+              userId,
+              providerId,
+              symbol,
+              assetSha,
+              sourceRow,
+              adjustmentsJson: JSON.stringify(materializedAdjustments),
+              prompt,
+            })
+          : null
         await recordImageEditLastUsedModel(env, {
           userId,
           operation: "image_edit",
@@ -20409,6 +20551,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               provider_id: providerId,
               model: chosenModel.model,
               request: queuedResult.request || null,
+              job: queuedJob ? mapImageEditJobRow(queuedJob, portraitBase(url, env)) : null,
               reused: Boolean(queuedResult.existing || queuedResult.reused),
               message:
                 "Free edit queued for the workstation. You will be notified in your Request Inbox when it finishes.",
@@ -20726,6 +20869,20 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(job.id)
           .run()
+        const queuedRequestId = queuedImageEditRequestIdFromJobId(job.id)
+        if (queuedRequestId) {
+          await env.ICONOPLASM_DB.prepare(
+            `UPDATE icono_request_notifications
+             SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+             WHERE request_id = ?
+               AND requester_user_id = ?
+               AND discord_status = 'sent'
+               AND read_at IS NULL`,
+          )
+            .bind(queuedRequestId, userId)
+            .run()
+            .catch(() => null)
+        }
       } catch (error) {
         logPublishStageFailure("image edit", "confirm_publish", job, error)
         return done(
@@ -22657,15 +22814,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
               ? true
               : coerceBoolean(autopickEligibleRequested, true)
           const autopickEligible = blacklisted ? false : autopickEligibleBase
-          let finalStatus = statusRequested
+          const isStagedImageEdit =
+            !existingAsset &&
+            statusRequested === "draft" &&
+            String(visionId || "").startsWith("comfyui-edit:")
+          let finalStatus = isStagedImageEdit ? "edit_pending" : statusRequested
           if (
-            finalStatus === "draft" &&
-            (existingStatus === "approved" || existingStatus === "rejected")
+            statusRequested === "draft" &&
+            (existingStatus === "approved" ||
+              existingStatus === "rejected" ||
+              existingStatus === "edit_pending")
           ) {
             finalStatus = existingStatus
           }
           if (blacklisted) finalStatus = "rejected"
-          const persistedAutopickEligible = finalStatus === "rejected" ? false : autopickEligible
+          const persistedAutopickEligible =
+            finalStatus === "rejected" || finalStatus === "edit_pending" ? false : autopickEligible
           const persistedIsStale = finalStatus === "rejected" ? false : isStale
           let candidateAction = ""
 
@@ -22703,15 +22867,19 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             // A new candidate, or one whose eligibility moved, changes the
             // gene's published object (its candidate gallery) even when the
             // winner stays. The event is what makes the Actions publisher
-            // republish the gene; reconcile then elects the winner.
-            candidateAction = isNewAsset
-              ? "candidate_added"
-              : existingStatus !== finalStatus ||
-                  Number(existingAsset?.is_stale || 0) !== (persistedIsStale ? 1 : 0) ||
-                  Number(existingAsset?.autopick_eligible ?? 1) !==
-                    (persistedAutopickEligible ? 1 : 0)
-                ? "candidate_changed"
-                : ""
+            // republish the gene; reconcile then elects the winner. Uninspected
+            // edit_pending results stay private until the user clicks Publish.
+            candidateAction =
+              finalStatus === "edit_pending"
+                ? ""
+                : isNewAsset
+                  ? "candidate_added"
+                  : existingStatus !== finalStatus ||
+                      Number(existingAsset?.is_stale || 0) !== (persistedIsStale ? 1 : 0) ||
+                      Number(existingAsset?.autopick_eligible ?? 1) !==
+                        (persistedAutopickEligible ? 1 : 0)
+                    ? "candidate_changed"
+                    : ""
             if (candidateAction) {
               await env.ICONOPLASM_DB.prepare(
                 `INSERT INTO icono_publish_events (gene_symbol, from_asset_sha256, to_asset_sha256, action, actor, reason)
@@ -22732,7 +22900,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
             // verification work. The whole point of the queue redesign is to
             // stop re-discovering image truth with fresh Bunny HEAD storms on
             // every admin request.
-            if (finalStatus !== "rejected" && (verifyStorage || forceUpload || uploadedAny)) {
+            if (
+              finalStatus !== "rejected" &&
+              finalStatus !== "edit_pending" &&
+              (verifyStorage || forceUpload || uploadedAny)
+            ) {
               await recordStorageAuditRenderableAsset(env, {
                 symbol,
                 assetSha256: assetSha,
