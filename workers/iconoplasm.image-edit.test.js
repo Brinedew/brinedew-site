@@ -3,9 +3,20 @@ import { readFileSync } from "node:fs"
 
 import test from "node:test"
 
-import { handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import {
+  fulfillGenerationRequests,
+  handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
+} from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { claimExactGenerationLeases } from "./iconoplasm-generation-lease.js"
 import { sha256Hex } from "./lib/iconoplasm-sha256.js"
-import { withGeneTexts } from "./test-helpers/account-erasure-fixture.js"
+import {
+  ASSET,
+  OTHER_NAME,
+  OTHER_USER,
+  seedWorld,
+  withGeneTexts,
+} from "./test-helpers/account-erasure-fixture.js"
+import { sealSession } from "./lib/sealed-session.js"
 import { TEST_SESSION_SECRET, sessionCookieFor } from "./test-helpers/sealed-session-cookie.js"
 
 // B-1156: each gene's factory prose is on Bunny Storage. buildEnv stores the
@@ -1311,6 +1322,7 @@ async function offeredFlows() {
   ]) {
     const listed = await workerRequest(env, `/api/iconoplasm/image-edit/providers?op=${query}`)
     for (const provider of listed.body.supported_providers) {
+      if (provider.free_queue) continue
       for (const option of provider.model_options) {
         flows.push({
           provider_id: provider.provider_id,
@@ -1690,3 +1702,192 @@ for (const check of KEY_CHECKS) {
     }
   })
 }
+
+test("free ComfyUI edit models are listed for image_edit without API keys and hidden from candidate_generation", async () => {
+  const env = buildEnv(new FakeDb())
+  delete env.ICONOPLASM_IMAGE_EDIT_KEY_SECRET
+
+  const editList = await workerRequest(env, "/api/iconoplasm/image-edit/providers?op=image_edit")
+  assert.equal(editList.status, 200)
+  assert.equal(editList.body.encryption_configured, false)
+
+  const comfy = editList.body.supported_providers.find((p) => p.provider_id === "comfyui")
+  assert.ok(comfy, "expected comfyui provider in image_edit list")
+  assert.equal(comfy.free_queue, true)
+  assert.equal(comfy.default_model, "flux-2-klein-9b-kv")
+  assert.deepEqual(
+    comfy.model_options.map((m) => [m.model, m.label, m.edit_capable, m.generate_capable]),
+    [
+      ["flux-2-klein-9b-kv", "FLUX.2 Klein 9B KV (Free)", true, false],
+      ["flux-2-klein-9b-base", "FLUX.2 Klein 9B Base (Free)", true, false],
+      ["flux-2-klein-4b", "FLUX.2 Klein 4B (Free)", true, false],
+      ["qwen-image-2.1-turbo", "Qwen-Image-2.1 Turbo INT8 (Free)", true, false],
+      ["fibo2-edit-turbo", "FIBO 2.0 Edit Turbo (Free)", true, false],
+      ["fibo2-edit-dev", "FIBO 2.0 Edit Dev (Free)", true, false],
+      ["flux-3-klein", "FLUX.3 Klein (Free)", true, false],
+      ["anima-edit-v2", "Anima Edit v3.0 (Free)", true, false],
+    ],
+  )
+
+  const genList = await workerRequest(
+    env,
+    "/api/iconoplasm/image-edit/providers?op=candidate_generation",
+  )
+  assert.equal(genList.status, 200)
+  assert.equal(
+    genList.body.supported_providers.some((p) => p.provider_id === "comfyui"),
+    false,
+  )
+})
+
+test("free ComfyUI edit queues edit_image, leases source_asset_sha256, and fulfills -e lineage", async () => {
+  const world = await seedWorld()
+  const originalFetch = globalThis.fetch
+  const textBody = "TP53 guardian prose for edit test."
+  const textSha = await sha256Hex(textBody)
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = String(input)
+      if (url.includes(`/texts/v1/TP53/${textSha}.txt`)) {
+        return new Response(textBody, { status: 200 })
+      }
+      return world.network.fetch(input, init)
+    }
+
+    await world.env.ICONOPLASM_DB.prepare(
+      `INSERT OR IGNORE INTO icono_gene_catalog (gene_symbol, full_name)
+       VALUES ('TP53', 'tumor protein p53')`,
+    ).run()
+
+    await world.env.ICONOPLASM_DB.prepare(
+      `INSERT OR REPLACE INTO icono_gene_texts
+         (gene_symbol, gene_id, text_id, version, text_sha256, tags, fields_json)
+       VALUES ('TP53', 'gene_tp53_0001', 'rev_tp53_0001', 1, ?, 'guardian, steel', '{}')`,
+    )
+      .bind(textSha)
+      .run()
+
+    const cookie = await sessionCookieFor({ user_id: OTHER_USER, username: OTHER_NAME }, world.env)
+
+    const sourceRowBefore = await world.env.ICONOPLASM_DB.prepare(
+      `SELECT asset_sha256, emulsion_id FROM icono_portrait_assets WHERE gene_symbol = 'TP53' AND asset_sha256 = ?`,
+    )
+      .bind(ASSET.alice)
+      .first()
+    assert.ok(sourceRowBefore)
+
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookie,
+            Origin: "https://iconoplasm.brinedew.bio",
+          },
+          body: JSON.stringify({
+            provider_id: "comfyui",
+            model: "flux-2-klein-9b-kv",
+            source_gene_symbol: "TP53",
+            source_asset_sha256: ASSET.alice,
+            adjustments: { remove_ai_generation_errors: true },
+          }),
+        }),
+        world.env,
+        { waitUntil() {} },
+      )
+    const payload = await response.json()
+    assert.equal(response.status, 200, JSON.stringify(payload))
+    assert.equal(payload.ok, true)
+    assert.equal(payload.queued, true)
+    assert.equal(payload.provider_id, "comfyui")
+    assert.equal(payload.model, "flux-2-klein-9b-kv")
+    assert.equal(payload.request.gene_symbol, "TP53")
+    assert.equal(payload.request.request_kind, "edit_image")
+    assert.equal(payload.request.requested_vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(payload.request.source_gene_symbol, "TP53")
+    assert.equal(payload.request.source_asset_sha256, ASSET.alice)
+    assert.match(payload.request.request_prompt, /Remove visible AI generation errors/)
+
+    const queuedRow = await world.env.ICONOPLASM_DB.prepare(
+      `SELECT * FROM icono_generation_requests WHERE id = ?`,
+    )
+      .bind(payload.request.id)
+      .first()
+    const claimed = await claimExactGenerationLeases({
+      db: world.env.ICONOPLASM_DB,
+      rows: [queuedRow],
+      leaseOwnerId: "workstation_test_0001",
+      limit: 5,
+      leaseSeconds: 600,
+    })
+    assert.equal(claimed.leases.length, 1)
+    const lease = claimed.leases[0]
+    assert.equal(lease.request.request_kind, "edit_image")
+    assert.equal(lease.request.requested_vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(lease.request.source_gene_symbol, "TP53")
+    assert.equal(lease.request.source_asset_sha256, ASSET.alice)
+    assert.match(lease.request.request_prompt, /Remove visible AI generation errors/)
+
+    const editedSha = "e".repeat(64)
+    // Publication lands the drawn portrait as a candidate before fulfillment
+    // writes its receipt (the receipt's foreign key requires the asset row).
+    await world.env.ICONOPLASM_DB.prepare(
+      `INSERT INTO icono_portrait_assets
+         (gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, mime, status)
+       VALUES ('TP53', ?, ?, ?, ?, 'image/webp', 'candidate')`,
+    )
+      .bind(
+        editedSha,
+        `portraits/v1/ee/${editedSha}/full.webp`,
+        `portraits/v1/ee/${editedSha}/medium.webp`,
+        `portraits/v1/ee/${editedSha}/thumb.webp`,
+      )
+      .run()
+    const fulfill = await fulfillGenerationRequests(world.env, {
+      resolvedBy: "pytest",
+      publicationId: "pub-comfy-edit-1",
+      items: [
+        {
+          ...(lease.source || {}),
+          ...lease,
+          request: undefined,
+          source: undefined,
+          request_ids: [queuedRow.id],
+          gene_symbol: "TP53",
+          provider_id: "comfyui",
+          model_id: "flux-2-klein-9b-kv",
+          prompt_sha256: "d".repeat(64),
+          generation_config_sha256: queuedRow.generation_config_sha256,
+          fulfilled_asset_sha256: editedSha,
+          fulfilled_vision_id: "comfyui-edit:flux-2-klein-9b-kv",
+          fulfilled_provider_id: "comfyui",
+          fulfilled_model_id: "flux-2-klein-9b-kv",
+          r2_key_full: `portraits/v1/ee/${editedSha}/full.webp`,
+          r2_key_medium: `portraits/v1/ee/${editedSha}/medium.webp`,
+          r2_key_thumb: `portraits/v1/ee/${editedSha}/thumb.webp`,
+          mime: "image/webp",
+          width: 1024,
+          height: 1280,
+          bytes: 4096,
+        },
+      ],
+    })
+    assert.equal(fulfill.ok, true, JSON.stringify(fulfill))
+
+    const promoted = await world.env.ICONOPLASM_DB.prepare(
+      `SELECT asset_sha256, status, vision_id, emulsion_id, created_by
+       FROM icono_portrait_assets
+       WHERE gene_symbol = 'TP53' AND asset_sha256 = ?`,
+    )
+      .bind(editedSha)
+      .first()
+    assert.ok(promoted)
+    assert.equal(promoted.status, "approved")
+    assert.equal(promoted.vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(promoted.emulsion_id, `${sourceRowBefore.emulsion_id}-e`)
+    assert.equal(promoted.created_by, OTHER_USER)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

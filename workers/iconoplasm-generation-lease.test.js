@@ -578,3 +578,21 @@ test("excludeAttemptIds skips held drawn leases without consuming limit and repo
     fixture.database.close()
   }
 })
+
+test("edit_image generation lease preserves source_gene_symbol and source_asset_sha256", () => {
+  const lease = exactGenerationLeaseFromRow(
+    boundRow({
+      request_kind: "edit_image",
+      request_mode: "specific",
+      requested_vision_id: "comfyui-edit:flux-2-klein-9b-kv",
+      request_prompt: "Shift the rim light cooler.",
+      source_gene_symbol: "TP53",
+      source_asset_sha256: sha("9"),
+    }),
+  )
+  assert.equal(lease.request.request_kind, "edit_image")
+  assert.equal(lease.request.requested_vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+  assert.equal(lease.request.request_prompt, "Shift the rim light cooler.")
+  assert.equal(lease.request.source_gene_symbol, "TP53")
+  assert.equal(lease.request.source_asset_sha256, sha("9"))
+})

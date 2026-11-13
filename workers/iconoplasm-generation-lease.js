@@ -473,6 +473,8 @@ function executionRequest(row) {
     full_name: text(row?.full_name),
     request_kind: text(row?.request_kind),
     request_prompt: text(row?.request_prompt),
+    source_gene_symbol: text(row?.source_gene_symbol || row?.gene_symbol).toUpperCase(),
+    source_asset_sha256: text(row?.source_asset_sha256).toLowerCase(),
     request_mode: text(row?.request_mode),
     requested_vision_id: text(row?.requested_vision_id),
     requested_emulsion_id: text(row?.requested_emulsion_id),

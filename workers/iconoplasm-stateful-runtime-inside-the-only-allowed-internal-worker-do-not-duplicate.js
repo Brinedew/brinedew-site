@@ -410,6 +410,80 @@ const KREA_GPT_IMAGE_25_BODY_FIELDS = Object.freeze({
 })
 
 const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
+  comfyui: Object.freeze({
+    provider_id: "comfyui",
+    label: "ComfyUI Workstation",
+    default_endpoint_url: "",
+    default_model: "flux-2-klein-9b-kv",
+    free_queue: true,
+    capabilities: Object.freeze(["edit"]),
+    model_options: Object.freeze([
+      Object.freeze({
+        model: "flux-2-klein-9b-kv",
+        label: "FLUX.2 Klein 9B KV (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "flux-2-klein-9b-base",
+        label: "FLUX.2 Klein 9B Base (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "flux-2-klein-4b",
+        label: "FLUX.2 Klein 4B (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "qwen-image-2.1-turbo",
+        label: "Qwen-Image-2.1 Turbo INT8 (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "fibo2-edit-turbo",
+        label: "FIBO 2.0 Edit Turbo (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "fibo2-edit-dev",
+        label: "FIBO 2.0 Edit Dev (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "flux-3-klein",
+        label: "FLUX.3 Klein (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+      Object.freeze({
+        model: "anima-edit-v2",
+        label: "Anima Edit v3.0 (Free)",
+        pricing_label: "Free · queued",
+        free_queue: true,
+        edit_capable: true,
+        generate_capable: false,
+      }),
+    ]),
+  }),
   // Checked against OpenAI's own docs on 2026-10-03
   // (developers.openai.com/api/docs/guides/image-generation, /models/gpt-image-2.5-*,
   // /deprecations): the guide's current models are the two GPT Image 2.5 models.
@@ -3211,6 +3285,18 @@ async function prepareGenerationRequest(
   }
   const sourceSymbolNorm = normalizeSymbol(sourceGeneSymbol || geneSymbol || "") || symbolNorm
   const sourceAssetNorm = normalizeSha256(sourceAssetSha256 || "") || ""
+  if (kind === "edit_image") {
+    if (!sourceAssetNorm) {
+      return { ok: false, status: 400, error: "Missing source portrait asset for edit request." }
+    }
+    const sourceRow = await sourceImageEditAssetRow(env, {
+      symbol: sourceSymbolNorm,
+      assetSha256: sourceAssetNorm,
+    })
+    if (!sourceRow?.asset_sha256) {
+      return { ok: false, status: 404, error: "Source portrait not found" }
+    }
+  }
   const clientRequestNorm = sanitizeText(clientRequestId || "", 180) || ""
   if (clientRequestNorm && !/^[a-z0-9][a-z0-9._:-]*$/i.test(clientRequestNorm)) {
     return { ok: false, error: "Invalid client request identifier" }
@@ -3303,7 +3389,20 @@ async function prepareGenerationRequest(
   }
   let resolvedVisionId = requestedRecipe ? `anima-v1-${requestedRecipe.slot}` : visionNorm
   let emulsionSlot = Math.max(0, optionalInt(requestedEmulsionSlot) || 0)
-  if (mode === "specific") {
+  const comfyEditPrefix = "comfyui-edit:"
+  const isComfyEditVision =
+    kind === "edit_image" && mode === "specific" && visionNorm.startsWith(comfyEditPrefix)
+  if (isComfyEditVision) {
+    const requestedModel = visionNorm.slice(comfyEditPrefix.length)
+    const comfyDef = imageEditProviderDefinition("comfyui")
+    const matchingOption = imageEditProviderModelOptions(comfyDef).find(
+      (opt) => opt?.model === requestedModel && opt?.edit_capable === true,
+    )
+    if (!matchingOption) {
+      return { ok: false, status: 400, error: "Choose an available free editing model." }
+    }
+    resolvedVisionId = `${comfyEditPrefix}${matchingOption.model}`
+  } else if (mode === "specific") {
     let optionRow = await env.ICONOPLASM_DB.prepare(
       `SELECT vision_id, emulsion_id, preview_assets_json
        FROM icono_generation_request_vision_option_rollup
@@ -4133,6 +4232,7 @@ function mapImageEditModelOption(option) {
     model: sanitizeText(option.model || "", 128) || "",
     label: sanitizeText(option.label || option.model || "", 160) || "",
     pricing_label: sanitizeText(option.pricing_label || "", 120) || "",
+    free_queue: option.free_queue === true,
     edit_image_param: editImageParam,
     edit_capable: editCapable,
     generate_capable: generateCapable,
@@ -4171,6 +4271,7 @@ function mapImageEditProviderDefinition(provider) {
     label: provider.label,
     default_endpoint_url: provider.default_endpoint_url,
     default_model: provider.default_model,
+    free_queue: provider.free_queue === true,
     capabilities: Array.isArray(provider.capabilities) ? provider.capabilities : [],
     model_options: imageEditProviderModelOptions(provider)
       .map(mapImageEditModelOption)
@@ -7243,7 +7344,7 @@ async function publishImageEditCandidateAsset(env, job, userId) {
       optionalInt(job.result_width),
       optionalInt(job.result_height),
       optionalInt(job.result_bytes),
-      sanitizeVoteVisionId(`image-edit:${job.id}`),
+      sanitizeVoteVisionId(job.vision_id || `image-edit:${job.id}`),
       editedEmulsionId || null,
       sourceSampleLabel,
       sourceSampleNumber,
@@ -7329,7 +7430,7 @@ function imageEditInheritedVoteItems(job, userId) {
   const assetSha = normalizeSha256(job?.result_asset_sha256 || "")
   if (!symbol || !assetSha) return []
   const inherited = capImageEditInheritedUpvotes(job?.inherited_upvotes)
-  const visionId = sanitizeVoteVisionId(`image-edit:${job.id}`)
+  const visionId = sanitizeVoteVisionId(job?.vision_id || `image-edit:${job.id}`)
   const items = []
   for (let index = 0; index < inherited; index += 1) {
     items.push({
@@ -7343,13 +7444,15 @@ function imageEditInheritedVoteItems(job, userId) {
   // Publishing is an explicit endorsement: record a real upvote for the
   // publisher. The gene-page vote UI must hydrate that vote (local snapshot +
   // deferred snapshot prime) so the first click does not toggle it off.
-  items.push({
-    asset_sha256: assetSha,
-    vision_id: visionId,
-    candidate_image_id: null,
-    user_id: normalizeUserId(userId),
-    vote_value: 1,
-  })
+  if (normalizeUserId(userId || "")) {
+    items.push({
+      asset_sha256: assetSha,
+      vision_id: visionId,
+      candidate_image_id: null,
+      user_id: normalizeUserId(userId),
+      vote_value: 1,
+    })
+  }
   return items
 }
 
@@ -9848,6 +9951,10 @@ export async function fulfillGenerationRequests(
               status,
               requester_user_id,
               gene_symbol,
+              COALESCE(request_kind, 'new_candidate') AS request_kind,
+              COALESCE(source_gene_symbol, '') AS source_gene_symbol,
+              COALESCE(source_asset_sha256, '') AS source_asset_sha256,
+              COALESCE(requested_vision_id, '') AS requested_vision_id,
               COALESCE(request_origin, 'user') AS request_origin,
               COALESCE(fulfilled_asset_sha256, '') AS fulfilled_asset_sha256,
               COALESCE(fulfilled_vision_id, '') AS fulfilled_vision_id,
@@ -10154,6 +10261,39 @@ export async function fulfillGenerationRequests(
         )
         .run()
       if (Number(beginResp?.meta?.changes || 0) > 0) {
+        if (normalizeGenerationRequestKind(preflightRow?.request_kind || "") === "edit_image") {
+          const editSourceSymbol =
+            normalizeSymbol(preflightRow?.source_gene_symbol || preflightRow?.gene_symbol || "") ||
+            ""
+          const editSourceAssetSha = normalizeSha256(preflightRow?.source_asset_sha256 || "") || ""
+          const editSourceRow = editSourceAssetSha
+            ? await sourceImageEditAssetRow(env, {
+                symbol: editSourceSymbol,
+                assetSha256: editSourceAssetSha,
+              })
+            : null
+          const editInheritedUpvotes = imageEditInheritedUpvotes({
+            upvotes: editSourceRow?.image_upvotes,
+            downvotes: editSourceRow?.image_downvotes,
+          })
+          const editRequesterUserId = normalizeUserId(preflightRow?.requester_user_id || "") || ""
+          const editJob = {
+            id: `request-${intent.requestId}`,
+            source_gene_symbol: editSourceSymbol,
+            source_asset_sha256: editSourceAssetSha,
+            result_asset_sha256: intent.fulfilledAssetSha,
+            vision_id: intent.fulfilledVisionId,
+            inherited_upvotes: editInheritedUpvotes,
+          }
+          await publishImageEditCandidateAsset(env, editJob, editRequesterUserId || actorNorm)
+          if (editRequesterUserId) {
+            await applyImageEditInheritedVotes(env, null, editJob, editRequesterUserId)
+          }
+          await settleGeneAfterVote(env, null, editSourceSymbol, {
+            reason: "queued_image_edit_fulfilled",
+            shedable: false,
+          }).catch(() => null)
+        }
         deliveryRequestIds.add(intent.requestId)
         startedDeliveryIds.add(intent.requestId)
         continue
@@ -19601,6 +19741,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         let lastUsedSelection = null
         if (env.KV) {
           const configuredProviderIds = new Set(providers.map((p) => p.provider_id))
+          for (const def of scopedDefs) {
+            if (def?.free_queue) configuredProviderIds.add(def.provider_id)
+          }
           const remembered = await readImageEditLastUsedSelection(env, {
             userId,
             operation,
@@ -20169,8 +20312,12 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const userId = normalizeUserId(sessionUser.user_id)
       const providerId = normalizeImageEditProviderId(p?.provider_id || p?.provider || "")
-      const providerRow = await getImageEditProviderRow(env, { userId, providerId })
-      if (!providerRow?.encrypted_api_key) {
+      const providerDef = imageEditProviderDefinition(providerId)
+      const isFreeQueueProvider = Boolean(providerDef?.free_queue)
+      const providerRow = isFreeQueueProvider
+        ? { provider_id: providerId, model: providerDef?.default_model || "" }
+        : await getImageEditProviderRow(env, { userId, providerId })
+      if (!isFreeQueueProvider && !providerRow?.encrypted_api_key) {
         return done(
           "image_edit_jobs_400",
           json({ ok: false, error: "Selected image edit provider is not configured." }, 400),
@@ -20178,12 +20325,98 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       }
       const chosenModel = resolveImageEditRequestModel({
         requestedModel: p?.model,
-        storedModel: providerRow.model,
-        providerDef: imageEditProviderDefinition(providerId),
+        storedModel: providerRow?.model || "",
+        providerDef,
         operation: "edit",
       })
       if (!chosenModel.ok) {
         return done("image_edit_jobs_400", json({ ok: false, error: chosenModel.error }, 400))
+      }
+      if (isFreeQueueProvider) {
+        const symbol = normalizeSymbol(p?.source_gene_symbol || p?.symbol || p?.gene_symbol || "")
+        const assetSha = normalizeSha256(p?.source_asset_sha256 || p?.asset_sha256 || "")
+        if (!symbol) return done("image_edit_jobs_400", json({ error: "Missing source gene" }, 400))
+        if (!assetSha)
+          return done("image_edit_jobs_400", json({ error: "Missing source asset" }, 400))
+        const adjustmentsResult = normalizeImageEditAdjustments(p?.adjustments || p || {})
+        if (!adjustmentsResult.ok) {
+          return done(
+            "image_edit_jobs_400",
+            json({ ok: false, error: adjustmentsResult.error }, 400),
+          )
+        }
+        const adjustmentIncompatibility = imageEditAdjustmentIncompatibility({
+          providerId,
+          model: chosenModel.model,
+          items: adjustmentsResult.items,
+        })
+        if (adjustmentIncompatibility) {
+          return done(
+            "image_edit_jobs_400",
+            json({ ok: false, error: adjustmentIncompatibility }, 400),
+          )
+        }
+        const sourceRow = await sourceImageEditAssetRow(env, { symbol, assetSha256: assetSha })
+        if (!sourceRow?.asset_sha256) {
+          return done(
+            "image_edit_jobs_404",
+            json({ ok: false, error: "Source portrait not found" }, 404),
+          )
+        }
+        const promptTemplatesByKind = await getImageEditPromptTemplatesByKind(env)
+        const materializedAdjustments = materializeImageEditAdjustments(
+          adjustmentsResult.items,
+          promptTemplatesByKind,
+        )
+        const prompt = buildImageEditPrompt(
+          materializedAdjustments,
+          imageEditSharedSuffixPromptTemplate(promptTemplatesByKind),
+          imageEditSharedPrefixPromptTemplate(promptTemplatesByKind),
+        )
+        const queuedResult = await createGenerationRequest(env, {
+          geneSymbol: symbol,
+          requesterUserId: userId,
+          requesterUsername: sessionUser.username || "",
+          requestMode: "specific",
+          requestedVisionId: `comfyui-edit:${chosenModel.model}`,
+          requestKind: "edit_image",
+          requestPrompt: prompt,
+          sourceGeneSymbol: symbol,
+          sourceAssetSha256: assetSha,
+          clientRequestId: p?.client_request_id || "",
+        })
+        if (!queuedResult?.ok) {
+          return done(
+            "image_edit_jobs_queue_err",
+            json(
+              { ok: false, error: queuedResult?.error || "Failed to queue free edit request." },
+              queuedResult?.status || 400,
+            ),
+          )
+        }
+        await recordImageEditLastUsedModel(env, {
+          userId,
+          operation: "image_edit",
+          providerId,
+          model: chosenModel.model,
+        })
+        return done(
+          "image_edit_jobs_queued",
+          json(
+            {
+              ok: true,
+              queued: true,
+              provider_id: providerId,
+              model: chosenModel.model,
+              request: queuedResult.request || null,
+              reused: Boolean(queuedResult.existing || queuedResult.reused),
+              message:
+                "Free edit queued for the workstation. You will be notified in your Request Inbox when it finishes.",
+            },
+            200,
+            { "Cache-Control": "no-store" },
+          ),
+        )
       }
       providerRow.model = chosenModel.model
       const symbol = normalizeSymbol(p?.source_gene_symbol || p?.symbol || p?.gene_symbol || "")
