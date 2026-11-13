@@ -22,10 +22,23 @@
 // and at 600 a day (the sheddable tier's 60% line) the first run, 2026-10-22,
 // deleted 537 and sent that warning; it would have arrived every day for a
 // month, teaching the owner to ignore it. So the sweep stays under Cloudflare's
-// own warning line, leaving room for the publication's few deletes of its
-// previous version: 480 deletes and a handful of lists a day. About 36 days
-// clears the backlog; afterwards each run lists and finds nothing.
-export const RETIRED_KV_SWEEP_DAILY_DELETES = 480
+// own warning line, leaving room for the publication's deletes of its previous
+// version.
+//
+// B-1217: 480 left too little room. The account's delete meter (Cloudflare
+// GraphQL kvOperationsAdaptiveGroups, 2026-11-01..12) read 402 to 556 a day,
+// almost all of it this sweep; the publication's own deletes add up to about
+// 100 on a busy day. The 500 line was crossed on Nov 2 (556), Nov 6 (511) and
+// Nov 12 (544), one warning email each. Reads (~3,000 of 100,000), writes
+// (<160 of 1,000) and lists (<15 of 1,000) were nowhere near. At 300 the
+// sweep plus a busy publication day stays near 40%. On 2026-11-13 about 7,300
+// retired keys remained (5,744 phone cards, 1,556 card-catalog), so about 25
+// more days; afterwards each run lists and finds nothing.
+export const RETIRED_KV_SWEEP_DAILY_DELETES = 300
+// Cloudflare emails the owner once a day's deletes pass this (50% of 1,000).
+export const CLOUDFLARE_KV_DAILY_DELETE_WARNING = 500
+// The publication's own deletes of retired versions on a busy day (B-1217).
+export const OTHER_KV_DAILY_DELETES_BUSY_DAY = 100
 
 // Largest values first. Every delete costs the same, but on 2026-10-27 the
 // namespace held 22.7 GB against the free plan's 1 GB: retired hydrated

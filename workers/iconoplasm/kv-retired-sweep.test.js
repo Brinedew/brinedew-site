@@ -5,9 +5,23 @@ import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 import test from "node:test"
 
-import { sweepRetiredIconoplasmKvKeys } from "./kv-retired-sweep.js"
+import {
+  CLOUDFLARE_KV_DAILY_DELETE_WARNING,
+  OTHER_KV_DAILY_DELETES_BUSY_DAY,
+  RETIRED_KV_SWEEP_DAILY_DELETES,
+  sweepRetiredIconoplasmKvKeys,
+} from "./kv-retired-sweep.js"
 
 const VERSIONS = { catalogArtifactVersionToken: "a5c1", portraitSnapshotSchemaVersion: "v3" }
+
+// B-1217: at 480 a day the sweep plus the publication's deletes crossed
+// Cloudflare's 50% delete warning three times in twelve days.
+test("a day's sweep plus a busy day's other deletes stays under Cloudflare's warning", () => {
+  assert.ok(
+    RETIRED_KV_SWEEP_DAILY_DELETES + OTHER_KV_DAILY_DELETES_BUSY_DAY <
+      CLOUDFLARE_KV_DAILY_DELETE_WARNING,
+  )
+})
 
 test(
   "the sweep deletes retired keys a day's share at a time and keeps current ones",
