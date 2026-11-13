@@ -18,16 +18,19 @@ Antagonistic pleiotropy is one of two population-genetic mechanisms by which sel
 The theory is often summarised as "genes that are useful when young and harmful when old". The summary is loose in ways that matter. It is regularly applied to mechanisms, such as replicative telomere shortening, whose protective effect does not stop with age, and whose removal late in life would be expected to shorten life rather than lengthen it. [Misapplications](#misapplications) sets out what the definition requires and where the shorthand departs from it.
 
 ## Definitions
-
 **Pleiotropy** is the effect of one gene on more than one trait. The word, *Pleiotropie*, was coined by Ludwig Plate in 1910.[^stearns2010] An early recorded case is in Mendel's 1866 paper: the factor that made pea flowers white also made the seed coat white, while violet flowers came with "gray, gray-brown, leather-brown" seed coats and a reddish tint in the leaf axils.[^mendel1866] The gene was identified in 2010 as a bHLH transcription factor that controls anthocyanin pigment throughout the plant; Mendel's white allele most likely carries a splice-site mutation that truncates the protein.[^hellens2010]
 
 Pleiotropy is **antagonistic** when an allele's effects on two fitness components have opposite signs. The standard example known by 1957 is the sickle-cell allele of haemoglobin, HbS. Anthony Allison showed in 1954 that Ugandan children carrying one copy had fewer and lighter *Plasmodium falciparum* infections,[^allison1954] while two copies cause sickle-cell disease. Its two effects differ in dominance, not in age, so selection holds the allele at an intermediate frequency where malaria is common.
+
+Williams did not use the phrase "antagonistic pleiotropy" in his 1957 paper; he wrote of pleiotropic genes *"that have opposite effects on fitness at different ages, or, more accurately, in different somatic environments"*, illustrating the idea with a hypothetical allele that promotes bone calcification during growth and arterial calcification in adulthood.[^williams1957] The phrase itself was coined in 1982 by Michael Rose in population-genetic terms—for any allele with opposing effects on two fitness components, generating a negative genetic correlation—without strictly requiring a single trait's instantaneous survival effect to reverse sign late in life.[^rose1982]
 
 In the theory of ageing, the fitness components are **age-specific**: the probability of surviving from age $x$ to $x + 1$, and fecundity at age $x$. An allele shows antagonistic pleiotropy across ages when it raises some of these and lowers others. Three features of the definition are easily lost:
 
 1. **The comparison is between genotypes.** "Lowers survival at 70" means that carriers alive at 70 survive the year less often than non-carriers alive at 70, where each has carried their allele for life. It is not a statement about what would happen if the allele's product were removed at 70 (see [below](#late-removal-is-a-different-counterfactual)).
 2. **The effect at each age is a net effect.** An allele can impose a cost at some age and still raise survival at that age, if its benefits at the same age are larger. Only the sign of the net effect counts.
 3. **The effects are on fitness components.** Health, tissue function or a biomarker matter only through survival and reproduction.
+
+Two distinctions from evolutionary genetics help keep these senses apart. **Sign pleiotropy** refers to an allele whose effects genuinely reverse direction across ages or environments, whereas **magnitude pleiotropy** describes effects that vary only in size.[^remold2012] Separately, Annalise Paaby and Matthew Rockman separate **molecular-gene pleiotropy** (one gene performing multiple molecular or physiological roles), **developmental pleiotropy** (mutations affecting multiple traits), and **selectional pleiotropy** (alleles with opposing effects on fitness components); only the third is antagonistic pleiotropy in the evolutionary sense.[^paabyrockman2013]
 
 > [!note]- Formal definitions
 > Let $l(x)$ be the probability of surviving from birth to age $x$, $m(x)$ the expected number of daughters born per year at age $x$, and $\mu(x)$ the mortality rate. In a population with a stable age structure, the growth rate $r$ solves the Euler–Lotka equation
@@ -472,6 +475,20 @@ The distinction changes what the theory predicts. Under antagonistic pleiotropy 
 
 The summary also invites a second question: would the old organism be better off if the mechanism were switched off now? This is not the question the definition asks. An intervention at 70 acts on a body shaped by 70 years of the mechanism's operation, including whatever damage it held in check. The answer can differ from the allele comparison in either direction. A mechanism can be costly to have carried for a lifetime and still be indispensable in the state it has produced, and an allele's late cost can be irreversible by the time it is expressed. Questions about late-life interventions need data from late-life interventions.
 
+### Conceptual drift in the literature
+
+In biogerontology, "antagonistic pleiotropy" has gradually widened beyond alleles that reverse net fitness sign across ages into a catch-all label for continuous resource trade-offs, cumulative metabolic damage and lifelong cancer-defence constraints. Several lines of work drove that expansion:
+
+- **Continuous allocation and cumulative damage.** Thomas Kirkwood and Michael Rose folded the [[disposable-soma-theory|disposable soma theory]]—a continuous metabolic budget dividing resources between reproduction and somatic maintenance—into antagonistic pleiotropy as a physiological mechanism,[^kirkwoodrose1991] though Kirkwood later noted that casting somatic-maintenance genes directly as antagonistic pleiotropy requires inverting their action so that alleles actively depress repair rather than merely under-investing in it.[^kirkwood2017] Alexey Golubev, Andrew Hanson and Vadim Gladyshev argued that antagonistic pleiotropy theory had mistaken "a cumulative quantitative process for a qualitative switch", proposing to unite it with damage-accumulation models by treating metabolic enzymes that continuously generate reactive byproducts—whose collateral damage compounds over decades—as producing late-acting pleiotropic costs.[^golubev2018]
+- **Tumour suppression and telomeres.** [[judith-campisi|Judith Campisi]] popularised [[cellular-senescence|cellular senescence]] as a canonical example of antagonistic pleiotropy—suppressing cancer early in life while promoting chronic inflammation and tissue decline late in life.[^campisi2001][^campisi2005][^campisi2013] Bret Weinstein and Deborah Ciszek framed somatic telomerase repression and short telomeres (the "reserve-capacity hypothesis") as evolved antagonistic pleiotropy trading cancer protection against tissue repair,[^weinsteinciszek2002] and Rivka Stone, Abraham Aviv and colleagues analysed human telomere length as an evolutionary trade-off between cancer and atherosclerotic vascular disease.[^stone2016][^avivshay2018]
+- **Broad mutant screens and "firehose" programmes.** Steven Austad and Jessica Hoffman treated a wide range of lifespan-extending mutations with early-life fitness penalties (*daf-2*, *age-1*, *chico*, *p66shc*, Ames and Snell dwarfs) as evidence that antagonistic pleiotropy is ubiquitous.[^austadhoffman2018] David Gems and Carina Kern broadened the category beyond post-reproductive developmental run-on to include synchronous "firehose-type costly programs"—acute defences such as neutrophil responses to infection whose collateral tissue injury accumulates into late-life pathology.[^gemskern2024]
+
+Other biogerontologists have pushed back against this drift, arguing that it lumps genuinely distinct mechanisms under one label:
+
+- **Developmental run-on versus ongoing defence.** Mikhail Blagosklonny argued that p53 is misclassified as antagonistically pleiotropic—removing *Trp53* shortens rather than lengthens lifespan by bringing cancer forward—and restricted antagonistic pleiotropy to developmental growth pathways such as [[mtor-mtor-p42345|mTOR]] that are useful early in life and continue running destructively once growth stops as a "quasi-program".[^blagosklonny2010]
+- **Live trade-offs within old age.** Aubrey de Grey objected to calling pathways such as inflammation or GH/IGF-1 signalling "good in the young, bad in the old" when turning them up or down still carries competing costs and benefits *within* old age—"good in the old and bad in the old in different ways".[^degrey2015] In the same spirit, Samuel Pavard and C. Jessica E. Metcalf analysed telomere shortening and telomerase repression as a lifelong trade-off between competing causes of mortality rather than an early-good, late-bad switch.[^pavardmetcalf2024]
+- **Uncoupling energy, function and senescence.** Silvia Giaimo and Fabrizio d'Adda di Fagagna questioned whether cellular senescence shows a net early-benefit to late-harm reversal,[^giaimo2012] and Axel Kowald, João Passos and Kirkwood argued that senescence evolved for transient tissue remodelling and wound healing and accumulates late when immune clearance weakens.[^kowald2020] Alexei Maklakov and Tracey Chapman separated continuous energy-allocation trade-offs from age-specific functional trade-offs, pointing both to *daf-2* knockdown in adult *C. elegans* (which extends lifespan without early reproductive cost)[^dillin2002] and to post-reproductive intestinal autophagy converting gut biomass into yolk as a genuine case of developmental run-on after reproduction ends.[^maklakovchapman2019][^ezcurra2018]
+
 ### Telomere shortening
 
 Human somatic cells repress telomerase, so their telomeres shorten with each division until the cells stop dividing (see [[telomeres]], [[telomerase-tert]] and [[hayflick-moorhead-experiment]]). Shortening is the textbook candidate for antagonistic pleiotropy: it limits the proliferation of incipient cancers, and the short telomeres of old age are associated with degenerative disease. The evidence shows a mechanism whose protective effect continues into old age.
@@ -869,11 +886,15 @@ Mice with extra copies of the normal gene behave differently. "Super p53" mice, 
 
 The early-ageing phenotype belongs to alleles that change how p53 is regulated, not to p53 function as such. Mikhail Poyurovsky and Carol Prives concluded that "at least in the case of p53 there is mounting data challenging the antagonistic pleiotropy model".[^poyurovsky2010] Elizabeth Ungewitter and Heidi Scrable discussed whether the effects attributed to p53 belong to p53 itself or to the genes that modify its activity.[^ungewitter2009]
 
+Mikhail Blagosklonny similarly rejected *Trp53* as an example of antagonistic pleiotropy on the ground that neither *Trp53*-null nor heterozygous mice live longer; loss of p53 shortens lifespan by accelerating cancer, whereas genuine antagonistic pleiotropy on his account applies to developmental growth pathways such as [[mtor-mtor-p42345|mTOR]] whose activity continues destructively past maturity.[^blagosklonny2010]
+
 ### Cellular senescence
 
 [[judith-campisi|Judith Campisi]] proposed in 2005 that "the senescence response may be antagonistically pleiotropic, promoting early-life survival by curtailing the development of cancer but eventually limiting longevity as dysfunctional senescent cells accumulate".[^campisi2005] (See [[cellular-senescence]] and [[sasp]].) The proposal rests on late-life costs that are well documented. In mice, killing cells that express p16$^{Ink4a}$ from 12 months of age delayed tumour formation, attenuated the deterioration of kidney, heart and fat, and extended median lifespan.[^baker2016] (See [[baker-ink-attac-experiment]] and [[senolytics]].)
 
 The ablation experiment answers the late-removal question, not the allele question, and it removed a class of cells rather than the capacity to make them. Senescent cells also have functions unrelated to cancer. They appear early in skin wounds and speed their closure by secreting PDGF-AA,[^demaria2014] and removing the p16-high cells that accumulate in the liver's sinusoidal endothelium disrupted blood–tissue barriers and caused fibrosis.[^grosse2020] Silvia Giaimo and Fabrizio d'Adda di Fagagna asked whether the evidence supports the claim that senescence helps survival mainly in youth and harms it mainly in old age, and argued that "there is room to rethink this common view".[^giaimo2012]
+
+Axel Kowald, João Passos and Thomas Kirkwood likewise rejected the simple early-cancer-suppression versus late-pathology narrative, proposing that cellular senescence evolved for transient tissue remodelling and wound repair and accumulates in old age because immune clearance falters.[^kowald2020]
 
 ### Other traps
 
@@ -896,17 +917,16 @@ The ablation experiment answers the late-removal question, not the allele questi
 | Cellular senescence | Cancer suppression, wound healing | Accumulating senescent cells | Proposed;[^campisi2005] late ablation helps in some tissues and harms in others[^baker2016][^grosse2020] |
 
 ## Relationship to other theories
-
 - **Mutation accumulation.** Both mechanisms follow from the decline in the force of selection. They differ in whether the late-acting alleles are favoured (antagonistic pleiotropy) or merely tolerated (mutation accumulation), and so in their predictions for genetic variance.[^charlesworthhughes1996][^partridgebarton1993] (See [[selection-shadow-theory]].)
-- **Disposable soma.** Thomas Kirkwood's theory explains the trade-off physiologically: an organism that spends less on somatic maintenance has more to spend on reproduction.[^kirkwood1977] Kirkwood and Rose described the two theories as "convergent", one based in population genetics and the other in physiological ecology.[^kirkwoodrose1991] (See [[disposable-soma-theory]].)
+- **Disposable soma.** Thomas Kirkwood's theory explains the trade-off physiologically: an organism that spends less on somatic maintenance has more to spend on reproduction.[^kirkwood1977] Kirkwood and Rose described the two theories as "convergent", one based in population genetics and the other in physiological ecology,[^kirkwoodrose1991] though Kirkwood later noted that framing maintenance genes directly as antagonistic pleiotropy requires inverting their action,[^kirkwood2017] and Alexei Maklakov and Tracey Chapman separate continuous energy-allocation trade-offs from age-specific functional trade-offs.[^maklakovchapman2019] (See [[disposable-soma-theory]].)
+- **Developmental run-on and quasi-programmes.** Treats post-reproductive decline as the unselected continuation of developmental or growth programmes (such as [[mtor-mtor-p42345|mTOR]] signalling or post-reproductive yolk production in *C. elegans*) past the point where they serve reproduction, rather than as an optimal energy-allocation compromise.[^blagosklonny2010][^ezcurra2018][^gemskern2024]
 - **Tumour suppressor theory of ageing.** Treats some age-related decline as the cost of anti-cancer mechanisms that remain beneficial throughout life, a constraint rather than an antagonistic allele. (See [[tumor-suppressor-theory-of-aging]] and [[replicative-credit]].)
 - **Mortality rate models.** Hamilton's force of selection is used to explain why the mortality rate rises with age, though not its exponential form. (See [[Mortality rate models]].)
 
 ## History
 
 ### From Weismann to Hamilton
-
-Weismann proposed in the early 1880s that selection had designed a mechanism to remove the old, possibly a limit on the number of times somatic cells can divide.[^williams1957] Fisher noted in 1930 that selection weakens with age, and Haldane and Medawar developed the point; Medawar's 1952 lecture stated the theory of mutation accumulation.[^charlesworth2000][^medawar1952] Williams's 1957 paper proposed that selection actively favours alleles with early benefits and late costs, and listed nine testable deductions.[^williams1957] Hamilton derived the age-specific force of selection on survival and fecundity in 1966,[^hamilton1966] and Charlesworth's *Evolution in Age-Structured Populations* gave the population genetics of age-specific selection a systematic form in 1980.[^charlesworth1980] In between, Kirkwood proposed the disposable soma theory in 1977.[^kirkwood1977]
+Weismann proposed in the early 1880s that selection had designed a specific mechanism to remove the old, possibly a limit on the number of times somatic cells can divide.[^williams1957] Fisher noted in 1930 that selection weakens with age, and Haldane and Medawar developed the point; Medawar's 1952 lecture stated the theory of mutation accumulation.[^charlesworth2000][^medawar1952] Williams's 1957 paper proposed that selection actively favours alleles with early benefits and late costs, and listed nine testable deductions.[^williams1957] Hamilton derived the age-specific force of selection on survival and fecundity in 1966,[^hamilton1966] and Charlesworth's *Evolution in Age-Structured Populations* gave the population genetics of age-specific selection a systematic form in 1980.[^charlesworth1980] In between, Kirkwood proposed the disposable soma theory in 1977,[^kirkwood1977] and Michael Rose coined the phrase "antagonistic pleiotropy" in 1982.[^rose1982]
 
 ### Experiments
 
@@ -1097,3 +1117,37 @@ Figure 1 was computed for this article. Mortality comes from the Social Security
 [^promislow1996]: Promislow DEL, Tatar M, Khazaeli AA, Curtsinger JW (1996). "Age-specific patterns of genetic variance in *Drosophila melanogaster*. I. Mortality". *Genetics*. 143 (2): 839–848. [doi:10.1093/genetics/143.2.839](https://doi.org/10.1093/genetics/143.2.839)
 
 [^codd2021]: Codd V, Wang Q, Allara E, Musicha C, Kaptoge S, et al. (2021). "Polygenic basis and biomedical consequences of telomere length variation". *Nature Genetics*. 53 (10): 1425–1433. [doi:10.1038/s41588-021-00944-6](https://doi.org/10.1038/s41588-021-00944-6)
+
+[^rose1982]: Rose MR (1982). "Antagonistic pleiotropy, dominance, and genetic variation". *Heredity*. 48 (1): 63–78. [doi:10.1038/hdy.1982.7](https://doi.org/10.1038/hdy.1982.7)
+
+[^remold2012]: Remold S (2012). "Understanding specialism when the Jack of all trades can be the master of all". *Proceedings of the Royal Society B*. 279 (1749): 4861–4869. [doi:10.1098/rspb.2012.1990](https://doi.org/10.1098/rspb.2012.1990)
+
+[^paabyrockman2013]: Paaby AB, Rockman MV (2013). "The many faces of pleiotropy". *Trends in Genetics*. 29 (2): 66–73. [doi:10.1016/j.tig.2012.10.010](https://doi.org/10.1016/j.tig.2012.10.010)
+
+[^kirkwood2017]: Kirkwood TBL (2017). "The disposable soma theory: origins and evolution". In Shefferson RP, Jones OR, Salguero-Gómez R (eds.), *The Evolution of Senescence in the Tree of Life*, pp. 23–39. Cambridge: Cambridge University Press. [doi:10.1017/9781139939867.002](https://doi.org/10.1017/9781139939867.002)
+
+[^golubev2018]: Golubev A, Hanson AD, Gladyshev VN (2018). "A tale of two concepts: harmonizing the free radical and antagonistic pleiotropy theories of aging". *Antioxidants & Redox Signaling*. 29 (10): 1003–1017. [doi:10.1089/ars.2017.7105](https://doi.org/10.1089/ars.2017.7105)
+
+[^campisi2001]: Campisi J (2001). "Cellular senescence as a tumor-suppressor mechanism". *Trends in Cell Biology*. 11 (11): S27–S31. [doi:10.1016/S0962-8924(01)02151-1](https://doi.org/10.1016/S0962-8924(01)02151-1)
+
+[^campisi2013]: Campisi J (2013). "Aging, cellular senescence, and cancer". *Annual Review of Physiology*. 75: 685–705. [doi:10.1146/annurev-physiol-030212-183653](https://doi.org/10.1146/annurev-physiol-030212-183653)
+
+[^weinsteinciszek2002]: Weinstein BS, Ciszek D (2002). "The reserve-capacity hypothesis: evolutionary origins and modern implications of the trade-off between tumor-suppression and tissue-repair". *Experimental Gerontology*. 37 (5): 615–627. [doi:10.1016/s0531-5565(02)00012-8](https://doi.org/10.1016/s0531-5565(02)00012-8)
+
+[^stone2016]: Stone RC, Horvath K, Kark JD, Susser E, Tishkoff SA, Aviv A (2016). "Telomere length and the cancer–atherosclerosis trade-off". *PLOS Genetics*. 12 (7): e1006144. [doi:10.1371/journal.pgen.1006144](https://doi.org/10.1371/journal.pgen.1006144)
+
+[^austadhoffman2018]: Austad SN, Hoffman JM (2018). "Is antagonistic pleiotropy ubiquitous in aging biology?". *Evolution, Medicine, and Public Health*. 2018 (1): 287–294. [doi:10.1093/emph/eoy033](https://doi.org/10.1093/emph/eoy033)
+
+[^gemskern2024]: Gems D, Kern CC (2024). "Biological constraint, evolutionary spandrels and antagonistic pleiotropy". *Ageing Research Reviews*. 101: 102527. [doi:10.1016/j.arr.2024.102527](https://doi.org/10.1016/j.arr.2024.102527)
+
+[^blagosklonny2010]: Blagosklonny MV (2010). "Revisiting the antagonistic pleiotropy theory of aging: TOR-driven program and quasi-program". *Cell Cycle*. 9 (16): 3151–3156. [doi:10.4161/cc.9.16.13120](https://doi.org/10.4161/cc.9.16.13120)
+
+[^degrey2015]: de Grey A (2015). Interview with Rhonda Patrick, *FoundMyFitness*, episode 10 (13 August 2015). [foundmyfitness.com](https://www.foundmyfitness.com/episodes/aubrey-de-grey)
+
+[^pavardmetcalf2024]: Pavard S, Metcalf CJE (2024). "Trade-offs between mortality components in life history evolution: the case of cancers". In Burger O, Lee R, Sear R (eds.), *Human Evolutionary Demography*, pp. 715–740. Cambridge: Open Book Publishers. [doi:10.11647/obp.0251.31](https://doi.org/10.11647/obp.0251.31)
+
+[^kowald2020]: Kowald A, Passos JF, Kirkwood TBL (2020). "On the evolution of cellular senescence". *Aging Cell*. 19 (12): e13270. [doi:10.1111/acel.13270](https://doi.org/10.1111/acel.13270)
+
+[^maklakovchapman2019]: Maklakov AA, Chapman T (2019). "Evolution of ageing as a tangle of trade-offs: energy versus function". *Proceedings of the Royal Society B*. 286 (1911): 20191604. [doi:10.1098/rspb.2019.1604](https://doi.org/10.1098/rspb.2019.1604)
+
+[^ezcurra2018]: Ezcurra M, Benedetto A, Sornda T, Gilliat AF, Au C, et al. (2018). "*C. elegans* eats its own intestine to make yolk leading to multiple senescent pathologies". *Current Biology*. 28 (16): 2544–2556.e5. [doi:10.1016/j.cub.2018.06.035](https://doi.org/10.1016/j.cub.2018.06.035)
