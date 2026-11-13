@@ -1,43 +1,162 @@
 formulas:
-  stage_label: if(draft == true, "draft", if(status == "in_review", "in review", if(status == "scheduled", "scheduled", if(draft == false, "published", "unknown"))))
-  stage_sort: if(formula.stage_label == "draft", 1, if(formula.stage_label == "in review", 2, if(formula.stage_label == "scheduled", 3, if(formula.stage_label == "published", 4, 5))))
+  assessment_banner: if(note.vital_level && note.class, "This level-" + note.vital_level.toString() + " vital article is rated " + note.class + "-class.", if(note.class, "Rated " + note.class + "-class.", if(note.vital_level, "Level-" + note.vital_level.toString() + " vital article (unrated).", "Unassessed")))
+  vital_sort: if(note.vital_level, note.vital_level, 99)
+  class_rank: if(note.class == "FA", 1, if(note.class == "A", 2, if(note.class == "GA", 3, if(note.class == "B", 4, if(note.class == "C", 5, if(note.class == "Start", 6, if(note.class == "Stub", 7, if(note.class == "FL", 8, if(note.class == "List", 9, if(note.class == "NA", 10, 99))))))))))
+  stage_label: if(draft == true, "draft", if(draft == false, "published", "unflagged"))
+  stage_sort: if(draft == true, 1, if(draft == false, 2, 3))
   updated_relative: file.mtime.relative()
 properties:
   title:
     displayName: Note
+  vital_level:
+    displayName: Vital
+  class:
+    displayName: Class
+  formula.assessment_banner:
+    displayName: Assessment
   formula.stage_label:
     displayName: Stage
+  draft:
+    displayName: Draft
   formula.updated_relative:
     displayName: Updated
-  status:
-    displayName: Status
+  file.folder:
+    displayName: Folder
 views:
   - type: table
-    name: Pipeline
+    name: Assessed Wiki
     filters:
-      or:
-        - draft == true
-        - status == "in_review"
-        - status == "scheduled"
+      and:
+        - file.inFolder("wiki")
+        - '!file.inFolder("wiki/_backups")'
+        - file.ext == "md"
+        - or:
+            - note.class
+            - note.vital_level
+    order:
+      - title
+      - vital_level
+      - class
+      - formula.assessment_banner
+      - draft
+      - date
+    sort:
+      - property: vital_level
+        direction: ASC
+      - property: formula.class_rank
+        direction: ASC
+      - property: formula.vital_sort
+        direction: ASC
+    columnSize:
+      note.title: 220
+      note.vital_level: 70
+      note.class: 80
+      formula.assessment_banner: 225
+  - type: table
+    name: Priority Gaps
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - '!file.inFolder("wiki/_backups")'
+        - file.ext == "md"
+        - note.vital_level <= 2
+        - formula.class_rank >= 4
+        - note.class != "NA"
+    order:
+      - vital_level
+      - class
+      - title
+      - formula.assessment_banner
+      - draft
+    sort:
+      - property: formula.vital_sort
+        direction: ASC
+      - property: formula.class_rank
+        direction: DESC
+    columnSize:
+      note.title: 220
+      note.vital_level: 70
+      note.class: 80
+      formula.assessment_banner: 360
+  - type: table
+    name: All Wiki
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - '!file.inFolder("wiki/_backups")'
+        - file.ext == "md"
+    order:
+      - vital_level
+      - class
+      - title
+      - formula.assessment_banner
+      - draft
+      - formula.updated_relative
+    sort:
+      - property: formula.vital_sort
+        direction: ASC
+      - property: formula.class_rank
+        direction: ASC
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      note.title: 220
+      note.vital_level: 70
+      note.class: 80
+      formula.assessment_banner: 360
+  - type: table
+    name: Unassessed Wiki
+    filters:
+      and:
+        - file.inFolder("wiki")
+        - '!file.inFolder("wiki/_backups")'
+        - file.ext == "md"
+        - "!note.class"
+        - "!note.vital_level"
+    order:
+      - title
+      - draft
+      - date
+      - formula.updated_relative
+    sort:
+      - property: file.mtime
+        direction: DESC
+    columnSize:
+      note.title: 220
+  - type: table
+    name: All Content
+    filters:
+      and:
+        - file.ext == "md"
+        - '!file.inFolder("Templates")'
+        - '!file.inFolder("wiki/_backups")'
     order:
       - formula.stage_label
       - title
+      - file.folder
+      - vital_level
+      - class
       - formula.updated_relative
-      - status
     sort:
       - property: formula.stage_sort
         direction: ASC
       - property: file.mtime
         direction: DESC
     columnSize:
-      note.title: 163
+      note.title: 220
   - type: cards
     name: Unpublished
     filters:
       and:
+        - file.ext == "md"
+        - '!file.inFolder("Templates")'
+        - '!file.inFolder("wiki/_backups")'
         - draft == true
     order:
       - title
+      - file.folder
+      - vital_level
+      - class
       - file.mtime
     sort:
       - property: file.mtime
@@ -49,38 +168,16 @@ views:
     name: Published
     filters:
       and:
+        - file.ext == "md"
+        - '!file.inFolder("Templates")'
         - draft == false
     order:
       - title
+      - file.folder
       - file.mtime
     sort:
       - property: file.mtime
         direction: DESC
-  - type: cards
-    name: Needs Review
-    filters:
-      and:
-        - status == "in_review"
-    order:
-      - title
-      - file.mtime
-    sort:
-      - property: file.mtime
-        direction: DESC
-    imageFit: ""
-    cardSize: 190
-    imageAspectRatio: 1
-  - type: cards
-    name: Scheduled
-    filters:
-      and:
-        - status == "scheduled"
-    order:
-      - publish_date
-      - title
-    sort:
-      - property: publish_date
-        direction: ASC
     imageFit: ""
     cardSize: 190
     imageAspectRatio: 1
