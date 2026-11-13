@@ -87,3 +87,75 @@ test(
     }
   },
 )
+
+test(
+  "the sweep deletes orphaned current-version snapshots not in the pointer while keeping keys, previous_keys and pending_keys",
+  { timeout: 60000 },
+  async () => {
+    const require = createRequire(import.meta.url)
+    const { Miniflare, convertV4MiniflareOptions } = createRequire(
+      require.resolve("wrangler/package.json"),
+    )("miniflare")
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('local')}}",
+        compatibilityDate: "2026-08-01",
+        kvNamespaces: ["KV"],
+      }),
+    )
+    try {
+      const kv = await runtime.getKVNamespace("KV")
+      const pointerKey = "iconoplasm:published-portrait-fingerprint:v3"
+      const currentHydrated =
+        "iconoplasm:hydrated-catalog-artifact:a5c1:05b673c49b44-a5c1-v3-19385-current"
+      const previousHydrated =
+        "iconoplasm:hydrated-catalog-artifact:a5c1:8ad63b3e62d1-a5c1-v3-19384-previous"
+      const pendingHydrated =
+        "iconoplasm:hydrated-catalog-artifact:a5c1:999999999999-a5c1-v3-19386-pending"
+      const currentRefs = "iconoplasm:published-portrait-refs:v3-19385-current"
+      const previousRefs = "iconoplasm:published-portrait-refs:v3-19384-previous"
+      const pendingRefs = "iconoplasm:published-portrait-refs:v3-19386-pending"
+
+      const orphaned = [
+        "iconoplasm:hydrated-catalog-artifact:a5c1:daba7daa0c66-a5c1-v3-19160-orphan1",
+        "iconoplasm:hydrated-catalog-artifact:a5c1:80cb888c0834-a5c1-v3-19160-orphan2",
+        "iconoplasm:published-portrait-refs:v3-19160-orphan1",
+        "iconoplasm:published-portrait-refs:v3-19160-orphan2",
+      ]
+      const kept = [
+        pointerKey,
+        currentHydrated,
+        previousHydrated,
+        pendingHydrated,
+        currentRefs,
+        previousRefs,
+        pendingRefs,
+      ]
+
+      await kv.put(
+        pointerKey,
+        JSON.stringify({
+          schema: "iconoplasm.publishedPortraitFingerprint.v1",
+          published_at: "2026-11-05T07:55:18.788Z",
+          fingerprint: { published_count: 19385, latest: "current" },
+          keys: [currentHydrated, currentRefs],
+          previous_keys: [previousHydrated, previousRefs],
+          pending_keys: [pendingHydrated, pendingRefs],
+        }),
+      )
+      for (const name of [...orphaned, ...kept.filter((key) => key !== pointerKey)]) {
+        await kv.put(name, "x")
+      }
+
+      const result = await sweepRetiredIconoplasmKvKeys(kv, VERSIONS, { limit: 40 })
+      assert.equal(result.deleted, orphaned.length)
+      assert.equal(result.done, true)
+
+      const remaining = (await kv.list()).keys.map((key) => key.name).sort()
+      assert.deepEqual(remaining, [...kept].sort())
+    } finally {
+      await runtime.dispose()
+    }
+  },
+)

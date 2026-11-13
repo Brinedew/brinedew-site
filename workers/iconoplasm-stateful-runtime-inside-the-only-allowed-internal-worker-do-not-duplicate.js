@@ -1947,31 +1947,49 @@ async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catal
   }
   // A catalog replacement prepares both old and new base versions before the
   // shared portrait pointer moves. Readers can observe either manifest safely.
-  const keys = []
+  const writes = []
   for (const [baseHash, artifact] of preparedCatalogs) {
     const hydrated = mergePublishedPortraitRefsIntoArtifact(artifact, rows)
     if (!isCurrentCatalogArtifact(hydrated)) throw new Error("Catalog publication is invalid")
     const key = `${KV_HYDRATED_CATALOG_ARTIFACT_PREFIX}${buildPortraitAwareManifestHash(baseHash, fingerprint)}`
-    await env.KV.put(key, JSON.stringify(hydrated))
-    keys.push(key)
+    writes.push([key, JSON.stringify(hydrated)])
   }
   const version = portraitSnapshotVersion(fingerprint)
   // These are required publication writes, not best-effort cache warming.
   // A failed payload write must leave the prior pointer and isolate caches intact.
   const refsKey = `${KV_PUBLISHED_PORTRAIT_REFS_PREFIX}${version}`
-  await env.KV.put(refsKey, JSON.stringify(rows))
-  keys.push(refsKey)
-  // B-1147: KV keeps this version and the previous one. Every version used to
-  // stay forever: 516 snapshots of the whole catalogue and 539 portrait lists by
-  // 2026-10-21. A reader or extension still on the previous version keeps
-  // working; one two versions behind gets the unavailable error and refreshes
-  // its manifest, as for any missing snapshot.
+  writes.push([refsKey, JSON.stringify(rows)])
+  const keys = writes.map(([key]) => key)
+  // B-1147 / B-1221: KV keeps this version and the previous one. Every version
+  // used to stay forever: 516 snapshots of the whole catalogue and 539 portrait
+  // lists by 2026-10-21. A reader or extension still on the previous version
+  // keeps working; one two versions behind gets the unavailable error and
+  // refreshes its manifest, as for any missing snapshot. Stage pending_keys in
+  // the pointer before writing the payloads so the retired-key sweep never
+  // races an in-flight publication.
   const pointerKey = `${KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX}${PUBLISHED_PORTRAIT_SNAPSHOT_SCHEMA_VERSION}`
   let prior = null
   try {
     prior = JSON.parse((await env.KV.get(pointerKey)) || "null")
   } catch {}
   const priorKeys = Array.isArray(prior?.keys) ? prior.keys : []
+  const priorPreviousKeys = Array.isArray(prior?.previous_keys) ? prior.previous_keys : []
+  const priorPendingKeys = Array.isArray(prior?.pending_keys) ? prior.pending_keys : []
+  if (prior && typeof prior === "object" && prior.fingerprint) {
+    await env.KV.put(
+      pointerKey,
+      JSON.stringify({
+        ...prior,
+        pending_keys: keys,
+      }),
+    )
+  }
+  for (const [key, value] of writes) {
+    await env.KV.put(key, value)
+  }
+  const nextPreviousKeys = priorKeys.some((key) => !keys.includes(key))
+    ? priorKeys
+    : priorPreviousKeys
   const now = Date.now()
   await env.KV.put(
     pointerKey,
@@ -1980,14 +1998,14 @@ async function commitPortraitReferenceSnapshot(env, { fingerprint, rows }, catal
       published_at: new Date(now).toISOString(),
       fingerprint,
       keys,
-      previous_keys: priorKeys,
+      previous_keys: nextPreviousKeys,
     }),
   )
-  const kept = new Set([...keys, ...priorKeys])
-  const retired = (Array.isArray(prior?.previous_keys) ? prior.previous_keys : []).filter(
-    (key) => typeof key === "string" && !kept.has(key),
-  )
-  await Promise.all(retired.map((key) => env.KV.delete(key)))
+  const kept = new Set([...keys, ...nextPreviousKeys])
+  const retired = Array.from(
+    new Set([...priorKeys, ...priorPreviousKeys, ...priorPendingKeys]),
+  ).filter((key) => typeof key === "string" && !kept.has(key))
+  if (env.KV.delete) await Promise.all(retired.map((key) => env.KV.delete(key)))
   publishedPortraitRefsCache.key = version
   publishedPortraitRefsCache.value = rows
   sharedPublishedPortraitFingerprintCache.loadedAt = now
