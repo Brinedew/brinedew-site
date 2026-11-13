@@ -84,6 +84,7 @@ configuration:
     - .trash
     - .stfolder
     - .gemini
+    - Content Status Base.base
   theme:
     fontOrigin: local
     cdnCaching: false
