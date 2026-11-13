@@ -1437,6 +1437,7 @@ test("ready edit_image receipt stays unread on gene view and opens the edit moda
   }
   const posts = []
   let openedEdit = null
+  const readyEditNotifications = []
   const inbox = createRequestInbox({
     fetchJSON: async (url, options) => {
       if (url === "/api/iconoplasm/notifications/read") {
@@ -1464,9 +1465,14 @@ test("ready edit_image receipt stays unread on gene view and opens the edit moda
     onOpenEditJob: (info) => {
       openedEdit = info
     },
+    onReadyEditJobs: (items) => {
+      readyEditNotifications.push(...items)
+    },
   })
 
   await inbox.refresh()
+  assert.equal(readyEditNotifications.length, 1)
+  assert.equal(readyEditNotifications[0].edit_job_id, "request-91")
   // Visiting /gene/PAGE2 before reviewing must not mark the ready edit read.
   await inbox.noteGeneViewed("PAGE2")
   assert.equal(posts.length, 0)

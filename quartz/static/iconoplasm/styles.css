@@ -1498,7 +1498,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--icono-radius-sm);
 }
 
@@ -1510,7 +1510,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-image-edit-before-after {
   display: block;
   width: min(var(--icono-image-tile-width), 100%);
-  aspect-ratio: var(--icono-image-edit-aspect-ratio, 4 / 5);
   margin-top: 0.75rem;
 }
 
@@ -1542,8 +1541,7 @@ img-comparison-slider.rendered [slot="second"] {
 .icono-image-edit-comparison {
   display: block;
   width: 100%;
-  height: 100%;
-  aspect-ratio: inherit;
+  aspect-ratio: var(--icono-image-edit-aspect-ratio, 4 / 5);
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-sm);
   background: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
