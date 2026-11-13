@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2026-10-11
 draft: false
+vital_level: 2
+class: B
 aliases:
 - Laws of mortality
 - Law of mortality

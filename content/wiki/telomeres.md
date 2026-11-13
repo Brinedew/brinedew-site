@@ -2,6 +2,8 @@
 title: Telomeres
 date: 2026-10-13
 draft: true
+vital_level: 2
+class: B
 tags:
   - content/wiki
 aliases:

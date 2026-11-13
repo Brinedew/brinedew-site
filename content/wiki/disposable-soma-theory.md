@@ -2,6 +2,8 @@
 title: Disposable soma theory
 date: 2026-10-13
 draft: true
+vital_level: 3
+class: B
 tags:
   - content/wiki
 aliases:

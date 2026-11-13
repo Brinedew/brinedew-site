@@ -10,6 +10,8 @@ domains:
   - auto-inhibitory domain (AID)
 domains_top3: Protein kinase; AIS; Disordered
 draft: true
+vital_level: 4
+class: Start
 first_letter: P
 full_name: 5'-AMP-activated protein kinase catalytic subunit alpha-1
 gene_symbol: PRKAA1

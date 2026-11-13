@@ -2,6 +2,8 @@
 title: Self-Fertilization
 date: 2025-08-10
 draft: true
+vital_level: 4
+class: C
 tags:
   - content/wiki
 ---

@@ -10,6 +10,8 @@ domains:
   - propeptide
 domains_top3: B; C; A
 draft: true
+vital_level: 3
+class: Start
 first_letter: I
 full_name: Insulin-like growth factor 1
 gene_symbol: IGF1

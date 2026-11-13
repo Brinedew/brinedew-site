@@ -2,7 +2,7 @@
 title: Eutely
 date: 2025-08-20
 draft: true
-vital_level: 4
+vital_level: 3
 class: Start
 tags:
   - content/wiki

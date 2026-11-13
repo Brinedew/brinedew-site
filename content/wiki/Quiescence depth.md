@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2026-11-11
 draft: true
+vital_level: 2
+class: B
 aliases:
 - 
 ---

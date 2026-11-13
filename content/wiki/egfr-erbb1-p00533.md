@@ -12,6 +12,8 @@ domains:
   - tyrosine kinase domain
 domains_top3: Protein kinase; Important for dimerization, phosphorylation and activation; Disordered
 draft: true
+vital_level: 3
+class: Start
 first_letter: E
 full_name: Epidermal growth factor receptor
 gene_symbol: EGFR

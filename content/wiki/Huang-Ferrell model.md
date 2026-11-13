@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2026-06-21
 draft: true
+vital_level: 4
+class: Start
 aliases:
 - 
 ---

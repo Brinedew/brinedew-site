@@ -4,7 +4,7 @@ tags:
 - content/wiki
 date: 2026-08-26
 draft: true
-vital_level: 3
+vital_level: 2
 class: Stub
 aliases:
 - ecology of cancer

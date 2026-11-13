@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2026-08-26
 draft: true
+vital_level: 4
+class: Stub
 aliases:
 - bioelectric pattern
 - bioelectricity and morphogenesis

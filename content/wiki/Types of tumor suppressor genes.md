@@ -4,7 +4,7 @@ tags:
   - content/wiki
 date: 2025-12-09
 draft: true
-vital_level: 3
+vital_level: 2
 class: C
 aliases:
   - null

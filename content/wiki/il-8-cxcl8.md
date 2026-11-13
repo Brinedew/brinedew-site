@@ -8,6 +8,8 @@ domain_count: 0
 domains: []
 domains_top3:
 draft: true
+vital_level: 3
+class: Start
 first_letter: C
 full_name: Interleukin-8
 gene_symbol: CXCL8

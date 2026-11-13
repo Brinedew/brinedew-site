@@ -11,6 +11,8 @@ domains:
   - TEN domain
 domains_top3: Reverse transcriptase; RNA-interacting domain 1; GQ motif
 draft: true
+vital_level: 2
+class: Start
 first_letter: T
 full_name: Telomerase reverse transcriptase
 gene_symbol: TERT

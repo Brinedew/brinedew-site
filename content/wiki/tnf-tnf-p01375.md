@@ -8,6 +8,8 @@ domain_count: 1
 domains: []
 domains_top3: THD
 draft: true
+vital_level: 3
+class: Start
 first_letter: T
 full_name: Tumor necrosis factor
 gene_symbol: TNF

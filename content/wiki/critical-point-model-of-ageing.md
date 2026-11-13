@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2026-10-14
 draft: true
+vital_level: 3
+class: B
 aliases:
   - Critical-point model of aging
   - Dynamic resilience model of ageing

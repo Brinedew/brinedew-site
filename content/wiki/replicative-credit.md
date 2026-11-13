@@ -2,6 +2,8 @@
 title: Replicative Credit
 date: 2025-08-10
 draft: true
+vital_level: 2
+class: Start
 ---
 
 # Replicative Credit

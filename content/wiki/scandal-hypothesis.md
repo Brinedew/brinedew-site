@@ -2,6 +2,8 @@
 title: "SCANDAL Hypothesis"
 date: 2025-08-10
 draft: true
+vital_level: 3
+class: Start
 ---
 
 # SCANDAL Hypothesis

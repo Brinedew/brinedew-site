@@ -2,6 +2,8 @@
 title: "Devil Facial Tumor Disease (DFTD)"
 date: 2025-08-10
 draft: true
+vital_level: 3
+class: Start
 ---
 
 # Devil Facial Tumor Disease (DFTD)

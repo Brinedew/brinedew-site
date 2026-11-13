@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2026-08-25
 draft: true
+vital_level: 3
+class: Stub
 aliases:
 - Leo W. Buss
 ---

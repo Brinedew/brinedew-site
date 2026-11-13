@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2025-09-18
 draft: false
+vital_level: 4
+class: List
 aliases:
   -
 ---

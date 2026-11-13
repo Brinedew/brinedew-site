@@ -1,5 +1,7 @@
 ---
 draft: true
+vital_level: 5
+class: Stub
 date: 2025-10-04
 ---
 # summary

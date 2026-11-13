@@ -10,6 +10,8 @@ domains:
   - pocket domain
 domains_top3: Disordered; Pocket; binds T and E1A; Domain A
 draft: true
+vital_level: 2
+class: Start
 first_letter: R
 full_name: Retinoblastoma-associated protein
 gene_symbol: RB1

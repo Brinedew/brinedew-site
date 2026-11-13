@@ -4,9 +4,9 @@ filters:
     - '!file.inFolder("wiki/_backups")'
     - file.ext == "md"
 formulas:
-  assessment_banner: 'if(note.vital_level && note.class, "This level-" + note.vital_level.toString() + " vital article is rated " + note.class + "-class.", if(note.class, "Rated " + note.class + "-class.", if(note.vital_level, "Level-" + note.vital_level.toString() + " vital article (unrated).", "Unassessed")))'
-  vital_sort: 'if(note.vital_level, note.vital_level, 99)'
-  class_rank: 'if(note.class == "FA", 1, if(note.class == "A", 2, if(note.class == "GA", 3, if(note.class == "B", 4, if(note.class == "C", 5, if(note.class == "Start", 6, if(note.class == "Stub", 7, if(note.class == "FL", 8, if(note.class == "List", 9, if(note.class == "NA", 10, 99))))))))))'
+  assessment_banner: if(note.vital_level && note.class, "This level-" + note.vital_level.toString() + " vital article is rated " + note.class + "-class.", if(note.class, "Rated " + note.class + "-class.", if(note.vital_level, "Level-" + note.vital_level.toString() + " vital article (unrated).", "Unassessed")))
+  vital_sort: if(note.vital_level, note.vital_level, 99)
+  class_rank: if(note.class == "FA", 1, if(note.class == "A", 2, if(note.class == "GA", 3, if(note.class == "B", 4, if(note.class == "C", 5, if(note.class == "Start", 6, if(note.class == "Stub", 7, if(note.class == "FL", 8, if(note.class == "List", 9, if(note.class == "NA", 10, 99))))))))))
   updated_relative: file.mtime.relative()
 properties:
   title:
@@ -36,6 +36,8 @@ views:
       - draft
       - date
     sort:
+      - property: vital_level
+        direction: ASC
       - property: formula.class_rank
         direction: ASC
       - property: formula.vital_sort

@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2026-10-13
 draft: true
+vital_level: 1
+class: B
 aliases:
   - Peto paradox
 ---

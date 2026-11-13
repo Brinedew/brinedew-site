@@ -11,6 +11,8 @@ domains:
   - RAM/ANK (intracellular)
 domains_top3: EGF-like 1; EGF-like 2; EGF-like 3
 draft: true
+vital_level: 2
+class: Start
 first_letter: N
 full_name: Neurogenic locus notch homolog protein 1
 gene_symbol: NOTCH1

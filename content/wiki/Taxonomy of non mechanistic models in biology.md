@@ -5,6 +5,8 @@ tags:
   - taxonomy
 date: 2026-08-17
 draft: true
+vital_level: 4
+class: Start
 aliases:
   -
 ---

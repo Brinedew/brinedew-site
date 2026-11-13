@@ -4,6 +4,8 @@ tags: null
 date: 2025-08-19
 status: draft
 draft: true
+vital_level: 5
+class: Start
 ---
 # Research Gaps
 

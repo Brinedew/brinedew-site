@@ -1,6 +1,8 @@
 ---
 date: 2026-10-13
 draft: true
+vital_level: 1
+class: B
 tags:
   - content/wiki
 title: Cellular senescence
