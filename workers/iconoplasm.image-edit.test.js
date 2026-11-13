@@ -1745,11 +1745,24 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
   const originalFetch = globalThis.fetch
   const textBody = "TP53 guardian prose for edit test."
   const textSha = await sha256Hex(textBody)
+  const bunnyObjects = new Map()
   try {
     globalThis.fetch = async (input, init) => {
       const url = String(input)
+      const method = String(init?.method || "GET").toUpperCase()
       if (url.includes(`/texts/v1/TP53/${textSha}.txt`)) {
         return new Response(textBody, { status: 200 })
+      }
+      if (url.startsWith("https://storage.bunnycdn.com/test-zone/")) {
+        const key = url.slice("https://storage.bunnycdn.com/test-zone/".length)
+        if (method === "PUT") {
+          bunnyObjects.set(key, Buffer.from(init?.body || ""))
+          return new Response(null, { status: 201 })
+        }
+        if (method === "GET") {
+          const body = bunnyObjects.get(key)
+          return body ? new Response(body, { status: 200 }) : new Response(null, { status: 404 })
+        }
       }
       return world.network.fetch(input, init)
     }
@@ -1947,6 +1960,16 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
     assert.equal(promoted.vision_id, "comfyui-edit:flux-2-klein-9b-kv")
     assert.equal(promoted.emulsion_id, `${sourceRowBefore.emulsion_id}-e`)
     assert.equal(promoted.created_by, OTHER_USER)
+
+    const publishedGeneObject = JSON.parse(
+      bunnyObjects.get("genes/v3/TP53.json")?.toString("utf8") || "{}",
+    )
+    assert.equal(publishedGeneObject.symbol, "TP53")
+    assert.ok(
+      Array.isArray(publishedGeneObject.portrait_candidates) &&
+        publishedGeneObject.portrait_candidates.some((c) => c.asset_sha256 === editedSha),
+      "publish must synchronously republish genes/v3/TP53.json before returning 200 OK",
+    )
 
     const notifAfter = await world.env.ICONOPLASM_DB.prepare(
       `SELECT read_at FROM icono_request_notifications WHERE request_id = ?`,

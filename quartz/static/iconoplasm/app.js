@@ -352,6 +352,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         loginUrl: voteLoginUrl(),
         onCanonicalChanged: function (symbol, expectation) {
           invalidateGeneDetail(symbol)
+          markGeneOriginFresh(symbol)
           // The caretaker who just changed the text reads it from the origin:
           // Bunny's edge would show the old text for up to a minute.
           var fresh = { forceFresh: true, fromOrigin: true }
@@ -1832,10 +1833,63 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
+  var ORIGIN_FRESH_GENES_STORAGE_KEY = "iconoplasm:origin-fresh-genes"
+  var ORIGIN_FRESH_GENE_TTL_MS = 90000
+
+  function readOriginFreshGenes() {
+    try {
+      if (typeof sessionStorage === "undefined") return {}
+      var raw = sessionStorage.getItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
+      if (!raw) return {}
+      var parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== "object") return {}
+      var now = Date.now()
+      var active = {}
+      Object.keys(parsed).forEach(function (key) {
+        var expiresAt = Number(parsed[key])
+        if (Number.isFinite(expiresAt) && expiresAt > now) active[key] = expiresAt
+      })
+      return active
+    } catch (_error) {
+      return {}
+    }
+  }
+
+  function writeOriginFreshGenes(map) {
+    try {
+      if (typeof sessionStorage === "undefined") return
+      if (!map || !Object.keys(map).length) {
+        sessionStorage.removeItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
+        return
+      }
+      sessionStorage.setItem(ORIGIN_FRESH_GENES_STORAGE_KEY, JSON.stringify(map))
+    } catch (_error) {
+      /* ignore sessionStorage failures */
+    }
+  }
+
+  function markGeneOriginFresh(symbol) {
+    var key = normalizedSymbol(symbol)
+    if (!key) return
+    var active = readOriginFreshGenes()
+    active[key] = Date.now() + ORIGIN_FRESH_GENE_TTL_MS
+    writeOriginFreshGenes(active)
+  }
+
+  function isGeneOriginFresh(symbol) {
+    var key = normalizedSymbol(symbol)
+    if (!key) return false
+    var active = readOriginFreshGenes()
+    return Number(active[key] || 0) > Date.now()
+  }
+
   function fetchGeneDetail(symbol, options) {
     var key = normalizedSymbol(symbol)
     if (!key) return Promise.resolve(null)
     options = options || {}
+    if (!options.fromOrigin && isGeneOriginFresh(key)) {
+      options = Object.assign({}, options, { fromOrigin: true })
+    }
     if (options.forceFresh) {
       // When a vote auto-promotes a new canonical portrait, the Worker still marks
       // public gene JSON cacheable. Bust both our in-memory cache and the request URL
@@ -7677,13 +7731,28 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         updateImageEditButtons()
         seedPublisherVoteSnapshotAfterImageEditPublish(payload)
         void requestInbox.refresh()
-        var root = document.getElementById(ROOT_ID)
-        if (root && state.source && state.source.symbol) {
-          renderGene(root, state.source.symbol, { forceFresh: true })
+        var publishedSymbol = normalizedSymbol(
+          (state.job && state.job.source_gene_symbol) ||
+            (state.source && state.source.symbol) ||
+            "",
+        )
+        if (publishedSymbol) {
+          markGeneOriginFresh(publishedSymbol)
+          invalidateGeneDetail(publishedSymbol)
         }
-        // Publish finished: dismiss the modal so the refreshed candidate grid
-        // is visible immediately. Failures keep the dialog open with the error.
+        // Publish finished: dismiss the modal before re-rendering or navigating
+        // so the refreshed candidate grid from origin is visible immediately.
+        // Failures keep the dialog open with the error.
         closeImageEditDialog()
+        var root = document.getElementById(ROOT_ID)
+        if (publishedSymbol && root) {
+          var route = getRoute()
+          if (route.page === "gene" && normalizedSymbol(route.symbol) === publishedSymbol) {
+            renderGene(root, publishedSymbol, { forceFresh: true, fromOrigin: true })
+          } else {
+            navigateTo("/gene/" + encodeURIComponent(publishedSymbol))
+          }
+        }
       })
       .catch(function (error) {
         state.loading = false
@@ -8363,8 +8432,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           .then(function (payload) {
             requestDirectState.job = payload && payload.job ? payload.job : requestDirectState.job
             setStatus("Published as a new candidate portrait.", "success")
+            markGeneOriginFresh(symbol)
+            invalidateGeneDetail(symbol)
             var root = document.getElementById(ROOT_ID)
-            if (root) renderGene(root, symbol, { forceFresh: true })
+            if (root) renderGene(root, symbol, { forceFresh: true, fromOrigin: true })
           })
           .catch(function (error) {
             if (error && error.payload && error.payload.job) {

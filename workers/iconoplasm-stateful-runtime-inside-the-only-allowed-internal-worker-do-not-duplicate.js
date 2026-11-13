@@ -20903,6 +20903,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         ...job,
         published_at: job.published_at || new Date().toISOString(),
       }
+      // Republish the stable gene object before answering 200 so the caller's
+      // immediate fromOrigin refresh (and F5 reloads while Bunny's 60s edge TTL
+      // expires) sees the new candidate portrait right away.
+      await republishGene(env, job.source_gene_symbol)
       return done(
         "image_edit_jobs",
         json(
@@ -21436,6 +21440,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         ...job,
         published_at: job.published_at || new Date().toISOString(),
       }
+      await republishGene(env, job.gene_symbol)
       return done(
         "candidate_generation_jobs",
         json(
