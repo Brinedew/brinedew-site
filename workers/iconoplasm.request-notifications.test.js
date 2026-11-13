@@ -1424,6 +1424,89 @@ test("opening a gene page marks its results seen; a receipt click only navigates
   assert.equal(posts.length, 1)
 })
 
+test("ready edit_image receipt stays unread on gene view and opens the edit modal on click", async () => {
+  const readyEdit = {
+    request_id: 91,
+    notification_id: 91,
+    unread: true,
+    request_kind: "edit_image",
+    edit_job_id: "request-91",
+    gene_symbol: "PAGE2",
+    gene_url: "/gene/PAGE2",
+    image_url: "https://cdn.example/after.webp",
+  }
+  const posts = []
+  let openedEdit = null
+  const inbox = createRequestInbox({
+    fetchJSON: async (url, options) => {
+      if (url === "/api/iconoplasm/notifications/read") {
+        posts.push(JSON.parse(options.body))
+        return { ok: true }
+      }
+      return url.startsWith("/api/iconoplasm/notifications")
+        ? {
+            ok: true,
+            authenticated: true,
+            unread_count: 1,
+            ready_count: 1,
+            open_count: 0,
+            ready_requests: [readyEdit],
+            open_requests: [],
+          }
+        : { ok: true, caretaker: null }
+    },
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+    navigate: () => {
+      throw new Error("should open edit modal instead of plain navigation")
+    },
+    onOpenEditJob: (info) => {
+      openedEdit = info
+    },
+  })
+
+  await inbox.refresh()
+  // Visiting /gene/PAGE2 before reviewing must not mark the ready edit read.
+  await inbox.noteGeneViewed("PAGE2")
+  assert.equal(posts.length, 0)
+
+  const markup = inbox.panelMarkup()
+  assert.match(markup, /data-icono-edit-job-id="request-91"/)
+  assert.match(markup, /href="\/gene\/PAGE2\?edit_job=request-91"/)
+  assert.match(markup, /aria-label="Edit ready">Edit</)
+
+  const handlers = {}
+  const receipt = {
+    getAttribute: (name) =>
+      ({
+        href: "/gene/PAGE2?edit_job=request-91",
+        "data-icono-edit-job-id": "request-91",
+        "data-icono-request-gene-symbol": "PAGE2",
+      })[name] || "",
+    addEventListener: (name, handler) => {
+      handlers[name] = handler
+    },
+  }
+  inbox.wire({
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector === "[data-icono-request-receipt]" ? [receipt] : []),
+  })
+  let prevented = false
+  handlers.click({
+    preventDefault() {
+      prevented = true
+    },
+  })
+  assert.equal(prevented, true)
+  assert.deepEqual(openedEdit, {
+    editJobId: "request-91",
+    geneSymbol: "PAGE2",
+    href: "/gene/PAGE2?edit_job=request-91",
+    link: receipt,
+  })
+})
+
 test("signed-out inbox performs zero caretaker or generation requests", async () => {
   var fetches = 0
   const inbox = createRequestInbox({

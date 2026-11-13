@@ -91,7 +91,13 @@ export function projectGeneAuthorityRows({
       }
     })
     .filter(Boolean)
-    .filter((row) => row.autopick_eligible && !row.is_stale && row.status !== "rejected")
+    .filter(
+      (row) =>
+        row.autopick_eligible &&
+        !row.is_stale &&
+        row.status !== "rejected" &&
+        row.status !== "edit_pending",
+    )
 }
 
 export function electGeneAuthorityWinner({

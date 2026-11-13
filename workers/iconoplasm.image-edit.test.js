@@ -1740,7 +1740,7 @@ test("free ComfyUI edit models are listed for image_edit without API keys and hi
   )
 })
 
-test("free ComfyUI edit queues edit_image, leases source_asset_sha256, and fulfills -e lineage", async () => {
+test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages edit_pending review job, and publishes -e lineage on approve", async () => {
   const world = await seedWorld()
   const originalFetch = globalThis.fetch
   const textBody = "TP53 guardian prose for edit test."
@@ -1875,8 +1875,67 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, and fulfi
     })
     assert.equal(fulfill.ok, true, JSON.stringify(fulfill))
 
+    // Before the requester inspects before/after and clicks Publish, the edited
+    // asset stays staged as edit_pending and unpublished.
+    const stagedAsset = await world.env.ICONOPLASM_DB.prepare(
+      `SELECT asset_sha256, status, autopick_eligible
+       FROM icono_portrait_assets
+       WHERE gene_symbol = 'TP53' AND asset_sha256 = ?`,
+    )
+      .bind(editedSha)
+      .first()
+    assert.ok(stagedAsset)
+    assert.equal(stagedAsset.status, "edit_pending")
+    assert.equal(stagedAsset.autopick_eligible, 0)
+
+    const jobId = `request-${queuedRow.id}`
+    assert.equal(payload.job?.id, jobId)
+    assert.equal(payload.job?.status, "queued")
+
+    const getResp =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${jobId}`, {
+          method: "GET",
+          headers: { Cookie: cookie, Origin: "https://iconoplasm.brinedew.bio" },
+        }),
+        world.env,
+        { waitUntil() {} },
+      )
+    assert.equal(getResp.status, 200)
+    const getPayload = await getResp.json()
+    assert.equal(getPayload.job.id, jobId)
+    assert.equal(getPayload.job.status, "succeeded")
+    assert.equal(getPayload.job.published, false)
+    assert.equal(getPayload.job.source_asset.asset_sha256, ASSET.alice)
+    assert.equal(getPayload.job.result_asset.asset_sha256, editedSha)
+
+    await world.env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_request_notifications
+       SET discord_status = 'sent', discord_sent_at = CURRENT_TIMESTAMP
+       WHERE request_id = ?`,
+    )
+      .bind(queuedRow.id)
+      .run()
+
+    const publishResp =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(
+          `https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${jobId}/publish`,
+          {
+            method: "POST",
+            headers: { Cookie: cookie, Origin: "https://iconoplasm.brinedew.bio" },
+          },
+        ),
+        world.env,
+        { waitUntil() {} },
+      )
+    const publishPayload = await publishResp.json()
+    assert.equal(publishResp.status, 200, JSON.stringify(publishPayload))
+    assert.equal(publishPayload.ok, true)
+    assert.equal(publishPayload.job.published, true)
+
     const promoted = await world.env.ICONOPLASM_DB.prepare(
-      `SELECT asset_sha256, status, vision_id, emulsion_id, created_by
+      `SELECT asset_sha256, status, autopick_eligible, vision_id, emulsion_id, created_by
        FROM icono_portrait_assets
        WHERE gene_symbol = 'TP53' AND asset_sha256 = ?`,
     )
@@ -1884,9 +1943,17 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, and fulfi
       .first()
     assert.ok(promoted)
     assert.equal(promoted.status, "approved")
+    assert.equal(promoted.autopick_eligible, 1)
     assert.equal(promoted.vision_id, "comfyui-edit:flux-2-klein-9b-kv")
     assert.equal(promoted.emulsion_id, `${sourceRowBefore.emulsion_id}-e`)
     assert.equal(promoted.created_by, OTHER_USER)
+
+    const notifAfter = await world.env.ICONOPLASM_DB.prepare(
+      `SELECT read_at FROM icono_request_notifications WHERE request_id = ?`,
+    )
+      .bind(queuedRow.id)
+      .first()
+    assert.ok(notifAfter?.read_at)
   } finally {
     globalThis.fetch = originalFetch
   }

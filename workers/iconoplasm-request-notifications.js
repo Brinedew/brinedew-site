@@ -99,6 +99,7 @@ function mapReadyNotification(row, portraitUrlForAsset) {
   const requestId = positiveInteger(row?.request_id)
   const notificationId = positiveInteger(row?.id)
   const symbol = geneSymbol(row?.gene_symbol)
+  const kind = requestKind(row?.request_kind)
   const sha = assetSha(row?.fulfilled_asset_sha256)
   const readAt = boundedText(row?.read_at, 64)
   return {
@@ -106,7 +107,8 @@ function mapReadyNotification(row, portraitUrlForAsset) {
     request_id: requestId,
     notification_id: notificationId,
     kind: "request_fulfilled",
-    request_kind: requestKind(row?.request_kind),
+    request_kind: kind,
+    edit_job_id: kind === "edit_image" && requestId ? `request-${requestId}` : "",
     gene_symbol: symbol,
     requested_emulsion_label:
       boundedText(row?.requested_emulsion_label, 255) ||
