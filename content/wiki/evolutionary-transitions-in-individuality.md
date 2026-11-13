@@ -11,45 +11,54 @@ aliases:
 ---
 # Evolutionary transitions in individuality
 
-Evolutionary transitions in individuality (ETIs) are events in the history of life where previously independent reproducing units integrate into a new, higher-level evolutionary individual. Once an ETI stabilizes, selection shifts primarily from competition *among* the constituent parts toward selection *among* the newly formed wholes.
+**Evolutionary transitions in individuality** (**ETIs**) are events in the history of life in which previously independent reproducing entities integrate into a new, higher-level evolutionary individual.[^2][^3] Once a transition stabilizes, natural selection acts primarily on the collective whole rather than independently among its constituent parts.
 
-## Maynard Smith and Szathmáry's major transitions list
+## Maynard Smith and Szathmáry's major transitions
 
-[John Maynard Smith](john-maynard-smith.md) and [Eörs Szathmáry](eors-szathmary.md) organized the overarching history of biological complexity around eight major transitions in *The Major Transitions in Evolution* (1995), unified by two recurring themes—new modes of hereditary information transmission and the suppression of within-group conflict:
+[John Maynard Smith](john-maynard-smith.md) and [Eörs Szathmáry](eors-szathmary.md) organized biological complexity around eight major transitions unified by two recurring changes: novel mechanisms for transmitting hereditary information and mechanisms that suppress internal conflict among parts:[^2]
 
-1. **Replicating molecules $\rightarrow$ populations of molecules in compartments** (mitigating molecular parasites via stochastic assortment inside bounded protocells).
-2. **Independent replicators $\rightarrow$ chromosomes** (linking genes onto shared DNA molecules so replication becomes strictly synchronous).
-3. **RNA as gene and enzyme $\rightarrow$ DNA + protein** (the genetic code and division of labor between hereditary storage and catalytic work).
-4. **Prokaryotes $\rightarrow$ eukaryotes** (endosymbiosis uniting archaeal hosts with protomitochondrial symbionts inside an integrated cell).
-5. **Asexual clones $\rightarrow$ sexual populations** (recombination, meiotic shuffling, and syngenetic inheritance despite the twofold cost of sex).
-6. **Protists (single cells) $\rightarrow$ animals, plants, and fungi** (obligate multicellularity with somatic division of labor).
-7. **Solitary individuals $\rightarrow$ colonies with non-reproductive castes** (eusocial insect superorganisms, such as ants, honeybees, and termites).
+1. **Replicating molecules $\rightarrow$ populations of molecules in compartments** (containing molecular parasites via stochastic assortment inside dividing protocells).
+2. **Independent replicators $\rightarrow$ chromosomes** (linking genes onto shared DNA molecules so replication becomes synchronous).
+3. **RNA as gene and enzyme $\rightarrow$ DNA + protein** (the genetic code and division of labor between storage and catalysis).
+4. **Prokaryotes $\rightarrow$ eukaryotes** (endosymbiosis integrating archaeal hosts and protomitochondrial symbionts into one cell).
+5. **Asexual clones $\rightarrow$ sexual populations** (recombination and meiotic inheritance despite the twofold cost of males).
+6. **Single-celled protists $\rightarrow$ animals, plants, and fungi** (obligate multicellularity with somatic division of labor).
+7. **Solitary organisms $\rightarrow$ colonies with non-reproductive castes** (eusocial insect superorganisms, such as ants, honeybees, and termites).
 8. **Primate societies $\rightarrow$ human societies with language** (symbolic cultural inheritance).
 
-*(Later syntheses noted variations around timing and candidates such as plastid acquisition or host–microbiome holobionts, though multicellularity remains the most clinically consequential transition for vertebrates.)*
+Later work has debated borderline candidates such as plastid acquisition or host–microbiome holobionts, while treating obligate multicellularity as the decisive transition governing vertebrate anatomy, cancer, and aging.
 
-## How conflict is suppressed: bottlenecks, germline, and de-Darwinization
+## Conflict mediation and de-Darwinization
 
-A major transition fails whenever cheating parts replicate faster within a group than the group itself succeeds between groups. For the transition to multicellularity (transition 6), [Leo Buss](leo-buss.md) argued in *The Evolution of Individuality* (1987) that animal embryology and development evolved specifically as **conflict-mediation machinery**:
+A transition collapses if cheating components replicate faster inside the collective than the collective succeeds between groups. Analyzing the transition to multicellularity, [Leo Buss](leo-buss.md) proposed that animal embryonic mechanisms evolved specifically to mediate intra-organismal conflict:[^1]
 
-- **Single-cell bottleneck.** Passing every life cycle through a single fertilized egg forces every somatic cell to start closely clonal ($r \approx 1$), eliminating pre-existing genetic variation inside the newly founded body so defection has to arise *de novo* every generation rather than inheriting compound advantage across host generations.
-- **Early germline sequestration ([Weismann's barrier](weismann-barrier.md)).** Isolating germ cells early shields gamete lineages from somatic mutations, denying selfish somatic variants any evolutionary future past the death of the host.
+- **Single-cell bottleneck.** Passing each generation through a single fertilized egg ensures high initial genetic relatedness across somatic cells ($r \approx 1$), purging pre-existing within-organism genetic variation so selfish cell lineages must arise anew in each host rather than propagating across host generations.[^1]
+- **Early germline sequestration ([Weismann's barrier](weismann-barrier.md)).** Isolating gametes early denies somatic mutations access to inheritance, restricting mutant lineages to the lifespan of a single host body.[^1]
 
-[Richard Michod](richard-michod.md) formalized this logic quantitatively as two coupled shifts: **conflict mediation** (policing intra-organismal selfishness) and **fitness reorganization / export** (transferring reproductive specialization from individual cells onto the integrated organism). In philosophical terms, Peter Godfrey-Smith's [de-Darwinization](de-darwinization.md) framework describes an ETI as stripping lower-level entities of heritable fitness variance of their own.
+[Richard Michod](richard-michod.md) formalized ETIs as two coupled shifts: **conflict mediation** (policing internal selfishness) and **fitness reorganization** (exporting reproductive division of labor onto the collective).[^3] In philosophical terms, Peter Godfrey-Smith's [de-Darwinization](de-darwinization.md) framework describes a transition as suppressing Darwinian variation and independent heritability at the lower level.[^5]
 
 ## Empirical model: volvocine green algae
 
-Unlike ancient animal origins, the **volvocine green algae** preserve an evolutionary series spanning unicellular *Chlamydomonas*, undifferentiated colonial *Gonium* and *Pandorina*, and fully differentiated *Volvox carteri* with thousands of somatic flagellated cells and dedicated germ cells (`gonidia`). Investigating this clade, Michod, Aurora Nedelcu, and collaborators showed:
+The volvocine green algae preserve a phylogenetic gradient spanning unicellular *Chlamydomonas*, simple colonies (*Gonium*, *Pandorina*), and differentiated *Volvox carteri*, which pairs thousands of sterile flagellated somatic cells with dedicated germ cells (`gonidia`). Studies by Michod, Aurora Nedelcu, and collaborators show two key evolutionary steps:[^4]
 
-- Soma–germ specialization evolves because of trade-offs between flagellar motility and cell division (reproductive specialization becomes beneficial once colony size exceeds physiological thresholds).
-- In *Volvox carteri*, the somatic master regulator ***regA*** suppresses chloroplast biogenesis and locks somatic cells out of reproduction—an adaptation evolved by co-opting an ancestral unicellular stress-response trade-off. When *regA* mutates, somatic cells revert to reproducing like single cells, recreating miniature somatic neoplasms in algae.
+- Size thresholds favor soma–germ division of labor because flagellar swimming and cell division conflict mechanically in large colonies.
+- In *Volvox carteri*, the master regulator ***regA*** represses chloroplast biogenesis to lock somatic cells out of reproduction—an adaptation evolved by co-opting an ancestral unicellular stress response. When *regA* mutates, somatic cells regain reproductive capacity and proliferate selfishly, providing an algal analog of somatic neoplasia.[^4]
 
 ## Relevance to cancer and aging
 
-In vertebrate bodies, somatic cells remain only partially de-Darwinized because adult tissues require proliferation for turnover and wound repair. From the perspective of ETIs and [multilevel selection](multilevel-selection.md), tumorigenesis is a localized **reversion of the multicellular transition**—cells defecting from somatic agreements ([multicellular cooperation](multicellular-cooperation.md)) and re-evolving Darwinian autonomy. Conversely, long-lived animals retain extreme [tumor-suppressor](tumor-suppressor-theory-of-aging.md) constraints (replicative limits, apoptosis, niche policing, senescence) to keep that transition from unraveling over decades.
+Because adult vertebrates require tissue renewal and wound repair, somatic cells remain only partially de-Darwinized. From the standpoint of ETIs and [multilevel selection](multilevel-selection.md), cancer is a localized reversion of the multicellular transition in which somatic lineages escape collective restraint ([multicellular cooperation](multicellular-cooperation.md)) and resume autonomous selection. Maintaining multicellularity over long lifespans therefore requires stringent [tumor-suppressive constraints](tumor-suppressor-theory-of-aging.md)—checkpoints, replicative limits, apoptosis, and tissue policing.
+
+## See also
+
+- [[de-darwinization|De-Darwinization]]
+- [[multicellular-cooperation|Multicellular cooperation]]
+- [[multilevel-selection|Multilevel selection]]
+- [[Non-technical language in longevity|Non-technical language in longevity]]
 
 ## References
 
-- Buss, L. W. (1987). *The Evolution of Individuality*. Princeton University Press.
-- Maynard Smith, J., & Szathmáry, E. (1995). *The Major Transitions in Evolution*.
-- Michod, R. E. (1999). *Darwinian Dynamics: Evolutionary Transitions in Fitness and Individuality*.
+[^1]: Buss LW. *The Evolution of Individuality*. Princeton University Press, 1987.
+[^2]: Maynard Smith J, Szathmáry E. *The Major Transitions in Evolution*. W. H. Freeman, 1995. ISBN 978-0-19-850294-4.
+[^3]: Michod RE. *Darwinian Dynamics: Evolutionary Transitions in Fitness and Individuality*. Princeton University Press, 1999.
+[^4]: Michod RE, Viossat Y, Solari CA, Hurand M, Nedelcu AM. Life-history evolution and the origin of multicellularity. *Journal of Theoretical Biology*. 2006. [doi:10.1016/j.jtbi.2005.08.043](https://doi.org/10.1016/j.jtbi.2005.08.043).
+[^5]: Godfrey-Smith P. *Darwinian Populations and Natural Selection*. Oxford University Press, 2009. ISBN 978-0199552047.

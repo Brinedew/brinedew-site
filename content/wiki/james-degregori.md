@@ -13,23 +13,28 @@ aliases:
 
 ![James DeGregori](../Attachments/james-degregori.jpg)
 
-James DeGregori is an American cancer biologist, professor of biochemistry and molecular genetics at the University of Colorado Anschutz Medical Campus, known for formulating and testing the theory of [adaptive oncogenesis](adaptive-oncogenesis.md).
+**James DeGregori** is an American cancer biologist, professor of biochemistry and molecular genetics at the University of Colorado Anschutz Medical Campus, known for formulating and testing the evolutionary theory of [adaptive oncogenesis](adaptive-oncogenesis.md).
 
-## Adaptive oncogenesis and hematopoietic competition experiments
+## Adaptive oncogenesis and hematopoietic competition
 
-Traditional somatic-mutation models treat cancer risk as a function of mutation accumulation over time. DeGregori's adaptive oncogenesis framework flips the emphasis from mutation supply to *selective context*: in young, homeostatic tissue, wild-type progenitors are already near a local fitness optimum, so most oncogenic perturbations impair rather than enhance cellular competitiveness. When aging, irradiation, or chronic inflammation degrades that niche, normal progenitors lose vigor, creating selective openings for mutations that rescue signaling or survival under degraded conditions.
+Whereas classical mutation-centric models attribute rising cancer incidence with age primarily to cumulative mutation counts, DeGregori shifts the causal focus to *tissue selective context*.[^4] In young, intact tissues, wild-type stem and progenitor cells occupy a fitness peak, so oncogenic mutations rarely confer an advantage and often impose a fitness cost.[^2] When aging, chronic inflammation, or genotoxic injury impairs wild-type competitors, oncogenic alterations that restore survival or bypass damaged regulatory signals become positively selected.[^1][^2][^3]
 
-DeGregori and collaborators established this empirically in murine hematopoietic stem and progenitor competition assays:
+DeGregori and collaborators tested this prediction using competitive bone-marrow transplantation and chimeric progenitor assays in mice:
 
-- **Aged lymphoid progenitors and *Bcr-Abl* (*PNAS*, 2010).** Working with Curtis Henry and Andriy Marusyk, DeGregori showed that aged mouse B-lymphoid progenitors have diminished receptor kinase and IL-7-pathway signaling compared to young progenitors. Expressing *Bcr-Abl* gave mutant clones only a modest advantage in young progenitors, whereas in old progenitors it rescued Akt and STAT5 signaling, driving dramatic clonal expansion and leukemia.
-- **Irradiation-induced niche selection (*PLoS Biology*, 2010).** Marusyk and DeGregori demonstrated that ionizing radiation selects for *p53*-deficient hematopoietic progenitors primarily by impairing the competitive fitness of unmutated wild-type stem cells, rather than merely through acute mutagenesis — and that restoring healthy non-irradiated competitors suppresses mutant expansion.
-- **Aging-associated inflammation (2015).** Henry and DeGregori showed that chronic inflammatory signaling in old bone marrow suppresses normal progenitor fitness and promotes *Bcr-Abl* clonal selection, while anti-inflammatory interventions restore normal competition and restrict leukemogenesis.
+- **Aged progenitors and *Bcr-Abl* selection.** Old mouse B-lymphoid progenitors show reduced receptor-kinase and IL-7 signaling relative to young progenitors. Introducing *Bcr-Abl* gave clones little advantage in young marrow but rescued Akt and STAT5 signaling in aged progenitors, driving leukemic expansion.[^2]
+- **Irradiation-induced niche selection.** Ionizing radiation selects for *p53*-deficient hematopoietic progenitors primarily because it degrades the competitiveness of unmutated wild-type stem cells; restoring unirradiated wild-type competitors suppresses mutant expansion.[^1]
+- **Chronic inflammation.** Age-related systemic inflammation reduces normal B-progenitor vigor and accelerates selection for oncogenic clones, whereas suppressing inflammation preserves wild-type competitiveness and blunts leukemogenesis without altering mutation rates.[^3]
 
-His book *Adaptive Oncogenesis: A New Understanding of How Cancer Evolves Inside Us* (Harvard University Press, 2018) synthesizes these findings for both biologists and broader readers.
+DeGregori presented the full evolutionary synthesis in *Adaptive Oncogenesis: A New Understanding of How Cancer Evolves Inside Us* (2018).[^4]
 
-## Key works
+## See also
 
-- Marusyk, A., & DeGregori, J. (2010). Irradiation selects for p53-deficient hematopoietic progenitors. *PLoS Biology*.
-- Henry, C. J., Marusyk, A., et al., & DeGregori, J. (2010). Declining lymphoid progenitor fitness promotes aging-associated leukemogenesis. *Proceedings of the National Academy of Sciences*, 107(50), 21713–21718.
-- Henry, C. J., Casás-Selves, M., Kim, J., et al. (2015). Aging-associated inflammation promotes selection for adaptive oncogenic events in B cell progenitors. *Journal of Clinical Investigation*.
-- DeGregori, J. (2018). *Adaptive Oncogenesis: A New Understanding of How Cancer Evolves Inside Us*. Harvard University Press.
+- [[adaptive-oncogenesis|Adaptive oncogenesis]]
+- [[clonal-evolution|Clonal evolution]]
+
+## References
+
+[^1]: Marusyk A, DeGregori J, et al. Irradiation selects for p53-deficient hematopoietic progenitors. *PLoS Biology*. 2010. [doi:10.1371/journal.pbio.1000324](https://doi.org/10.1371/journal.pbio.1000324).
+[^2]: Henry CJ, Marusyk A, et al., DeGregori J. Declining lymphoid progenitor fitness promotes aging-associated leukemogenesis. *Proceedings of the National Academy of Sciences*. 2010;107(50):21713–21718. [doi:10.1073/pnas.1005486107](https://doi.org/10.1073/pnas.1005486107).
+[^3]: Henry CJ, Casás-Selves M, Kim J, et al. Aging-associated inflammation promotes selection for adaptive oncogenic events in B cell progenitors. *Journal of Clinical Investigation*. 2015. [doi:10.1172/JCI83024](https://doi.org/10.1172/JCI83024).
+[^4]: DeGregori J. *Adaptive Oncogenesis: A New Understanding of How Cancer Evolves Inside Us*. Harvard University Press, 2018.

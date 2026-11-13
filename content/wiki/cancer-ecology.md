@@ -11,30 +11,37 @@ aliases:
 ---
 # Cancer ecology
 
-Cancer ecology studies tumors as evolving ecological communities: spatially structured populations of competing and cooperating cell phenotypes embedded within microenvironments of diffusing nutrients, acid waste, extracellular matrix, stromal cells, and immune effectors.
+**Cancer ecology** studies tumors as evolving ecological communities: spatially structured populations of competing and cooperating cell phenotypes embedded within microenvironments of diffusing nutrients, acid waste, extracellular matrix, stromal cells, and immune effectors.[^3]
 
 ## Core ecological dynamics
 
-[Peter Nowell](peter-nowell.md) established in 1976 that tumors progress through somatic [clonal evolution](clonal-evolution.md). An ecological view adds that clonal fitness is never purely cell-intrinsic; it is frequency- and context-dependent, shaped by how cells interact with one another and modify their shared habitat:
+[Peter Nowell](peter-nowell.md) established that tumors progress through somatic [clonal evolution](clonal-evolution.md). An ecological perspective adds that clonal fitness is never purely cell-intrinsic; it depends on population frequencies and how cells interact with one another and remodel their local habitat:
 
-- **Formal eco-evolutionary synthesis.** Lauren Merlo, John Pepper, Brian Reid, and [Carlo Maley](carlo-maley.md) (*Nature Reviews Cancer*, 2006) mapped standard ecological concepts — resource competition, predation (by [[immune-surveillance|immune surveillance]]), parasitism, and habitat selection — directly onto neoplastic progression, arguing that microenvironmental selection pressures rival mutation rate as drivers of malignancy.
-- **Public-goods cooperation among tumor clones.** Robert Axelrod, David Axelrod, and Kenneth Pienta (*PNAS*, 2006) noted that tumor cells need not acquire all capabilities cell-autonomously: clones secreting diffusible growth factors, angiogenic signals, or matrix-remodeling proteases create local public goods that partially cross-feed neighboring subclones, generating commensal and mutualistic coexistence inside tumors.
-- **Glycolytic phenotype competition and niche construction.** [Robert Gatenby](robert-gatenby.md) and Robert Gillies (*Nature Reviews Cancer*, 2004) showed how constitutive aerobic glycolysis (the Warburg effect) functions as ecological interference competition: hypoxic niches select for high glucose uptake and proton/lactate export, acidifying the peritumoral stroma to kill normal acid-sensitive neighbors and clear space for acid-adapted clones.
+- **Eco-evolutionary selection.** Population-ecology dynamics—resource competition, predation by [[immune-surveillance|immune surveillance]], parasitism, and habitat selection—govern neoplastic progression alongside mutation rate, determining which subclones expand or persist.[^3]
+- **Public-goods cooperation.** Tumor cells need not acquire every hallmark capability autonomously: subclones secreting diffusible growth factors, angiogenic signals, or matrix-remodeling proteases supply shared local public goods that support neighboring clones in commensal or mutualistic coexistence.[^2]
+- **Metabolic niche construction.** Constitutive aerobic glycolysis (the Warburg effect) functions as interference competition: intermittent hypoxia selects for high glucose uptake and proton or lactate export, acidifying the peritumoral stroma to kill normal acid-sensitive neighbors and clear space for acid-adapted clones.[^1]
 
 ## Measuring spatial heterogeneity and progression
 
-Because ecological interactions depend on which phenotypes coexist and how habitats partition them, population-ecology diversity metrics predict clinical progression independently of single driver mutations. In a prospective longitudinal study of Barrett's esophagus, Maley et al. (*Nature Genetics*, 2006) measured genetic clonal diversity across patient biopsies and showed that high intratumoral clonal diversity strongly predicts malignant progression to esophageal adenocarcinoma. Subsequent single-crypt and multi-biopsy work (Maley et al., *Nature Communications*, 2017) traced spatial–temporal clone expansion across individual crypts before genome doubling and overt malignancy.
+Ecological diversity metrics predict clinical progression independently of individual driver mutations. In prospective cohorts of Barrett's esophagus, higher genetic clonal diversity within biopsies strongly predicted progression to esophageal adenocarcinoma,[^4] and single-crypt sampling subsequently resolved the spatial and temporal expansion of clones before genome doubling.[^5]
 
-To standardize cross-tumor comparisons, Maley et al. (*Nature Reviews Cancer*, 2017) proposed classifying neoplasms along both evolutionary indices (clonal diversity, turnover rate) and ecological indices (resource hazards, microenvironmental heterogeneity) — distinguishing stable, spatially compartmentalized ecosystems from rapidly evolving, unstable habitats. Spatial heterogeneity across distinct vascular and necrotic zones also creates evolutionary "refugia" where cells experience different drug concentrations and immune pressures.
+Classification systems developed by [Carlo Maley](carlo-maley.md) and collaborators index neoplasms along both evolutionary variables (clonal diversity, turnover rate) and ecological variables (resource availability, microenvironmental hazards, spatial heterogeneity).[^6] Spatial partitioning across vascularized and necrotic regions also generates evolutionary refugia where cells face sharply different drug concentrations and immune selection.
 
 ## Implications for therapy
 
-Treating a tumor as an ecological community changes therapeutic goals. Standard maximum-tolerated-dose regimens select aggressively for resistant phenotypes and destroy drug-sensitive competitors (*competitive release*). Evolutionary protocols such as [adaptive therapy](adaptive-therapy.md) preserve sensitive populations to hold resistant clones down through resource competition, while niche-targeting interventions aim to reshape the tumor habitat (e.g., buffering tumor acidosis or interrupting stromal cross-feeding) rather than killing isolated cells one by one.
+Treating a tumor as an ecosystem alters therapeutic strategy. Standard maximum-tolerated-dose regimens select strongly for resistant phenotypes while eliminating drug-sensitive competitors (*competitive release*). Evolutionary protocols such as [adaptive therapy](adaptive-therapy.md) retain sensitive clones to hold resistant lineages down through resource competition, while habitat-targeted interventions seek to modify acidosis or disrupt stromal cross-feeding rather than eradicating cells individually.
+
+## See also
+
+- [[clonal-evolution|Clonal evolution]]
+- [[adaptive-therapy|Adaptive therapy]]
+- [[carlo-maley|Carlo Maley]]
 
 ## References
 
-- Gatenby, R. A., & Gillies, R. J. (2004). Why do cancers have high aerobic glycolysis? *Nature Reviews Cancer*.
-- Axelrod, R., Axelrod, D. E., & Pienta, K. J. (2006). Evolution of cooperation among tumor cells. *Proceedings of the National Academy of Sciences*.
-- Merlo, L. M. F., Pepper, J. W., Reid, B. J., & Maley, C. C. (2006). Cancer as an evolutionary and ecological process. *Nature Reviews Cancer*.
-- Maley, C. C. et al. (2006). Genetic clonal diversity predicts progression to esophageal adenocarcinoma. *Nature Genetics*.
-- Maley, C. C. et al. (2017). Classifying the evolutionary and ecological features of neoplasms. *Nature Reviews Cancer*.
+[^1]: Gatenby RA, Gillies RJ. Why do cancers have high aerobic glycolysis? *Nature Reviews Cancer*. 2004. [doi:10.1038/nrc1478](https://doi.org/10.1038/nrc1478).
+[^2]: Axelrod R, Axelrod DE, Pienta KJ. Evolution of cooperation among tumor cells. *Proceedings of the National Academy of Sciences*. 2006. [doi:10.1073/pnas.0606053103](https://doi.org/10.1073/pnas.0606053103).
+[^3]: Merlo LMF, Pepper JW, Reid BJ, Maley CC. Cancer as an evolutionary and ecological process. *Nature Reviews Cancer*. 2006. [doi:10.1038/nrc2013](https://doi.org/10.1038/nrc2013).
+[^4]: Maley CC, et al. Genetic clonal diversity predicts progression to esophageal adenocarcinoma. *Nature Genetics*. 2006. [doi:10.1038/ng1768](https://doi.org/10.1038/ng1768).
+[^5]: Martinez P, Mallo D, Paulson TG, Li X, Sanchez CA, Reid BJ, Graham TA, Kuhner MK, Maley CC. Evolution of Barrett's esophagus through space and time at single-crypt and whole-biopsy levels. *Nature Communications*. 2017. [doi:10.1038/s41467-017-02621-x](https://doi.org/10.1038/s41467-017-02621-x).
+[^6]: Maley CC, et al. Classifying the evolutionary and ecological features of neoplasms. *Nature Reviews Cancer*. 2017. [doi:10.1038/nrc.2017.69](https://doi.org/10.1038/nrc.2017.69).
