@@ -142,11 +142,21 @@ export async function claimExactGenerationLeases({
   leaseOwnerId,
   limit = 10,
   leaseSeconds = 900,
+  excludeAttemptIds,
   now = new Date(),
   idFactory = defaultIdFactory,
 } = {}) {
   requireDatabase(db)
   const ownerId = requiredId(leaseOwnerId, "lease_owner_id")
+  if (excludeAttemptIds !== undefined && !Array.isArray(excludeAttemptIds)) {
+    leaseError("GENERATION_LEASE_INVALID", "exclude_attempt_ids must be an array", 400)
+  }
+  const excludedAttempts = new Set(
+    (Array.isArray(excludeAttemptIds) ? excludeAttemptIds : [])
+      .map((value) => text(value, 180))
+      .filter(Boolean)
+      .slice(0, 200),
+  )
   const startedAt = clock(now)
   const claimedAt = startedAt.toISOString()
   const expiresAt = new Date(
@@ -154,8 +164,29 @@ export async function claimExactGenerationLeases({
   ).toISOString()
   const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 10)))
   const leases = []
-  for (const row of Array.isArray(rows) ? rows : []) {
-    if (leases.length >= boundedLimit) break
+  let excludedCount = 0
+  let completedCount = 0
+  let remainingCount = 0
+  const remainingOpenGenes = new Set()
+  const remainingOpenBatchIds = new Set()
+  const recordRemaining = (row) => {
+    remainingCount += 1
+    const gene = text(row?.gene_symbol, 64).toUpperCase()
+    if (gene) remainingOpenGenes.add(gene)
+    const batchId = text(row?.request_batch_id, 180)
+    if (batchId) remainingOpenBatchIds.add(batchId)
+  }
+  const rowList = Array.isArray(rows) ? rows : []
+  for (let index = 0; index < rowList.length; index++) {
+    const row = rowList[index]
+    if (leases.length >= boundedLimit) {
+      for (let rest = index; rest < rowList.length; rest++) {
+        if (text(rowList[rest]?.status || "open").toLowerCase() === "open") {
+          recordRemaining(rowList[rest])
+        }
+      }
+      break
+    }
     let exact
     try {
       exact = exactGenerationLeaseFromRow({
@@ -168,6 +199,10 @@ export async function claimExactGenerationLeases({
     const requestId = exact.generation_request_id
     const existing = await readLease(db, requestId)
     if (activeLease(existing, ownerId, startedAt)) {
+      if (excludedAttempts.has(text(existing.generation_attempt_id, 180))) {
+        excludedCount += 1
+        continue
+      }
       leases.push(
         Object.freeze({
           ...exactGenerationLeaseFromRow({
@@ -179,12 +214,16 @@ export async function claimExactGenerationLeases({
       )
       continue
     }
+    if (existing && text(existing.status) === "completed") {
+      completedCount += 1
+      continue
+    }
     if (
       existing &&
-      (text(existing.status) === "completed" ||
-        (text(existing.status) === "active" &&
-          Date.parse(existing.expires_at) > startedAt.getTime()))
+      text(existing.status) === "active" &&
+      Date.parse(existing.expires_at) > startedAt.getTime()
     ) {
+      recordRemaining(row)
       continue
     }
     const attemptId = requiredId(await idFactory("generation_attempt"), "generation_attempt_id")
@@ -225,9 +264,15 @@ export async function claimExactGenerationLeases({
         claimedAt,
       )
       .run()
-    if (Number(result?.meta?.changes || 0) < 1) continue
+    if (Number(result?.meta?.changes || 0) < 1) {
+      recordRemaining(row)
+      continue
+    }
     const claimed = await readLease(db, requestId)
-    if (!claimed || text(claimed.lease_token) !== leaseToken) continue
+    if (!claimed || text(claimed.lease_token) !== leaseToken) {
+      recordRemaining(row)
+      continue
+    }
     leases.push(
       Object.freeze({
         ...exactGenerationLeaseFromRow({ ...row, generation_attempt_id: attemptId }),
@@ -239,6 +284,11 @@ export async function claimExactGenerationLeases({
     schema_version: 1,
     lease_owner_id: ownerId,
     lease_seconds: leaseDurationSeconds(leaseSeconds),
+    excluded_count: excludedCount,
+    completed_count: completedCount,
+    remaining_count: remainingCount,
+    remaining_open_genes: Object.freeze(Array.from(remainingOpenGenes).sort()),
+    remaining_open_batch_ids: Object.freeze(Array.from(remainingOpenBatchIds).sort()),
     leases: Object.freeze(leases),
   })
 }

@@ -493,3 +493,88 @@ test("material access is fenced to the active owner and persisted request source
     database.close()
   }
 })
+
+test("excludeAttemptIds skips held drawn leases without consuming limit and reports remaining work", async () => {
+  const fixture = leaseDatabase()
+  try {
+    const ids = deterministicIds()
+    const rows = [1, 2, 3, 4].map((index) =>
+      boundRow({
+        id: 40 + index,
+        generation_request_id: `generation_request_${String(index).padStart(4, "0")}`,
+        generation_attempt_id: "",
+        gene_symbol: index <= 2 ? "CA3" : index === 3 ? "EGFR" : "TP53",
+        request_batch_id: index <= 3 ? "order_alpha" : "order_beta",
+      }),
+    )
+    const now = new Date("2026-08-30T00:00:00Z")
+    const first = await claimExactGenerationLeases({
+      db: fixture.db,
+      rows,
+      leaseOwnerId: "workstation_0001",
+      limit: 2,
+      leaseSeconds: 600,
+      excludeAttemptIds: [],
+      now,
+      idFactory: ids,
+    })
+    assert.equal(first.leases.length, 2)
+    assert.equal(first.excluded_count, 0)
+    assert.equal(first.remaining_count, 2)
+    assert.deepEqual(first.remaining_open_genes, ["EGFR", "TP53"])
+    assert.deepEqual(first.remaining_open_batch_ids, ["order_alpha", "order_beta"])
+
+    const heldAttempts = first.leases.map((lease) => lease.generation_attempt_id)
+    const second = await claimExactGenerationLeases({
+      db: fixture.db,
+      rows,
+      leaseOwnerId: "workstation_0001",
+      limit: 1,
+      leaseSeconds: 600,
+      excludeAttemptIds: heldAttempts,
+      now,
+      idFactory: ids,
+    })
+    assert.deepEqual(
+      second.leases.map((lease) => lease.generation_request_id),
+      ["generation_request_0003"],
+    )
+    assert.equal(second.excluded_count, 2)
+    assert.equal(second.remaining_count, 1)
+    assert.deepEqual(second.remaining_open_genes, ["TP53"])
+    assert.deepEqual(second.remaining_open_batch_ids, ["order_beta"])
+
+    const third = await claimExactGenerationLeases({
+      db: fixture.db,
+      rows,
+      leaseOwnerId: "workstation_0001",
+      limit: 10,
+      leaseSeconds: 600,
+      excludeAttemptIds: [...heldAttempts, second.leases[0].generation_attempt_id],
+      now,
+      idFactory: ids,
+    })
+    assert.deepEqual(
+      third.leases.map((lease) => lease.generation_request_id),
+      ["generation_request_0004"],
+    )
+    assert.equal(third.excluded_count, 3)
+    assert.equal(third.remaining_count, 0)
+    assert.deepEqual(third.remaining_open_genes, [])
+    assert.deepEqual(third.remaining_open_batch_ids, [])
+
+    await assert.rejects(
+      claimExactGenerationLeases({
+        db: fixture.db,
+        rows,
+        leaseOwnerId: "workstation_0001",
+        excludeAttemptIds: "not-an-array",
+        now,
+        idFactory: ids,
+      }),
+      /exclude_attempt_ids must be an array/,
+    )
+  } finally {
+    fixture.database.close()
+  }
+})

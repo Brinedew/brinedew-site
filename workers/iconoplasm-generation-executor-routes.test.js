@@ -231,3 +231,43 @@ test("private lease material requires the generation capability and is never cac
   assert.deepEqual(await response.json(), { prose: "private" })
   assert.equal(reads, 1)
 })
+
+test("claim forwards exclude_attempt_ids when supplied and rejects non-array values", async () => {
+  const { calls, handler } = fixture()
+  const path = "/api/iconoplasm/authority/generation-leases/claim"
+
+  const invalid = await handler({
+    match: route("authority_generation_lease_claim"),
+    request: request(path, {
+      lease_owner_id: "workstation_1",
+      exclude_attempt_ids: "attempt_1",
+    }),
+    env,
+  })
+  assert.equal(invalid.status, 400)
+  assert.equal((await invalid.json()).error.code, "GENERATION_LEASE_INVALID")
+  assert.equal(calls.length, 0)
+
+  const accepted = await handler({
+    match: route("authority_generation_lease_claim"),
+    request: request(path, {
+      lease_owner_id: "workstation_1",
+      limit: 10,
+      lease_seconds: 600,
+      exclude_attempt_ids: ["attempt_1", "attempt_2"],
+    }),
+    env,
+  })
+  assert.equal(accepted.status, 200)
+  assert.deepEqual(calls, [
+    [
+      "claim",
+      {
+        leaseOwnerId: "workstation_1",
+        leaseSeconds: 600,
+        limit: 10,
+        excludeAttemptIds: ["attempt_1", "attempt_2"],
+      },
+    ],
+  ])
+})

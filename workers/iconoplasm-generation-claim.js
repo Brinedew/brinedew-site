@@ -103,7 +103,7 @@ export async function validateGenerationRequestRowsForClaim(
 }
 
 export async function claimValidatedGenerationRequests(
-  { env, db, rows = [], leaseOwnerId, limit, leaseSeconds } = {},
+  { env, db, rows = [], leaseOwnerId, limit, leaseSeconds, excludeAttemptIds } = {},
   {
     validateRows = validateGenerationRequestRowsForClaim,
     quarantineRequests = quarantinePermanentGenerationRequests,
@@ -112,12 +112,16 @@ export async function claimValidatedGenerationRequests(
 ) {
   const validated = await validateRows({ env, rows })
   const quarantine = await quarantineRequests({ db, blockedRows: validated.blockedRows })
-  const claimed = await claimLeases({
+  const claimInput = {
     db,
     rows: validated.validRows,
     leaseOwnerId,
     limit,
     leaseSeconds,
-  })
+  }
+  if (excludeAttemptIds !== undefined) {
+    claimInput.excludeAttemptIds = excludeAttemptIds
+  }
+  const claimed = await claimLeases(claimInput)
   return Object.freeze({ validated, quarantine, claimed })
 }
