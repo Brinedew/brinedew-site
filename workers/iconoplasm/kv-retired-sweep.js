@@ -12,9 +12,12 @@
 //   token CATALOG_ARTIFACT_VERSION_TOKEN and schema v3.
 //
 // Current versions are kept to the current and the previous one by the
-// publication itself (commitPortraitReferenceSnapshot); this sweep never
-// touches a key of the current token or schema, so it cannot race a
-// publication that is writing its next version.
+// publication itself (commitPortraitReferenceSnapshot). When no pointer with
+// `keys` exists yet, this sweep never touches a key of the current token or
+// schema. Once the pointer carries `keys` (B-1221), the sweep reads the pointer
+// after each list page and deletes any snapshot key absent from `keys`,
+// `previous_keys` and `pending_keys`, so it clears pre-pointer orphans without
+// racing a publication that is writing its next version.
 //
 // Price: Cloudflare's free plan allows 1,000 KV deletes and 1,000 lists a day.
 // The sweep is sheddable work (nobody waits for it). Cloudflare emails the
@@ -40,6 +43,28 @@ export const CLOUDFLARE_KV_DAILY_DELETE_WARNING = 500
 // The publication's own deletes of retired versions on a busy day (B-1217).
 export const OTHER_KV_DAILY_DELETES_BUSY_DAY = 100
 
+async function readKeptSnapshotKeys(kv, portraitSnapshotSchemaVersion) {
+  if (!kv?.get || !portraitSnapshotSchemaVersion) return null
+  try {
+    const raw = await kv.get(
+      `iconoplasm:published-portrait-fingerprint:${portraitSnapshotSchemaVersion}`,
+    )
+    if (!raw) return null
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+    const keys = Array.isArray(parsed?.keys)
+      ? parsed.keys.filter((key) => typeof key === "string" && key.length > 0)
+      : []
+    if (!keys.length) return null
+    const extra = [
+      ...(Array.isArray(parsed?.previous_keys) ? parsed.previous_keys : []),
+      ...(Array.isArray(parsed?.pending_keys) ? parsed.pending_keys : []),
+    ].filter((key) => typeof key === "string" && key.length > 0)
+    return new Set([...keys, ...extra])
+  } catch {
+    return null
+  }
+}
+
 // Largest values first. Every delete costs the same, but on 2026-10-27 the
 // namespace held 22.7 GB against the free plan's 1 GB: retired hydrated
 // snapshots are about 6 MB each, card-catalog keys and portrait lists about
@@ -51,11 +76,15 @@ function retiredRules({ catalogArtifactVersionToken, portraitSnapshotSchemaVersi
   return [
     {
       prefix: hydrated,
-      retired: (name) => !name.startsWith(`${hydrated}${catalogArtifactVersionToken}:`),
+      usesPointer: true,
+      retired: (name, kept) =>
+        kept ? !kept.has(name) : !name.startsWith(`${hydrated}${catalogArtifactVersionToken}:`),
     },
     {
       prefix: refs,
-      retired: (name) => !name.startsWith(`${refs}${portraitSnapshotSchemaVersion}-`),
+      usesPointer: true,
+      retired: (name, kept) =>
+        kept ? !kept.has(name) : !name.startsWith(`${refs}${portraitSnapshotSchemaVersion}-`),
     },
     { prefix: "iconoplasm:card-catalog", retired: () => true },
     { prefix: "iconoplasm:mobile-card-vm:", retired: () => true },
@@ -76,7 +105,10 @@ export async function sweepRetiredIconoplasmKvKeys(
       if (deleted >= limit) return { deleted, lists, done: false }
       const page = await kv.list({ prefix: rule.prefix, cursor, limit: 1000 })
       lists += 1
-      const retired = page.keys.map((key) => key.name).filter(rule.retired)
+      const kept = rule.usesPointer
+        ? await readKeptSnapshotKeys(kv, versions?.portraitSnapshotSchemaVersion)
+        : null
+      const retired = page.keys.map((key) => key.name).filter((name) => rule.retired(name, kept))
       const names = retired.slice(0, limit - deleted)
       for (let i = 0; i < names.length; i += 50)
         await Promise.all(names.slice(i, i + 50).map((name) => kv.delete(name)))

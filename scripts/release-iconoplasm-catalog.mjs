@@ -94,10 +94,10 @@ export function d1OverHttp(
   return { prepare: (sql) => statement(sql), counter }
 }
 
-// The subset of the KV binding the release uses: get (text or json) and put.
+// The subset of the KV binding the release uses: get (text or json), put and delete.
 export function kvOverHttp(
   namespaceId,
-  { fetchImpl = fetch, counter = { read: 0, written: 0 } } = {},
+  { fetchImpl = fetch, counter = { read: 0, written: 0, deleted: 0 } } = {},
 ) {
   const url = (key) =>
     api(`/storage/kv/namespaces/${namespaceId}/values/${encodeURIComponent(key)}`)
@@ -124,13 +124,25 @@ export function kvOverHttp(
         throw new Error(`KV write ${key} failed (${response.status}): ${body.slice(0, 200)}`)
       }
     },
+    async delete(key) {
+      const response = await fetchImpl(url(key), {
+        method: "DELETE",
+        headers: auth(),
+      })
+      counter.deleted = (counter.deleted || 0) + 1
+      if (response.status === 404) return
+      if (!response.ok) {
+        const body = await response.text().catch(() => "")
+        throw new Error(`KV delete ${key} failed (${response.status}): ${body.slice(0, 200)}`)
+      }
+    },
   }
 }
 
 export async function releaseCatalog({ fetchImpl = fetch } = {}) {
   const { d1DatabaseId, kvNamespaceId, vars } = workerBindings()
   const d1Counter = { read: 0, written: 0 }
-  const kvCounter = { read: 0, written: 0 }
+  const kvCounter = { read: 0, written: 0, deleted: 0 }
   const env = {
     ...vars,
     ICONOPLASM_DB: d1OverHttp(d1DatabaseId, { fetchImpl, counter: d1Counter }),
