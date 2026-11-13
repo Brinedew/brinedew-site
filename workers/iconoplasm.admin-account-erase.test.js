@@ -214,6 +214,18 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
   for (const step of ERASURE_STEPS) {
     if (step.action === "comments") continue
     const database = step.database === "accounts" ? "accounts" : step.database
+    if (step.id === "caretaker_save_throttle") {
+      assert.equal(
+        rows(
+          world.iconoplasm,
+          "SELECT 1 FROM icono_caretaker_save_throttle WHERE account_id = ?",
+          accountId,
+        ).length,
+        1,
+        "the erased account's opaque ID is seeded in its private save timestamp",
+      )
+      continue
+    }
     assert.ok(
       seeded.includes(`${database}.${step.table}`),
       `the seed has no row of the erased person in ${database}.${step.table}`,
@@ -282,6 +294,14 @@ test("a verified erasure removes the person, keeps the content and leaves everyo
 
   // 1. The person is gone from every database, key and object.
   assert.deepEqual(findTraces(world, needles), [])
+  assert.deepEqual(
+    rows(
+      world.iconoplasm,
+      "SELECT account_id FROM icono_caretaker_save_throttle ORDER BY account_id",
+    ).map((row) => row.account_id),
+    [world.otherAccount],
+    "erasure deletes only the former caretaker's private save timestamp",
+  )
 
   // 2. The account: erased under its anonymous label, no provider link, no users row, no
   // fingerprint, and the append-only guards are back.

@@ -484,6 +484,17 @@ export async function seedWorld() {
     emulsionIds: ["BOBTESTNAME-1"],
   })
 
+  // B-1190 caretaker save cooldown state is private service data. Erasure removes the person's
+  // timestamp but leaves the other caretaker's row alone.
+  insert(iconoplasm, "icono_caretaker_save_throttle", {
+    account_id: erasedAccount,
+    last_save_at: "2026-11-11T12:00:00.000Z",
+  })
+  insert(iconoplasm, "icono_caretaker_save_throttle", {
+    account_id: otherAccount,
+    last_save_at: "2026-11-11T12:01:00.000Z",
+  })
+
   // Published portraits: two by the erased person, one by the other person, one by the workstation.
   seedAsset(iconoplasm, "TP53", ASSET.alice, ERASED_USER, "ALICETESTNAME-1")
   seedAsset(iconoplasm, "TP53", ASSET.bob, OTHER_USER)

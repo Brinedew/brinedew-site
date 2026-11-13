@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 import { parse } from "yaml"
+import { planOnlineMigrations } from "./apply-online-d1-migrations.mjs"
 import {
   readAppliedChangedMigrations,
   reviewedOnlineMigrationPaths,
@@ -95,6 +96,29 @@ test("a reviewed online migration and its plan entry are ordinary releases", () 
       }),
     ],
     ["migrations-iconoplasm/0110_drop.sql"],
+  )
+})
+
+test("the caretaker save throttle schema is reviewed for the normal online release", () => {
+  const migration = "0151_caretaker_save_throttle.sql"
+  const manifest = JSON.parse(
+    readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
+  )
+  const reviewed = reviewedOnlineMigrationPaths()
+  assert.ok(reviewed.has(`migrations-iconoplasm/${migration}`))
+  assert.deepEqual(
+    planOnlineMigrations({
+      manifest,
+      files: { iconoplasm: [migration] },
+      applied: { iconoplasm: new Set() },
+    }),
+    {
+      pending: [
+        { resource: "iconoplasm", name: migration, key: `iconoplasm/${migration}`, guards: [] },
+      ],
+      total: { rows_read: 10, rows_written: 10 },
+      resources: ["iconoplasm"],
+    },
   )
 })
 

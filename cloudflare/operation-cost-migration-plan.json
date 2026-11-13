@@ -42,6 +42,14 @@
           "max": 20000
         }
       ]
+    },
+    "iconoplasm/0151_caretaker_save_throttle.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 10,
+        "rows_written": 10,
+        "requests": 1
+      }
     }
   }
 }
