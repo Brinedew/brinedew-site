@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: {{DATE:YYYY-MM-DD}}
 draft: true
+vital_level:
+class:
 aliases:
 - 
 ---

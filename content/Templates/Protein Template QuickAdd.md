@@ -5,6 +5,8 @@ tags:
   - content/wiki
 date: {{DATE:YYYY-MM-DD}}
 draft: true
+vital_level:
+class:
 aliases:
   - {{VALUE:Gene symbol (if different)}}
 symbol: {{VALUE:Gene symbol}}

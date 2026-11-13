@@ -2,6 +2,8 @@
 title: Eutely
 date: 2025-08-20
 draft: true
+vital_level: 4
+class: Start
 tags:
   - content/wiki
 ---
@@ -38,4 +40,3 @@ Eutely is a developmental pattern seen in several small metazoans where the adul
 - [Weismann Barrier](weismann-barrier.md)
 - [Cellular Senescence](cellular-senescence.md)
 - [Telomeres](telomeres.md)
-

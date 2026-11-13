@@ -5,6 +5,8 @@ tags:
   - experiment
 date: 2026-09-12
 draft: true
+vital_level: 3
+class: C
 aliases:
   - daf-2 experiment
   - Kenyon 1993

@@ -5,6 +5,8 @@ tags:
   - tier-list
 date: 2026-10-21
 draft: true
+vital_level: 4
+class: List
 aliases:
   -
 ---

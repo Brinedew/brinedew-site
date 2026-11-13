@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2026-09-12
 draft: true
+vital_level: 2
+class: C
 aliases:
   - hallmarks of aging
   - twelve hallmarks

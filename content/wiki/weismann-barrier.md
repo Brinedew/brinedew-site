@@ -4,6 +4,8 @@ tags:
   - content/wiki
 date: 2026-08-08
 draft: true
+vital_level: 2
+class: B
 aliases:
   - Weismann's barrier
   - Weissmann's barrier

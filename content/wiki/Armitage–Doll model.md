@@ -4,6 +4,8 @@ tags:
 - content/wiki
 date: 2025-11-09
 draft: true
+vital_level: 3
+class: Stub
 aliases:
 - 
 ---
