@@ -216,11 +216,22 @@ export function createIconoplasmGenerationExecutorHandler(dependencies = {}) {
 
     if (routeId === "authority_generation_lease_claim") {
       try {
-        const result = await claimGenerationLeases(env, {
+        if (body?.exclude_attempt_ids !== undefined && !Array.isArray(body.exclude_attempt_ids)) {
+          throw new IconoplasmGenerationLeaseError(
+            "GENERATION_LEASE_INVALID",
+            "exclude_attempt_ids must be an array",
+            400,
+          )
+        }
+        const claimOptions = {
           limit: body?.limit,
           leaseOwnerId: body?.lease_owner_id,
           leaseSeconds: body?.lease_seconds,
-        })
+        }
+        if (Array.isArray(body?.exclude_attempt_ids)) {
+          claimOptions.excludeAttemptIds = body.exclude_attempt_ids
+        }
+        const result = await claimGenerationLeases(env, claimOptions)
         return json({ ok: true, ...result })
       } catch (error) {
         return rejected(error, "GENERATION_LEASE_CLAIM_FAILED", "Generation lease claim failed")

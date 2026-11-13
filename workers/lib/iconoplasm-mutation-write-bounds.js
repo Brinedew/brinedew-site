@@ -49,7 +49,7 @@ export const GENERATION_CLAIM_SCAN_PER_LEASE = 4
 export const GENERATION_CLAIM_SCAN_FLOOR = 20
 export const GENERATION_CLAIM_SCAN_CEILING = 200
 
-export function generationClaimBounds(rawLimit) {
+export function generationClaimBounds(rawLimit, excludedCount = 0) {
   const claimLimit = Math.max(
     1,
     Math.min(
@@ -57,9 +57,13 @@ export function generationClaimBounds(rawLimit) {
       Math.trunc(Number(rawLimit) || GENERATION_CLAIM_DEFAULT_LIMIT),
     ),
   )
+  const skipped = Math.max(
+    0,
+    Math.min(GENERATION_CLAIM_SCAN_CEILING, Math.trunc(Number(excludedCount) || 0)),
+  )
   const scanLimit = Math.min(
     GENERATION_CLAIM_SCAN_CEILING,
-    Math.max(GENERATION_CLAIM_SCAN_FLOOR, claimLimit * GENERATION_CLAIM_SCAN_PER_LEASE),
+    Math.max(GENERATION_CLAIM_SCAN_FLOOR, claimLimit * GENERATION_CLAIM_SCAN_PER_LEASE + skipped),
   )
   return { claimLimit, scanLimit }
 }
