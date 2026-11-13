@@ -3072,10 +3072,19 @@ function generationRequestSelectionFilters(env, { geneSymbol = "" } = {}) {
 // offers; the receipts test uses it to stand in for the authority source check.
 export async function generationRequestLeaseClaim(
   env,
-  { limit = 10, leaseOwnerId, leaseSeconds = 900 } = {},
+  { limit = 10, leaseOwnerId, leaseSeconds = 900, excludeAttemptIds } = {},
   dependencies = {},
 ) {
-  const { claimLimit, scanLimit } = generationClaimBounds(limit)
+  const wantsSummary = Array.isArray(excludeAttemptIds)
+  const normalizedExcluded = wantsSummary
+    ? Array.from(
+        new Set(excludeAttemptIds.map((v) => String(v || "").trim()).filter(Boolean)),
+      ).slice(0, 200)
+    : undefined
+  const { claimLimit, scanLimit } = generationClaimBounds(
+    limit,
+    normalizedExcluded ? normalizedExcluded.length : 0,
+  )
   const { policy, openFilters, eligibleFilters } = generationRequestSelectionFilters(env)
   const [[totalOpenCount, eligibleCount], eligibleRows] = await Promise.all([
     countOpenAndEligibleGenerationRequests(env, openFilters, eligibleFilters),
@@ -3093,9 +3102,13 @@ export async function generationRequestLeaseClaim(
       leaseOwnerId,
       limit: claimLimit,
       leaseSeconds,
+      ...(normalizedExcluded !== undefined ? { excludeAttemptIds: normalizedExcluded } : {}),
     },
     dependencies,
   )
+  const excludedCount = Number(claimed?.excluded_count || 0)
+  const completedCount = Number(claimed?.completed_count || 0)
+  const remainingCount = Number(claimed?.remaining_count || 0)
   return {
     schema_version: 1,
     delivery_mode: policy.mode,
@@ -3107,8 +3120,23 @@ export async function generationRequestLeaseClaim(
     blocked_rows: validated.blockedRows,
     lease_owner_id: claimed.lease_owner_id,
     lease_seconds: claimed.lease_seconds,
-    has_more: eligibleRows.length >= scanLimit || claimed.leases.length < eligibleCount,
+    has_more:
+      eligibleRows.length >= scanLimit ||
+      remainingCount > 0 ||
+      claimed.leases.length + excludedCount + completedCount + quarantine.quarantined_count <
+        eligibleCount,
     leases: claimed.leases,
+    ...(wantsSummary
+      ? {
+          excluded_count: excludedCount,
+          remaining_open_genes: Array.isArray(claimed?.remaining_open_genes)
+            ? claimed.remaining_open_genes
+            : [],
+          remaining_open_batch_ids: Array.isArray(claimed?.remaining_open_batch_ids)
+            ? claimed.remaining_open_batch_ids
+            : [],
+        }
+      : {}),
   }
 }
 

@@ -22,6 +22,7 @@ import {
   generationRequestLeaseClaim,
   handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWorkerDoNotDuplicate as handleApi,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
+import { createIconoplasmApp } from "./iconoplasm/app.js"
 import { writeFactoryGeneText } from "./iconoplasm/gene-text-write.js"
 import { fakeBunnyStorage } from "./test-helpers/fake-bunny-storage.js"
 import {
@@ -682,3 +683,201 @@ test("everything a reader requests on one gene joins one order until any of it i
   assert.equal(sent.length, 1)
   assert.match(sent[0].content, /Your 13 free queue candidate portraits for \*\*CA3\*\*/)
 })
+
+test(
+  "holding drawn sessions lets 10 + 5 + 5 claim cleanly, register in one CA3 election, and notify once for 20",
+  { timeout: 120000 },
+  async (t) => {
+    const require = createRequire(import.meta.url)
+    const { Miniflare, convertV4MiniflareOptions } = createRequire(
+      require.resolve("wrangler/package.json"),
+    )("miniflare")
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        modules: true,
+        script: "export default {fetch(){return new Response('combined')}}",
+        compatibilityDate: "2026-08-01",
+        d1Databases: ["DB"],
+      }),
+    )
+    const schema = new DatabaseSync(":memory:")
+    try {
+      const directory = new URL("../migrations-iconoplasm/", import.meta.url)
+      for (const file of readdirSync(directory)
+        .filter((name) => name.endsWith(".sql"))
+        .sort())
+        schema.exec(readFileSync(new URL(file, directory), "utf8"))
+      const definitions = schema
+        .prepare(
+          "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END,rowid",
+        )
+        .all()
+      const db = await runtime.getD1Database("DB")
+      for (let i = 0; i < definitions.length; i += 20)
+        await db.batch(definitions.slice(i, i + 20).map(({ sql }) => db.prepare(sql)))
+
+      await writeFactoryGeneText(
+        { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
+        { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
+      )
+      await db
+        .prepare(
+          "INSERT INTO icono_gene_catalog (gene_symbol, full_name) VALUES ('CA3', 'carbonic anhydrase 3')",
+        )
+        .run()
+      const styles = (from, count) =>
+        Array.from({ length: count }, (_, index) => `anima-v1-${from + index}`)
+
+      const firstTen = await order(
+        db,
+        { symbol: "CA3", requested_vision_ids: styles(1, 10), client_batch_id: "order-20" },
+        "reader-combined",
+      )
+      assert.equal(firstTen.status, 200, JSON.stringify(firstTen.payload))
+
+      const env = {
+        ICONOPLASM_DB: db,
+        ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+      }
+      const claimOne = await generationRequestLeaseClaim(env, {
+        limit: 10,
+        leaseOwnerId: "drain-test",
+        excludeAttemptIds: [],
+      })
+      assert.equal(claimOne.leases.length, 10)
+      assert.equal(claimOne.excluded_count, 0)
+      assert.equal(claimOne.has_more, false)
+      assert.deepEqual(claimOne.remaining_open_genes, [])
+
+      // While the first 10 stay open (held locally after drawing), +5 and +5 arrive.
+      for (const [offset, tag] of [
+        [11, "plus-five-a"],
+        [16, "plus-five-b"],
+      ]) {
+        const more = await order(
+          db,
+          { symbol: "CA3", requested_vision_ids: styles(offset, 5), client_batch_id: tag },
+          "reader-combined",
+        )
+        assert.equal(more.status, 200, JSON.stringify(more.payload))
+      }
+
+      const batchSizes = await db
+        .prepare(
+          "SELECT COUNT(*) AS n, COUNT(DISTINCT request_batch_id) AS batches FROM icono_generation_requests WHERE gene_symbol = 'CA3' AND status = 'open'",
+        )
+        .first()
+      assert.equal(batchSizes.n, 20)
+      assert.equal(batchSizes.batches, 1)
+
+      const heldAttempts = claimOne.leases.map((lease) => lease.generation_attempt_id)
+      const claimTwo = await generationRequestLeaseClaim(env, {
+        limit: 10,
+        leaseOwnerId: "drain-test",
+        excludeAttemptIds: heldAttempts,
+      })
+      assert.equal(claimTwo.leases.length, 10)
+      assert.equal(claimTwo.excluded_count, 10)
+      assert.equal(claimTwo.has_more, false)
+      assert.deepEqual(claimTwo.remaining_open_genes, [])
+      assert.deepEqual(claimTwo.remaining_open_batch_ids, [])
+
+      const claimOneIds = new Set(claimOne.leases.map((lease) => lease.generation_request_id))
+      assert.ok(claimTwo.leases.every((lease) => !claimOneIds.has(lease.generation_request_id)))
+
+      // Registering all 20 combined portraits in one request triggers one gene election
+      // with a single shared created_at across all 20 assets.
+      const publishCalls = []
+      const ADMIN_TOKEN = "factory-token-0000000000000000000000001"
+      const app = createIconoplasmApp({
+        isAdmin: async () => true,
+        legacy: async () => new Response("legacy", { status: 299 }),
+        publishGene: async (_env, symbol) => {
+          publishCalls.push(symbol)
+          return { ok: true }
+        },
+        refreshSummaries: async () => {},
+        accountUsage: async () => ({ rows_read: 0, rows_written: 0 }),
+      })
+      const portraits = [...claimOne.leases, ...claimTwo.leases].map((lease, index) => ({
+        symbol: "CA3",
+        asset_sha256: String(index + 1).padStart(64, "a"),
+        width: 768,
+        height: 1024,
+        vision_id: lease.request.requested_vision_id,
+        emulsion_id: "C9-test",
+        sample_label: "CA3-1",
+        sample_number: 1,
+      }))
+      const registered = await app.request(
+        "/api/iconoplasm/admin/portraits/register",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN}` },
+          body: JSON.stringify({ created_by: "drain:combined", portraits }),
+        },
+        { ICONOPLASM_DB: db, ICONOPLASM_ADMIN_TOKEN: ADMIN_TOKEN },
+      )
+      const registeredBody = await registered.json()
+      assert.equal(registered.status, 200, JSON.stringify(registeredBody))
+      assert.equal(registeredBody.ok, true, JSON.stringify(registeredBody))
+      assert.equal(registeredBody.registered, 20)
+      assert.equal(registeredBody.added, 20)
+      assert.deepEqual(publishCalls, ["CA3"])
+      const timestamps = await db
+        .prepare(
+          "SELECT COUNT(*) AS n, COUNT(DISTINCT created_at) AS ts FROM icono_portrait_assets WHERE gene_symbol = 'CA3'",
+        )
+        .first()
+      assert.equal(timestamps.n, 20)
+      assert.equal(timestamps.ts, 1)
+
+      const sent = []
+      const originalFetch = globalThis.fetch
+      t.after(() => (globalThis.fetch = originalFetch))
+      globalThis.fetch = async (url, init) => {
+        const value = String(url)
+        if (value.startsWith("https://storage.bunnycdn.com/"))
+          return new Response(
+            new Uint8Array([82, 73, 70, 70, 8, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32]),
+            { headers: { "Content-Type": "image/webp" } },
+          )
+        if (value === "https://discord.com/api/v10/users/@me/channels")
+          return Response.json({ id: "dm-channel" })
+        sent.push(JSON.parse(init.body.get("payload_json")))
+        return Response.json({ id: `message-${sent.length}` })
+      }
+      for (const lease of [...claimOne.leases, ...claimTwo.leases]) {
+        await db
+          .prepare(
+            `UPDATE icono_generation_requests
+             SET status = 'delivery_pending',
+                 fulfillment_publication_id = 'pub-combined',
+                 fulfilled_asset_sha256 = ?,
+                 fulfilled_vision_id = requested_vision_id
+             WHERE id = ?`,
+          )
+          .bind(
+            portraits.find((p) => p.vision_id === lease.request.requested_vision_id).asset_sha256,
+            lease.request.request_id,
+          )
+          .run()
+      }
+      const delivered = await deliverPendingRequestFulfillmentNotifications({
+        ICONOPLASM_DB: db,
+        ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters",
+        DISCORD_BOT_TOKEN: "test-only",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-only",
+      })
+      assert.equal(delivered.delivered, 1)
+      assert.equal(delivered.delivered_requests, 20)
+      assert.equal(sent.length, 1)
+      assert.match(sent[0].content, /Your 20 free queue candidate portraits for \*\*CA3\*\*/)
+    } finally {
+      schema.close()
+      await runtime.dispose()
+    }
+  },
+)
