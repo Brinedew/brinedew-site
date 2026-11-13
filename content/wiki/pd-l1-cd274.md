@@ -20,7 +20,7 @@ PD-L1 is expressed on antigen-presenting cells and on cells in immune-privileged
 
 ## In cancer
 
-PD-L1 expression is the tumor's principal immune-evasion display: it converts a site of active immune recognition into a site of T-cell exhaustion, and it is one of the escape phenotypes of [immunoediting](immunoediting.md). PD-L1 immunohistochemistry is the companion diagnostic for PD-1/PD-L1 blockade, with the caveat that expression is heterogeneous and inducible — a negative stain does not guarantee a non-responsive tumor. Amplification of the CD274 locus occurs in Hodgkin lymphoma and other PD-L1-high tumors.
+PD-L1 expression is the tumor's principal immune-evasion display: it converts a site of active immune recognition into a site of T-cell exhaustion, and it is one of the escape phenotypes of [immunoediting](immune-surveillance.md). PD-L1 immunohistochemistry is the companion diagnostic for PD-1/PD-L1 blockade, with the caveat that expression is heterogeneous and inducible — a negative stain does not guarantee a non-responsive tumor. Amplification of the CD274 locus occurs in Hodgkin lymphoma and other PD-L1-high tumors.
 
 ## Notes
 

@@ -16,3 +16,11 @@ The **Huang–Ferrell model** is a mathematical model in systems biology that de
 The model depicts the MAPK cascade as a three-tiered chain of proteins: MAPK kinase kinase (MKKK), MAPK kinase (MKK), and MAPK. Activator enzymes initiate the cascade by modifying MKKK, which then triggers a sequence of chemical modifications called phosphorylation. To capture this process mathematically, the model uses a system of ordinary differential equations based on Michaelis–Menten enzyme kinetics to track how the concentrations of these proteins change over time. The model relies on dual-site phosphorylation, requiring kinases to phosphorylate MKK and MAPK at two distinct locations before they become active. Because the modifying enzymes must bind, modify one site, release the protein, and re-bind to modify the second site—a process called nonprocessive modification—the cascade introduces a delay and a steep, non-linear amplification of the signal.
 
 The primary finding of the Huang–Ferrell model is that this multi-tiered, dual-site phosphorylation structure produces "ultrasensitivity," meaning the final output of the cascade rises steeply once the input passes a specific threshold, mimicking a digital switch. The model showed that this sharp, switch-like behavior can occur without positive feedback loops. Subsequent researchers have expanded the model to show that adding feedback loops can lead to bistability—where the system permanently locks into an "active" or "inactive" state even after the initial stimulus ceases—or to sustained chemical oscillations. Today, researchers use the model as a standard test case to evaluate new simulation software, study cell signaling dynamics, and analyze how disease-related mutations disrupt cellular decision-making.
+
+## See also
+
+- [[Goldbeter–Koshland module]]
+- [[Novak–Tyson model]]
+- [[Bathtub Dynamics]]
+- [[Types of cell senescence and quiescence|Senescence and quiescence control loops]]
+- [[Taxonomy of non mechanistic models in biology|Taxonomy of non-mechanistic and causal models]]

@@ -4,6 +4,9 @@ date: 2025-08-10
 draft: true
 vital_level: 2
 class: C
+aliases:
+  - oncogene-classification
+  - How malignant cells evade host coordination systems
 ---
 
 # How malignant cells evade host coordination systems
@@ -22,7 +25,7 @@ Modern cancer genomics largely validated this multi-hit model while revising the
 
 *Gene names appear in italics (RAS, p53), with the type of genetic change shown in parentheses.*
 
-## overview
+## Overview
 
 Below are oncogenic mechanisms classified by which host control system they breach. Cancer cells can either disable each control layer directly through mutations, or co-opt neighboring cells to bypass controls indirectly. 
 
@@ -37,33 +40,7 @@ Blood and immune cells function as dispersed individuals where motility and rapi
 
 *What the host enforces:* Resting cells require external permission to divide. This creates a coordination mechanism where individual cells defer to collective judgment about growth conditions. The system uses a multi-component lock: permission signals must accumulate to sufficient levels to activate kinases (CDK4/6 - enzymes that add phosphate groups to proteins to change their function), which then remove a molecular brake from the replication machinery. 
 
-The brake works like this: RB protein normally sits bound to E2F transcription factors, physically preventing them from turning on DNA synthesis genes. When CDK4/6 kinases phosphorylate RB protein, this changes RB's shape and forces it to release its grip on E2F. The freed E2F transcription factors can then bind to DNA and activate the genes needed for DNA replication, including DNA polymerase and the molecular machinery for copying chromosomes.
-
-??? "How is gene expression controlled?"
-    Gene regulation is controlled by transcription factors - proteins that bind to specific DNA sequences and control whether genes get transcribed into RNA:
-    
-    **DNA binding:** Transcription factors have specialized domains that recognize and bind to specific DNA sequences (usually 6-12 base pairs long) near target genes.
-    
-    **Activation vs. repression:** Some transcription factors activate genes by recruiting RNA polymerase and helping it start transcription. Others repress genes by blocking RNA polymerase access or recruiting chromatin-compacting proteins.
-    
-    **Combinatorial control:** Multiple transcription factors work together on each gene's regulatory region. A gene might need 3-5 different transcription factors all bound simultaneously to turn on fully.
-    
-    **Signal integration:** This allows cells to integrate multiple signals - a gene might only turn on when growth factors AND nutrients AND appropriate cell cycle signals are all present, each detected by different transcription factors.
-    
-    This system lets cells respond to environmental changes by rapidly changing which proteins they make, without altering their DNA sequence.
-
-??? "How does phosphorylation work as a molecular switch?"
-    Phosphorylation is a fundamental mechanism cells use to rapidly change protein function without making new proteins:
-    
-    **Chemical modification:** Kinase enzymes add charged phosphate groups (PO₄³⁻) to specific amino acids (usually serine, threonine, or tyrosine) on target proteins.
-    
-    **Conformational change:** The added negative charge and bulk of the phosphate group changes the protein's 3D shape by altering local electrostatic interactions and creating new binding surfaces.
-    
-    **Functional switching:** This shape change can activate enzymes, create or destroy protein binding sites, change protein stability, or alter subcellular localization.
-    
-    **Reversibility:** Phosphatase enzymes can remove phosphate groups, making this a reversible on/off switch that doesn't require protein synthesis or degradation.
-    
-    This allows cells to rapidly coordinate complex responses to signals - one kinase activation can simultaneously modify dozens of target proteins.
+The brake works like this: [[rb-rb1|RB protein]] normally sits bound to [[e2f1-e2f1-q01094|E2F transcription factors]], physically preventing them from turning on DNA synthesis genes. When CDK4/6 kinases phosphorylate RB protein, this changes RB's shape and forces it to release its grip on E2F. The freed E2F transcription factors can then bind to DNA and activate the genes needed for DNA replication, including DNA polymerase and the molecular machinery for copying chromosomes.
 
 *Why this design?* The multi-component architecture requires consensus from multiple inputs before committing to cell division. This prevents catastrophic coordination failures: a single cell deciding to divide when nutrients are scarce, space is limited, or tissue repair is complete could trigger runaway growth that damages the entire organism. 
 
@@ -139,22 +116,7 @@ These systems have different functions: G1/S asks "are conditions right to start
 
 This forces premature release of the cell division machinery (E2F transcription factors) regardless of actual conditions.
 
-??? "Why is the cell cycle organized into discrete phases with checkpoints?"
-    The cell cycle's organization solves several computational and coordination problems that would be impossible with continuous division:
-    
-    **All-or-nothing control:** Cell division must be binary - there's no such thing as "half a cell division." The system uses hysteresis (like a light switch with different on/off thresholds) to ensure committed entry into each phase. Once cyclin levels reach the threshold to start M-phase, they must drop much lower to exit, preventing oscillation.
-    
-    **Error propagation prevention:** DNA replication errors and chromosome segregation mistakes are catastrophic if not caught. Discrete checkpoints create mandatory "inspection points" where the cell verifies completion and quality before proceeding. Each checkpoint can halt the entire cycle until problems are resolved.
-    
-    **Irreversible progression:** Positive feedback loops ensure that once a phase transition begins, it completes fully. This prevents partial replication or incomplete chromosome separation, which would be lethal.
-    
-    **Stable coordination states:** The discrete phases create stable cellular states (G1: growth, S: replication, G2: preparation, M: division) that can be maintained indefinitely if conditions aren't right. This allows cells to pause growth during stress or nutrient deprivation.
-    
-    **Resource management:** Separating DNA synthesis (S) from division (M) allows the cell to complete the energy-intensive replication process before committing to the mechanically complex division process.
-    
-    This design is evolutionarily conserved across all eukaryotes because it's the only known mechanism for reliable cellular reproduction.
-
-**Disabling replication stress response:** Many cancers have defective ATR-CHK1 signaling, allowing them to proceed through S-phase despite replication fork problems. This creates a dependency where cancer cells rely on residual checkpoint function to prevent lethal replication fork collapse - they can tolerate some replication stress but cannot survive complete loss of stress response mechanisms.
+**Disabling replication stress response:** Many cancers have defective [[atr|ATR]]-CHK1 signaling, allowing them to proceed through S-phase despite replication fork problems. This creates a dependency where cancer cells rely on residual checkpoint function to prevent lethal replication fork collapse - they can tolerate some replication stress but cannot survive complete loss of stress response mechanisms.
 
 **Whole-genome doubling (WGD):** Some cancers undergo tetraploidization as a checkpoint bypass mechanism. But how does a cell actually duplicate its entire genome without dividing?
 
@@ -217,209 +179,31 @@ Cancer exploits this by mutating PCP components, causing directional decoherence
 
 This is particularly critical in basal-like breast cancers, where PCP defects allow cancer cells to explore multiple invasion routes simultaneously rather than being constrained to collective directional movement.
 
-**Cell competition exploitation:** Normal tissues need quality control to eliminate damaged or suboptimal cells before they compromise tissue function. But here's the design problem: how does a cell know if it's "damaged" when damage is often relative rather than absolute?
+**Cell competition and supercompetition exploitation:** Normal tissues use distributed fitness comparison—mediated by [[myc|MYC]] levels, [[flower-drosophila|Flower]] isoforms, and [[Anti-frontrunner dynamics#1-epithelial-defense-against-cancer-edac|EDAC]] apical extrusion—to purge suboptimal cells without central arbitration. Malignant clones subvert this quality-control circuit either by amplifying growth drivers (*MYC*, STAT, [[yap-yap1|YAP]]/[[taz-wwtr1|TAZ]]) to become **supercompetitors** that trigger [[apoptosis]] in surrounding wild-type neighbors, or by acquiring stress-pathway lesions (JNK/*hid* resistance alongside polarity loss) that make former losers immune to extrusion.
 
-**The engineering challenge:** A tissue can't use a central authority to decide which cells to eliminate - that would create a single point of failure. Instead, it needs a distributed consensus algorithm where cells can assess their own fitness relative to neighbors and coordinate elimination of the least fit cells.
-
-**The solution concept:** Cells continuously broadcast their fitness status to neighbors and compare it against what they receive back. If a cell detects that its neighbors are significantly fitter, it triggers its own elimination. If a cell detects that its neighbors are less fit, it helps eliminate them.
-
-**The implementation challenge:** This requires three coordinated mechanisms:
-1. **Fitness broadcasting:** How do cells signal their current fitness level?
-2. **Comparative assessment:** How do cells determine which neighbors are less fit?  
-3. **Elimination execution:** How do cells resist elimination when fit, but submit to elimination when unfit?
-
-**Answer 1 - Fitness broadcasting:** Cells use their metabolic activity level as a fitness proxy - highly active, well-resourced cells are probably healthier than sluggish, resource-starved cells. 
-
-*How they measure metabolic activity:* Cells produce a protein called MYC in proportion to their metabolic rate. High-MYC levels signal "I'm metabolically active and well-resourced." Low-MYC levels signal "I'm metabolically sluggish."
-
-**Answer 2 - Comparative assessment:** The key insight is that cellular fitness differences create different survival thresholds for death signals. Cells need to detect when their neighbors are less fit than themselves.
-
-*How they make the comparison:* Cells detect fitness differences through direct contact at cell junctions, where they can sense each other's MYC protein levels and metabolic activity. High-MYC cells can detect when neighbors have lower MYC levels.
-
-**Answer 3 - Elimination execution:** High-fitness cells produce both death signals AND death signal blockers, creating a "kill others, protect self" configuration. Low-fitness cells produce fewer death signal blockers, making them vulnerable to elimination by their fitter neighbors.
-
-*How the death signal system works:* All cells are constantly exposed to death signals via a cellular pathway called JNK. But cells also produce a death signal blocker called "puckered" in proportion to their MYC levels. High-MYC cells produce enough puckered to block the death signals and survive. Low-MYC cells don't produce enough puckered, so the death signals kill them.
-
-**The complete mechanism:** Winners survive because high MYC → high puckered → blocked JNK. Losers die because low MYC → low puckered → active JNK.
-
-**Important caveat:** This mechanism comes from Drosophila research, where there's a single JNK-blocking protein called "puckered." Mammals have evolved multiple JNK-blocking proteins (DUSP1/MKP-1, DUSP6/MKP-3, etc.) with different specificities, and mammalian cell competition may use additional or different pathways.
-
-**The BIM connection in mammals:** While flies use the JNK pathway for competitive cell elimination, mammals also use BIM-mediated mitochondrial apoptosis. High-MYC mammalian cells upregulate BIM (a pro-death protein), but they may survive through different mechanisms than fly cells - possibly including multiple DUSP proteins, enhanced BCL-2 anti-apoptotic proteins, or other pathways we don't fully understand yet.
-
-**What we don't know:** The precise molecular mechanism of mammalian cell competition is still being worked out. It likely combines elements of both JNK-mediated death (conserved from flies) and BIM-mediated mitochondrial apoptosis (more prominent in mammals).
-
-**(Mechanism from Drosophila research - mammalian details may differ)**
-
-| **Feature** | **Winners** | **Losers** |
-|-------------|-------------|------------|
-| **MYC Level** | High | Low |
-| **Puckered (JNK Repressor)** | High - blocks death signals | Low - death signals active |
-| **JNK Pathway** | Blocked | Active |
-| **Fate** | Survive and eliminate neighbors | Die via JNK-mediated apoptosis |
-| **BIM Production** | High (but death blocked) | Low (but death active) |
-
-Here's the detailed mechanism (from Drosophila wing imaginal disc studies):
-
-**Step 1 - Fitness detection:** Cells with high dMyc levels detect neighbors with lower dMyc levels through direct protein interactions at cell boundaries. The dMyc differential creates metabolic differences - high-dMyc cells have elevated ribosome biogenesis and protein synthesis rates that neighboring cells can sense.
-
-**Step 2 - JNK pathway activation:** In lower-fitness cells, the competitive stress activates the JNK (Jun N-terminal Kinase) stress response pathway. JNK activation is the central decision point that determines cell fate during competition.
-
-**Step 3 - hid gene induction:** Activated JNK directly induces transcription of the pro-apoptotic gene hid (head involution defective). hid is the key executioner - its protein product directly blocks cellular survival pathways and triggers apoptosis.
-
-**Step 4 - Apoptotic execution:** hid protein binds to and inhibits DIAP1 (Drosophila Inhibitor of Apoptosis Protein 1), which normally blocks caspase activation. With DIAP1 neutralized, caspases activate and execute apoptosis in the loser cells.
-
-**Step 5 - Corpse clearance:** Winner cells engulf apoptotic debris through macrophage-like phagocytosis, clearing dead cells and expanding into available tissue space.
-
-This creates a fitness-based sorting algorithm: high-dMyc cells trigger JNK→hid→apoptosis in low-dMyc neighbors, while protecting themselves through competitive advantage mechanisms.
-
-Transformed cells systematically dismantle this quality control system through three coordinated strategies:
-
-**Strategy 1 - Become supercompetitors:** Transformed cells overexpress dMyc, STAT pathway components, or Yorkie (Yki) to achieve massive fitness advantages that eliminate normal neighbors.
-
-**Strategy 2 - Block stress responses:** Cells with oncogene activation or loss of tumor suppressors (scrib, lgl, dlg) become resistant to JNK-mediated elimination signals from healthier neighbors.
-
-**Strategy 3 - Survive their own competitive stress:** Transformed cells must avoid triggering their own hid-mediated apoptosis despite the metabolic stress created by oncogene overexpression.
-
-**The molecular mechanisms (Drosophila):**
-
-**dMyc amplification creates a deadly paradox:** Normal dMyc makes cells competitive but also metabolically stressed - high dMyc levels increase ribosome production and protein synthesis demands, creating cellular stress that can trigger JNK→hid→apoptosis. Transformed cells need dMyc's competitive advantages without its stress-induced suicide programming.
-
-**How do normal dMyc winners survive their own metabolic stress?** The survival mechanism centers on blocking JNK pathway activation:
-
-**High-dMyc cells (winners):** Upregulate puckered, a dual-specificity phosphatase that directly dephosphorylates and inactivates JNK. Even under metabolic stress, the blocked JNK pathway cannot activate hid transcription or trigger apoptosis.
-
-**Low-dMyc cells (losers):** Cannot upregulate enough puckered to block JNK activation. Competitive stress activates JNK→hid→DIAP1 inhibition→caspase activation→apoptosis.
-
-The paradox resolves: it's not about absolute stress levels, it's about the balance between JNK activation (death signal) and puckered expression (death signal blocker). Winners block JNK; losers cannot.
-
-**Tumor suppressor loss provides competitive immunity:** Loss of cell polarity genes (scrib, lgl, dlg) or cell adhesion regulators creates competitive advantages by disrupting normal fitness-sensing mechanisms. Cells with defective tumor suppressors gain advantages because they:
-- Proliferate despite polarity defects that would normally trigger elimination
-- Resist JNK-mediated apoptosis signals from organized neighbors
-- Avoid growth constraints imposed by proper epithelial organization
-- Experimental evidence shows scrib- mutant clones can become supercompetitors when additional oncogenes are activated (avoiding elimination and becoming transformers)
-
-**hid pathway disruption disarms the suicide programming:** Transformed cells solve the dMyc paradox through multiple mechanisms that block JNK→hid signaling:
-- **Enhanced puckered expression** blocks JNK activation, preventing hid transcriptional induction
-- **Constitutive DIAP1 overexpression** sequesters any hid protein that gets produced, preventing caspase activation
-- **JNK pathway mutations** can directly disrupt stress signal transduction upstream of hid
-- **Transcriptional repressors** at the hid locus can block JNK-mediated transcriptional activation
-
-**Can winners, losers, or both become transformed?** BOTH can transform through different routes:
-
-**Super-competitor transformants:** Start with high dMyc or activated growth pathways (STAT, Yorkie), amplify further to become "super-competitors." These cells eliminate normal neighbors through enhanced competitive killing mechanisms. They survive their own metabolic stress through multiple adaptations: enhanced puckered expression blocks JNK activation, DIAP1 overexpression prevents caspase activation, and growth pathway mutations provide survival signals.
-
-**Resistant losers:** Start with tumor suppressor loss (scrib-, lgl-, dlg-) but avoid elimination through context-dependent rescue mechanisms. Loss of cell polarity disrupts normal competitive evaluation, while additional mutations (Ras activation, growth pathway stimulation) provide enough survival advantage to resist JNK→hid elimination.
-
-**Different survival requirements:**
-- Super-competitor transformants need multiple stress-resistance mechanisms (puckered upregulation, DIAP1 overexpression, growth pathway activation)
-- Resistant losers need disruption of competitive evaluation plus moderate growth advantages
-
-**The competitive killing mechanism:** Super-competitors can eliminate neighbors through both contact-dependent and diffusible mechanisms, though the specific distance-acting factors remain incompletely characterized in Drosophila systems.
-
-The result: transformed cells retain competitive advantages while becoming immune to both metabolic stress-induced apoptosis and elimination signals from organized neighbors.
-
-## Cell Competition States: Drosophila Examples
-
-| **Feature** | **Normal Winners** | **Super-Competitors** | **Normal Losers** | **Transformed Losers** |
-|-------------|-------------------|----------------------|-------------------|----------------------|
-| **Genotype Examples** | Wild-type vs Minute/+ | dMyc overexpression, STAT activation, Yorkie (Yki) activation | Minute/+ (ribosomal protein deficient), Wild-type vs super-competitors | scrib-, lgl-, dlg- mutants (context-dependent) |
-| **MYC/dMyc Level** | Normal | Very High | Low/Normal | Variable |
-| **Key Mechanism** | Normal fitness vs reduced fitness neighbors | Oncogene hyperactivation | Ribosomal deficiency, reduced protein synthesis | Loss of cell polarity, endocytic defects |
-| **Death Signal Response** | Puckered-mediated JNK resistance | Enhanced survival mechanisms | JNK-mediated apoptosis via hid activation | Context-dependent (can become resistant) |
-| **Killing Range** | Contact-dependent (adjacent cells) | Extended distance (up to 8-10 cell diameters) | No killing ability | Variable |
-| **Elimination Method** | Induce apoptosis in neighbors | Non-autonomous hid induction at distance | Undergo apoptosis and extrusion | Eliminated unless rescue conditions present |
-| **Key Genes Involved** | Puckered (puc), JNK pathway | dMyc, STAT, Yorkie, Warts pathway | Ribosomal protein genes (RpS, RpL) | scrib, lgl, dlg, rab5, vps25, TSG101 |
-| **Tissue Context** | Wing imaginal discs, eye discs | Wing/eye imaginal discs | Wing imaginal discs | Imaginal discs, epithelia |
-| **Competitive Advantage** | Fitness differential | Massive fitness advantage + distance killing | Fitness disadvantage | Conditional - can flip to super-competitor |
-| **Apoptosis Pathway** | Avoid JNK → hid → death | Avoid death, induce death in others | JNK → hid → apoptosis | Variable depending on context |
-| **Research Status** | Well-established mechanism | Well-established | Well-established | Context-dependent, some mechanisms unclear |
-| **Transformation Potential** | Low (normal cells) | High (oncogene-driven) | None (eliminated) | High (when elimination is blocked) |
-
-**Synthetic lethal vulnerability:** Cancers addicted to YAP/TAZ signaling become vulnerable to mechanical disruption or YAP/TAZ inhibitors.
-
-This represents failure of emergent spatial coordination - the tissue's ability to self-organize and maintain appropriate cell density without central control.
-
+**Synthetic lethal vulnerability:** Cancers addicted to YAP/TAZ signaling become vulnerable to mechanical disruption or YAP/TAZ inhibitors. This represents failure of emergent spatial coordination—the tissue's ability to self-organize and maintain appropriate cell density without central control.
 
 ### 4. replicative senescence evasion
+*Main article: [[telomeres|Telomeres and replicative senescence]]*
 
-*What the host enforces:* Every chromosome has "telomeres"—protective DNA caps that shorten each time a cell divides. After ~50-60 divisions, telomeres become critically short and the cell is forced into permanent cell cycle arrest (senescence) or death. This creates a physical countdown mechanism that prevents any cell lineage from replicating indefinitely.
+*What the host enforces:* Every linear chromosome carries protective [[telomeres|telomeric DNA repeats]] that erode across somatic divisions, driving damaged or aging lineages into [[cellular-senescence|replicative senescence]] or apoptosis after ~50–60 divisions (the [[hayflick-moorhead-experiment|Hayflick limit]]).
 
-*Evasion mechanisms:*
+*Evasion mechanisms:* To escape this division counter, tumors face a strategic trade-off between catalytic efficiency and immunological stealth:
 
-**Reactivating telomerase machinery:** Normal adult cells shut down telomerase—the enzyme that rebuilds telomeres. Cancer reactivates it by mutating the TERT promoter (regulatory DNA sequence that controls gene expression), creating new binding sites for transcription factors. Random mutations occasionally create functional regulatory sequences that restore telomerase expression.
-
-**Taking the alternative route:** Cancer faces a strategic choice between efficiency and stealth when maintaining telomeres:
-
-**Strategy 1 (TERT reactivation):** Efficient but detectable - reactivate the dedicated telomere enzyme. This is fast and precise but heavily monitored by immune surveillance. TERT expression is a strong cancer signal that triggers immune responses.
-
-**Strategy 2 (ALT mechanism):** Stealthy but messy - hijack general DNA repair machinery for telomere copying. This is harder to detect because it uses "legitimate" repair enzymes, making it more immunologically silent. However, it's messier, less efficient, and requires the cell to tolerate genomic instability.
-
-Here's the core mechanism behind ALT: Cancer loses the proteins that package telomere DNA into organized structures. Without proper packaging, telomeric DNA becomes unstable and forms problematic twisted knots. These knots stall DNA replication, which forces the cell to use emergency repair systems. The emergency repair process - copying telomere sequences from one chromosome to another - becomes the ALT mechanism itself.
-
-The molecular details: The packaging proteins are ATRX and DAXX (chromatin remodelers that normally organize telomeric DNA). When cancer loses these proteins, telomeric DNA becomes loosely packed, allowing G-quadruplex structures (twisted DNA knots) to form. These knots trigger homologous recombination repair, which IS the ALT mechanism.
-
-This creates two distinct cancer patterns: ALT dominates in cancers with ATRX/DAXX mutations, while TERT reactivation dominates in cancers where ATRX/DAXX remain functional.
-
-**Crisis tolerance:** Some cancers can survive periods of severe telomere dysfunction ("crisis") that would normally be lethal. During crisis, massive chromosomal instability occurs, but rare cells that acquire telomere maintenance mechanisms can emerge from this chaos with enhanced genomic diversity.
-
-**Amplifying the machinery:** Cancer can also just make more copies of the telomerase components (TERT, TERC) so the repair process runs faster and more efficiently.
-
-The result: cancer cells bypass the Hayflick limit. Cells with functional telomere maintenance gain replicative immortality characteristic of stem cells, but without the accompanying growth controls.
-
+- **TERT reactivation (efficiency):** Re-expressing [[telomerase-tert|telomerase]] via *TERT* promoter mutations or locus amplification rebuilds telomeres cleanly, though neoantigens and TERT overexpression carry higher immune visibility.
+- **Alternative Lengthening of Telomeres (ALT, stealth):** Loss of chromatin remodelers **ATRX/DAXX** destabilizes telomeric packaging, allowing G-quadruplexes and stalled forks that hijack homologous recombination to copy telomeres between chromosomes—harder for immunity to spot as foreign machinery, at the cost of ongoing genomic instability.
+- **Crisis tolerance:** Cells surviving severe telomere dysfunction ("crisis") accumulate massive rearrangements, occasionally yielding rare telomere-stabilized escapers with expanded genomic diversity.
 
 ### 5. apoptosis evasion
+*Main article: [[apoptosis|Apoptosis]]*
 
-*What the host enforces:* Cells run continuous self-diagnostics. When they detect serious problems—DNA damage, oncogene activation, metabolic stress—they're supposed to either stop dividing permanently or trigger apoptosis (programmed cell death). 
+*What the host enforces:* Cells run continuous self-diagnostics. Serious damage—DNA breaks, oncogene stress, metabolic crisis—triggers intrinsic (mitochondrial cytochrome c → [[caspase-3-casp3-p42574|caspases]] via APAF1/caspase-9) or extrinsic ([[fas-cd95-p25445|Fas]]/[[tnf-tnf-p01375|TNF]] death receptors → caspase-8) programmed cell death. Crucially, [[p53-tp53|p53]] is a damage assessor feeding into mitochondrial apoptosis rather than a single central kill-switch, so cancer must disable multiple independent death arms (for instance overproducing [[bcl-2|BCL-2]]/[[bcl-xl-bcl2l1|BCL-XL]]/[[mcl-1|MCL-1]], activating [[mdm2|MDM2]], or silencing caspase-8).
 
-*System architecture:* Apoptosis is actually NOT centralized through p53. Multiple independent pathways can trigger cell death:
+*Evasion and co-option mechanisms:*
 
-**Extrinsic pathway**: Death receptors (Fas, TNF receptors) detect external "you should die" signals and directly activate caspase-8, which kills the cell without involving p53.
-
-**Intrinsic pathway**: Mitochondrial damage releases cytochrome c, which forms the apoptosome and activates caspase-9, again without requiring p53.
-
-**p53 damage assessment**: p53 monitors internal damage and can trigger the intrinsic pathway when it detects severe problems.
-
-So p53 isn't a "central controller" - it's a specialized damage assessor that feeds into one of several death pathways. This explains why p53 mutations don't completely disable apoptosis: cells can still die through death receptors or direct mitochondrial damage. Cancer must therefore disable multiple apoptosis pathways, with p53 as only one target.
-
-*Evasion mechanisms:*
-
-**Disabling p53 surveillance:** Cancer uses proteins like MDM2/MDM4 to destroy the p53 sensor before it can raise an alarm.
-
-**Exploiting the senescence pathway:** This reveals a fundamental systemic paradox. p53 can trigger senescence (permanent growth arrest) as a "safe mode" when apoptosis would be too disruptive. But senescent cells secrete SASP (senescence-associated secretory phenotype) factors that create a tumor-promoting inflammatory environment.
-
-*Concrete mechanism:* Cancer cells deliberately damage their neighbors' DNA through specific molecular signals: reactive oxygen species (ROS) that directly attack DNA bases, inflammatory cytokines including IL-1β, IL-6, and IL-8, and TGF-β. These signals work through two routes - direct secretion into the extracellular space and gap junction-mediated transfer between cells. The ROS activate NF-κB signaling in neighboring fibroblasts, while IL-1β and TGF-β cooperatively activate IL1/NF-κB and TGF-β/SMAD pathways. This dual pathway activation induces DNA damage response (DDR) that triggers ATM/ATR kinases and p53, forcing healthy cells into senescence as a protective response. However, senescent cells don't just sit quietly - they produce a cocktail of inflammatory molecules (the SASP factors) as a cry for help to recruit immune cells for tissue repair. Cancer exploits this: the inflammatory signals that were meant to summon help instead create a tumor-promoting environment that feeds growth factors and pro-angiogenic signals back to the cancer.
-
-*Bystander senescence effect:* This creates a spreading chain reaction. The inflammatory molecules produced by the first wave of senescent cells damage the DNA of their neighbors, forcing them into senescence too. Each newly senescent cell produces more inflammatory signals, expanding the zone of tumor-promoting inflammation. This is why cancer can convert large areas of healthy tissue into metabolically active tumor supporters - it's a self-amplifying process where the host's own protective responses get hijacked.
-
-*Why this mechanism works:* Cancer converts potential competitors (healthy fibroblasts) into metabolically hyperactive servants that can't divide but continuously produce tumor-promoting factors. The DNA damage response, designed to protect genome integrity, becomes a recruitment mechanism for supportive stromal cells.
-
-**Disabling intrinsic apoptosis:** Cancer overproduces anti-apoptotic BCL2 family proteins that block mitochondrial cell death pathways.
-
-**Disabling extrinsic apoptosis:** Cancer can silence caspase-8, disrupting the Fas/TNF death receptor pathways that provide external death signals.
-
-**Entosis and cannibalism:** Normal tissues have a quality control mechanism for eliminating cells that lose proper attachment to their surrounding matrix. When epithelial cells detach from the basement membrane (usually a sign of damage or displacement), they trigger a stress response that can lead to entosis - where one cell actively invades and gets digested by a neighboring cell.
-
-Here's how the invasion mechanism works: The detached "loser" cell forms adherens junctions with a healthy "winner" cell. The loser cell then activates its RhoA-ROCK signaling pathway, which drives actomyosin contraction - essentially the cell's internal muscle system. This contractile force literally pushes the loser cell into the winner cell's cytoplasm, creating a cell-in-cell structure where the invading cell ends up surrounded by a membrane-bound vacuole inside the host cell.
-
-The digestion process is equally sophisticated. The host cell recruits autophagy machinery (LC3, ATG5/7 proteins) to the vacuole membrane, followed by lysosomes that release digestive enzymes like cathepsin B. The internalized cell is systematically broken down and recycled through organized molecular dismantling.
-
-**The evolutionary design logic and why cancer wins:** The entosis system evolved as a quality control mechanism based on a reasonable assumption: damaged or stressed cells would become mechanically stiffer and less deformable than healthy cells. The system uses mechanical properties as a fitness proxy - softer, more deformable cells eliminate stiffer, less flexible ones. This made evolutionary sense because cellular damage typically increases stiffness through cytoskeletal disruption and loss of normal membrane flexibility.
-
-Cancer breaks this assumption in a devastating way. Instead of becoming stiffer like typical damaged cells, cancer cells become *softer* and more deformable than normal cells. Oncogenic mutations like activated Kras and Rac actually decrease actomyosin contractility, making cancer cells appear "fitter" from the mechanical competition system's perspective. This creates an evolutionary mismatch where the quality control system identifies cancer cells as the healthy winners that should eliminate their neighbors.
-
-**The metabolic rigging:** Cancer compounds this mechanical advantage with metabolic dominance. Cancer cells overexpress nutrient transporters and metabolic enzymes, allowing them to outcompete normal cells for glucose and other essential resources. During glucose starvation - which naturally triggers entosis - cancer cells maintain higher energy reserves while normal cells become metabolically stressed. The entosis system then eliminates the glucose-starved normal cells (now marked as "losers" by high AMPK stress signaling) in favor of the better-fed cancer cells.
-
-**Why this creates such effective cannibalism:** When cancer cells cannibalize neighbors through entosis, they gain nutrients while exploiting a rigged competition where they have multiple unfair advantages:
-1. **Mechanical superiority**: Cancer cells are softer and more deformable
-2. **Metabolic dominance**: Cancer cells hoard nutrients more effectively  
-3. **Stress resistance**: Cancer cells maintain fitness markers during harsh conditions
-4. **Growth factor production**: Digested cells provide amino acids and building blocks that fuel cancer proliferation
-
-The victim cells - whether healthy neighbors or metabolically weaker cancer cells - get systematically eliminated by what the host tissue interprets as "fitter" cells. This explains why tumors with high entosis levels correlate with worse patient outcomes: cancer has weaponized the host's own quality control system to eliminate competition and fuel its own growth.
-
-**Synthetic lethal vulnerability:** Cancers that lose p53 become hyperdependent on other DNA damage checkpoints and are vulnerable to PARP inhibitors or ATR inhibitors.
-
-While p53 is often called a single-point-of-failure, the DNA damage response includes p63/p73 backup systems and non-p53 pathways (CHK2/ATM). However, p53's central integration role makes it the most frequent target for inactivation.
+- **Weaponizing bystander senescence:** When DNA damage drives fibroblasts into arrest rather than lysis, their pro-inflammatory [[sasp|SASP]] (ROS, IL-1β, [[il-6|IL-6]], [[il-8-cxcl8|IL-8]], [[tgfb1-tgfb1-p01137|TGF-β]]) induces secondary DNA damage and senescence in neighboring stroma via NF-κB/SMAD signaling, converting potential normal competitors into chronic providers of trophic and pro-angiogenic factors.
+- **Entosis and metabolic cannibalism:** Detached epithelial cells normally initiate non-apoptotic cell-in-cell clearance (**entosis**), where stiffer/starved loser cells invade softer neighbors via RhoA–ROCK actomyosin contraction and are digested inside LC3/ATG-recruited autophagosomes. Oncogenic *KRAS* and *Rac* make malignant cells mechanically *softer* while nutrient transporters protect their ATP/AMPK pools during starvation—rigging host mechanical and metabolic sorting so cancer cells engulf surrounding healthy or stressed neighbors for amino-acid fuel.
+- **Synthetic lethal vulnerability:** Tumors that lose p53 become hyperdependent on residual intra-S and G2/M DNA-damage checkpoints ([[atr|ATR]]–CHK1, PARP-mediated repair), exposing actionable therapeutic dependencies.
 
 
 ### 6. metabolic reprogramming
@@ -464,55 +248,16 @@ The result: cells that consume resources at growth rates while ignoring normal f
 
 
 ### 7. immune evasion
+*Main article: [[immune-surveillance|Immune surveillance and immunoediting]]*
 
-*What the host enforces:* The immune system continuously patrols for abnormal cells through a dynamic process called immunoediting: **Elimination** (destroying abnormal cells), **Equilibrium** (containing partially-controlled cancer cells), and **Escape** (cancer overwhelms immune control). This creates ongoing evolutionary pressure.
+*What the host enforces:* Cytotoxic T cells, NK cells, and macrophages continually police transformed cells across the Elimination → Equilibrium → Escape sequence.
 
-*Evasion mechanisms:*
+*Evasion and co-option mechanisms:*
 
-**Phase 1 - Evading elimination:** Cancer disables the cellular identity card system that allows immune surveillance. 
-
-Normal cells display internal protein fragments on their surface using MHC-I complexes - molecular billboards that show T cells what's happening inside the cell. These complexes require β2-microglobulin, a structural component that stabilizes the peptide-binding groove where protein fragments are displayed. Cancer frequently deletes β2-microglobulin, causing MHC-I complexes to collapse and preventing any internal proteins from being displayed. This renders cancer cells essentially invisible to T cells - like removing the license plate and vehicle identification from a car to avoid police detection.
-
-Alternatively, cancer upregulates PD-L1 (more commonly through adaptive IFN-γ-induced expression than genomic amplification), a "don't kill me" signal that binds to PD-1 receptors on T cells and actively suppresses their activation even when they recognize cancer antigens. This is like displaying fake diplomatic immunity credentials to avoid prosecution.
-
-Some cancers recruit immunosuppressive T-regulatory cells via CCL22 chemokine signaling, essentially hiring corrupt security guards to protect them from legitimate law enforcement.
-
-**Phase 2 - Exploiting equilibrium:** Cancer cells that survive initial immune attack often enter a dormant equilibrium state where immune pressure selects for less immunogenic variants. This creates evolutionary pressure toward stealth phenotypes.
-
-**Phase 3 - Inflammatory co-option:** Escaped cancers don't just evade immunity—they actively co-opt immune cells as supportive partners. This represents the most sophisticated form of immune subversion, exploiting a fundamental evolutionary trade-off.
-
-Why do "tumor-promoting" immune cells exist at all? M2 macrophages didn't evolve to help cancer - they evolved for essential tissue maintenance that cancer then hijacks.
-
-**Normal M2 functions in wound healing:** When tissue is damaged, the immune response has two phases. M1 macrophages arrive first to kill pathogens and clear debris, but continued M1 activity would prevent healing through chronic inflammation and tissue destruction. M2 macrophages take over the second phase to:
-
-- Promote new blood vessel formation (angiogenesis) to supply healing tissue with nutrients
-- Secrete growth factors (PDGF, TGF-β) to stimulate cell proliferation for tissue repair  
-- Remodel extracellular matrix to rebuild tissue architecture
-- Suppress ongoing inflammation to prevent tissue damage from excessive immune responses
-
-**Why M1 dominates early, then loses to M2:** The fundamental problem is temporal coordination. How does a macrophage "know" when it's time to switch from killing mode to healing mode?
-
-The solution is environmental sensing. Macrophages constantly monitor their surroundings and adjust their arginine usage based on what they detect:
-
-**Early wound environment favors M1:** Fresh injuries are hypoxic, contain pathogens and cellular debris, and lack the growth factors present in healthy tissue. These conditions trigger nearby immune cells to release "danger" signals that tell macrophages: "prioritize killing over healing." Macrophages receiving these signals produce more of the enzyme that converts arginine into a cytotoxic weapon (nitric oxide), winning the competition for arginine.
-
-**Later wound environment favors M2:** As pathogens are cleared and blood flow restores oxygen levels, the danger signals fade. Different immune cells now arrive and release "repair" signals that tell macrophages: "switch to healing mode." Macrophages receiving repair signals produce more of the enzyme that consumes arginine for tissue building (collagen synthesis), now winning the arginine competition.
-
-The specific molecules involved: danger signals include interferon-gamma (IFN-γ) from T-cells, which activates the STAT1 pathway to upregulate the cytotoxic enzyme iNOS. Repair signals include IL-4 and IL-13 from helper T-cells, which activate the STAT6 pathway to upregulate the tissue-building enzyme Arginase-1.
-
-**Cancer's temporal sabotage:** Cancer bypasses this environmental sensing system by constitutively producing the "repair" signals (IL-4/IL-13) regardless of the actual tissue state. This forces macrophages into healing mode even when killing mode is needed, permanently disabling their cytotoxic capacity while activating all their tissue-building functions.
-
-The result: macrophages lose their ability to produce cancer-killing nitric oxide and instead activate tissue repair programs that support cancer growth - angiogenesis, growth factor secretion, matrix remodeling, immune suppression.
-
-**The evolutionary trap:** The immune system faces a fundamental recognition problem: cancer cells are the body's own cells that have gone rogue, not foreign invaders. The signals that distinguish "tissue in need of repair" from "tissue harboring cancer" evolved under conditions where cancer was rare (since most animals died from other causes before developing cancer). Cancer exploits this gap in the recognition system, triggering repair responses when elimination responses are needed.
-
-This represents a complete functional hijacking - the same cells that should be coordinating tissue repair instead become cancer's construction crew, building the infrastructure cancer needs to grow and spread.
-
-**NK-cell editing loop:** Cancers that lose MHC-I to evade T-cells face NK cell recognition. However, successful escapers often simultaneously downregulate NKG2D ligands (MICA/B, ULBP) to avoid NK surveillance. This creates a two-layer evolutionary filter - cancers must evade both T-cell and NK-cell recognition systems.
-
-**Synthetic lethal vulnerability:** Cancers that lose MHC-I presentation become vulnerable to NK cell killing, while those that amplify PD-L1 become targets for checkpoint inhibitor therapy. The evolutionary trade-offs create therapeutic opportunities.
-
-The result: cancer co-opts immune cells for tumor-promoting functions while simultaneously evading immune surveillance. Co-evolutionary selection creates both resistance mechanisms and new therapeutic vulnerabilities.
+- **Masking identity cards:** Deleting β2-microglobulin collapses MHC-I complexes ([[hla-a-hla-a-p04439|HLA-A]]) so T cells cannot see intracellular peptides, while concurrent loss of NKG2D stress ligands (MICA/B, ULBP) blunts "missing-self" NK cell killing.
+- **Triggering checkpoint brakes and Tregs:** Adaptive IFN-γ-induced [[pd-l1-cd274|PD-L1]] expression suppresses [[pd-1-pdcd1|PD-1]]+ T cells, while CCL22 chemokine secretion recruits immunosuppressive regulatory T cells.
+- **Subverting the M1→M2 macrophage arginine switch:** Normal tissue repair transitions from cytotoxic M1 macrophages (IFN-γ/STAT1 → iNOS, converting arginine into nitric oxide) to trophic M2 macrophages (IL-4/IL-13/STAT6 → Arginase-1, driving collagen synthesis, angiogenesis, and [[tgfb1-tgfb1-p01137|TGF-β]]-mediated dampening). Tumors constitutively emit IL-4/IL-13, locking macrophages into repair mode so host maintenance crews build stroma and suppress immunity instead of clearing the lesion.
+- **Synthetic lethal vulnerability:** MHC-I loss invites NK-cell lysis, whereas PD-L1 reliance sensitizes tumors to [[pd-1-pdcd1|PD-1]]/[[ctla-4|CTLA-4]] checkpoint blockade.
 
 
 ### 8. angiogenesis induction
@@ -744,8 +489,10 @@ Different tissues tend toward different strategies based on their baseline secur
 
 ## Related
 
-- **[Tumor Suppressor Theory of Aging](tumor-suppressor-theory-of-aging.md)** - How anti-cancer mechanisms drive aging
-- **[p53](p53-tp53.md)** - The key damage surveillance system
-- **[Cellular Senescence](cellular-senescence.md)** - How cells permanently exit the cell cycle
-- **[Antagonistic Pleiotropy Theory](antagonistic-pleiotropy-theory.md)** - Why the same mechanisms can be both protective and harmful
+- [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]] - How anti-cancer mechanisms drive aging
+- [[p53-tp53|p53]] - The key damage surveillance system
+- [[cellular-senescence|Cellular Senescence]] - How cells permanently exit the cell cycle
+- [[Cell competition]] - Supercompetition, polarity-loser immunity, and *Drosophila* mechanisms
+- [[Anti-frontrunner dynamics]] - Tissue-level collective suppression of outgrowing clones
+- [[antagonistic-pleiotropy-theory|Antagonistic Pleiotropy Theory]] - Why the same mechanisms can be both protective and harmful
 

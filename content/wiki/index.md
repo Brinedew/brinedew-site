@@ -32,8 +32,8 @@ Evolutionary frameworks for understanding aging:
 - **[[selection-shadow-theory]]** - The decline with age in the force of selection, and mutation accumulation
 - **[[antagonistic-pleiotropy-theory]]** - Alleles that raise survival or reproduction at some ages and lower them at others
 - **[[disposable-soma-theory]]** - Ageing as the cost of spending less on maintenance than on reproduction
-- **[[defensive-degeneration-theory]]** - Aging as cancer prevention
-- **[[tumor-suppressor-theory-of-aging]]** - Anti-cancer mechanisms driving senescence
+- **[[tumor-suppressor-theory-of-aging]]** - Anti-cancer defenses (and defensive degeneration) driving senescence
+- **[[Empirical constraints on longevity models]]** - Demographic and phylogenetic facts any aging theory must survive
 - **[[Atavistic-theory-of-cancer]]** - Cancer as reversion to unicellular state
 - **[[red-queen-hypothesis]]** - Why the arms race with parasites favors sex
 
@@ -46,16 +46,20 @@ Why the risk of death rises with age, and how fast:
 - **[[critical-point-model-of-ageing]]** - Ageing as a loss of resilience ending at a critical point, and the claimed 120–150-year limit to human lifespan
 - **[[saturating-removal-model-of-senescence]]** - A model of senescent-cell turnover that predicts Gompertz-like mortality, and how well it is supported
 - **[[strehler-mildvan-theory]]** - Vitality, random challenges and the convergence of mortality curves, and why the convergence age is not a species constant
+- **[[Taxonomy of non mechanistic models in biology|Taxonomy of non-mechanistic and causal models in biology]]** - Statistical, thermodynamic, and causal-inference frameworks vs. mechanistic theory
 
 ## Cancer evolution
 
 - **[[clonal-evolution]]** - Nowell's model: tumors as evolving cell populations
 - **[[cancer-ecology]]** - Tumors as ecosystems of competing and cooperating clones
-- **[[immunoediting]]** - Elimination, equilibrium, and escape
 - **[[adaptive-oncogenesis]]** - Aging changes which mutations are selected
+- **[[Tomasetti–Vogelstein model]]** - Stem-cell division counts and mutation supply across tissues
 - **[[adaptive-therapy]]** - Managing tumors instead of eradicating them
 - **[[petos-paradox]]** - Why cancer risk across species does not scale with body size and lifespan, and the mechanisms proposed in elephants, whales and naked mole-rats
-- **[[immune-surveillance]]** - Immune elimination, equilibrium, and escape
+- **[[immune-surveillance]]** - Immune surveillance and cancer immunoediting (elimination, equilibrium, escape)
+- **[[Anti-frontrunner dynamics]]** - Collective tissue suppression of fast-dividing defectors
+- **[[Cell competition]]** - Fitness-comparison culling, supercompetition, and winner/loser elimination in developing and adult tissues
+- **[[Conflict between development and tumor suppression]]** - The evolutionary arms race between embryonic plasticity and neoplasia
 - **[[flower-drosophila|Flower]]** - The molecular marker system of cell competition
 
 ## Biological Mechanisms
@@ -64,11 +68,26 @@ Key cellular and molecular processes:
 
 - **[[apoptosis]]** - Programmed cell death, intrinsic and extrinsic
 - **[[cellular-senescence]]** - Stable arrest of cell division in damaged or stressed cells
+- **[[Quiescence depth]]** - Graded reversible arrest thresholds governed by Rb–E2F and lysosomal function
+- **[[Types of cell senescence and quiescence|Senescence and quiescence control loops]]** - Feedback loops and bifurcations separating reversible quiescence from irreversible senescence
 - **[[senolytics]]** - Drugs that kill senescent cells, and what the mouse and human trials show
 - **[[p53-tp53|p53]]** - The genome's primary tumor suppressor
 - **[[telomeres]]** - Protective chromosome ends whose shortening limits cell division
 - **[[weismann-barrier]]** - Separating soma from germline
 - **[[bioelectricity]]** - Voltage patterns as developmental signals
+- **[[Mosaic vs regulative development spectrum]]** - Autonomous lineage determinants vs. conditional neighbor signaling in embryos
+- **[[Classical embryology observations and their mechanisms]]** - Experimental embryology phenomena and their molecular mechanisms
+- **[[Tissue signalling archetypes]]** - Structural classification of intercellular signaling modes
+- **[[Terminal selectors]]** - Master transcription factors maintaining post-mitotic cell identity
+- **[[Pluripotency silencing]]** - Epigenetic lockdown of embryonic plasticity in somatic lineages
+- **[[History of biogerontology]]** - Eras and paradigm shifts in aging research
+- **[[Non-technical language in longevity]]** - Why vague everyday terms obscure level-of-selection fitness sign flips
+
+## Reference & Methods
+
+- **[[Glossary]]** - Key terminology across aging, clonal governance, and evolutionary oncology
+- **[[Flash-in-the-pan wet lab methods]]** - Historical assay transitions from bespoke bench protocols to high-throughput platforms
+- **[[Tier List cell lines]]** - Benchmark cancer and non-transformed cell lines ranked by biological utility
 
 ## Transmissible Cancers
 

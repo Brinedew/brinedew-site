@@ -19,6 +19,8 @@ Below is a breakdown of the must-know terminal selectors in humans, organized by
 
 ---
 
+## Human terminal selector families by tissue
+
 ### 1. Nervous System (Sensory, Neurotransmitter, and Subtype Selectors)
 
 Neuronal subtypes provide some of the cleanest examples of terminal selectors, where small TF codes coordinate neurotransmitter machinery, ion channels, and structural proteins.
@@ -70,33 +72,31 @@ Metabolic tissues rely on terminal selectors to constantly tune the expression o
 
 ---
 
-### Key GRN Concepts & Properties for Researchers
+## Key GRN Concepts & Properties for Researchers
 
 When modeling or inferring human GRNs (e.g., using **SCENIC/pySCENIC**, **CellOracle**, or multiome **scRNA-seq + scATAC-seq**), terminal selectors exhibit distinct topological and biochemical behaviors:
 
-#### 1. Network Topology: Cliques and Autoregulation
+### 1. Network Topology: Cliques and Autoregulation
 * **Strong Positive Autoregulation:** Terminal selectors almost universally activate their own transcription (or form mutually reinforcing 2- or 3-node cliques, e.g., HNF4A–HNF1A, or PPARG–CEBPA). This provides the **bistability** and memory required to remain in an attractor state after transient developmental signals (Wnt, BMP, Notch) have dissipated.
 * **Coherent Feedforward Loops (cFFLs):** Terminal selectors frequently regulate an intermediate TF and then co-regulate target structural genes together with that TF. This serves as a **signaling delay and noise filter**, preventing spurious activation from transient transcriptional bursts.
 
-#### 2. Chromatin Architecture: Super-Enhancers and Pioneer Capacity
+### 2. Chromatin Architecture: Super-Enhancers and Pioneer Capacity
 * Terminal selector genes are typically driven by **Super-Enhancers (SEs)** or **Broad Open Chromatin Domains (BODs)**. 
 * Many terminal selectors (or their direct obligate partners, like FOXA, GATA, or ASCL1) retain **pioneer factor activity**, meaning they can scan and access closed, nucleosomal chromatin to expose terminal differentiation gene batteries.
 
-#### 3. "Direct Reprogramming" Kernels
+### 3. "Direct Reprogramming" Kernels
 * Terminal selectors form the core recipes in **transdifferentiation / direct lineage conversion** (e.g., *ASCL1/NURR1/LMX1A* for induced dopaminergic neurons; *GATA4/MEF2C/TBX5* for induced cardiomyocytes). Ectopically supplying the terminal selector code is often sufficient to overcome epigenetic barriers and force the GRN into the target attractor basin.
 
-#### 4. The Dedifferentiation Phenomenon in Human Disease
+### 4. The Dedifferentiation Phenomenon in Human Disease
 * In human oncology, **lineage dedifferentiation and plasticity** almost invariably involve the silencing, mutation, or functional displacement of terminal selectors:
   * Loss of **HNF4A** in Hepatocellular Carcinoma (driving epithelial-to-mesenchymal transition).
   * Loss of **PAX5** in B-cell Acute Lymphoblastic Leukemia (B-ALL), causing reversion to an uncommitted, highly proliferative progenitor state.
   * Downregulation of **PDX1/MAFA** under chronic hyperglycemic/inflammatory stress, leading to $\beta$-cell exhaustion and diabetes.
 
 
-In developmental and stem cell biology, **terminal selectors** (lineage-determining master transcription factors, such as MyoD in muscle, HNF4α in hepatocytes, Pax5 in B-cells, or CHE-1/unc-86 in neurons) lock in cell identity. They do this by establishing **positive autoregulatory and reciprocal feedback loops** at cell-type-specific super-enhancers. These loops produce **bistable switches** (with stable "ON" and "OFF" states) that insulate differentiated cells from spontaneous dedifferentiation.
+## Breakdown under Yamanaka reprogramming (OSKM)
 
-Yet, ectopic expression of the four **Yamanaka factors** (Oct4, Sox2, Klf4, and c-Myc; **OSKM**) can universally extinguish these disparate positive feedback loops across virtually any differentiated somatic lineage. 
-
-Because OSKM do not contain individual repressors specific to each cell lineage, they break these loops using **shared dynamical, biochemical, and epigenetic mechanisms**:
+Because terminal selector bistable switches depend on positive autoregulatory and reciprocal feedback loops at lineage-specific super-enhancers, ectopic expression of the four **[[takahashi-yamanaka-reprogramming-experiment|Yamanaka factors]]** (Oct4, Sox2, Klf4, and [[myc|c-Myc]]; **OSKM**) can extinguish these disparate identity locks across virtually any differentiated somatic lineage and restore pluripotency (reversing somatic [[Pluripotency silencing|pluripotency silencing]]). Because OSKM do not encode individual repressors tailored to every adult cell type, they dismantle terminal selector attractors through **shared dynamical, biochemical, and epigenetic mechanisms**:
 
 ---
 

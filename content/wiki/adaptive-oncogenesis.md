@@ -17,7 +17,7 @@ Adaptive oncogenesis is a theory of cancer initiation that explains age-related 
 
 An oncogenic mutation is a reproductive advantage or disadvantage for a cell, and which one it is depends on the tissue the cell lives in. In young, healthy tissue, cells carrying oncogenic mutations usually divide more slowly or die more readily than their normal neighbors, so selection removes them. Aging, and the damage that comes with it — inflammation, fibrosis, reduced stem-cell competition, altered signaling — changes the relative fitness of cell phenotypes. Mutations that lost in young tissue can win in old tissue, and clones carrying them expand.
 
-On this account, the rise of cancer with age tracks the degradation of the tissue environment at least as much as the accumulation of mutations. The theory explains observations that mutation-accumulation models handle poorly, including the weak relationship between lifetime cell divisions, measured mutation loads, and cancer risk across tissues. The [Tomasetti–Vogelstein model](Tomasetti–Vogelstein%20model.md) addresses tissue-level mutation supply; adaptive oncogenesis addresses what selection does with it.
+On this account, the rise of cancer with age tracks the degradation of the tissue environment at least as much as the accumulation of mutations. The theory explains observations that mutation-accumulation models handle poorly, including the weak relationship between lifetime cell divisions, measured mutation loads, and cancer risk across tissues. The [[Tomasetti–Vogelstein model]] addresses tissue-level mutation supply; adaptive oncogenesis addresses what selection does with it.
 
 ## Practical implications
 

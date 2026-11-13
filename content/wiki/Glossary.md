@@ -79,7 +79,7 @@ Use of membrane voltage and ion-flux patterns as signals that coordinate cell be
 **[[cancer-ecology|Cancer ecology]]**
 Study of tumors as ecosystems of competing and cooperating cell phenotypes shaped by resources, stromal cells, and the immune system.
 
-**[[immunoediting|Cancer immunoediting]]**
+**[[immune-surveillance|Cancer immunoediting]]**
 Idea that the immune system interacts with cancer in three stages: elimination (removes abnormal cells), equilibrium (holds tumors stable), and escape (selects for cells that evade detection).
 
 **[[ctvt-line|Canine transmissible venereal tumor (CTVT)]]**

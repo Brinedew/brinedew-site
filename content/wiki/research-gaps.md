@@ -7,7 +7,7 @@ draft: true
 vital_level: 5
 class: Start
 ---
-# Research Gaps
+# Research Gaps — Cnidarian Longevity & Rejuvenation
 
 ## Gap — How long is the **continuous** medusa-phase maintained in *Turritopsis dohrnii* (no reversions)?
 **What this gap is:** We lack a documented upper bound (or even a proper survival curve) for *continuous maintenance of the medusa body plan* in *T. dohrnii* when reversions to polyp are disallowed.

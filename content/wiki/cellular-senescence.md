@@ -35,7 +35,7 @@ Hayflick and Moorhead described 25 strains of normal human fibroblasts derived f
 
 The counting mechanism was found three decades later. Telomeres shorten as human cells divide in culture,[^harley1990] and cells given telomerase, the enzyme that lengthens telomeres, continued dividing at least 20 doublings past their normal limit.[^bodnar1998] Fabrizio d'Adda di Fagagna and colleagues showed in 2003 that the arrest is a DNA-damage response: senescent human cells carry clusters of DNA-damage proteins at their chromosome ends, and inactivating the checkpoint kinases CHK1 and CHK2 lets them re-enter DNA replication.[^dadda2003]
 
-In 1997 Manuel Serrano, Scott Lowe and colleagues found that an activated *RAS* oncogene causes normal human and rodent cells to enter "a permanent G1 arrest" that is "phenotypically indistinguishable from cellular senescence". Senescence, they concluded, "does not simply reflect the accumulation of cell divisions, but can be prematurely activated in response to an oncogenic stimulus."[^serrano1997]
+In 1997 Manuel Serrano, Scott Lowe and colleagues found that an activated *RAS* oncogene causes normal human and rodent cells to enter "a permanent G1 arrest" that is "phenotypically indistinguishable from cellular senescence". Senescence, they concluded, "does not simply reflect the accumulation of cell divisions, but can be prematurely activated in response to an oncogenic stimulus."[^serrano1997] (For the inducible fibroblast assay used to study this response, see [[IMR90 ER RAS model]].)
 
 ## Pathways and markers
 
@@ -49,10 +49,11 @@ The two pathways differ in how they hold the arrest. Christian Beauséjour and c
 Senescent cells were first identified in tissue by Goberdhan Dimri and colleagues, who found that "several human cells express a beta-galactosidase, histochemically detectable at pH 6, upon senescence in culture", and that cells staining for it become more common in human skin with age.[^dimri1995] The stained enzyme is ordinary lysosomal β-galactosidase, whose activity at pH 6 reflects lysosomal mass,[^lee2006] and macrophages that express both it and p16 accumulate in old mice.[^hall2016] Later work showed that senescent cells are heterogeneous. Comparing many transcriptomes, Alejandra Hernandez-Segura and colleagues found that the senescence programme depends on cell type, on the stress that caused it and on time since arrest, and identified 55 genes at its common core, none of them a classical marker such as p16 or p21.[^hernandezsegura2017] The International Cell Senescence Association therefore recommended identifying senescent cells by several markers together.[^gorgoulis2019]
 
 ## The secretory phenotype
+*Main article: [[sasp|Senescence-associated secretory phenotype (SASP)]]*
 
 Jean-Philippe Coppé, Judith Campisi and colleagues named the SASP in 2008. Human cells induced to senesce by DNA damage "secrete myriad factors associated with inflammation and malignancy"; the secretion developed over several days, only after damage severe enough to cause senescence, and was amplified by oncogenic RAS and by loss of p53.[^coppe2008] The same year, two groups showed that the SASP also acts on the senescent cell itself. Juan Carlos Acosta and colleagues found that chemokines acting through the receptor CXCR2 reinforce senescence,[^acosta2008] and Thomas Kuilman and colleagues found that IL-6 is required for oncogene-induced senescence to begin and to persist.[^kuilman2008]
 
-The SASP makes senescence a property of tissues as well as cells. It recruits immune cells that clear senescent cells, and it can also promote inflammation and, in some contexts, the growth of neighbouring premalignant cells.[^coppe2008][^campisi2005] (See [[sasp]].)
+The SASP makes senescence a property of tissues as well as cells. It recruits immune cells that clear senescent cells, and it can also promote inflammation and, in some contexts, the growth of neighbouring premalignant cells.[^coppe2008][^campisi2005]
 
 ## Functions
 

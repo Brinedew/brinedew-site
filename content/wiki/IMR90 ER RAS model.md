@@ -11,7 +11,7 @@ aliases:
 ---
 # IMR90 ER:RAS model
 
-**IMR90 ER:RAS** is the cell culture model of oncogene-induced senescence (OIS). This system is based on non-immortalized, primary **IMR90 human fetal lung fibroblasts** that were made to express conditional oncogenic construct ER:RAS. The oncogene is inactive until triggered by the researcher upon the start of the experiment.
+**IMR90 ER:RAS** is the cell culture model of [[cellular-senescence|oncogene-induced senescence]] (OIS), built around the inducible RAS paradigm introduced in the [[serrano-lowe-senescence-experiment|Serrano–Lowe senescence experiment]]. This system is based on non-immortalized, primary **IMR90 human fetal lung fibroblasts** that were made to express conditional oncogenic construct ER:RAS. The oncogene is inactive until triggered by the researcher upon the start of the experiment.
 
 ![[image-54.png|Principle of the experiment: addition of 4OHT to the culture medium triggers senescence in model cells. From McHugh et al., 2023.]]
 ### Setup

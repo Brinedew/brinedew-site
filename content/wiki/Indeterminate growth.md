@@ -121,3 +121,9 @@ Growth, actuarial senescence, reproductive senescence, and physiological deterio
 > ![[markroper2021-p6-b1.png|Roper et al., 2021 — passage reporting that reproductive and actuarial senescence can follow different age trajectories.]]
 >
 > **OCR excerpt:** "Our results here show that age trajectories of reproduction are often uncoupled from the pattern of actuarial senescence... both uncoupling and concurrent patterns of actuarial and reproductive senescence appear common." (p. 6, `doc:markroper2021/page:6/block:1`)
+
+## See also
+
+- [[research-gaps|Research Gaps — Cnidarian Longevity & Rejuvenation]]
+- [[Mortality rate models]]
+- [[antagonistic-pleiotropy-theory]]

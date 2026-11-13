@@ -36,6 +36,9 @@ When the drain operates at a maximum throughput $C$:
 ### 1. Applications in Biochemistry
 
 #### A. Zero-Order Ultrasensitivity (Goldbeter–Koshland Kinetics)
+
+*Main article: [[Goldbeter–Koshland module]]*
+
 In biochemistry, this exact "spout and drain" behavior was formalized by Albert Goldbeter and Daniel Koshland (1981):
 * **The Spout:** An activating enzyme (e.g., a kinase) that phosphorylates a target protein at rate $V_1$.
 * **The Drain:** An opposing enzyme (e.g., a phosphatase) that dephosphorylates the protein at a maximum saturated rate $V_2 = V_{\max}$.
@@ -60,3 +63,12 @@ $$x(t) = \int_0^t [u(\tau) - r] \, d\tau$$
 * **Role in Systems:** Integral action is the mathematical requirement for **robust perfect adaptation** (completely eliminating steady-state tracking error despite constant disturbances).
 * **Biochemical Implementation:** In nature (such as bacterial chemotaxis) and synthetic biology, cells cannot perform negative numbers, so they build biological integrators using saturated, opposing reactions (a zero-order drain vs. an input spout). 
 * **Antithetic Integral Feedback:** Developed for synthetic gene networks, two complementary molecules (e.g., a sense and anti-sense RNA, or a protease and inhibitor) annihilate each other. The excess represents the integrated error, directly mirroring the spout-and-drain balance to keep gene expression constant.
+
+## See also
+
+- [[Goldbeter–Koshland module]]
+- [[saturating-removal-model-of-senescence]]
+- [[Huang-Ferrell model]]
+- [[Novak–Tyson model]]
+- [[Hopf bifurcation]]
+- [[Taxonomy of non mechanistic models in biology|Taxonomy of non-mechanistic and causal models]]

@@ -11,7 +11,7 @@ aliases:
 ---
 # Quiescence depth
 
-**Quiescence depth** (also termed **G0 depth** or **depth of cellular dormancy**) is a classification of the non-dividing cells in eukaryotic organisms by how restricted are they from returning to the mitotic cell cycle. Quiescent cells cells occupy a spectrum characterized by variable activation thresholds and latencies to initiate DNA replication upon mitogenic stimulation.[1, 2] Cells situated in shallow quiescence reside near the restriction point and can re-enter the cell division cycle within hours of receiving minimal growth signals.[1, 3] Conversely, deeply quiescent or dormant cells require prolonged, high-concentration mitogen exposure, marked transcriptional reprogramming, and organelle remodeling before committing to cell division.[1, 4]
+**Quiescence depth** (also termed **G0 depth** or **depth of cellular dormancy**) is a classification of the non-dividing cells in eukaryotic organisms by how deeply restricted they are from returning to the mitotic cell cycle. Quiescent cells occupy a spectrum characterized by variable activation thresholds and latencies to initiate DNA replication upon mitogenic stimulation.[1, 2] Cells situated in shallow quiescence reside near the restriction point and can re-enter the cell division cycle within hours of receiving minimal growth signals.[1, 3] Conversely, deeply quiescent or dormant cells require prolonged, high-concentration mitogen exposure, marked transcriptional reprogramming, and organelle remodeling before committing to cell division.[1, 4]
 
 The depth of quiescence is governed biochemically by the bistable RB1-E2F1 signaling switch, the stoichiometric balance of cyclin-dependent kinases (CDKs) and their inhibitors (CKIs), metabolic shifts between protein synthesis and lysosomal autophagic clearance, and chromatin compaction.[1, 5] The regulation of quiescence depth is critical to tissue homeostasis, stem cell maintenance, longevity, and the evasion of cytotoxic therapies by dormant cancer cells.[2, 6]
 
@@ -147,12 +147,12 @@ Aging in human stem cell compartments is characterized by dysregulation of quies
 
 ## See also
 
-* Cell cycle
-* G0 phase
-* Restriction point
-* Stem cell
-* Cellular senescence
-* Disseminated tumor cells
+* [[cellular-senescence|Cellular senescence]]
+* [[Types of cell senescence and quiescence|Senescence and quiescence control loops]]
+* [[p53-tp53|p53]]
+* [[p16ink4a-cdkn2a|p16^INK4a]]
+* [[mtor-mtor-p42345|mTOR]]
+* [[IMR90 ER RAS model]]
 
 ---
 

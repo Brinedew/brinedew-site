@@ -1,5 +1,5 @@
 ---
-title: Taxonomy of non-mechanistic models in biology
+title: Taxonomy of non-mechanistic and causal models in biology
 tags:
   - content/wiki
   - taxonomy
@@ -8,9 +8,10 @@ draft: true
 vital_level: 4
 class: Start
 aliases:
-  -
+  - Causal inference frameworks in biology
+  - Taxonomy of non mechanistic models in biology
 ---
-# Taxonomy of non-mechanistic models in biology
+# Taxonomy of non-mechanistic and causal models in biology
 
 **Mechanistic models** in molecular cell biology explain complicated phenomena like nutrient sensing or apoptosis by decomposing them into: 
 * the molecules (receptor A, kinase B, cell membrane...)
@@ -39,3 +40,28 @@ Instead, these models introduce higher-level abstractions. These abstractions ar
 | Expression profiles predict treatment response      | Molecular-state-to-outcome function       | Logistic regression, random forest, neural network            | Drug response, survival, subtype                        | Correlational or predictive mapping can succeed with causal pathway structure unresolved               |
 | Cells fluctuate between recurrent phenotypic states | Effective state-transition process        | Markov model, hidden Markov model                             | Transition probabilities and dwell times                | Specifies state dynamics without specifying the molecular circuitry generating transitions             |
 | A signaling output oscillates                       | Effective oscillator                      | Sinusoidal fit, autoregressive model, state-space model       | Period, phase, damping, coherence                       | Describes temporal behavior without representing the feedback loop producing it                        |
+
+## Causal inference frameworks
+
+When doctors, economists, and computer scientists reason about genetic or cellular effects, their claims often bottom out in probabilities or effect sizes — statements like "this gene causes a 50% higher risk of cancer" or "these alleles add +5 IQ points." That style is best thought of as **predictive causality**, distinct from the **mechanistic causality** sought in wet-lab biology.
+
+Philosophers of science and quantitative biologists distinguish several causal frameworks:
+
+| Framework | Main idea | Typical use in biology |
+| --- | --- | --- |
+| Interventionism (Woodward) | X causes Y if manipulating X changes Y | Knockouts, CRISPR perturbations, drug treatments |
+| Manipulationist causation (Pearl/Woodward tradition) | Causation defined through interventions rather than correlations | Genetic perturbation studies |
+| Potential Outcomes Framework (Rubin Causal Model) | Compare outcome under treatment vs no treatment | Clinical trials, increasingly genomics |
+| Structural Causal Models (Pearl) | Directed acyclic graphs and structural equations | Epidemiology, systems biology, genomics |
+| INUS conditions (Mackie) | Cause is an insufficient but necessary part of an unnecessary but sufficient complex | Multifactorial disease causation |
+| Mechanistic causation | Explain causal relations by identifying entities and activities producing an effect | Dominant style in molecular biology |
+| Probabilistic causation (Suppes) | Causes raise probabilities of effects | Cancer epidemiology, risk factors |
+| Counterfactual causation (Lewis) | If X had not occurred, Y would not have occurred | Evolutionary biology, epidemiology |
+| Actual causation | Which particular event caused a particular outcome? | Precision medicine, pathology |
+| Causal network inference | Infer causal graph from observational data | Transcriptomics, signaling networks |
+| Dynamical systems causation | Causation as state transitions in dynamical systems | Developmental biology, physiology |
+| Information-theoretic causality | Causal influence measured via information flow | Neuroscience, systems biology |
+
+## See also
+
+- [[Mortality rate models]]

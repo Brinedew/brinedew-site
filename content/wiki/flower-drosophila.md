@@ -8,7 +8,6 @@ vital_level: 2
 class: Start
 aliases:
 - flower gene
-- cell competition
 ---
 # Flower (Drosophila)
 
@@ -16,7 +15,7 @@ Flower is a transmembrane protein family in *Drosophila* whose isoforms mark cel
 
 ## Function
 
-The flower gene produces multiple splice isoforms with opposite signaling meanings. The isoforms Flower^LoseA and Flower^LoseB appear on cells destined to die and serve as "eat-me" signals: neighboring cells and hemocytes recognize them and eliminate the displaying cell. The isoform Flower^Win appears on cells that outcompete their neighbors. The system implements cell competition at the molecular level: in a tissue where some cells grow slower than others - through Myc deficiency, mitochondrial defects, or mutation - the slow cells display Flower^Lose and are killed and phagocytosed by their faster neighbors, even though they are healthy in isolation. The winner cells actively kill the losers; the losers' death requires the winners' Flower signal.
+The flower gene produces multiple splice isoforms with opposite signaling meanings. The isoforms Flower^LoseA and Flower^LoseB appear on cells destined to die and serve as "eat-me" signals: neighboring cells and hemocytes recognize them and eliminate the displaying cell. The isoform Flower^Win appears on cells that outcompete their neighbors. The system implements [[Cell competition|cell competition]] at the molecular level: in a tissue where some cells grow slower than others - through Myc deficiency, mitochondrial defects, or mutation - the slow cells display Flower^Lose and are killed and phagocytosed by their faster neighbors, even though they are healthy in isolation. The winner cells actively kill the losers; the losers' death requires the winners' Flower signal.
 
 ## Cell competition
 

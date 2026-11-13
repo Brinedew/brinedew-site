@@ -21,14 +21,14 @@ The 2013 paper assigned each hallmark to one of three tiers according to its pro
 | Hallmark | Tier | Process |
 | --- | --- | --- |
 | Genomic instability | Primary | Accumulation of DNA damage and mutations |
-| Telomere attrition | Primary | Shortening of chromosome ends with each replication ([[telomeres|telomeres]], [[telomerase-tert|telomerase]]) |
+| Telomere attrition | Primary | Shortening of chromosome ends with each replication ([[telomeres\|telomeres]], [[telomerase-tert\|telomerase]]) |
 | Epigenetic alterations | Primary | Changes in DNA methylation and chromatin organization |
 | Loss of proteostasis | Primary | Decline in protein folding and clearance |
-| Deregulated nutrient sensing | Antagonistic | Altered [[igf-1|IGF-1]], [[insulin|insulin]], and [[mtor-mtor-p42345|mTOR]] signaling |
+| Deregulated nutrient sensing | Antagonistic | Altered [[igf-1\|IGF-1]], [[insulin\|insulin]], and [[mtor-mtor-p42345\|mTOR]] signaling |
 | Mitochondrial dysfunction | Antagonistic | Reduced mitochondrial function and altered signaling |
-| Cellular senescence | Antagonistic | Accumulation of arrested cells ([[cellular-senescence|senescence]], [[sasp|SASP]]) |
+| Cellular senescence | Antagonistic | Accumulation of arrested cells ([[cellular-senescence\|senescence]], [[sasp\|SASP]]) |
 | Stem cell exhaustion | Integrative | Reduced regenerative capacity |
-| Altered intercellular communication | Integrative | Changed circulating signals and chronic inflammation ([[sasp|SASP]]) |
+| Altered intercellular communication | Integrative | Changed circulating signals and chronic inflammation ([[sasp\|SASP]]) |
 
 The tiers describe roles in the model. Primary hallmarks generate damage. Antagonistic hallmarks began as protective responses and produce harm when they persist. Integrative hallmarks follow from the first two and explain the organism-level phenotype. The paper argued that the hallmarks interact and that a drug acting on several of them could delay multiple age-related diseases, which made the framework a template for intervention research.[^1]
 
