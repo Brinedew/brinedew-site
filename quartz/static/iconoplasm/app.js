@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=c8f670fed9ce201f"
+import { createRequestInbox } from "./request-inbox.js?v=09364c8c05783a6b"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
@@ -47,6 +47,11 @@ import {
   openDialog,
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
+import {
+  createImageEditJobWatcher,
+  isImageEditJobPendingStatus,
+  resolveImageEditAspectRatio,
+} from "./image-edit-dialog-live.js?v=fde43f1a07d2448a"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
@@ -1266,6 +1271,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         navigateTo("/gene/" + encodeURIComponent(symbol), info.link || null)
       }
       openImageEditJobDialog(info.editJobId, { symbol: symbol })
+    },
+    onReadyEditJobs: function (items) {
+      imageEditJobWatcher.notifyReadyJobs(items)
     },
     // B-996: the caretaker film needs the gene's portrait and molecular
     // weight. Signed-in caretakers only, once per symbol, through the same static
@@ -6879,12 +6887,37 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     job: null,
     loading: false,
     encryptionConfigured: false,
+    sessionVersion: 0,
   }
+
+  var imageEditJobWatcher = createImageEditJobWatcher({
+    fetchJob: function (jobId) {
+      return fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(jobId)).then(
+        function (payload) {
+          return (payload && payload.job) || null
+        },
+      )
+    },
+    isDialogOpen: function () {
+      return Boolean(imageEditDialogState.dialog && imageEditDialogState.dialog.open)
+    },
+    onResolved: function (job, sessionVersion) {
+      if (sessionVersion !== imageEditDialogState.sessionVersion) return
+      if (!imageEditDialogState.dialog || !imageEditDialogState.dialog.open) return
+      imageEditDialogState.job = job
+      imageEditDialogState.loading = false
+      showImageEditResult(job, imageEditDialogState.source || {})
+      updateImageEditButtons()
+      void requestInbox.refresh()
+    },
+  })
 
   function resetImageEditDialogState() {
     // B-612: a sign-out or account switch must clear provider state so the
     // next guest view can never render the previous session's providers or
     // its "last used" marker.
+    imageEditJobWatcher.stop()
+    imageEditDialogState.sessionVersion += 1
     imageEditDialogState.source = null
     imageEditDialogState.providers = []
     imageEditDialogState.supportedProviders = []
@@ -7238,10 +7271,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return String(value || "")
   }
 
-  function applyImageEditAspectRatio(dialog, source) {
-    var width = Number(source && source.width)
-    var height = Number(source && source.height)
-    var ratio = width > 0 && height > 0 ? Math.round(width) + " / " + Math.round(height) : ""
+  function applyImageEditAspectRatio(dialog, dims) {
+    var ratio = resolveImageEditAspectRatio(dims || {})
     var targets = [
       dialog,
       dialog && dialog.querySelector("[data-icono-image-edit-source-viewer]"),
@@ -7253,6 +7284,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (ratio) target.style.setProperty("--icono-image-edit-aspect-ratio", ratio)
       else target.style.removeProperty("--icono-image-edit-aspect-ratio")
     })
+  }
+
+  function clearImageEditComparisonPreview(dialog) {
+    if (!dialog) return
+    var before = dialog.querySelector("[data-icono-image-edit-before]")
+    var after = dialog.querySelector("[data-icono-image-edit-after]")
+    if (before) {
+      before.onload = null
+      before.removeAttribute("src")
+    }
+    if (after) {
+      after.onload = null
+      after.removeAttribute("src")
+    }
   }
 
   function renderImageEditContext(source) {
@@ -7346,9 +7391,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function openImageEditDialog(source) {
     if (!currentUser) return
     var dialog = ensureImageEditDialog()
+    imageEditJobWatcher.stop()
+    imageEditDialogState.sessionVersion += 1
     imageEditDialogState.source = source
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
+    clearImageEditComparisonPreview(dialog)
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
@@ -7412,6 +7460,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var dialog = ensureImageEditDialog()
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
     var result = dialog.querySelector("[data-icono-image-edit-result]")
+    imageEditJobWatcher.stop()
+    imageEditDialogState.sessionVersion += 1
+    var submitSessionVersion = imageEditDialogState.sessionVersion
+    clearImageEditComparisonPreview(dialog)
     if (sourceViewer) sourceViewer.hidden = false
     if (result) result.hidden = true
     imageEditDialogState.loading = true
@@ -7436,6 +7488,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       body: JSON.stringify(body),
     })
       .then(function (payload) {
+        if (submitSessionVersion !== imageEditDialogState.sessionVersion) {
+          if (payload && payload.queued) void requestInbox.refresh()
+          return
+        }
         if (payload && payload.ok === false && payload.error) {
           // The route returned 502 with an error string in the body. Show
           // the error to the user. The Edit button is re-enabled so they
@@ -7446,8 +7502,18 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           return
         }
         if (payload && payload.queued) {
+          var queuedJob =
+            payload.job && typeof payload.job === "object"
+              ? payload.job
+              : payload.request && payload.request.id
+                ? {
+                    id: "request-" + String(payload.request.id),
+                    status: "queued",
+                    published: false,
+                  }
+                : null
           imageEditDialogState.loading = false
-          imageEditDialogState.job = null
+          imageEditDialogState.job = queuedJob
           imageEditSetStatus(
             String(
               payload.message ||
@@ -7457,6 +7523,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           )
           void requestInbox.refresh()
           updateImageEditButtons()
+          if (queuedJob && queuedJob.id && isImageEditJobPendingStatus(queuedJob.status)) {
+            imageEditJobWatcher.start({
+              jobId: queuedJob.id,
+              sessionVersion: submitSessionVersion,
+            })
+          }
           return
         }
         var job = payload && payload.job
@@ -7466,6 +7538,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         updateImageEditButtons()
       })
       .catch(function (error) {
+        if (submitSessionVersion !== imageEditDialogState.sessionVersion) return
         imageEditDialogState.loading = false
         imageEditSetStatus(String((error && error.message) || "Image edit failed."), "error")
         updateImageEditButtons()
@@ -7482,18 +7555,37 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var result = dialog.querySelector("[data-icono-image-edit-result]")
     var before = dialog.querySelector("[data-icono-image-edit-before]")
     var after = dialog.querySelector("[data-icono-image-edit-after]")
-    if (before) {
-      var syncBeforeRatio = function () {
-        if (!source.width && before.naturalWidth > 0) source.width = before.naturalWidth
-        if (!source.height && before.naturalHeight > 0) source.height = before.naturalHeight
-        applyImageEditAspectRatio(dialog, source)
+    var safeSource = source || {}
+    var syncResultAspectRatio = function () {
+      if (before && !safeSource.width && before.naturalWidth > 0) {
+        safeSource.width = before.naturalWidth
       }
-      before.onload = syncBeforeRatio
-      portraitDelivery.bind(before, source.image_url || "")
-      if (before.complete) syncBeforeRatio()
+      if (before && !safeSource.height && before.naturalHeight > 0) {
+        safeSource.height = before.naturalHeight
+      }
+      applyImageEditAspectRatio(dialog, {
+        afterWidth: after ? after.naturalWidth : 0,
+        afterHeight: after ? after.naturalHeight : 0,
+        beforeWidth: before ? before.naturalWidth : 0,
+        beforeHeight: before ? before.naturalHeight : 0,
+        sourceWidth: safeSource.width,
+        sourceHeight: safeSource.height,
+      })
     }
-    if (after) portraitDelivery.bind(after, portraitAssetRefUrl(job && job.result_asset, "medium"))
-    applyImageEditAspectRatio(dialog, source)
+    if (before) {
+      before.onload = syncResultAspectRatio
+      portraitDelivery.bind(
+        before,
+        safeSource.image_url || portraitAssetRefUrl(job && job.source_asset, "medium") || "",
+      )
+      if (before.complete) syncResultAspectRatio()
+    }
+    if (after) {
+      after.onload = syncResultAspectRatio
+      portraitDelivery.bind(after, portraitAssetRefUrl(job && job.result_asset, "medium"))
+      if (after.complete) syncResultAspectRatio()
+    }
+    syncResultAspectRatio()
     if (job.status === "failed") {
       imageEditSetStatus(String((job && job.error) || "Image edit failed."), "error")
       if (sourceViewer) sourceViewer.hidden = false
@@ -7537,6 +7629,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       height: 0,
       adjustments: {},
     }
+    imageEditJobWatcher.stop()
+    imageEditDialogState.sessionVersion += 1
+    var openSessionVersion = imageEditDialogState.sessionVersion
+    clearImageEditComparisonPreview(dialog)
     imageEditDialogState.source = initialSource
     imageEditDialogState.job = null
     imageEditDialogState.loading = true
@@ -7553,6 +7649,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     loadImageEditProviders({ preserveStatus: true })
     fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(cleanJobId))
       .then(function (payload) {
+        if (openSessionVersion !== imageEditDialogState.sessionVersion) return
         var job = payload && payload.job
         if (!job) throw new Error("Edit job could not be found.")
         var symbol = normalizedSymbol(job.source_gene_symbol || requestedSymbol)
@@ -7597,14 +7694,26 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         renderImageEditContext(source)
         applyImageEditModelConstraints()
         if (sourceImg) {
+          var syncJobSourceRatio = function () {
+            if (!source.width && sourceImg.naturalWidth > 0) source.width = sourceImg.naturalWidth
+            if (!source.height && sourceImg.naturalHeight > 0)
+              source.height = sourceImg.naturalHeight
+            applyImageEditAspectRatio(dialog, source)
+          }
+          sourceImg.onload = syncJobSourceRatio
           portraitDelivery.bind(sourceImg, source.image_url || "")
           sourceImg.alt = symbol + " source portrait"
+          if (sourceImg.complete) syncJobSourceRatio()
         }
-        if (job.status === "queued" || job.status === "running") {
+        if (isImageEditJobPendingStatus(job.status)) {
           if (sourceViewer) sourceViewer.hidden = false
           if (result) result.hidden = true
           applyImageEditAspectRatio(dialog, source)
           imageEditSetStatus("Free edit is still queued for the workstation.", "")
+          imageEditJobWatcher.start({
+            jobId: job.id,
+            sessionVersion: openSessionVersion,
+          })
         } else {
           showImageEditResult(job, source)
         }
@@ -7612,7 +7721,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         if (symbol && !cachedGene) {
           fetchGeneDetail(symbol)
             .then(function (genePayload) {
-              if (!genePayload || imageEditDialogState.job !== job) return
+              if (!genePayload || openSessionVersion !== imageEditDialogState.sessionVersion) return
+              var activeJob = imageEditDialogState.job || job
               var candidate = Array.isArray(genePayload.portrait_candidates)
                 ? genePayload.portrait_candidates.find(function (item) {
                     return normalizedAssetSha(item && item.asset_sha256) === sourceSha
@@ -7623,15 +7733,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
                 candidate || genePayload.portrait || {},
               )
               if (imageEditDialogState.dialog && imageEditDialogState.dialog.open) {
-                var wasShowingResult =
-                  result && !result.hidden && imageEditDialogState.job.status === "succeeded"
+                var wasShowingResult = result && !result.hidden && activeJob.status === "succeeded"
                 renderImageEditContext(source)
                 applyImageEditModelConstraints()
                 if (wasShowingResult) {
                   imageEditSetStatus(
-                    job.published ? "Edit already published." : "Edit ready to publish.",
+                    activeJob.published ? "Edit already published." : "Edit ready to publish.",
                     "success",
                   )
+                } else if (isImageEditJobPendingStatus(activeJob.status)) {
+                  imageEditSetStatus("Free edit is still queued for the workstation.", "")
                 }
               }
             })
@@ -7639,6 +7750,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         }
       })
       .catch(function (error) {
+        if (openSessionVersion !== imageEditDialogState.sessionVersion) return
         imageEditDialogState.loading = false
         imageEditSetStatus(String((error && error.message) || "Could not load edit."), "error")
         updateImageEditButtons()
@@ -7766,6 +7878,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function wireImageEditDialog(dialog) {
+    dialog.addEventListener("close", function () {
+      imageEditJobWatcher.stop()
+      imageEditDialogState.sessionVersion += 1
+      imageEditDialogState.loading = false
+    })
     dialog.addEventListener("change", function (event) {
       if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
         applyImageEditModelConstraints()

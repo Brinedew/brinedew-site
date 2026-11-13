@@ -15,6 +15,7 @@ export function createRequestInbox({
   resolvePortraitUrl,
   navigate,
   onOpenEditJob,
+  onReadyEditJobs,
   loadCaretakerFilm,
 }) {
   var state = {
@@ -190,6 +191,17 @@ export function createRequestInbox({
           return Math.max(highest, Number((item && item.notification_id) || 0) || 0)
         }, previousHighWater)
         renderSidebar()
+        var readyEditJobs = readyRequests.filter(function (item) {
+          return (
+            item &&
+            item.unread === true &&
+            item.request_kind === "edit_image" &&
+            (item.edit_job_id || item.request_id)
+          )
+        })
+        if (readyEditJobs.length && typeof onReadyEditJobs === "function") {
+          onReadyEditJobs(readyEditJobs)
+        }
         if (pendingViewedGene) void noteGeneViewed(pendingViewedGene)
         if (opts.announce && previousHighWater > 0 && newestUnread) {
           showFulfilledNotice(newestUnread)
