@@ -13,7 +13,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { releaseCatalog, workerBindings } from "./release-iconoplasm-catalog.mjs"
+import { kvOverHttp, releaseCatalog, workerBindings } from "./release-iconoplasm-catalog.mjs"
 
 test("the release writes where the production Worker reads, never staging", () => {
   const { d1DatabaseId, kvNamespaceId, vars } = workerBindings()
@@ -51,4 +51,27 @@ test("a public release lagging the index is retried, at most once a day", async 
   assert.equal(publicReleaseIsBehind({ ...frozen, gene_count: 19381 }, 19381, now), false)
   // An unreadable metadata route releases nothing.
   assert.equal(publicReleaseIsBehind(null, 19381, now), false)
+})
+
+test("kvOverHttp.delete deletes a key and tolerates 404", async () => {
+  process.env.CLOUDFLARE_ACCOUNT_ID ||= "account"
+  process.env.CLOUDFLARE_API_TOKEN ||= "token"
+  const calls = []
+  const counter = { read: 0, written: 0, deleted: 0 }
+  const kv = kvOverHttp("ns123", {
+    counter,
+    fetchImpl: async (url, init = {}) => {
+      calls.push({ url, method: init.method || "GET" })
+      return new Response(null, { status: calls.length === 1 ? 200 : 404 })
+    },
+  })
+  await kv.delete("iconoplasm:published-portrait-refs:v3-19160-old")
+  await kv.delete("iconoplasm:published-portrait-refs:v3-19160-missing")
+  assert.equal(counter.deleted, 2)
+  assert.equal(calls[0].method, "DELETE")
+  assert.match(
+    calls[0].url,
+    /\/storage\/kv\/namespaces\/ns123\/values\/iconoplasm%3Apublished-portrait-refs%3Av3-19160-old$/,
+  )
+  assert.equal(calls[1].method, "DELETE")
 })
