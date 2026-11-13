@@ -14,8 +14,10 @@ import { checkAnonymousRateLimit, RATE_LIMIT_OUTCOME } from "./anonymous-rate-li
  * public edge worker, which itself only runs on the brinedew.bio host routes.
  */
 
+const CONTACT_BODY_MIN = 10
 const CONTACT_BODY_MAX = 5000
 const CONTACT_EMAIL_MAX = 254
+const CONTACT_MIN_ELAPSED_MS = 1200
 const CONTACT_REQUEST_MAX_BYTES = 64 * 1024
 const CONTACT_FORM_RETURN_PATH = "/about"
 const CONTACT_RATE_LIMIT_POLICY = Object.freeze({
@@ -60,9 +62,7 @@ function isHtmlFormSubmission(request) {
   return acceptsHtml && type === "application/x-www-form-urlencoded"
 }
 
-function isSameOriginUrlEncodedSubmission(request) {
-  if (mediaType(request) !== "application/x-www-form-urlencoded") return true
-
+function isSameOriginSubmission(request) {
   let requestOrigin
   try {
     requestOrigin = new URL(request.url).origin
@@ -134,9 +134,48 @@ async function parsePayload(request) {
       email: form.get("email"),
       message: form.get("message"),
       website: form.get("website"),
+      affiliation: form.get("affiliation"),
+      elapsed_ms: form.get("elapsed_ms"),
     }
   }
   throw new TypeError("Unsupported content type")
+}
+
+const BOT_USER_AGENT_RE =
+  /(?:bot|crawler|spider|scraper|teardownbriefs|curl|wget|python-requests|httpx|aiohttp|go-http-client|libwww-perl|headlesschrome|phantomjs)/i
+const OUTDATED_CHROME_UA_RE = /\bChrome\/1[0-2]\d\.0\.0\.0\b/i
+const BARE_PROBE_BODY_RE =
+  /^(?:test(?:ing)?|hello|hi|ping|check)(?:\s+(?:test|message|123|form))*[.!?\s]*$/i
+const GENERATED_BOT_EMAIL_RE = /^[a-z]+[bcdfghjklmnpqrstvwxz]{4,}[a-z]*\d{2,}@/i
+const SPAM_PITCH_BODY_RE = /\bwhop\.com\b|\$\d+\s+(?:diy|done-for-you|dfy)\b/i
+
+function isLikelyAutomatedBot({ request, payload, fromEmail = null, body = null }) {
+  const honeypot = sanitizeText(payload?.website || "", 255) || ""
+  const secondaryHoneypot = sanitizeText(payload?.affiliation || payload?.company || "", 255) || ""
+  if (honeypot || secondaryHoneypot) return true
+
+  const rawElapsed = payload?.elapsedMs !== undefined ? payload.elapsedMs : payload?.elapsed_ms
+  if (rawElapsed !== undefined && rawElapsed !== null && rawElapsed !== "") {
+    const elapsedMs = Number(rawElapsed)
+    if (Number.isFinite(elapsedMs) && elapsedMs < CONTACT_MIN_ELAPSED_MS) {
+      return true
+    }
+  }
+
+  const userAgent = String(request.headers.get("User-Agent") || "").trim()
+  if (userAgent && (BOT_USER_AGENT_RE.test(userAgent) || OUTDATED_CHROME_UA_RE.test(userAgent))) {
+    return true
+  }
+
+  if (fromEmail && GENERATED_BOT_EMAIL_RE.test(fromEmail)) {
+    return true
+  }
+
+  if (body && (BARE_PROBE_BODY_RE.test(body) || SPAM_PITCH_BODY_RE.test(body))) {
+    return true
+  }
+
+  return false
 }
 
 function isValidEmail(value) {
@@ -172,7 +211,7 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
   if (type !== "application/json" && type !== "application/x-www-form-urlencoded") {
     return respond(request, jsonError("Unsupported content type", 415, corsHeaders), "invalid")
   }
-  if (!isSameOriginUrlEncodedSubmission(request)) {
+  if (!isSameOriginSubmission(request)) {
     return jsonError("Cross-origin form submissions are not allowed.", 403, corsHeaders)
   }
 
@@ -223,15 +262,18 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
     return respond(request, jsonError("Invalid request body", 400, responseHeaders), "invalid")
   }
 
-  // Honeypot: silently accept and drop. If the hidden field is filled, it's a bot
-  // and we don't want to give it a feedback signal.
-  const honeypot = sanitizeText(payload?.website || "", 255) || ""
-  if (honeypot) {
+  // Silent bot-drop: if honeypot, timing, or User-Agent marks this as an
+  // automated submission, accept and ignore without sending mail or writing KV.
+  if (isLikelyAutomatedBot({ request, payload })) {
     return respond(request, jsonOk({ queued: false, ignored: true }, responseHeaders), "sent")
   }
 
   const fromEmail = sanitizeText(payload?.email || "", CONTACT_EMAIL_MAX)
   const body = sanitizeText(payload?.message || payload?.body || "", CONTACT_BODY_MAX)
+
+  if (isLikelyAutomatedBot({ request, payload, fromEmail, body })) {
+    return respond(request, jsonOk({ queued: false, ignored: true }, responseHeaders), "sent")
+  }
 
   if (!fromEmail || !isValidEmail(fromEmail)) {
     return respond(
@@ -240,10 +282,14 @@ export async function handleContactSubmission(request, env, ctx, corsHeaders) {
       "invalid",
     )
   }
-  if (!body || body.length < 3) {
+  if (!body || body.length < CONTACT_BODY_MIN || !/\S+\s+\S+/.test(body)) {
     return respond(
       request,
-      jsonError("Write a message of at least 3 characters.", 422, responseHeaders),
+      jsonError(
+        "Write a message of at least 10 characters (two or more words).",
+        422,
+        responseHeaders,
+      ),
       "invalid",
     )
   }
