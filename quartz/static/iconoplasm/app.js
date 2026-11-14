@@ -6886,6 +6886,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     lastUsed: null,
     job: null,
     loading: false,
+    discarding: false,
     encryptionConfigured: false,
     sessionVersion: 0,
   }
@@ -6924,6 +6925,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.lastUsed = null
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
+    imageEditDialogState.discarding = false
     imageEditDialogState.encryptionConfigured = false
     var dialog = imageEditDialogState.dialog
     if (!dialog) return
@@ -6968,6 +6970,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</div>",
       footerClass: "icono-image-edit-actions",
       footer:
+        '<button type="button" class="icono-button icono-button--danger icono-image-edit-action-button icono-image-edit-discard-button" data-icono-image-edit-discard hidden>Discard</button>' +
         '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
         '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish</button>',
     })
@@ -7026,20 +7029,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function updateImageEditButtons() {
     var dialog = ensureImageEditDialog()
+    var discardButton = dialog.querySelector("[data-icono-image-edit-discard]")
     var editButton = dialog.querySelector("[data-icono-image-edit-submit]")
     var publishButton = dialog.querySelector("[data-icono-image-edit-publish]")
     var isFree = isSelectedImageEditProviderFree()
+    if (discardButton) {
+      var canDiscard = Boolean(
+        imageEditDialogState.job &&
+        !imageEditDialogState.job.published &&
+        (imageEditDialogState.job.status === "succeeded" ||
+          imageEditDialogState.job.status === "failed"),
+      )
+      discardButton.hidden = !canDiscard
+      discardButton.disabled = imageEditDialogState.loading || !canDiscard
+      discardButton.textContent = imageEditDialogState.discarding ? "Discarding..." : "Discard"
+    }
     if (editButton) {
       editButton.disabled =
         imageEditDialogState.loading ||
         (!imageEditDialogState.encryptionConfigured && !isFree) ||
         !imageEditSelectedProvider() ||
         !imageEditHasAdjustment()
-      editButton.textContent = imageEditDialogState.loading
-        ? isFree
-          ? "Queueing..."
-          : "Editing..."
-        : "Edit"
+      editButton.textContent =
+        imageEditDialogState.loading && !imageEditDialogState.discarding
+          ? isFree
+            ? "Queueing..."
+            : "Editing..."
+          : "Edit"
     }
     if (publishButton) {
       var shouldShowPublish =
@@ -7054,7 +7070,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         !imageEditDialogState.job ||
         imageEditDialogState.job.status !== "succeeded" ||
         imageEditDialogState.job.published
-      publishButton.textContent = imageEditDialogState.loading ? "Publishing..." : "Publish"
+      publishButton.textContent =
+        imageEditDialogState.loading && !imageEditDialogState.discarding
+          ? "Publishing..."
+          : "Publish"
     }
   }
 
@@ -7877,11 +7896,40 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
   }
 
+  function discardImageEditJob() {
+    var state = imageEditDialogState
+    if (!state.job || state.job.published || state.loading) return
+    var jobId = String(state.job.id || "").trim()
+    if (!jobId) {
+      closeImageEditDialog()
+      return
+    }
+    state.loading = true
+    state.discarding = true
+    updateImageEditButtons()
+    imageEditSetStatus("Discarding edit...", "")
+    Promise.resolve(
+      typeof requestInbox.dismissEditJob === "function" ? requestInbox.dismissEditJob(jobId) : null,
+    )
+      .then(function () {
+        state.loading = false
+        state.discarding = false
+        closeImageEditDialog()
+      })
+      .catch(function (error) {
+        state.loading = false
+        state.discarding = false
+        imageEditSetStatus(String((error && error.message) || "Could not discard edit."), "error")
+        updateImageEditButtons()
+      })
+  }
+
   function wireImageEditDialog(dialog) {
     dialog.addEventListener("close", function () {
       imageEditJobWatcher.stop()
       imageEditDialogState.sessionVersion += 1
       imageEditDialogState.loading = false
+      imageEditDialogState.discarding = false
     })
     dialog.addEventListener("change", function (event) {
       if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {
@@ -7901,8 +7949,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         updateImageEditButtons()
       }
     })
+    var discard = dialog.querySelector("[data-icono-image-edit-discard]")
     var edit = dialog.querySelector("[data-icono-image-edit-submit]")
     var publish = dialog.querySelector("[data-icono-image-edit-publish]")
+    if (discard) discard.addEventListener("click", discardImageEditJob)
     if (edit) edit.addEventListener("click", submitImageEdit)
     if (publish) publish.addEventListener("click", publishImageEditJob)
   }

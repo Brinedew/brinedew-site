@@ -1563,6 +1563,10 @@ img-comparison-slider.rendered [slot="second"] {
   gap: 0.85rem;
 }
 
+.icono-image-edit-discard-button {
+  margin-inline-end: auto;
+}
+
 .icono-image-edit-dialog sl-select,
 .icono-image-edit-dialog sl-button,
 .icono-image-edit-dialog sl-checkbox {

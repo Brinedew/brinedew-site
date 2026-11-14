@@ -196,6 +196,7 @@ export async function markRequestNotificationsRead(
   {
     requesterUserId,
     notificationIds = [],
+    requestId = 0,
     fulfillmentPublicationId = "",
     gene = "",
     markAll = false,
@@ -206,6 +207,7 @@ export async function markRequestNotificationsRead(
   }
   const requesterId = userId(requesterUserId)
   if (!requesterId) return { ok: false, status: 401, error: "Authentication required" }
+  const cleanRequestId = positiveInteger(requestId)
   let response
   if (markAll) {
     response = await env.ICONOPLASM_DB.prepare(
@@ -216,6 +218,17 @@ export async function markRequestNotificationsRead(
          AND read_at IS NULL`,
     )
       .bind(requesterId)
+      .run()
+  } else if (cleanRequestId) {
+    response = await env.ICONOPLASM_DB.prepare(
+      `UPDATE icono_request_notifications
+       SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+       WHERE requester_user_id = ?
+         AND request_id = ?
+         AND discord_status = 'sent'
+         AND read_at IS NULL`,
+    )
+      .bind(requesterId, cleanRequestId)
       .run()
   } else if (boundedText(fulfillmentPublicationId, 255) && geneSymbol(gene)) {
     response = await env.ICONOPLASM_DB.prepare(
