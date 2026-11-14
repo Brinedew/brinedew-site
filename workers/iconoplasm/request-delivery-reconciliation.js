@@ -1,7 +1,17 @@
+import {
+  DISCORD_OUTBOX_TABLES,
+  openDiscordOutboxStorageStatuses,
+} from "../lib/iconoplasm-discord-outbox.js"
+
 export const DELIVERY_RECONCILIATION_BATCH_SIZE = 50
 const DELIVERY_FAILED_NOTE =
   "The Discord message could not be delivered; the portrait is published and available on the gene page."
 const DELIVERY_FAILED_AFTER_MS = 24 * 60 * 60 * 1000
+const OPEN_OUTBOX_STATUSES_SQL = openDiscordOutboxStorageStatuses(
+  DISCORD_OUTBOX_TABLES.REQUEST_FULFILLMENT,
+)
+  .map((status) => `'${status}'`)
+  .join(", ")
 
 // Two bounded ranges use the existing (status, created_at, id) index; splitting
 // equal timestamps avoids SQLite scanning the entire equal-time prefix. Inspect
@@ -50,7 +60,7 @@ export async function reconcileDeliveryBacklog(db) {
         `SELECT request_id,
            MAX(CASE WHEN discord_status = 'sent' THEN 1 ELSE 0 END) AS any_sent,
            MAX(CASE WHEN discord_status IN (
-             'pending', 'sending', 'retry', 'unknown', 'suppressed_not_test_recipient'
+             ${OPEN_OUTBOX_STATUSES_SQL}
            ) THEN 1 ELSE 0 END) AS any_open,
            MAX(CASE WHEN discord_status = 'failed' THEN 1 ELSE 0 END) AS any_failed,
            MAX(COALESCE(discord_last_attempt_at, created_at)) AS last_attempt
