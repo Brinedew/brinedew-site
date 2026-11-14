@@ -45,6 +45,16 @@ import {
 } from "./lib/cloudflare-availability.js"
 import { accountD1Usage } from "./iconoplasm/operation-cost-account-usage.js"
 import { prepareGeneEssenceUpsertStatement } from "./lib/iconoplasm-essence-write.js"
+import {
+  assertValidInitialIconoplasmJobStatus,
+  transitionIconoplasmJobToFailed,
+  transitionIconoplasmJobToSucceeded,
+} from "./lib/iconoplasm-job-state.js"
+import {
+  DISCORD_OUTBOX_TABLES,
+  assertDiscordOutboxTransition,
+  toDiscordOutboxStorageStatus,
+} from "./lib/iconoplasm-discord-outbox.js"
 import { promptTagsWithoutRetired } from "../shared/iconoplasm-tag-categories.js"
 import { parseDiscoveryMembershipSymbols } from "./iconoplasm-discovery-membership.js"
 import {
@@ -420,7 +430,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
     model_options: Object.freeze([
       Object.freeze({
         model: "flux-2-klein-9b-kv",
-        label: "FLUX.2 Klein 9B KV (Free)",
+        label: "(Free) FLUX.2 Klein 9B KV",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -428,7 +438,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "flux-2-klein-9b-base",
-        label: "FLUX.2 Klein 9B Base (Free)",
+        label: "(Free) FLUX.2 Klein 9B Base",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -436,7 +446,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "flux-2-klein-4b",
-        label: "FLUX.2 Klein 4B (Free)",
+        label: "(Free) FLUX.2 Klein 4B",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -444,7 +454,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "qwen-image-2.1-turbo",
-        label: "Qwen-Image-2.1 Turbo INT8 (Free)",
+        label: "(Free) Qwen-Image-2.1 Turbo INT8",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -452,7 +462,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "fibo2-edit-turbo",
-        label: "FIBO 2.0 Edit Turbo (Free)",
+        label: "(Free) FIBO 2.0 Edit Turbo",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -460,7 +470,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "fibo2-edit-dev",
-        label: "FIBO 2.0 Edit Dev (Free)",
+        label: "(Free) FIBO 2.0 Edit Dev",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -468,7 +478,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "flux-3-klein",
-        label: "FLUX.3 Klein (Free)",
+        label: "(Free) FLUX.3 Klein",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -476,7 +486,7 @@ const ICONOPLASM_IMAGE_EDIT_PROVIDER_DEFINITIONS = Object.freeze({
       }),
       Object.freeze({
         model: "anima-edit-v2",
-        label: "Anima Edit v3.0 (Free)",
+        label: "(Free) Anima Edit v3.0",
         pricing_label: "Free · queued",
         free_queue: true,
         edit_capable: true,
@@ -5644,6 +5654,7 @@ function mapImageEditJobRow(row, baseUrl = "") {
 }
 
 async function insertImageEditJob(env, row) {
+  const status = assertValidInitialIconoplasmJobStatus(row.status)
   await env.ICONOPLASM_DB.prepare(
     `INSERT INTO icono_image_edit_jobs (
        id,
@@ -5677,53 +5688,22 @@ async function insertImageEditJob(env, row) {
       row.source_score,
       row.adjustments_json,
       row.prompt,
-      row.status,
+      status,
       row.inherited_upvotes,
     )
     .run()
 }
 
 async function updateImageEditJobSucceeded(env, row) {
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_image_edit_jobs
-     SET status = 'succeeded',
-         result_asset_sha256 = ?,
-         result_r2_key_full = ?,
-         result_r2_key_medium = ?,
-         result_r2_key_thumb = ?,
-         result_mime = ?,
-         result_width = ?,
-         result_height = ?,
-         result_bytes = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-  )
-    .bind(
-      row.result_asset_sha256,
-      row.result_r2_key_full,
-      row.result_r2_key_medium,
-      row.result_r2_key_thumb,
-      row.result_mime,
-      row.result_width,
-      row.result_height,
-      row.result_bytes,
-      row.id,
-    )
-    .run()
+  return transitionIconoplasmJobToSucceeded(env.ICONOPLASM_DB, "icono_image_edit_jobs", row)
 }
 
 async function updateImageEditJobFailed(env, { id, error }) {
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_image_edit_jobs
-     SET status = 'failed',
-         error = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-  )
-    .bind(sanitizeText(error || "", 2000) || "Image edit failed", id)
-    .run()
+  return transitionIconoplasmJobToFailed(env.ICONOPLASM_DB, "icono_image_edit_jobs", {
+    id,
+    error: sanitizeText(error || "", 2000) || "Image edit failed",
+    defaultError: "Image edit failed",
+  })
 }
 
 function queuedImageEditRequestIdFromJobId(jobId) {
@@ -7651,7 +7631,7 @@ async function candidateGenerationGeneContext(env, symbol) {
     // on raw equality so direct image generation stays point-keyed.
     `SELECT
        gc.gene_symbol,
-       COALESCE(gc.full_name, ge.full_name, '') AS full_name,
+       COALESCE(gc.full_name, '') AS full_name,
        COALESCE(ge.weight_kg, 0) AS weight_kg,
        COALESCE(ge.sex, '') AS sex,
        COALESCE(ge.age, '') AS age,
@@ -8079,52 +8059,25 @@ async function insertCandidateGenerationJob(env, row) {
       row.provider_model_id,
       row.prompt_sha256,
       row.generation_config_sha256,
-      row.status,
+      assertValidInitialIconoplasmJobStatus(row.status),
     )
     .run()
 }
 
 async function updateCandidateGenerationJobSucceeded(env, row) {
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_candidate_generation_jobs
-     SET status = 'succeeded',
-         result_asset_sha256 = ?,
-         result_r2_key_full = ?,
-         result_r2_key_medium = ?,
-         result_r2_key_thumb = ?,
-         result_mime = ?,
-         result_width = ?,
-         result_height = ?,
-         result_bytes = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
+  return transitionIconoplasmJobToSucceeded(
+    env.ICONOPLASM_DB,
+    "icono_candidate_generation_jobs",
+    row,
   )
-    .bind(
-      row.result_asset_sha256,
-      row.result_r2_key_full,
-      row.result_r2_key_medium,
-      row.result_r2_key_thumb,
-      row.result_mime,
-      row.result_width,
-      row.result_height,
-      row.result_bytes,
-      row.id,
-    )
-    .run()
 }
 
 async function updateCandidateGenerationJobFailed(env, { id, error }) {
-  await env.ICONOPLASM_DB.prepare(
-    `UPDATE icono_candidate_generation_jobs
-     SET status = 'failed',
-         error = ?,
-         updated_at = CURRENT_TIMESTAMP,
-         completed_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-  )
-    .bind(sanitizeText(error || "", 2000) || "Image generation failed", id)
-    .run()
+  return transitionIconoplasmJobToFailed(env.ICONOPLASM_DB, "icono_candidate_generation_jobs", {
+    id,
+    error: sanitizeText(error || "", 2000) || "Image generation failed",
+    defaultError: "Image generation failed",
+  })
 }
 
 async function getCandidateGenerationJobForUser(env, { id, userId }) {
@@ -10187,15 +10140,19 @@ export async function fulfillGenerationRequests(
   // when the workstation resends the completion. Anything else writes nothing,
   // so a resent completion is a no-op (B-962).
   async function retryFailedNotification(requestId) {
+    const targetStatus = toDiscordOutboxStorageStatus(
+      DISCORD_OUTBOX_TABLES.REQUEST_FULFILLMENT,
+      assertDiscordOutboxTransition("failed", "retry"),
+    )
     await env.ICONOPLASM_DB.prepare(
       `UPDATE icono_request_notifications
-       SET discord_status = 'retry',
+       SET discord_status = ?,
            discord_error = '',
            discord_next_attempt_at = NULL
        WHERE request_id = ?
          AND discord_status = 'failed'`,
     )
-      .bind(requestId)
+      .bind(targetStatus, requestId)
       .run()
   }
 
@@ -11711,7 +11668,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
   const symbol = normalizeSymbol(payload.symbol || payload.gene_symbol || fallbackSymbol || "")
   if (!symbol) return null
 
-  const fullName = sanitizeText(payload.name || payload.full_name, 255)
   const weightKgRaw = optionalFloat(payload.weight_kg, { min: 0 })
   const weightKg =
     Number.isFinite(weightKgRaw) && weightKgRaw > 0 ? Math.round(weightKgRaw * 10) / 10 : null
@@ -11747,7 +11703,6 @@ function normalizeEssencePayload(rawEssence, fallbackSymbol) {
 
   return {
     gene_symbol: symbol,
-    full_name: fullName,
     weight_kg: weightKg,
     molecular_weight_kda: molecularWeightKda,
     height_cm: heightCm,
@@ -14866,9 +14821,9 @@ export async function markVisionRollupsDirty(env, rawVisionIds, now = new Date()
   return visionIds.length
 }
 
-// Unmeasured estimate (2026-10-11): one vision's assets, codes and rollups read
-// back. Replace it with a receipt when one exists.
-const VISION_ROLLUP_ESTIMATED_ROWS_READ = 1000
+// B-1099: measured ~2,000 rows read per style on the SOX11 trace (rebuild
+// covers admin vision, vision-option, factory-option rollups and previews).
+const VISION_ROLLUP_ESTIMATED_ROWS_READ = 2000
 
 export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIRTY_BATCH } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
@@ -14957,11 +14912,37 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
   return { ok: true, visions: rebuiltIds.length, refused, remaining: visionIds.length }
 }
 
+async function syncTouchedVisionReadModels(
+  env,
+  { symbol, assetVisionId = "", autoPromote = null } = {},
+) {
+  const visionIds = []
+  const addVision = (rawVisionId) => {
+    const cleaned = validAdminRollupVisionId(rawVisionId || "")
+    if (cleaned && !cleaned.toLowerCase().startsWith("artist-random-")) visionIds.push(cleaned)
+  }
+  addVision(assetVisionId)
+  if (autoPromote?.changed && autoPromote?.to_asset_sha256 && env?.ICONOPLASM_DB) {
+    const promoted = await env.ICONOPLASM_DB.prepare(
+      "SELECT vision_id FROM icono_portrait_assets WHERE gene_symbol = ? AND asset_sha256 = ? LIMIT 1",
+    )
+      .bind(symbol, autoPromote.to_asset_sha256)
+      .first()
+    addVision(promoted?.vision_id)
+  }
+  return syncAdminReadModels(env, {
+    symbols: [symbol],
+    visionIds,
+    onlyExplicitVisions: true,
+  })
+}
+
 async function syncAdminReadModels(
   env,
   {
     symbols = [],
     visionIds = [],
+    onlyExplicitVisions = false,
     skipVoteSummaries = false,
     skipVisionRollups = false,
     skipDashboard = false,
@@ -14982,7 +14963,7 @@ async function syncAdminReadModels(
   for (let index = 0; index < symbolList.length; index += ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT) {
     const symbolChunk = symbolList.slice(index, index + ADMIN_READ_MODEL_SYMBOL_BATCH_DEFAULT)
     if (!skipVoteSummaries) await rebuildVoteAssetSummaryForSymbols(env, symbolChunk)
-    if (!skipVisionRollups)
+    if (!skipVisionRollups && !onlyExplicitVisions)
       for (const visionId of await collectVisionIdsForSymbols(env, symbolChunk))
         finalVisionIdSet.add(visionId)
   }
@@ -15951,7 +15932,11 @@ async function removePortraitAssetAndQueueLocalRemoval(
     actorId: actorNorm,
     reason: `admin_remove_candidate:${assetShaNorm}`,
   })
-  await syncAdminReadModels(env, { symbols: [symbolNorm] })
+  await syncTouchedVisionReadModels(env, {
+    symbol: symbolNorm,
+    assetVisionId: existing?.vision_id,
+    autoPromote,
+  })
 
   return {
     ok: true,
@@ -23263,13 +23248,22 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, from, actorId)
           .run()
+        const prevAsset = from
+          ? await env.ICONOPLASM_DB.prepare(
+              "SELECT vision_id FROM icono_portrait_assets WHERE gene_symbol=? AND asset_sha256=? LIMIT 1",
+            )
+              .bind(symbol, from)
+              .first()
+          : null
         const autoPromote = await autoPromoteTopVotedPortrait(env, {
           symbol,
           actorId,
           reason: "admin_clear_override",
         })
-        await syncAdminReadModels(env, {
-          symbols: [symbol],
+        await syncTouchedVisionReadModels(env, {
+          symbol,
+          assetVisionId: prevAsset?.vision_id,
+          autoPromote,
         })
         return done(
           "clear_override",
@@ -23286,6 +23280,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
       if (path.endsWith("/reject")) {
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("reject_400", json({ error: "Missing asset_sha256" }, 400))
+        const existingAsset = await env.ICONOPLASM_DB.prepare(
+          "SELECT vision_id FROM icono_portrait_assets WHERE gene_symbol=? AND asset_sha256=? LIMIT 1",
+        )
+          .bind(symbol, asset)
+          .first()
         const current = await env.ICONOPLASM_DB.prepare(
           "SELECT current_asset_sha256 FROM icono_publish_state WHERE gene_symbol=? LIMIT 1",
         )
@@ -23329,8 +23328,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           actorId,
           reason: "admin_reject_auto_promote",
         })
-        await syncAdminReadModels(env, {
-          symbols: [symbol],
+        await syncTouchedVisionReadModels(env, {
+          symbol,
+          assetVisionId: existingAsset?.vision_id,
+          autoPromote,
         })
         const republished = await republishGene(env, symbol)
         return done(
@@ -23354,6 +23355,11 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           .first()
         const from = current?.current_asset_sha256 || null
         if (!from) return done("unpublish_400", json({ error: "No published state to clear" }, 400))
+        const prevAsset = await env.ICONOPLASM_DB.prepare(
+          "SELECT vision_id FROM icono_portrait_assets WHERE gene_symbol=? AND asset_sha256=? LIMIT 1",
+        )
+          .bind(symbol, from)
+          .first()
         await env.ICONOPLASM_DB.prepare(
           "UPDATE icono_publish_state SET current_asset_sha256=NULL, admin_override=1, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE gene_symbol=?",
         )
@@ -23364,8 +23370,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         )
           .bind(symbol, from, null, actorId, String(p?.reason || "").slice(0, 2000) || null)
           .run()
-        await syncAdminReadModels(env, {
-          symbols: [symbol],
+        await syncTouchedVisionReadModels(env, {
+          symbol,
+          assetVisionId: prevAsset?.vision_id,
         })
         return done(
           "unpublish",
@@ -23377,7 +23384,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
         const asset = String(p?.asset_sha256 || "").trim()
         if (!asset) return done("unstale_400", json({ error: "Missing asset_sha256" }, 400))
         const existing = await env.ICONOPLASM_DB.prepare(
-          "SELECT COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy FROM icono_portrait_assets WHERE gene_symbol=? AND asset_sha256=? LIMIT 1",
+          "SELECT COALESCE(is_stale, 0) AS is_stale, COALESCE(is_legacy, 0) AS is_legacy, vision_id FROM icono_portrait_assets WHERE gene_symbol=? AND asset_sha256=? LIMIT 1",
         )
           .bind(symbol, asset)
           .first()
@@ -23397,8 +23404,10 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           actorId,
           reason: "admin_unstale_auto_promote",
         })
-        await syncAdminReadModels(env, {
-          symbols: [symbol],
+        await syncTouchedVisionReadModels(env, {
+          symbol,
+          assetVisionId: existing?.vision_id,
+          autoPromote,
         })
         return done(
           "unstale",
@@ -23420,6 +23429,7 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
              r2_key_full,
              r2_key_medium,
              r2_key_thumb,
+             vision_id,
              COALESCE(is_legacy, 0) AS is_legacy
            FROM icono_portrait_assets
            WHERE gene_symbol=? AND asset_sha256=?
@@ -23489,8 +23499,9 @@ export async function handleIconoplasmApiRequestInsideTheOnlyAllowedStatefulWork
           await deletePortraitStorageObject(env, key)
         }
 
-        await syncAdminReadModels(env, {
-          symbols: [symbol],
+        await syncTouchedVisionReadModels(env, {
+          symbol,
+          assetVisionId: existing?.vision_id,
         })
         return done(
           "purge_legacy",

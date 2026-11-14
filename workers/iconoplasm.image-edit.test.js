@@ -1718,14 +1718,14 @@ test("free ComfyUI edit models are listed for image_edit without API keys and hi
   assert.deepEqual(
     comfy.model_options.map((m) => [m.model, m.label, m.edit_capable, m.generate_capable]),
     [
-      ["flux-2-klein-9b-kv", "FLUX.2 Klein 9B KV (Free)", true, false],
-      ["flux-2-klein-9b-base", "FLUX.2 Klein 9B Base (Free)", true, false],
-      ["flux-2-klein-4b", "FLUX.2 Klein 4B (Free)", true, false],
-      ["qwen-image-2.1-turbo", "Qwen-Image-2.1 Turbo INT8 (Free)", true, false],
-      ["fibo2-edit-turbo", "FIBO 2.0 Edit Turbo (Free)", true, false],
-      ["fibo2-edit-dev", "FIBO 2.0 Edit Dev (Free)", true, false],
-      ["flux-3-klein", "FLUX.3 Klein (Free)", true, false],
-      ["anima-edit-v2", "Anima Edit v3.0 (Free)", true, false],
+      ["flux-2-klein-9b-kv", "(Free) FLUX.2 Klein 9B KV", true, false],
+      ["flux-2-klein-9b-base", "(Free) FLUX.2 Klein 9B Base", true, false],
+      ["flux-2-klein-4b", "(Free) FLUX.2 Klein 4B", true, false],
+      ["qwen-image-2.1-turbo", "(Free) Qwen-Image-2.1 Turbo INT8", true, false],
+      ["fibo2-edit-turbo", "(Free) FIBO 2.0 Edit Turbo", true, false],
+      ["fibo2-edit-dev", "(Free) FIBO 2.0 Edit Dev", true, false],
+      ["flux-3-klein", "(Free) FLUX.3 Klein", true, false],
+      ["anima-edit-v2", "(Free) Anima Edit v3.0", true, false],
     ],
   )
 
