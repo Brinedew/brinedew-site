@@ -177,6 +177,73 @@ test("switching genes shows the terms checkbox, pre-checked only for accepted te
   }
 })
 
+// B-1139: short noun link with the checkbox clickable from the row midpoint at
+// phone (402px) and desktop (1280px) widths without accidentally triggering <a>.
+test("clicking the middle of the terms row toggles acceptance without opening the terms link", async (t) => {
+  const browser = await launchChrome(t)
+  if (!browser) return
+  const { server, origin } = await startSite()
+  try {
+    for (const viewport of [
+      { width: 402, height: 844 },
+      { width: 1280, height: 900 },
+    ]) {
+      const opened = await openSwitchDialog(browser, origin, "terms_2026_09_02_v3", false, {
+        viewport,
+      })
+      try {
+        await opened.page.evaluate(() => document.fonts.ready)
+        const terms = opened.dialog.locator("[data-icono-caretaker-claim-terms]")
+        const link = terms.locator('a[href="/caretaker-terms"]')
+        assert.equal((await terms.textContent()).trim(), "I accept the caretaker terms.")
+        assert.equal((await link.textContent()).trim(), "caretaker terms")
+        const { rowBox, baseBox, linkBox } = await terms.evaluate((host) => ({
+          rowBox: host.getBoundingClientRect().toJSON(),
+          baseBox: host.shadowRoot.querySelector('[part~="base"]').getBoundingClientRect().toJSON(),
+          linkBox: host
+            .querySelector('a[href="/caretaker-terms"]')
+            .getBoundingClientRect()
+            .toJSON(),
+        }))
+        assert.ok(
+          rowBox && baseBox && linkBox,
+          `${viewport.width}x${viewport.height}: missing terms bounding boxes`,
+        )
+        assert.ok(
+          linkBox.width < baseBox.width * 0.4,
+          `${viewport.width}x${viewport.height}: link still occupies ${linkBox.width} of ${baseBox.width}px`,
+        )
+        let popupOpened = false
+        opened.context.on("page", () => {
+          popupOpened = true
+        })
+        await opened.page.mouse.click(linkBox.x + linkBox.width + 24, rowBox.y + rowBox.height / 2)
+        const state = await readDialog(opened.dialog)
+        assert.equal(
+          popupOpened,
+          false,
+          `${viewport.width}x${viewport.height}: row click opened terms link (base=${JSON.stringify(baseBox)}, link=${JSON.stringify(linkBox)})`,
+        )
+        assert.equal(
+          state.checked,
+          true,
+          `${viewport.width}x${viewport.height}: row click did not check the terms box`,
+        )
+        assert.equal(
+          state.submitDisabled,
+          false,
+          `${viewport.width}x${viewport.height}: submit remained disabled`,
+        )
+      } finally {
+        await opened.context.close()
+      }
+    }
+  } finally {
+    server.close()
+    await browser.close()
+  }
+})
+
 test("the switch dialog fits a small phone without a scroll bar", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return

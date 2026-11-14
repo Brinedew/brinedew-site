@@ -188,3 +188,68 @@ export function createImageEditJobWatcher({
     stop,
   }
 }
+
+/**
+ * Formats a free edit model label with a leading "(Free) " badge so free and
+ * paid options scan consistently without scanning to the end of the line.
+ */
+export function formatFreeImageEditModelLabel(rawLabel) {
+  const base = String(rawLabel || "")
+    .trim()
+    .replace(/\s*\(Free\)\s*$/i, "")
+    .replace(/^\(Free\)\s*/i, "")
+    .trim()
+  return base ? "(Free) " + base : "(Free)"
+}
+
+/**
+ * Builds sorted edit-provider dropdown options with all free-queue models on
+ * top regardless of connected paid APIs, then alphanumerically within tiers.
+ */
+export function buildImageEditProviderOptions({
+  supported = [],
+  configured = {},
+  lastUsed = null,
+} = {}) {
+  let lastUsedValue = ""
+  if (lastUsed && lastUsed.provider_id && lastUsed.model) {
+    lastUsedValue = lastUsed.provider_id + ":" + lastUsed.model
+  }
+  const options = []
+  ;(Array.isArray(supported) ? supported : []).forEach((sp) => {
+    const isFreeProvider = Boolean(sp && sp.free_queue)
+    if (!isFreeProvider && !configured[sp.provider_id]) return
+    ;(sp.model_options || []).forEach((m) => {
+      const isFreeOption = isFreeProvider || Boolean(m && m.free_queue)
+      const value = sp.provider_id + ":" + m.model
+      const rawModelLabel = String((m && (m.label || m.model)) || "")
+      const label = isFreeOption
+        ? formatFreeImageEditModelLabel(rawModelLabel)
+        : sp.label + " · " + rawModelLabel
+      if (!lastUsedValue && m && m.last_used) lastUsedValue = value
+      options.push({
+        value,
+        label,
+        free: isFreeOption,
+        lastUsed: false,
+      })
+    })
+  })
+  options.sort((a, b) => {
+    if (a.free !== b.free) return a.free ? -1 : 1
+    return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
+  })
+  if (lastUsedValue) {
+    options.forEach((opt) => {
+      if (opt.value === lastUsedValue) {
+        opt.lastUsed = true
+        opt.label = opt.label + " · last used"
+      }
+    })
+  }
+  let selectedValue = lastUsedValue || (options.length ? options[0].value : "")
+  if (selectedValue && !options.some((opt) => opt.value === selectedValue)) {
+    selectedValue = options.length ? options[0].value : ""
+  }
+  return { options, selectedValue }
+}

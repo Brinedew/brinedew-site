@@ -48,10 +48,11 @@ import {
   setDialogTitle,
 } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import {
+  buildImageEditProviderOptions,
   createImageEditJobWatcher,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
-} from "./image-edit-dialog-live.js?v=fde43f1a07d2448a"
+} from "./image-edit-dialog-live.js?v=6891c21b3e60c734"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
@@ -617,9 +618,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       (checked ? " checked" : "") +
       '>I accept the <a href="' +
       esc(terms.document_url) +
-      '" target="_blank" rel="noopener">' +
-      esc(terms.display_label || "caretaker terms") +
-      "</a>.</sl-checkbox>"
+      '" target="_blank" rel="noopener">caretaker terms</a>.</sl-checkbox>'
     )
   }
 
@@ -7090,50 +7089,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // Prefer the explicit last_used selection from the API. Fall back to any
     // model_options last_used flag for older payloads.
     var lastUsedSelection = imageEditDialogState.lastUsed || null
-    var lastUsedValue = ""
-    if (lastUsedSelection && lastUsedSelection.provider_id && lastUsedSelection.model) {
-      lastUsedValue = lastUsedSelection.provider_id + ":" + lastUsedSelection.model
-    }
-    var options = []
-    supported.forEach(function (sp) {
-      var isFreeProvider = Boolean(sp && sp.free_queue)
-      if (!isFreeProvider && !configured[sp.provider_id]) return
-      ;(sp.model_options || []).forEach(function (m) {
-        var isFreeOption = isFreeProvider || Boolean(m && m.free_queue)
-        var value = sp.provider_id + ":" + m.model
-        var label = isFreeOption ? String(m.label || m.model) : sp.label + " · " + m.label
-        if (!lastUsedValue && m.last_used) lastUsedValue = value
-        options.push({
-          value: value,
-          label: label,
-          lastUsed: false,
-        })
-      })
+    var built = buildImageEditProviderOptions({
+      supported: supported,
+      configured: configured,
+      lastUsed: lastUsedSelection,
     })
-    // Stable alphanumeric order. Last-used is a label/preselect only — never
-    // rearrange the list, which made the menu feel jumpy and error-prone.
-    options.sort(function (a, b) {
-      return a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
-    })
-    if (lastUsedValue) {
-      options.forEach(function (opt) {
-        if (opt.value === lastUsedValue) {
-          opt.lastUsed = true
-          opt.label = opt.label + " · last used"
-        }
-      })
-    }
-    var selectedValue = lastUsedValue || (options.length ? options[0].value : "")
-    // If the remembered selection is no longer available, fall back to the
-    // first sorted option instead of leaving a stale value.
-    if (
-      selectedValue &&
-      !options.some(function (opt) {
-        return opt.value === selectedValue
-      })
-    ) {
-      selectedValue = options.length ? options[0].value : ""
-    }
+    var options = built.options
+    var selectedValue = built.selectedValue
     select.innerHTML = options.length
       ? options
           .map(function (opt) {
