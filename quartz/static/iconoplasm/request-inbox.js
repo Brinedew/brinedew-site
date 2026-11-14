@@ -301,6 +301,7 @@ export function createRequestInbox({
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         notification_ids: Array.isArray(notificationIds) ? notificationIds : [],
+        request_id: Number(group.request_id || 0) || undefined,
         fulfillment_publication_id: group.fulfillment_publication_id || "",
         gene_symbol: group.gene_symbol || "",
         all: markAll === true,
@@ -533,6 +534,39 @@ export function createRequestInbox({
     state.unread_count = Math.max(0, state.unread_count - seen.length)
     renderSidebar()
     return markRead([], false, { gene_symbol: wanted }).catch(function () {})
+  }
+
+  // B-1226: discarding an unpublished edit in the review modal removes it from
+  // the Ready inbox without publishing it to the gene page.
+  function dismissEditJob(editJobId) {
+    var wantedJobId = String(editJobId || "").trim()
+    if (!wantedJobId || !getCurrentUser()) return Promise.resolve(null)
+    var match = wantedJobId.match(/^request-(\d+)$/i)
+    var requestId = match ? Number(match[1] || 0) || 0 : 0
+    var seen = (Array.isArray(state.ready_requests) ? state.ready_requests : []).filter(
+      function (item) {
+        if (!item || item.request_kind !== "edit_image") return false
+        var itemJobId = String(
+          item.edit_job_id || (item.request_id ? "request-" + item.request_id : ""),
+        ).trim()
+        return itemJobId === wantedJobId || (requestId > 0 && Number(item.request_id) === requestId)
+      },
+    )
+    var notificationIds = seen
+      .map(function (item) {
+        return Number(item.notification_id || 0) || 0
+      })
+      .filter(Boolean)
+    if (!requestId && !notificationIds.length) return Promise.resolve(null)
+    if (seen.length) {
+      state.ready_requests = state.ready_requests.filter(function (item) {
+        return seen.indexOf(item) === -1
+      })
+      state.unread_count = Math.max(0, state.unread_count - seen.length)
+      state.ready_count = Math.max(0, state.ready_count - seen.length)
+      renderSidebar()
+    }
+    return markRead(notificationIds, false, { request_id: requestId })
   }
 
   function fulfilledReceiptMarkup(group) {
@@ -1032,6 +1066,7 @@ export function createRequestInbox({
   return {
     caretakerPanelMarkup,
     caretakerSymbol,
+    dismissEditJob,
     panelMarkup,
     noteCaretakerDossier,
     noteGeneViewed,

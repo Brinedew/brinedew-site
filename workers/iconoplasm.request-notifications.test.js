@@ -239,9 +239,11 @@ class NotificationStatement {
     if (this.sql.includes("SET read_at = COALESCE")) {
       const userId = String(this.args[0] || "")
       const grouped = this.sql.includes("fulfillment_publication_id = ?")
+      const byRequest = this.sql.includes("request_id = ?")
       const publicationId = grouped ? String(this.args[1] || "") : ""
       const symbol = grouped ? String(this.args[2] || "") : ""
-      const ids = grouped ? [] : this.args.slice(1).map(Number)
+      const requestId = byRequest ? Number(this.args[1] || 0) : 0
+      const ids = grouped || byRequest ? [] : this.args.slice(1).map(Number)
       let changes = 0
       for (const row of this.db.notifications) {
         if (row.requester_user_id !== userId || row.discord_status !== "sent" || row.read_at)
@@ -251,6 +253,7 @@ class NotificationStatement {
           (row.fulfillment_publication_id !== publicationId || row.gene_symbol !== symbol)
         )
           continue
+        if (byRequest && Number(row.request_id) !== requestId) continue
         if (ids.length && !ids.includes(Number(row.id))) continue
         row.read_at = "2026-07-16 14:00:00"
         changes += 1
@@ -1634,4 +1637,118 @@ test("account switch and remount discard stale responses from both inbox feeds",
   assert.match(inbox.caretakerPanelMarkup(), /REMOUNT_NEW/)
   assert.doesNotMatch(inbox.panelMarkup(), /REMOUNT_OLD/)
   assert.doesNotMatch(inbox.caretakerPanelMarkup(), /REMOUNT_OLD/)
+})
+
+test("discarding an edit job marks only its notification read and clears it from the inbox", async () => {
+  const readyEdit = {
+    id: 91,
+    request_id: 91,
+    notification_id: 901,
+    unread: true,
+    request_kind: "edit_image",
+    edit_job_id: "request-91",
+    gene_symbol: "PAGE2",
+    gene_url: "/gene/PAGE2",
+    image_url: "https://cdn.example/after.webp",
+  }
+  const otherReady = {
+    id: 92,
+    request_id: 92,
+    notification_id: 902,
+    unread: true,
+    request_kind: "new_candidate",
+    gene_symbol: "TP53",
+    gene_url: "/gene/TP53",
+    image_url: "https://cdn.example/tp53.webp",
+  }
+  const posts = []
+  let readyItems = [readyEdit, otherReady]
+  let renders = 0
+  const inbox = createRequestInbox({
+    fetchJSON: async (url, options) => {
+      if (url === "/api/iconoplasm/notifications/read") {
+        const body = JSON.parse(options.body)
+        posts.push(body)
+        readyItems = readyItems.filter((item) => item.request_id !== body.request_id)
+        return { ok: true, marked_read: 1 }
+      }
+      return url.startsWith("/api/iconoplasm/notifications")
+        ? {
+            ok: true,
+            authenticated: true,
+            unread_count: readyItems.length,
+            ready_count: readyItems.length,
+            open_count: 0,
+            ready_requests: readyItems,
+            open_requests: [],
+          }
+        : { ok: true, caretaker: null }
+    },
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {
+      renders += 1
+    },
+    escapeHtml: (value) => String(value ?? ""),
+  })
+
+  await inbox.refresh()
+  assert.match(inbox.panelMarkup(), /data-icono-edit-job-id="request-91"/)
+  assert.match(inbox.panelMarkup(), /data-icono-request-gene-symbol="TP53"/)
+
+  const rendersBeforeDismiss = renders
+  await inbox.dismissEditJob("request-91")
+  assert.equal(posts.length, 1)
+  assert.equal(posts[0].request_id, 91)
+  assert.deepEqual(posts[0].notification_ids, [901])
+  assert.ok(renders > rendersBeforeDismiss)
+  assert.doesNotMatch(inbox.panelMarkup(), /data-icono-edit-job-id="request-91"/)
+  assert.match(inbox.panelMarkup(), /data-icono-request-gene-symbol="TP53"/)
+
+  // Non-queued (direct API) edit jobs do not hit the inbox read endpoint.
+  await inbox.dismissEditJob("direct-job-123")
+  assert.equal(posts.length, 1)
+})
+
+test("markRequestNotificationsRead marks a specific edit request read by requestId", async () => {
+  const db = new NotificationDb([
+    notificationRow({
+      id: 901,
+      request_id: 91,
+      requester_user_id: BRINEDEW_USER_ID,
+      gene_symbol: "TP53",
+      request_kind: "edit_image",
+      fulfillment_publication_id: "pub-edit-91",
+      discord_status: "sent",
+      read_at: null,
+    }),
+    notificationRow({
+      id: 902,
+      request_id: 92,
+      requester_user_id: BRINEDEW_USER_ID,
+      gene_symbol: "TP53",
+      request_kind: "new_candidate",
+      fulfillment_publication_id: "pub-cand-92",
+      discord_status: "sent",
+      read_at: null,
+    }),
+  ])
+  const response =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/notifications/read", {
+        method: "POST",
+        headers: {
+          Cookie: await signedInAs(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ request_id: 91 }),
+      }),
+      { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
+      { waitUntil() {} },
+    )
+  const result = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(result.ok, true)
+  assert.equal(result.marked_read, 1)
+  assert.ok(db.notifications[0].read_at)
+  assert.equal(db.notifications[1].read_at, null)
 })
