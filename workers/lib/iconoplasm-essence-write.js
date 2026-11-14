@@ -2,7 +2,6 @@
 // Tags, which only the caretaking routes write.
 const FIELDS = [
   "gene_symbol",
-  "full_name",
   "weight_kg",
   "molecular_weight_kda",
   "height_cm",

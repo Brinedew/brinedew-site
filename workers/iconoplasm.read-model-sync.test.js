@@ -361,3 +361,113 @@ test("admin sync reads transactional counts without rebuilding catalogue history
   // The admin home's own counts and attention list are tested on the real
   // schema in iconoplasm/admin-dashboard-counts.test.js.
 })
+
+test("candidate removal and rejection rebuild only touched style rollups instead of scanning every style (B-1099)", async () => {
+  for (const endpoint of ["remove-candidate", "reject"]) {
+    const env = buildEnv()
+    const targetSha = "aa".repeat(32)
+    let localRemovalInserted = false
+    const originalPrepare = env.gatewayDb.prepare.bind(env.gatewayDb)
+    env.gatewayDb.prepare = (sql) => {
+      const statement = originalPrepare(sql)
+      const originalAll = statement.all.bind(statement)
+      const originalFirst = statement.first.bind(statement)
+      const originalRun = statement.run.bind(statement)
+      statement.first = async () => {
+        env.gatewayDb.calls.push({ method: "first", sql: statement.sql, args: statement.args })
+        if (
+          statement.sql.includes("FROM icono_portrait_assets") &&
+          statement.sql.includes("asset_sha256")
+        ) {
+          return {
+            vision_id: "anima-v1-18",
+            candidate_image_id: 1,
+            r2_key_full: "",
+            r2_key_medium: "",
+            r2_key_thumb: "",
+          }
+        }
+        if (statement.sql.includes("FROM icono_local_removal_requests") && localRemovalInserted) {
+          return {
+            id: 9,
+            gene_symbol: "TP53",
+            asset_sha256: targetSha,
+            candidate_image_id: 1,
+            vision_id: "anima-v1-18",
+            requested_by: "admin",
+            reason: "test",
+            source: "admin_remove",
+          }
+        }
+        return originalFirst()
+      }
+      statement.all = async () => {
+        if (
+          statement.sql.includes("SELECT DISTINCT pa.vision_id") &&
+          statement.sql.includes("icono_portrait_assets")
+        ) {
+          env.gatewayDb.calls.push({ method: "all", sql: statement.sql, args: statement.args })
+          return { results: [{ vision_id: "anima-v1-18" }, { vision_id: "anima-v1-99" }] }
+        }
+        return originalAll()
+      }
+      statement.run = async () => {
+        if (statement.sql.includes("INSERT INTO icono_local_removal_requests")) {
+          localRemovalInserted = true
+        }
+        return originalRun()
+      }
+      return statement
+    }
+
+    const response = await viaStatefulWorker(
+      new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/admin/${endpoint}`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer secret-admin-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          symbol: "TP53",
+          asset_sha256: targetSha,
+          reason: "multi-style regression test",
+        }),
+      }),
+      env,
+      {},
+    )
+    assert.equal(response.status, 200, `${endpoint} failed`)
+
+    const scannedAllStyles = env.gatewayDb.calls.some(
+      (call) =>
+        call.sql.includes("SELECT DISTINCT pa.vision_id") &&
+        call.sql.includes("icono_portrait_assets"),
+    )
+    assert.equal(
+      scannedAllStyles,
+      false,
+      `${endpoint} must not scan every vision style of the gene`,
+    )
+
+    const visionRollupWrites = env.gatewayDb.calls.filter(
+      (call) =>
+        call.method === "run" &&
+        (call.sql.includes("INSERT INTO icono_admin_vision_rollup") ||
+          call.sql.includes("INSERT INTO icono_generation_request_vision_option_rollup")),
+    )
+    assert.ok(visionRollupWrites.length > 0, `${endpoint} must rebuild the touched style rollup`)
+    for (const write of visionRollupWrites) {
+      const boundText = JSON.stringify(write.args)
+      assert.equal(
+        boundText.includes("anima-v1-99"),
+        false,
+        `${endpoint} rebuilt untouched style anima-v1-99`,
+      )
+      assert.equal(
+        boundText.includes("anima-v1-18"),
+        true,
+        `${endpoint} missed touched style anima-v1-18`,
+      )
+    }
+  }
+})

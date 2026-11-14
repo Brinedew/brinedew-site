@@ -61,7 +61,7 @@ test("metadata publication succeeds after source cutover without reopening the r
       ).run()
     }
     const existing = db.prepare("SELECT * FROM icono_gene_essence WHERE gene_symbol='INS'").get()
-    assert.equal(existing.full_name, "Updated name")
+    assert.equal(existing.full_name, null)
     assert.equal(existing.weight_kg, 3)
     assert.equal(existing.manifestation, "frozen source")
     assert.equal(existing.manifestation_tags, null)
