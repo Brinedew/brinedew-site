@@ -2,7 +2,9 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildImageEditProviderOptions,
   createImageEditJobWatcher,
+  formatFreeImageEditModelLabel,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
 } from "./image-edit-dialog-live.js"
@@ -201,4 +203,51 @@ test("createImageEditJobWatcher pauses when hidden and resumes check on focus or
   assert.equal(calls, 1)
   assert.equal(isImageEditJobPendingStatus("queued"), true)
   assert.equal(isImageEditJobPendingStatus("succeeded"), false)
+})
+
+test("buildImageEditProviderOptions puts free models first and prefixes labels with (Free)", () => {
+  assert.equal(
+    formatFreeImageEditModelLabel("FLUX.2 Klein 9B KV (Free)"),
+    "(Free) FLUX.2 Klein 9B KV",
+  )
+  assert.equal(formatFreeImageEditModelLabel("(Free) FLUX.3 Klein"), "(Free) FLUX.3 Klein")
+
+  const built = buildImageEditProviderOptions({
+    supported: [
+      {
+        provider_id: "anthropic_alpha",
+        label: "AlphaPaid",
+        free_queue: false,
+        model_options: [{ model: "alpha-1", label: "Alpha Edit" }],
+      },
+      {
+        provider_id: "comfyui",
+        label: "Iconoplasm",
+        free_queue: true,
+        model_options: [
+          { model: "qwen", label: "Qwen-Image-2.1 Turbo INT8 (Free)" },
+          { model: "flux", label: "(Free) FLUX.2 Klein 4B" },
+        ],
+      },
+      {
+        provider_id: "openai",
+        label: "OpenAI",
+        free_queue: false,
+        model_options: [{ model: "gpt-image-1.5", label: "GPT Image 1.5" }],
+      },
+    ],
+    configured: { anthropic_alpha: true, openai: true },
+    lastUsed: { provider_id: "openai", model: "gpt-image-1.5" },
+  })
+
+  assert.deepEqual(
+    built.options.map((o) => [o.value, o.label, o.free]),
+    [
+      ["comfyui:flux", "(Free) FLUX.2 Klein 4B", true],
+      ["comfyui:qwen", "(Free) Qwen-Image-2.1 Turbo INT8", true],
+      ["anthropic_alpha:alpha-1", "AlphaPaid · Alpha Edit", false],
+      ["openai:gpt-image-1.5", "OpenAI · GPT Image 1.5 · last used", false],
+    ],
+  )
+  assert.equal(built.selectedValue, "openai:gpt-image-1.5")
 })
