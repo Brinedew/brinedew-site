@@ -1,5 +1,11 @@
+import {
+  DISCORD_OUTBOX_TABLES,
+  deliverableDiscordOutboxStorageStatuses,
+} from "../lib/iconoplasm-discord-outbox.js"
+
 const READY_GROUPS = "icono_request_delivery_ready_groups"
 const READY_INDEX = "idx_icono_request_delivery_ready_due"
+const REQUEST_OUTBOX_TABLE = DISCORD_OUTBOX_TABLES.REQUEST_FULFILLMENT
 
 // Each ready-mode range stops at its own limit before joining notification
 // payloads. Due time is the scheduling priority; a retry cannot starve older due
@@ -92,9 +98,9 @@ export async function claimReadyDeliveryGroup(db, { notificationIds, leader, all
     .bind(
       JSON.stringify(notificationIds),
       JSON.stringify(
-        allRequesters
-          ? ["pending", "retry", "suppressed_not_test_recipient"]
-          : ["pending", "retry"],
+        deliverableDiscordOutboxStorageStatuses(REQUEST_OUTBOX_TABLE, {
+          includeSuppressed: allRequesters,
+        }),
       ),
       leader.requester_user_id,
       leader.fulfillment_publication_id,

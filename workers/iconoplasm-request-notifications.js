@@ -10,11 +10,22 @@ import {
   REQUEST_INBOX_PAGE_SQL,
 } from "./iconoplasm/request-inbox-queries.js"
 import { readPortraitStorageObject } from "./lib/iconoplasm-portrait-storage.js"
+import {
+  DISCORD_OUTBOX_TABLES,
+  allowedSourceDiscordOutboxStorageStatuses,
+  assertDiscordOutboxTransition,
+  deliverableDiscordOutboxStorageStatuses,
+  nextDiscordOutboxRetryAt,
+  sendDiscordOutboxDirectMessage,
+  toDiscordOutboxStorageStatus,
+} from "./lib/iconoplasm-discord-outbox.js"
 import { reconcileDeliveryBacklog } from "./iconoplasm/request-delivery-reconciliation.js"
 import {
   readReadyDeliveryLeaders,
   claimReadyDeliveryGroup,
 } from "./iconoplasm/request-delivery-selection.js"
+
+const REQUEST_OUTBOX_TABLE = DISCORD_OUTBOX_TABLES.REQUEST_FULFILLMENT
 
 // During the live acceptance period, only Vladimir's immutable Discord user ID
 // may receive a DM. Production delivery is enabled only by the exact explicit
@@ -22,9 +33,6 @@ import {
 export const ICONOPLASM_FULFILLMENT_DM_TEST_RECIPIENT_ID = "1289482311557058641"
 const ICONOPLASM_FULFILLMENT_DM_ALL_REQUESTERS_MODE = "all_requesters"
 
-const DISCORD_API_BASE = "https://discord.com/api/v10"
-const DISCORD_RETRY_BASE_SECONDS = 15 * 60
-const DISCORD_RETRY_MAX_SECONDS = 24 * 60 * 60
 // ARCHITECTURE FENCE [IPD-006]: Discord accepts at most ten attachments on a
 // message. A fulfillment DM is a batch receipt with a bounded preview mosaic,
 // not a lossless transport for every generated portrait.
@@ -69,15 +77,7 @@ function requestKind(value) {
 }
 
 function nextDiscordRetryAt(attemptCount) {
-  const attempt = Math.max(1, positiveInteger(attemptCount) || 1)
-  const seconds = Math.min(
-    DISCORD_RETRY_MAX_SECONDS,
-    DISCORD_RETRY_BASE_SECONDS * 2 ** Math.max(0, attempt - 1),
-  )
-  return new Date(Date.now() + seconds * 1000)
-    .toISOString()
-    .replace("T", " ")
-    .replace(/\.\d{3}Z$/, "")
+  return nextDiscordOutboxRetryAt(attemptCount, { table: REQUEST_OUTBOX_TABLE })
 }
 
 export function resolveIconoplasmFulfillmentDeliveryPolicy(env) {
@@ -479,8 +479,17 @@ async function setDiscordState(env, notificationIds, status, fields = {}) {
     ),
   ).slice(0, 500)
   if (!ids.length) return
+  const storageStatus = toDiscordOutboxStorageStatus(REQUEST_OUTBOX_TABLE, status)
+  const allowedSources = fields.fromStatus
+    ? [
+        toDiscordOutboxStorageStatus(
+          REQUEST_OUTBOX_TABLE,
+          (assertDiscordOutboxTransition(fields.fromStatus, storageStatus), fields.fromStatus),
+        ),
+      ]
+    : allowedSourceDiscordOutboxStorageStatuses(REQUEST_OUTBOX_TABLE, storageStatus)
   const nextAttemptAt =
-    status === "retry"
+    storageStatus === "retry"
       ? boundedText(fields.nextAttemptAt, 64) || nextDiscordRetryAt(fields.attemptCount)
       : ""
   await env.ICONOPLASM_DB.prepare(
@@ -491,16 +500,18 @@ async function setDiscordState(env, notificationIds, status, fields = {}) {
          discord_message_id = ?,
          discord_error = ?,
          discord_next_attempt_at = ?
-     WHERE id IN (SELECT value FROM json_each(?))`,
+     WHERE id IN (SELECT value FROM json_each(?))
+       AND discord_status IN (SELECT value FROM json_each(?))`,
   )
     .bind(
-      status,
-      status,
+      storageStatus,
+      storageStatus,
       boundedText(fields.channelId, 255),
       boundedText(fields.messageId, 255),
       boundedText(fields.error, 1000),
       nextAttemptAt,
       JSON.stringify(ids),
+      JSON.stringify(Array.from(allowedSources)),
     )
     .run()
 }
@@ -572,9 +583,9 @@ export async function deliverPendingRequestFulfillmentNotifications(
   const allRequesters = allRequestersDiscordDeliveryEnabled(env)
   // Test-only suppressions are delivery debt, not terminal outcomes. Once
   // production delivery is explicitly enabled, retry those rows as well.
-  const deliverableStatuses = allRequesters
-    ? ["pending", "retry", "suppressed_not_test_recipient"]
-    : ["pending", "retry"]
+  const deliverableStatuses = deliverableDiscordOutboxStorageStatuses(REQUEST_OUTBOX_TABLE, {
+    includeSuppressed: allRequesters,
+  })
   const leaders = await readReadyDeliveryLeaders(env.ICONOPLASM_DB, {
     requestIds: ids,
     allRequesters,
@@ -681,99 +692,76 @@ export async function deliverPendingRequestFulfillmentNotifications(
       continue
     }
 
-    let channelId = ""
-    try {
-      const response = await fetch(`${DISCORD_API_BASE}/users/@me/channels`, {
-        method: "POST",
-        headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ recipient_id: requesterId }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      channelId = boundedText(payload?.id, 255)
-      if (!response.ok || !channelId) {
-        const retryable = response.status === 429 || response.status >= 500
-        await setDiscordState(env, notificationIds, retryable ? "retry" : "failed", {
-          error: `Discord DM channel failed (${response.status}): ${boundedText(payload?.message, 500)}`,
-          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
+    let messageDeferred = false
+    const outcome = await sendDiscordOutboxDirectMessage({
+      token: botToken,
+      recipientId: requesterId,
+      serverErrorStatus: "unknown",
+      missingChannelStatus: "failed",
+      missingChannelError: "Discord DM channel failed (200): ",
+      formatHttpError: (response, _bodyText, parsed, stage) =>
+        stage === "channel"
+          ? `Discord DM channel failed (${response.status}): ${boundedText(parsed?.message, 500)}`
+          : `Discord message failed (${response.status}): ${boundedText(parsed?.message, 500)}`,
+      formatChannelNetworkError: (error) =>
+        `Discord DM channel network failure: ${boundedText(error?.message || error || "unknown", 500)}`,
+      classifyMessageNetworkError: (error) => {
+        if (isWorkerSubrequestLimitError(error)) {
+          messageDeferred = true
+          return "retry"
+        }
+        return "unknown"
+      },
+      formatMessageNetworkError: (error) =>
+        isWorkerSubrequestLimitError(error)
+          ? `Discord message delivery deferred: ${boundedText(error?.message || error, 500)}`
+          : `Discord message delivery outcome unknown: ${boundedText(error?.message || error || "unknown", 500)}`,
+      buildMessageRequest: () => {
+        const messagePayload = {
+          content: discordMessage(rows, attachments.length),
+          nonce: `icono-batch-${leaderId}`,
+          enforce_nonce: true,
+          allowed_mentions: { parse: [] },
+          attachments: attachments.map((attachment, index) => ({
+            id: index,
+            filename: attachment.filename,
+            description: attachment.description,
+          })),
+        }
+        const form = new FormData()
+        form.append("payload_json", JSON.stringify(messagePayload))
+        attachments.forEach((attachment, index) => {
+          form.append(`files[${index}]`, attachment.blob, attachment.filename)
         })
-        result.failed += 1
-        continue
-      }
-    } catch (error) {
-      // Opening a channel has no user-visible side effect, so retry is safe.
-      await setDiscordState(env, notificationIds, "retry", {
-        error: `Discord DM channel network failure: ${boundedText(error?.message || error || "unknown", 500)}`,
-        attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
-      })
-      result.failed += 1
-      continue
-    }
-
-    try {
-      const messagePayload = {
-        content: discordMessage(rows, attachments.length),
-        nonce: `icono-batch-${leaderId}`,
-        enforce_nonce: true,
-        allowed_mentions: { parse: [] },
-        attachments: attachments.map((attachment, index) => ({
-          id: index,
-          filename: attachment.filename,
-          description: attachment.description,
-        })),
-      }
-      const form = new FormData()
-      form.append("payload_json", JSON.stringify(messagePayload))
-      attachments.forEach((attachment, index) => {
-        form.append(`files[${index}]`, attachment.blob, attachment.filename)
-      })
-      const response = await fetch(
-        `${DISCORD_API_BASE}/channels/${encodeURIComponent(channelId)}/messages`,
-        {
+        return {
           method: "POST",
           // Do not set Content-Type: fetch must add the multipart boundary.
           headers: { Authorization: `Bot ${botToken}` },
           body: form,
-        },
-      )
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        const status =
-          response.status === 429 ? "retry" : response.status >= 500 ? "unknown" : "failed"
-        await setDiscordState(env, notificationIds, status, {
-          channelId,
-          error: `Discord message failed (${response.status}): ${boundedText(payload?.message, 500)}`,
-          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
-        })
-        if (status === "unknown") result.unknown += 1
-        else result.failed += 1
-        continue
-      }
+        }
+      },
+    })
+    if (outcome.status === "sent") {
       await setDiscordState(env, notificationIds, "sent", {
-        channelId,
-        messageId: boundedText(payload?.id, 255),
+        fromStatus: "sending",
+        channelId: outcome.channelId,
+        messageId: outcome.messageId,
       })
       result.delivered += 1
       result.delivered_requests += rows.length
       result.delivered_request_ids.push(
         ...rows.map((row) => positiveInteger(row.request_id)).filter(Boolean),
       )
-    } catch (error) {
-      if (isWorkerSubrequestLimitError(error)) {
-        await setDiscordState(env, notificationIds, "retry", {
-          channelId,
-          error: `Discord message delivery deferred: ${boundedText(error?.message || error, 500)}`,
-          attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
-        })
-        result.deferred += 1
-        continue
-      }
-      // A failed response read after POST is ambiguous. Do not retry and risk
-      // a duplicate DM; the durable website inbox remains authoritative.
-      await setDiscordState(env, notificationIds, "unknown", {
-        channelId,
-        error: `Discord message delivery outcome unknown: ${boundedText(error?.message || error || "unknown", 500)}`,
+    } else {
+      await setDiscordState(env, notificationIds, outcome.status, {
+        fromStatus: "sending",
+        channelId: outcome.channelId,
+        error: outcome.error,
+        attemptCount: Number(leader?.discord_attempt_count || 0) + 1,
       })
-      result.unknown += 1
+      if (messageDeferred) result.deferred += 1
+      else if (outcome.status === "unknown") result.unknown += 1
+      else result.failed += 1
     }
   }
   // A scoped call tells its caller whether another of these orders is ready

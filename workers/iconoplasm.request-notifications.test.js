@@ -286,9 +286,11 @@ class NotificationStatement {
     }
     if (this.sql.includes("SET discord_status = ?")) {
       const ids = JSON.parse(this.args[6])
+      const allowedSources = this.args[7] ? JSON.parse(this.args[7]) : null
       let changes = 0
       for (const row of this.db.notifications) {
         if (!ids.includes(Number(row.id))) continue
+        if (allowedSources && !allowedSources.includes(row.discord_status)) continue
         row.discord_status = String(this.args[0] || "")
         row.discord_channel_id = String(this.args[2] || "")
         row.discord_message_id = String(this.args[3] || "")
