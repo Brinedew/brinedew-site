@@ -90,14 +90,38 @@ export function createRequestInbox({
     return Math.floor(seconds / (86400 * 30)) + "mo ago"
   }
 
+  function receiptHref(item) {
+    var entry = item || {}
+    var geneUrl = entry.gene_url || "/"
+    var isEdit = entry.request_kind === "edit_image"
+    var requestId = Number(entry.request_id || entry.id || 0) || 0
+    var editJobId = isEdit
+      ? String(entry.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
+      : ""
+    if (!isEdit || !editJobId) return geneUrl
+    return (
+      geneUrl +
+      (geneUrl.indexOf("?") >= 0 ? "&" : "?") +
+      "edit_job=" +
+      encodeURIComponent(editJobId)
+    )
+  }
+
   function showFulfilledNotice(notification) {
-    if (!notification || !notification.gene_symbol) return
+    if (
+      !notification ||
+      !notification.gene_symbol ||
+      typeof document === "undefined" ||
+      !document.body
+    ) {
+      return
+    }
     var existing = document.getElementById("icono-request-ready-notice")
     if (existing) existing.remove()
     var notice = document.createElement("a")
     notice.id = "icono-request-ready-notice"
     notice.className = "icono-request-ready-notice"
-    notice.href = notification.gene_url || "/"
+    notice.href = receiptHref(notification)
     notice.setAttribute("role", "status")
     notice.setAttribute("aria-live", "polite")
     notice.innerHTML =
@@ -108,15 +132,19 @@ export function createRequestInbox({
       escapeHtml(notification.requested_emulsion_label || "Your requested portrait") +
       "</small></span>"
     document.body.appendChild(notice)
-    window.setTimeout(function () {
-      notice.classList.add("icono-request-ready-notice--visible")
-    }, 20)
-    window.setTimeout(function () {
-      notice.classList.remove("icono-request-ready-notice--visible")
+    if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
       window.setTimeout(function () {
-        if (notice.parentNode) notice.remove()
-      }, 220)
-    }, 9000)
+        notice.classList.add("icono-request-ready-notice--visible")
+      }, 20)
+      window.setTimeout(function () {
+        notice.classList.remove("icono-request-ready-notice--visible")
+        window.setTimeout(function () {
+          if (notice.parentNode) notice.remove()
+        }, 220)
+      }, 9000)
+    } else {
+      notice.classList.add("icono-request-ready-notice--visible")
+    }
   }
 
   function reset() {
@@ -168,6 +196,7 @@ export function createRequestInbox({
         var newestUnread = readyRequests.find(function (item) {
           return item && item.unread && Number(item.notification_id || 0) > previousHighWater
         })
+        var wasLoaded = state.loaded
         state.loaded = true
         state.unread_count = Math.max(0, Number(payload.unread_count || 0) || 0)
         state.ready_count = Math.max(0, Number(payload.ready_count || 0) || 0)
@@ -203,7 +232,7 @@ export function createRequestInbox({
           onReadyEditJobs(readyEditJobs)
         }
         if (pendingViewedGene) void noteGeneViewed(pendingViewedGene)
-        if (opts.announce && previousHighWater > 0 && newestUnread) {
+        if (opts.announce && wasLoaded && newestUnread) {
           showFulfilledNotice(newestUnread)
         }
         return payload
@@ -326,26 +355,45 @@ export function createRequestInbox({
     })
   }
 
-  function stop() {
-    if (refreshTimer) window.clearTimeout(refreshTimer)
+  var OPEN_REQUEST_POLL_INTERVAL_MS = 10000
+  var OPEN_PASSIVE_REFRESH_MIN_INTERVAL_MS = 2000
+  // B-834: returning to a tab fires both `focus` and `visibilitychange`, and
+  // each used to refetch notifications and caretaker state (4 Worker requests
+  // per tab switch). Coalesce those passive refreshes to one per 30 s when idle,
+  // or 2 s while open requests are waiting so returning from Discord updates quickly.
+  var PASSIVE_REFRESH_MIN_INTERVAL_MS = 30000
+  var lastPassiveRefreshAt = 0
+
+  function clearRefreshTimer() {
+    if (refreshTimer && typeof window !== "undefined") window.clearTimeout(refreshTimer)
     refreshTimer = 0
+  }
+
+  function stop() {
+    clearRefreshTimer()
     invalidateInflight()
   }
 
   function scheduleOpenRequestRefresh() {
-    stop()
+    clearRefreshTimer()
     if (
       !getCurrentUser() ||
       state.open_count <= 0 ||
       typeof document === "undefined" ||
-      document.visibilityState !== "visible"
+      document.visibilityState !== "visible" ||
+      typeof window === "undefined"
     ) {
       return
     }
     refreshTimer = window.setTimeout(function () {
       refreshTimer = 0
-      void refresh({ announce: true }).finally(scheduleOpenRequestRefresh)
-    }, 60000)
+      var accountKey = ensureAccountContext()
+      if (!accountKey) return
+      var pending = state.caretaker_loaded
+        ? refreshRequests({ announce: true }, accountKey)
+        : refresh({ announce: true })
+      void pending.finally(scheduleOpenRequestRefresh)
+    }, OPEN_REQUEST_POLL_INTERVAL_MS)
   }
 
   function refreshForLifecycle(options) {
@@ -353,16 +401,15 @@ export function createRequestInbox({
     return refresh(options).finally(scheduleOpenRequestRefresh)
   }
 
-  // B-834: returning to a tab fires both `focus` and `visibilitychange`, and
-  // each used to refetch notifications and caretaker state (4 Worker requests
-  // per tab switch). Coalesce those passive refreshes to one per 30 s.
-  // Explicit refreshes (mount, account switch, after reads/claims) always run.
-  var PASSIVE_REFRESH_MIN_INTERVAL_MS = 30000
-  var lastPassiveRefreshAt = 0
+  function passiveRefreshMinIntervalMs() {
+    return state.open_count > 0
+      ? OPEN_PASSIVE_REFRESH_MIN_INTERVAL_MS
+      : PASSIVE_REFRESH_MIN_INTERVAL_MS
+  }
 
   function refreshForPassiveLifecycle(options) {
     var now = Date.now()
-    if (now - lastPassiveRefreshAt < PASSIVE_REFRESH_MIN_INTERVAL_MS) {
+    if (now - lastPassiveRefreshAt < passiveRefreshMinIntervalMs()) {
       scheduleOpenRequestRefresh()
       return Promise.resolve(null)
     }
@@ -459,18 +506,11 @@ export function createRequestInbox({
       var group = byKey[key]
       if (!group) {
         var geneUrl = item.gene_url || "/"
-        var editHref =
-          isEdit && editJobId
-            ? geneUrl +
-              (geneUrl.indexOf("?") >= 0 ? "&" : "?") +
-              "edit_job=" +
-              encodeURIComponent(editJobId)
-            : geneUrl
         group = {
           key: key,
           gene_symbol: symbol,
           gene_url: geneUrl,
-          href: editHref,
+          href: receiptHref(item),
           is_edit: Boolean(isEdit && editJobId),
           edit_job_id: editJobId,
           expected_size: 0,
