@@ -169,6 +169,11 @@ export function iconoplasmDatabase() {
   const database = new DatabaseSync(":memory:")
   database.exec("PRAGMA foreign_keys = ON")
   applyMigrations(database, "migrations-iconoplasm/")
+  database
+    .prepare(
+      "UPDATE icono_factory_active_recipe SET pipeline_code = 'D' WHERE singleton_id = 1 AND pipeline_code = 'A'",
+    )
+    .run()
   return new SqliteD1(database)
 }
 

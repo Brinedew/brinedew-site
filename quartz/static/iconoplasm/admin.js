@@ -1920,7 +1920,7 @@
   function renderFactoryRecipe() {
     if (state.activeTab !== "factory" || !state.factoryRecipe) return
     var data = state.factoryRecipe
-    var active = data.active_recipe || { pipeline: "A", vision: 1 }
+    var active = data.active_recipe || {}
     var pipelines = Array.isArray(data.pipelines) ? data.pipelines : []
     var visions = Array.isArray(data.visions) ? data.visions : []
     if (els.factoryPipeline) {
@@ -1935,7 +1935,7 @@
           )
         })
         .join("")
-      els.factoryPipeline.value = String(active.pipeline || "A")
+      els.factoryPipeline.value = String(active.pipeline || "")
     }
     if (els.factoryVision) {
       els.factoryVision.innerHTML = visions
@@ -1945,7 +1945,7 @@
           )
         })
         .join("")
-      els.factoryVision.value = String(active.vision || 1)
+      els.factoryVision.value = String(active.vision || "")
     }
     renderFactoryRecipeSelection()
     renderFactoryWiring()
