@@ -98,7 +98,7 @@ function diagnosticDatabase(options) {
       updated_by TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    INSERT INTO icono_factory_active_recipe VALUES (1, 'A', 1, 'test', CURRENT_TIMESTAMP);
+    INSERT INTO icono_factory_active_recipe VALUES (1, 'D', 1, 'test', CURRENT_TIMESTAMP);
     CREATE TABLE icono_factory_pipeline_vision_recommendations (
       pipeline_code TEXT PRIMARY KEY,
       vision_revision INTEGER NOT NULL,
@@ -209,7 +209,7 @@ function diagnosticDatabase(options) {
 const runId = "diag-11111111-2222-4333-8444-555555555555"
 const runOptions = {
   geneSymbol: "AFF2",
-  pipelineCodes: ["A", "B", "C", "D", "O"],
+  pipelineCodes: ["D", "K"],
   emulsionSlots: [30593, 255, 343, 21329, 24210],
   visionRevision: 1,
   promptBodyMode: "taggerizer_prompt",
@@ -218,7 +218,7 @@ const runOptions = {
   clientRunId: runId,
 }
 
-test("diagnostic matrix commits all 25 cells atomically and retrying is idempotent", async () => {
+test("diagnostic matrix commits all 10 cells atomically and retrying is idempotent", async () => {
   const { db, d1 } = diagnosticDatabase()
   try {
     const env = diagnosticEnv(d1)
@@ -226,26 +226,26 @@ test("diagnostic matrix commits all 25 cells atomically and retrying is idempote
     const created = await createDiagnosticMatrixRunForTest(env, url, runOptions)
     assert.equal(created.ok, true)
     assert.equal(created.run.id, runId)
-    assert.equal(created.run.cell_count, 25)
-    assert.equal(created.run.counts.total, 25)
+    assert.equal(created.run.cell_count, 10)
+    assert.equal(created.run.counts.total, 10)
     assert.equal(
       db.prepare("SELECT queue_state FROM icono_diagnostic_matrix_runs WHERE id = ?").get(runId)
         .queue_state,
       "queued",
     )
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 25)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 10)
 
     const retried = await createDiagnosticMatrixRunForTest(env, url, runOptions)
     assert.equal(retried.ok, true)
-    assert.equal(retried.run.counts.total, 25)
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 25)
+    assert.equal(retried.run.counts.total, 10)
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM icono_generation_requests").get().n, 10)
   } finally {
     db.close()
   }
 })
 
 test("diagnostic matrix leaves no partial run or requests when the batch is interrupted", async () => {
-  const { db, d1 } = diagnosticDatabase({ failBatchAt: 12 })
+  const { db, d1 } = diagnosticDatabase({ failBatchAt: 6 })
   try {
     const result = await createDiagnosticMatrixRunForTest(
       diagnosticEnv(d1),
@@ -265,7 +265,7 @@ test("diagnostic matrix leaves no partial run or requests when the batch is inte
 test("mixed accepted and retired factory matrices reject all work without writes", async () => {
   const { db, d1 } = diagnosticDatabase()
   try {
-    for (const pipelineCodes of [["E"], ["L"], ["H", "E"], ["O", "L"]]) {
+    for (const pipelineCodes of [["E"], ["L"], ["A", "E"], ["D", "A"], ["K", "O"]]) {
       const result = await createDiagnosticMatrixRunForTest(
         { ICONOPLASM_DB: d1 },
         new URL("https://iconoplasm.brinedew.bio/admin"),

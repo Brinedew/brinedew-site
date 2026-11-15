@@ -4874,7 +4874,7 @@ export async function activeFactoryRecipe(env) {
       LIMIT 1`,
   ).first()
   const storedVision = normalizeFactoryVisionRevision(row?.vision_revision || 1) || 1
-  const pipeline = normalizeFactoryPipelineCode(row?.pipeline_code || "A")
+  const pipeline = normalizeFactoryPipelineCode(row?.pipeline_code || "D")
   if (!isAcceptedFactoryPipeline(pipeline))
     throw new Error("The active factory Pipeline is unavailable. Select an accepted Pipeline.")
   return {

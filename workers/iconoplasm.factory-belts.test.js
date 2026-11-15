@@ -132,7 +132,7 @@ test("authorized factory belt requests execute through the gateway and real SQLi
   const { db, d1 } = database()
   db.exec(`CREATE TABLE icono_factory_pipeline_vision_recommendations (pipeline_code TEXT, vision_revision INTEGER);
     CREATE TABLE icono_factory_active_recipe (singleton_id INTEGER, pipeline_code TEXT, vision_revision INTEGER, updated_by TEXT, updated_at TEXT);
-    INSERT INTO icono_factory_active_recipe VALUES (1, 'A', 9, 'test', '2026-08-27');
+    INSERT INTO icono_factory_active_recipe VALUES (1, 'D', 9, 'test', '2026-08-27');
     CREATE TABLE icono_factory_vision_definitions (revision INTEGER, source_id TEXT, label TEXT, source_sha256 TEXT,
       positive_prefix TEXT, negative_prompt TEXT, prompt_content_mode TEXT, prompt_order_mode TEXT,
       prompt_replace_underscores INTEGER, emulsion_base_id TEXT, status TEXT);
@@ -152,8 +152,10 @@ test("authorized factory belt requests execute through the gateway and real SQLi
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("Cache-Control"), "no-store")
     const result = await response.json()
+    const d9 = result.belts.find((belt) => belt.code === "D9")
     const a9 = result.belts.find((belt) => belt.code === "A9")
-    assert.equal(a9.active, true)
+    assert.equal(d9.active, true)
+    assert.equal(a9.active, false)
     assert.equal(a9.outputs.length, 6)
     assert.match(a9.outputs[0].full_url, /\/full\.webp$/)
   } finally {
