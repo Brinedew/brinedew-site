@@ -225,8 +225,8 @@ test("buildImageEditProviderOptions puts free models first and prefixes labels w
         label: "Iconoplasm",
         free_queue: true,
         model_options: [
-          { model: "qwen", label: "Qwen-Image-2.1 Turbo INT8 (Free)" },
-          { model: "flux", label: "(Free) FLUX.2 Klein 4B" },
+          { model: "qwen", label: "Qwen-Image-2.1 Turbo (Free)" },
+          { model: "flux", label: "(Free) FLUX.3 Klein" },
         ],
       },
       {
@@ -243,8 +243,8 @@ test("buildImageEditProviderOptions puts free models first and prefixes labels w
   assert.deepEqual(
     built.options.map((o) => [o.value, o.label, o.free]),
     [
-      ["comfyui:flux", "(Free) FLUX.2 Klein 4B", true],
-      ["comfyui:qwen", "(Free) Qwen-Image-2.1 Turbo INT8", true],
+      ["comfyui:flux", "(Free) FLUX.3 Klein", true],
+      ["comfyui:qwen", "(Free) Qwen-Image-2.1 Turbo", true],
       ["anthropic_alpha:alpha-1", "AlphaPaid · Alpha Edit", false],
       ["openai:gpt-image-1.5", "OpenAI · GPT Image 1.5 · last used", false],
     ],

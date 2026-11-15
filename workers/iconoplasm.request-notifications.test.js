@@ -1754,3 +1754,276 @@ test("markRequestNotificationsRead marks a specific edit request read by request
   assert.ok(db.notifications[0].read_at)
   assert.equal(db.notifications[1].read_at, null)
 })
+
+function withMockBrowserInboxEnv(fn) {
+  const origWindow = globalThis.window
+  const origDocument = globalThis.document
+  const origDateNow = Date.now
+  let nowMs = 1_000_000
+  let nextTimerId = 1
+  const timers = []
+  const windowListeners = {}
+  const documentListeners = {}
+  const appendedNotices = []
+  const doc = {
+    visibilityState: "visible",
+    body: {
+      appendChild(node) {
+        appendedNotices.push(node)
+        node.parentNode = this
+      },
+    },
+    getElementById(id) {
+      return appendedNotices.find((node) => node.id === id) || null
+    },
+    createElement(tag) {
+      const classes = new Set()
+      const attrs = {}
+      return {
+        tagName: tag.toUpperCase(),
+        id: "",
+        className: "",
+        href: "",
+        innerHTML: "",
+        parentNode: null,
+        classList: {
+          add(name) {
+            classes.add(name)
+          },
+          remove(name) {
+            classes.delete(name)
+          },
+          has(name) {
+            return classes.has(name)
+          },
+        },
+        setAttribute(k, v) {
+          attrs[k] = String(v)
+        },
+        getAttribute(k) {
+          return attrs[k] ?? null
+        },
+        remove() {
+          const idx = appendedNotices.indexOf(this)
+          if (idx >= 0) appendedNotices.splice(idx, 1)
+          this.parentNode = null
+        },
+      }
+    },
+    addEventListener(type, cb) {
+      ;(documentListeners[type] ||= []).push(cb)
+    },
+  }
+  const win = {
+    setTimeout(cb, delay) {
+      const id = nextTimerId++
+      timers.push({ id, cb, delay, cleared: false })
+      return id
+    },
+    clearTimeout(id) {
+      const item = timers.find((t) => t.id === id)
+      if (item) item.cleared = true
+    },
+    addEventListener(type, cb) {
+      ;(windowListeners[type] ||= []).push(cb)
+    },
+  }
+  globalThis.window = win
+  globalThis.document = doc
+  Date.now = () => nowMs
+  return Promise.resolve()
+    .then(() =>
+      fn({
+        advanceMs(ms) {
+          nowMs += ms
+        },
+        timers,
+        appendedNotices,
+        triggerWindow(type) {
+          ;(windowListeners[type] || []).forEach((cb) => cb())
+        },
+        triggerDocument(type) {
+          ;(documentListeners[type] || []).forEach((cb) => cb())
+        },
+      }),
+    )
+    .finally(() => {
+      globalThis.window = origWindow
+      globalThis.document = origDocument
+      Date.now = origDateNow
+    })
+}
+
+async function flushMicrotasks(turns = 8) {
+  for (let i = 0; i < turns; i++) await Promise.resolve()
+}
+
+test("B-1231: empty initial inbox announces later fulfillment on 10s poll and updates Waiting to Ready", async () => {
+  await withMockBrowserInboxEnv(async (env) => {
+    let notifPayload = {
+      ok: true,
+      authenticated: true,
+      unread_count: 0,
+      ready_count: 0,
+      open_count: 1,
+      ready_requests: [],
+      open_requests: [
+        {
+          request_id: 77,
+          request_kind: "edit_image",
+          gene_symbol: "TP53",
+          gene_url: "/gene/TP53",
+          created_at: "2026-11-15T10:00:00Z",
+        },
+      ],
+    }
+    let caretakerCalls = 0
+    let notifCalls = 0
+    const inbox = createRequestInbox({
+      fetchJSON: async (url) => {
+        if (url.startsWith("/api/iconoplasm/notifications")) {
+          notifCalls += 1
+          return notifPayload
+        }
+        caretakerCalls += 1
+        return { ok: true, caretaker: null }
+      },
+      getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+      renderSidebar() {},
+      escapeHtml: (value) => String(value ?? ""),
+    })
+
+    inbox.start()
+    await flushMicrotasks()
+    assert.equal(notifCalls, 1)
+    assert.equal(caretakerCalls, 1)
+    assert.equal(env.appendedNotices.length, 0)
+    assert.match(inbox.panelMarkup(), /aria-selected="true"[^>]*data-icono-request-tab="waiting"/)
+
+    const activePoll = env.timers.find((t) => !t.cleared && t.delay >= 5000)
+    assert.ok(activePoll)
+    assert.equal(activePoll.delay, 10000)
+
+    notifPayload = {
+      ok: true,
+      authenticated: true,
+      unread_count: 1,
+      ready_count: 1,
+      open_count: 0,
+      ready_requests: [
+        {
+          notification_id: 501,
+          request_id: 77,
+          request_kind: "edit_image",
+          edit_job_id: "request-77",
+          unread: true,
+          gene_symbol: "TP53",
+          gene_url: "/gene/TP53",
+          requested_emulsion_label: "Edited portrait",
+          image_url: "https://cdn.example/tp53-edit.webp",
+        },
+      ],
+      open_requests: [],
+    }
+    activePoll.cb()
+    await flushMicrotasks()
+
+    assert.equal(notifCalls, 2)
+    assert.equal(caretakerCalls, 1)
+    assert.equal(env.appendedNotices.length, 1)
+    assert.equal(env.appendedNotices[0].href, "/gene/TP53?edit_job=request-77")
+    assert.match(env.appendedNotices[0].innerHTML, /TP53/)
+    assert.match(inbox.panelMarkup(), /aria-selected="true"[^>]*data-icono-request-tab="ready"/)
+    assert.match(inbox.panelMarkup(), /data-icono-edit-job-id="request-77"/)
+  })
+})
+
+test("B-1231: fast tab return while orders are open refreshes immediately without self-canceling paired focus", async () => {
+  await withMockBrowserInboxEnv(async (env) => {
+    let notifCalls = 0
+    let deferredResolve = null
+    let notifPayload = {
+      ok: true,
+      authenticated: true,
+      unread_count: 0,
+      ready_count: 0,
+      open_count: 1,
+      ready_requests: [],
+      open_requests: [
+        {
+          request_id: 88,
+          request_kind: "new_candidate",
+          gene_symbol: "BRAF",
+          gene_url: "/gene/BRAF",
+          created_at: "2026-11-15T10:00:00Z",
+        },
+      ],
+    }
+    const inbox = createRequestInbox({
+      fetchJSON: (url) => {
+        if (url.startsWith("/api/iconoplasm/notifications")) {
+          notifCalls += 1
+          if (deferredResolve) {
+            return new Promise((resolve) => {
+              const fn = deferredResolve
+              deferredResolve = resolve
+              if (fn !== true) fn(notifPayload)
+            })
+          }
+          return Promise.resolve(notifPayload)
+        }
+        return Promise.resolve({ ok: true, caretaker: null })
+      },
+      getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+      renderSidebar() {},
+      escapeHtml: (value) => String(value ?? ""),
+    })
+
+    inbox.start()
+    await flushMicrotasks()
+    assert.equal(notifCalls, 1)
+
+    // Returning from Discord 2.5s later fires visibilitychange + focus together;
+    // visibilitychange fetches, focus coalesces WITHOUT invalidating the in-flight fetch.
+    env.advanceMs(2500)
+    notifPayload = {
+      ok: true,
+      authenticated: true,
+      unread_count: 1,
+      ready_count: 1,
+      open_count: 0,
+      ready_requests: [
+        {
+          notification_id: 602,
+          request_id: 88,
+          request_kind: "new_candidate",
+          unread: true,
+          gene_symbol: "BRAF",
+          gene_url: "/gene/BRAF",
+          requested_emulsion_label: "Monochromatic",
+          image_url: "https://cdn.example/braf.webp",
+        },
+      ],
+      open_requests: [],
+    }
+    deferredResolve = true
+    env.triggerDocument("visibilitychange")
+    const resolveInflight = deferredResolve
+    env.advanceMs(5)
+    env.triggerWindow("focus")
+    assert.equal(notifCalls, 2)
+    deferredResolve = null
+    resolveInflight(notifPayload)
+    await flushMicrotasks()
+
+    assert.equal(env.appendedNotices.length, 1)
+    assert.equal(env.appendedNotices[0].href, "/gene/BRAF")
+    assert.match(inbox.panelMarkup(), /data-icono-request-gene-symbol="BRAF"/)
+
+    // Now idle (open_count === 0): passive focus within 30s stays throttled per B-834.
+    env.advanceMs(5000)
+    env.triggerWindow("focus")
+    await flushMicrotasks()
+    assert.equal(notifCalls, 2)
+  })
+})
