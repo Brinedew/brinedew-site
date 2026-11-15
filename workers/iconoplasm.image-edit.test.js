@@ -1714,18 +1714,12 @@ test("free ComfyUI edit models are listed for image_edit without API keys and hi
   const comfy = editList.body.supported_providers.find((p) => p.provider_id === "comfyui")
   assert.ok(comfy, "expected comfyui provider in image_edit list")
   assert.equal(comfy.free_queue, true)
-  assert.equal(comfy.default_model, "flux-2-klein-9b-kv")
+  assert.equal(comfy.default_model, "flux-3-klein")
   assert.deepEqual(
     comfy.model_options.map((m) => [m.model, m.label, m.edit_capable, m.generate_capable]),
     [
-      ["flux-2-klein-9b-kv", "(Free) FLUX.2 Klein 9B KV", true, false],
-      ["flux-2-klein-9b-base", "(Free) FLUX.2 Klein 9B Base", true, false],
-      ["flux-2-klein-4b", "(Free) FLUX.2 Klein 4B", true, false],
-      ["qwen-image-2.1-turbo", "(Free) Qwen-Image-2.1 Turbo INT8", true, false],
-      ["fibo2-edit-turbo", "(Free) FIBO 2.0 Edit Turbo", true, false],
-      ["fibo2-edit-dev", "(Free) FIBO 2.0 Edit Dev", true, false],
       ["flux-3-klein", "(Free) FLUX.3 Klein", true, false],
-      ["anima-edit-v2", "(Free) Anima Edit v3.0", true, false],
+      ["qwen-image-2.1-turbo", "(Free) Qwen-Image-2.1 Turbo", true, false],
     ],
   )
 
@@ -1800,7 +1794,7 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
           },
           body: JSON.stringify({
             provider_id: "comfyui",
-            model: "flux-2-klein-9b-kv",
+            model: "flux-3-klein",
             source_gene_symbol: "TP53",
             source_asset_sha256: ASSET.alice,
             adjustments: { remove_ai_generation_errors: true },
@@ -1814,10 +1808,10 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
     assert.equal(payload.ok, true)
     assert.equal(payload.queued, true)
     assert.equal(payload.provider_id, "comfyui")
-    assert.equal(payload.model, "flux-2-klein-9b-kv")
+    assert.equal(payload.model, "flux-3-klein")
     assert.equal(payload.request.gene_symbol, "TP53")
     assert.equal(payload.request.request_kind, "edit_image")
-    assert.equal(payload.request.requested_vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(payload.request.requested_vision_id, "comfyui-edit:flux-3-klein")
     assert.equal(payload.request.source_gene_symbol, "TP53")
     assert.equal(payload.request.source_asset_sha256, ASSET.alice)
     assert.match(payload.request.request_prompt, /Remove visible AI generation errors/)
@@ -1837,7 +1831,7 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
     assert.equal(claimed.leases.length, 1)
     const lease = claimed.leases[0]
     assert.equal(lease.request.request_kind, "edit_image")
-    assert.equal(lease.request.requested_vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(lease.request.requested_vision_id, "comfyui-edit:flux-3-klein")
     assert.equal(lease.request.source_gene_symbol, "TP53")
     assert.equal(lease.request.source_asset_sha256, ASSET.alice)
     assert.match(lease.request.request_prompt, /Remove visible AI generation errors/)
@@ -1869,13 +1863,13 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
           request_ids: [queuedRow.id],
           gene_symbol: "TP53",
           provider_id: "comfyui",
-          model_id: "flux-2-klein-9b-kv",
+          model_id: "flux-3-klein",
           prompt_sha256: "d".repeat(64),
           generation_config_sha256: queuedRow.generation_config_sha256,
           fulfilled_asset_sha256: editedSha,
-          fulfilled_vision_id: "comfyui-edit:flux-2-klein-9b-kv",
+          fulfilled_vision_id: "comfyui-edit:flux-3-klein",
           fulfilled_provider_id: "comfyui",
-          fulfilled_model_id: "flux-2-klein-9b-kv",
+          fulfilled_model_id: "flux-3-klein",
           r2_key_full: `portraits/v1/ee/${editedSha}/full.webp`,
           r2_key_medium: `portraits/v1/ee/${editedSha}/medium.webp`,
           r2_key_thumb: `portraits/v1/ee/${editedSha}/thumb.webp`,
@@ -1957,7 +1951,7 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
     assert.ok(promoted)
     assert.equal(promoted.status, "approved")
     assert.equal(promoted.autopick_eligible, 1)
-    assert.equal(promoted.vision_id, "comfyui-edit:flux-2-klein-9b-kv")
+    assert.equal(promoted.vision_id, "comfyui-edit:flux-3-klein")
     assert.equal(promoted.emulsion_id, `${sourceRowBefore.emulsion_id}-e`)
     assert.equal(promoted.created_by, OTHER_USER)
 
@@ -1980,4 +1974,77 @@ test("free ComfyUI edit queues edit_image, leases source_asset_sha256, stages ed
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test("B-1230: retired local ComfyUI models are rejected on new edit requests without silent fallback", async () => {
+  const world = await seedWorld()
+  const textSha = await sha256Hex("TP53 guardian prose for retired model test.")
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT OR IGNORE INTO icono_gene_catalog (gene_symbol, full_name)
+     VALUES ('TP53', 'tumor protein p53')`,
+  ).run()
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT OR REPLACE INTO icono_gene_texts
+       (gene_symbol, gene_id, text_id, version, text_sha256, tags, fields_json)
+     VALUES ('TP53', 'gene_tp53_0001', 'rev_tp53_0001', 1, ?, 'guardian, steel', '{}')`,
+  )
+    .bind(textSha)
+    .run()
+  const cookie = await sessionCookieFor({ user_id: OTHER_USER, username: OTHER_NAME }, world.env)
+  for (const retiredModel of [
+    "flux-2-klein-9b-kv",
+    "flux-2-klein-9b-base",
+    "flux-2-klein-4b",
+    "fibo2-edit-turbo",
+    "fibo2-edit-dev",
+    "anima-edit-v2",
+  ]) {
+    const response =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookie,
+            Origin: "https://iconoplasm.brinedew.bio",
+          },
+          body: JSON.stringify({
+            provider_id: "comfyui",
+            model: retiredModel,
+            source_gene_symbol: "TP53",
+            source_asset_sha256: ASSET.alice,
+            adjustments: { remove_ai_generation_errors: true },
+          }),
+        }),
+        world.env,
+        { waitUntil() {} },
+      )
+    assert.equal(response.status, 400, `expected 400 for retired model ${retiredModel}`)
+    const payload = await response.json()
+    assert.match(String(payload.error || ""), /no longer offered/i)
+  }
+
+  // Omitting model resolves to default flux-3-klein even without a stored preference.
+  const defaultResp =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie,
+          Origin: "https://iconoplasm.brinedew.bio",
+        },
+        body: JSON.stringify({
+          provider_id: "comfyui",
+          source_gene_symbol: "TP53",
+          source_asset_sha256: ASSET.alice,
+          adjustments: { remove_ai_generation_errors: true },
+        }),
+      }),
+      world.env,
+      { waitUntil() {} },
+    )
+  const defaultPayload = await defaultResp.json()
+  assert.equal(defaultResp.status, 200, JSON.stringify(defaultPayload))
+  assert.equal(defaultPayload.model, "flux-3-klein")
 })
