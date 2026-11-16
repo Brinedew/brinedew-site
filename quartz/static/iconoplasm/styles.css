@@ -1452,7 +1452,7 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 
 .icono-image-edit-status {
   width: auto;
-  margin: -0.25rem 0 -0.1rem;
+  margin: 0;
   padding: 0;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.82rem;
@@ -1484,6 +1484,44 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 .icono-image-edit-preview,
 .icono-image-edit-controls {
   min-width: 0;
+}
+
+.icono-image-edit-controls[hidden],
+.icono-image-edit-review-summary[hidden] {
+  display: none;
+}
+
+.icono-image-edit-review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  width: min(var(--icono-image-tile-width), 100%);
+  margin-inline: auto;
+}
+
+.icono-image-edit-review-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.24rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--dark) 22%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--light) 96%, var(--dark) 4%);
+  color: color-mix(in srgb, var(--dark) 82%, var(--secondary) 18%);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.icono-image-edit-review-chip--tone::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 70%, var(--dark) 30%);
+  background: var(--icono-context-color, transparent);
 }
 
 .icono-image-edit-artboard {
@@ -1564,8 +1602,30 @@ img-comparison-slider.rendered [slot="second"] {
   gap: 0.85rem;
 }
 
-.icono-image-edit-discard-button {
-  margin-inline-end: auto;
+.icono-image-edit-dialog[data-icono-image-edit-mode="review"] .icono-image-edit-body {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+.icono-image-edit-dialog[data-icono-image-edit-mode="review"] .icono-image-edit-preview {
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  width: 100%;
+}
+
+.icono-image-edit-dialog[data-icono-image-edit-mode="review"] .icono-image-edit-artboard {
+  margin-inline: auto;
+}
+
+.icono-image-edit-dialog[data-icono-image-edit-mode="review"] .icono-image-edit-before-after {
+  margin-top: 0;
+  margin-inline: auto;
+}
+
+.icono-image-edit-dialog[data-icono-image-edit-mode="review"] .icono-image-edit-actions {
+  justify-content: center;
+  gap: 0.75rem;
 }
 
 .icono-image-edit-dialog sl-select,

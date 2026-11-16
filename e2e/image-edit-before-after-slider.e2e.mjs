@@ -1,4 +1,4 @@
-// Regression coverage for Cluster 1:
+// Regression coverage for portrait editing workflows:
 // - B-1228: before/after image comparison slider must align "Before" and "After"
 //   images identically with zero margin shift, zero inline gap, matching shadow
 //   wrappers (.first and .second), and zero bottom clipping across desktop and
@@ -7,8 +7,13 @@
 //   (FLUX.3 Klein default + Qwen-Image-2.1 Turbo without INT8).
 // - B-1231: returning from an external tab while an order is open refreshes an
 //   initially empty Ready inbox and shows the Ready popup notice immediately.
+// - B-1232: Edit modal splits cleanly into Request mode ([Edit] only, wide) and
+//   Review mode (no request controls, centered [Discard] + [Publish] together),
+//   transitioning automatically when an open modal's edit finishes (Scenario 1)
+//   and opening directly in Review mode from the Ready inbox / ?edit_job (Scenario 2).
 // E2E scope: quartz shared/ content/apps/ scripts/prepare-iconoplasm-edge-assets.mjs !quartz/static/geneguessr/ !quartz/static/iconoplasm/admin !quartz/static/iconoplasm/caretaker-admin !workers/iconoplasm-admin !workers/iconoplasm-caretaker-admin
 import assert from "node:assert/strict"
+import { mkdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
@@ -64,21 +69,105 @@ function providersPayload() {
   }
 }
 
-function editJobPayload({ jobId, beforeUrl, afterUrl }) {
+function editJobPayload({
+  jobId,
+  beforeUrl,
+  afterUrl,
+  status = "succeeded",
+  adjustments = [
+    { kind: "surface_tone_hex", value: "#483a36" },
+    { kind: "age_years", value: 20 },
+  ],
+}) {
   return {
     ok: true,
     job: {
       id: jobId,
-      status: "succeeded",
+      status,
       provider_id: "comfyui",
       model: "flux-3-klein",
       source_gene_symbol: "TP53",
       source_asset_sha256: "a".repeat(64),
       published: false,
+      adjustments,
       source_asset: { renditions: { medium: { canonical_url: beforeUrl } } },
-      result_asset: { renditions: { medium: { canonical_url: afterUrl } } },
+      result_asset: afterUrl ? { renditions: { medium: { canonical_url: afterUrl } } } : null,
     },
   }
+}
+
+async function readDialogModeState(page) {
+  return page.evaluate(() => {
+    const dialog = document.querySelector("[data-icono-image-edit-dialog]")
+    const controls = dialog?.querySelector("[data-icono-image-edit-controls]")
+    const summary = dialog?.querySelector("[data-icono-image-edit-review-summary]")
+    const editBtn = dialog?.querySelector("[data-icono-image-edit-submit]")
+    const discardBtn = dialog?.querySelector("[data-icono-image-edit-discard]")
+    const publishBtn = dialog?.querySelector("[data-icono-image-edit-publish]")
+    const footer = dialog?.querySelector(".icono-image-edit-actions")
+    const title = dialog?.querySelector("[data-icono-dialog-title]")
+    const status = dialog?.querySelector("[data-icono-image-edit-status]")
+    const box = (el) => {
+      if (!el || !el.checkVisibility()) return null
+      const r = el.getBoundingClientRect()
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }
+    }
+    return {
+      mode: dialog?.getAttribute("data-icono-image-edit-mode") || "",
+      isWide: Boolean(dialog?.classList.contains("icono-dialog--wide")),
+      isStandard: Boolean(dialog?.classList.contains("icono-dialog--standard")),
+      title: title ? title.textContent.trim() : "",
+      status: status && !status.hidden ? status.textContent.trim() : "",
+      controlsVisible: Boolean(controls && controls.checkVisibility()),
+      summaryVisible: Boolean(summary && summary.checkVisibility()),
+      chips: summary
+        ? [...summary.querySelectorAll(".icono-image-edit-review-chip")].map((el) =>
+            el.textContent.trim(),
+          )
+        : [],
+      edit: {
+        visible: Boolean(editBtn && editBtn.checkVisibility()),
+        disabled: Boolean(editBtn && editBtn.disabled),
+        text: editBtn ? editBtn.textContent.trim() : "",
+        box: box(editBtn),
+      },
+      discard: {
+        visible: Boolean(discardBtn && discardBtn.checkVisibility()),
+        disabled: Boolean(discardBtn && discardBtn.disabled),
+        text: discardBtn ? discardBtn.textContent.trim() : "",
+        box: box(discardBtn),
+      },
+      publish: {
+        visible: Boolean(publishBtn && publishBtn.checkVisibility()),
+        disabled: Boolean(publishBtn && publishBtn.disabled),
+        text: publishBtn ? publishBtn.textContent.trim() : "",
+        box: box(publishBtn),
+      },
+      footerBox: box(footer),
+    }
+  })
+}
+
+function assertCenteredReviewFooter(state, { label, discardDisabled, publishDisabled }) {
+  assert.equal(state.mode, "review", `${label}: expected review mode`)
+  assert.equal(state.isStandard, true, `${label}: expected standard dialog width`)
+  assert.equal(state.isWide, false, `${label}: expected wide class removed`)
+  assert.equal(state.title, "Review portrait edit", `${label}: expected review title`)
+  assert.equal(state.controlsVisible, false, `${label}: editing controls must be hidden`)
+  assert.equal(state.edit.visible, false, `${label}: Edit button must be hidden`)
+  assert.equal(state.discard.visible, true, `${label}: Discard must be visible`)
+  assert.equal(state.publish.visible, true, `${label}: Publish must be visible`)
+  assert.equal(state.discard.disabled, discardDisabled, `${label}: Discard disabled mismatch`)
+  assert.equal(state.publish.disabled, publishDisabled, `${label}: Publish disabled mismatch`)
+  assert.ok(state.discard.box && state.publish.box && state.footerBox, `${label}: boxes missing`)
+  const gap = state.publish.box.left - state.discard.box.right
+  assert.ok(gap >= 4 && gap <= 20, `${label}: Discard and Publish should sit together, gap=${gap}`)
+  const pairCenter = (state.discard.box.left + state.publish.box.right) / 2
+  const footerCenter = (state.footerBox.left + state.footerBox.right) / 2
+  assert.ok(
+    Math.abs(pairCenter - footerCenter) <= 8,
+    `${label}: pairCenter=${pairCenter} not centered in footerCenter=${footerCenter}`,
+  )
 }
 
 async function measureComparisonGeometry(page) {
@@ -175,16 +264,64 @@ function assertComparisonAligned(metrics, label) {
   )
 }
 
-test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast return notification", async (t) => {
+test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, streamlined models, and fast return notification", async (t) => {
   const browser = await launchChrome(t)
   if (!browser) return
   const { server, origin } = await startSite()
+  const screenshotDir = process.env.ICONO_E2E_SCREENSHOT_DIR || ""
+  if (screenshotDir) mkdirSync(screenshotDir, { recursive: true })
   try {
     let notifPhase = "open"
+    let liveJobStatus = "queued"
     const setupContext = async (viewport) => {
       const context = await browser.newContext({ viewport })
-      await routeProduction(context, origin, (pathname) => {
+      await routeProduction(context, origin, (pathname, request) => {
         if (pathname === "/api/iconoplasm/image-edit/providers") return providersPayload()
+        if (pathname === "/api/iconoplasm/image-edit/jobs" && request.method() === "POST") {
+          return {
+            ok: true,
+            queued: true,
+            provider_id: "comfyui",
+            model: "flux-3-klein",
+            job: {
+              id: "request-live-1",
+              status: "queued",
+              published: false,
+            },
+            request: { id: 991 },
+          }
+        }
+        if (pathname === "/api/iconoplasm/image-edit/jobs/request-live-1") {
+          if (liveJobStatus === "succeeded") {
+            return editJobPayload({
+              jobId: "request-live-1",
+              beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+              afterUrl: `${HOST}/_e2e/after-384x501.svg`,
+              status: "succeeded",
+              adjustments: [
+                { kind: "remove_ai_generation_errors", text: "Remove visible AI errors" },
+              ],
+            })
+          }
+          return editJobPayload({
+            jobId: "request-live-1",
+            beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+            afterUrl: null,
+            status: "queued",
+            adjustments: [
+              { kind: "remove_ai_generation_errors", text: "Remove visible AI errors" },
+            ],
+          })
+        }
+        if (pathname === "/api/iconoplasm/image-edit/jobs/request-pending") {
+          return editJobPayload({
+            jobId: "request-pending",
+            beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+            afterUrl: null,
+            status: "running",
+            adjustments: [{ kind: "surface_tone_hex", value: "#483a36" }],
+          })
+        }
         if (pathname === "/api/iconoplasm/image-edit/jobs/request-short") {
           return editJobPayload({
             jobId: "request-short",
@@ -256,32 +393,20 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
       return context
     }
 
-    // 1. Desktop (1280x860): B-1230 dropdown options, B-1228 shorter & taller after, B-1231 return notice
+    // 1. Desktop (1280x860): Request mode + B-1230 models + Scenario 1 transition + Scenario 2 review + B-1228/B-1231
     {
       const context = await setupContext({ width: 1280, height: 860 })
       const page = await context.newPage()
-      await page.goto(`${HOST}/gene/TP53?edit_job=request-short`)
+      await page.goto(`${HOST}/gene/TP53`)
+      await page.waitForSelector("[data-icono-edit-source]", { state: "attached", timeout: 30_000 })
+      await page.$eval("[data-icono-edit-source]", (button) => button.click())
       const dialog = page.locator("#icono-image-edit-dialog")
-      await dialog.waitFor({ state: "visible", timeout: 30_000 })
+      await dialog.waitFor({ state: "visible", timeout: 20_000 })
       await page.waitForFunction(
         () => {
           const select = document.querySelector("[data-icono-image-edit-provider]")
           const opts = select ? [...select.querySelectorAll("sl-option")] : []
-          const before = document.querySelector("[data-icono-image-edit-before]")
-          const after = document.querySelector("[data-icono-image-edit-after]")
-          const slider = document.querySelector("[data-icono-image-edit-comparison]")
-          return (
-            opts.length >= 2 &&
-            Boolean(select && select.value) &&
-            slider &&
-            slider.classList.contains("rendered") &&
-            before &&
-            before.complete &&
-            before.naturalWidth > 0 &&
-            after &&
-            after.complete &&
-            after.naturalWidth > 0
-          )
+          return opts.length >= 2 && Boolean(select && select.value)
         },
         null,
         { timeout: 20_000 },
@@ -295,9 +420,6 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
         }
         return {
           value: select && select.value,
-          attr: select && select.getAttribute("value"),
-          upgraded: Boolean(customElements && customElements.get("sl-select")),
-          displayLabel: select && select.displayLabel,
           options: [...(select ? select.querySelectorAll("sl-option") : [])].map((o) => ({
             value: o.value,
             label: o.textContent.trim().replace(/\s+/g, " "),
@@ -310,13 +432,74 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
         { value: "comfyui:qwen-image-2.1-turbo", label: "(Free) Qwen-Image-2.1 Turbo" },
       ])
 
-      const shortMetrics = await measureComparisonGeometry(page)
-      assertComparisonAligned(shortMetrics, "desktop 384x512 vs 384x501")
-      if (process.env.ICONO_E2E_SCREENSHOT_DIR) {
-        await page.locator("[data-icono-image-edit-comparison]").screenshot({
-          path: path.join(process.env.ICONO_E2E_SCREENSHOT_DIR, "after-desktop-short.png"),
-        })
+      const requestState = await readDialogModeState(page)
+      assert.equal(requestState.mode, "request")
+      assert.equal(requestState.isWide, true)
+      assert.equal(requestState.controlsVisible, true)
+      assert.equal(requestState.summaryVisible, false)
+      assert.equal(requestState.edit.visible, true)
+      assert.equal(requestState.edit.disabled, true)
+      assert.equal(requestState.discard.visible, false)
+      assert.equal(requestState.publish.visible, false)
+
+      await page.locator('[data-icono-image-edit-adjustment="remove_ai_generation_errors"]').click()
+      await page.waitForFunction(
+        () => {
+          const btn = document.querySelector("[data-icono-image-edit-submit]")
+          return Boolean(btn && !btn.disabled)
+        },
+        null,
+        { timeout: 10_000 },
+      )
+      if (screenshotDir) {
+        await page.waitForTimeout(300)
+        await dialog.screenshot({ path: path.join(screenshotDir, "request-desktop.png") })
       }
+
+      // Scenario 1: submit queued free edit and keep modal open until it completes
+      await page.locator("[data-icono-image-edit-submit]").click()
+      await page.waitForFunction(
+        () => {
+          const status = document.querySelector("[data-icono-image-edit-status]")
+          return Boolean(status && !status.hidden && /queued/i.test(status.textContent || ""))
+        },
+        null,
+        { timeout: 10_000 },
+      )
+      const whileQueuedState = await readDialogModeState(page)
+      assert.equal(whileQueuedState.mode, "request")
+      assert.equal(whileQueuedState.discard.visible, false)
+      assert.equal(whileQueuedState.publish.visible, false)
+
+      liveJobStatus = "succeeded"
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+      await page.waitForFunction(
+        () => {
+          const dlg = document.querySelector("[data-icono-image-edit-dialog]")
+          const slider = document.querySelector("[data-icono-image-edit-comparison]")
+          const before = document.querySelector("[data-icono-image-edit-before]")
+          const after = document.querySelector("[data-icono-image-edit-after]")
+          return (
+            dlg?.getAttribute("data-icono-image-edit-mode") === "review" &&
+            slider &&
+            slider.classList.contains("rendered") &&
+            before?.complete &&
+            before.naturalWidth > 0 &&
+            after?.complete &&
+            after.naturalWidth > 0
+          )
+        },
+        null,
+        { timeout: 20_000 },
+      )
+      const scenario1State = await readDialogModeState(page)
+      assertCenteredReviewFooter(scenario1State, {
+        label: "scenario 1 open-modal transition",
+        discardDisabled: false,
+        publishDisabled: false,
+      })
+      assert.equal(scenario1State.summaryVisible, true)
+      assert.deepEqual(scenario1State.chips, ["Remove visible AI errors"])
 
       // Close dialog and test B-1231 fast return from Discord (<30s, >2s) while an order is waiting
       await page.keyboard.press("Escape")
@@ -333,6 +516,66 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
       await page.waitForSelector('[data-icono-request-tab="ready"][aria-selected="true"]', {
         timeout: 10_000,
       })
+
+      // Scenario 2 (pending edit opened directly): both Discard and Publish visible & disabled together
+      await page.goto(`${HOST}/gene/TP53?edit_job=request-pending`)
+      await dialog.waitFor({ state: "visible", timeout: 30_000 })
+      await page.waitForFunction(
+        () => {
+          const status = document.querySelector("[data-icono-image-edit-status]")
+          return Boolean(status && !status.hidden && /still queued/i.test(status.textContent || ""))
+        },
+        null,
+        { timeout: 15_000 },
+      )
+      const pendingState = await readDialogModeState(page)
+      assertCenteredReviewFooter(pendingState, {
+        label: "scenario 2 pending review",
+        discardDisabled: true,
+        publishDisabled: true,
+      })
+      assert.deepEqual(pendingState.chips, ["Surface tone · #483a36"])
+      if (screenshotDir) {
+        await page.waitForTimeout(300)
+        await dialog.screenshot({ path: path.join(screenshotDir, "review-pending-desktop.png") })
+      }
+
+      // Scenario 2 (ready edit opened via ?edit_job=request-short): aligned slider + centered footer
+      await page.goto(`${HOST}/gene/TP53?edit_job=request-short`)
+      await dialog.waitFor({ state: "visible", timeout: 30_000 })
+      await page.waitForFunction(
+        () => {
+          const before = document.querySelector("[data-icono-image-edit-before]")
+          const after = document.querySelector("[data-icono-image-edit-after]")
+          const slider = document.querySelector("[data-icono-image-edit-comparison]")
+          return (
+            slider &&
+            slider.classList.contains("rendered") &&
+            before &&
+            before.complete &&
+            before.naturalWidth > 0 &&
+            after &&
+            after.complete &&
+            after.naturalWidth > 0
+          )
+        },
+        null,
+        { timeout: 20_000 },
+      )
+      const reviewShortState = await readDialogModeState(page)
+      assertCenteredReviewFooter(reviewShortState, {
+        label: "scenario 2 ready desktop short",
+        discardDisabled: false,
+        publishDisabled: false,
+      })
+      assert.equal(reviewShortState.summaryVisible, true)
+      assert.deepEqual(reviewShortState.chips, ["Surface tone · #483a36", "Age · 20 years"])
+      const shortMetrics = await measureComparisonGeometry(page)
+      assertComparisonAligned(shortMetrics, "desktop 384x512 vs 384x501")
+      if (screenshotDir) {
+        await page.waitForTimeout(300)
+        await dialog.screenshot({ path: path.join(screenshotDir, "review-desktop-short.png") })
+      }
 
       // Also check taller-after case
       notifPhase = "open"
@@ -359,15 +602,10 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
       )
       const tallMetrics = await measureComparisonGeometry(page)
       assertComparisonAligned(tallMetrics, "desktop 880x1100 vs 880x1200")
-      if (process.env.ICONO_E2E_SCREENSHOT_DIR) {
-        await page.locator("[data-icono-image-edit-comparison]").screenshot({
-          path: path.join(process.env.ICONO_E2E_SCREENSHOT_DIR, "after-desktop-tall.png"),
-        })
-      }
       await context.close()
     }
 
-    // 2. Phone (400x820): B-1228 alignment at narrow width
+    // 2. Phone (400x820): B-1228 alignment & B-1232 review footer at narrow width
     {
       const context = await setupContext({ width: 400, height: 820 })
       const page = await context.newPage()
@@ -393,12 +631,17 @@ test("B-1228/B-1230/B-1231: slider geometry, streamlined edit models, and fast r
         null,
         { timeout: 20_000 },
       )
+      const phoneState = await readDialogModeState(page)
+      assertCenteredReviewFooter(phoneState, {
+        label: "phone 400x820",
+        discardDisabled: false,
+        publishDisabled: false,
+      })
       const phoneMetrics = await measureComparisonGeometry(page)
       assertComparisonAligned(phoneMetrics, "phone 400x820")
-      if (process.env.ICONO_E2E_SCREENSHOT_DIR) {
-        await page.locator("[data-icono-image-edit-comparison]").screenshot({
-          path: path.join(process.env.ICONO_E2E_SCREENSHOT_DIR, "after-phone-short.png"),
-        })
+      if (screenshotDir) {
+        await page.waitForTimeout(300)
+        await dialog.screenshot({ path: path.join(screenshotDir, "review-phone-short.png") })
       }
       await context.close()
     }
