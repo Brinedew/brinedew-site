@@ -437,6 +437,91 @@ test("a one-style order is drawn before the rest of a big order queued ahead of 
   )
 })
 
+// B-1251: an edit_image request takes queue_turn 0 so it jumps ahead of the
+// requester's own bulk new_candidate backlog without distorting future turns.
+test("an edit_image request gets turn 0 and is claimed ahead of open new_candidate requests", async (t) => {
+  const { db, raw } = watchedDatabase()
+  t.after(() => raw.close())
+  await writeFactoryGeneText(
+    { ICONOPLASM_DB: db, ...fakeBunnyStorage(t).env },
+    { symbol: "CA3", text: "A carbonic anhydrase.", tags: "zinc" },
+  )
+  const sourceSha = "a".repeat(64)
+  raw
+    .prepare(
+      `INSERT INTO icono_portrait_assets (
+         gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb,
+         mime, status, vision_id, emulsion_id
+       ) VALUES ('CA3', ?, ?, ?, ?, 'image/webp', 'approved', 'anima-v1-1', 'D1-1')`,
+    )
+    .run(
+      sourceSha,
+      `portraits/v1/aa/${sourceSha}/full.webp`,
+      `portraits/v1/aa/${sourceSha}/medium.webp`,
+      `portraits/v1/aa/${sourceSha}/thumb.webp`,
+    )
+
+  const backlogStyles = Array.from({ length: 12 }, (_, index) => `anima-v1-${index + 1}`)
+  const backlog = await order(
+    db,
+    { symbol: "CA3", requested_vision_ids: backlogStyles, client_batch_id: "reader-a-bulk" },
+    "reader-a",
+  )
+  assert.equal(backlog.status, 200, JSON.stringify(backlog.payload))
+
+  const editRes = await handleApi(
+    new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: await sessionCookieFor({ user_id: "reader-a", username: "reader-a" }),
+      },
+      body: JSON.stringify({
+        provider_id: "comfyui",
+        model: "flux-3-klein",
+        source_gene_symbol: "CA3",
+        source_asset_sha256: sourceSha,
+        adjustments: { remove_ai_generation_errors: true },
+      }),
+    }),
+    { ICONOPLASM_DB: db, SESSION_SECRET: TEST_SESSION_SECRET },
+    { waitUntil() {} },
+  )
+  const editBody = await editRes.json()
+  assert.equal(editRes.status, 200, JSON.stringify(editBody))
+  assert.equal(editBody.request.request_kind, "edit_image")
+
+  const editRow = raw
+    .prepare("SELECT id, request_kind, queue_turn FROM icono_generation_requests WHERE id = ?")
+    .get(editBody.request.id)
+  assert.equal(editRow.queue_turn, 0)
+
+  // Another new_candidate from reader-b still takes turn > 0 ahead of reader-a's tail,
+  // unaffected by turn-0 edit_image rows.
+  const readerB = await order(
+    db,
+    { symbol: "CA3", requested_vision_ids: ["anima-v1-13"], client_batch_id: "reader-b-one" },
+    "reader-b",
+  )
+  assert.equal(readerB.status, 200, JSON.stringify(readerB.payload))
+  const readerBRow = raw
+    .prepare(
+      "SELECT queue_turn FROM icono_generation_requests WHERE requester_user_id = 'reader-b'",
+    )
+    .get()
+  assert.equal(readerBRow.queue_turn, 2)
+
+  // The very next Drain claim pops the edit_image request first.
+  const claim = await generationRequestLeaseClaim(
+    { ICONOPLASM_DB: db, ICONOPLASM_FULFILLMENT_DM_DELIVERY_MODE: "all_requesters" },
+    { limit: 3, leaseOwnerId: "drain-test" },
+  )
+  assert.equal(claim.blocked_count, 0, JSON.stringify(claim.blocked_rows))
+  assert.equal(claim.leases.length, 3)
+  assert.equal(claim.leases[0].request.request_id, editBody.request.id)
+  assert.equal(claim.leases[0].request.request_kind, "edit_image")
+})
+
 // The Drain asks the site about the queue once a minute. Each question used to
 // read every waiting request twice, so about 1,750 waiting requests spent
 // Cloudflare's whole 5M daily reads on polling alone (B-1146).

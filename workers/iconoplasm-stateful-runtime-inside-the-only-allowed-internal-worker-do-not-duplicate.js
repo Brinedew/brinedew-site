@@ -3507,7 +3507,9 @@ async function prepareGenerationRequest(
                -- The fair turn (B-1146): just behind the queue's head for a reader
                -- with nothing waiting, else after the reader's own last turn. An
                -- order's rows insert one by one in a batch, so each sees the last.
-               CASE WHEN ? = 'diagnostic_matrix' THEN 0 ELSE 1 + MAX(
+               -- Edits (B-1251) hold turn 0 alongside diagnostics so interactive
+               -- portrait corrections jump to the head instead of sitting behind bulk queues.
+               CASE WHEN ? = 'diagnostic_matrix' OR ? = 'edit_image' THEN 0 ELSE 1 + MAX(
                  COALESCE((
                    SELECT queue_turn FROM icono_generation_requests
                    INDEXED BY idx_icono_generation_requests_waiting_turn
@@ -3583,6 +3585,7 @@ async function prepareGenerationRequest(
     requestContractHash,
     generationConfigHash,
     origin,
+    kind,
     requesterNorm,
     joinOrder ? batchIdNorm : "",
     requesterNorm,
