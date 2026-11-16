@@ -253,3 +253,153 @@ export function buildImageEditProviderOptions({
   }
   return { options, selectedValue }
 }
+
+function normalizeAdjustmentHex(value) {
+  const hex = String(value || "").trim()
+  return /^#[0-9a-f]{3,8}$/i.test(hex) ? hex : ""
+}
+
+function formatOneAdjustmentChip(kind, value, text) {
+  const cleanKind = String(kind || "").trim()
+  if (!cleanKind) return null
+  if (cleanKind === "remove_ai_generation_errors") {
+    return { kind: cleanKind, label: "Remove visible AI errors", toneHex: "" }
+  }
+  if (cleanKind === "sex") {
+    const clean = String(value || "").trim()
+    if (!clean) return null
+    return { kind: cleanKind, label: "Sex · " + clean, toneHex: "" }
+  }
+  if (cleanKind === "age_years") {
+    if (value == null || value === "") return null
+    return { kind: cleanKind, label: "Age · " + String(value) + " years", toneHex: "" }
+  }
+  if (cleanKind === "mass_kg") {
+    if (value == null || value === "") return null
+    return { kind: cleanKind, label: "Mass · " + String(value) + " kg", toneHex: "" }
+  }
+  if (cleanKind === "surface_tone_hex") {
+    const clean = String(value || "").trim()
+    const toneHex = normalizeAdjustmentHex(clean)
+    if (!clean && !toneHex) return null
+    return { kind: cleanKind, label: "Surface tone · " + (toneHex || clean), toneHex }
+  }
+  if (cleanKind === "fantastical_feature") {
+    const clean = String(value || "").trim()
+    const isRemoval = !clean || /remove all fantastical/i.test(clean)
+    return {
+      kind: cleanKind,
+      label: isRemoval ? "Remove fantastical features" : "Feature · " + clean,
+      toneHex: "",
+    }
+  }
+  if (cleanKind === "fashion_styles") {
+    const list = Array.isArray(value)
+      ? value.map((item) => String(item || "").trim()).filter(Boolean)
+      : String(value || "")
+          .split(/\s*\+\s*|\s*,\s*/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+    if (!list.length) return null
+    return { kind: cleanKind, label: "Style mix · " + list.join(" + "), toneHex: "" }
+  }
+  const fallbackText = String(value || text || "").trim()
+  return {
+    kind: cleanKind,
+    label: fallbackText ? cleanKind + " · " + fallbackText : cleanKind,
+    toneHex: "",
+  }
+}
+
+/**
+ * Formats stored job.adjustments into read-only summary chip descriptors
+ * for Review mode so caretakers can verify what produced the edit without
+ * re-exposing the interactive request form.
+ */
+export function formatImageEditAdjustmentChips(adjustments) {
+  const chips = []
+  if (Array.isArray(adjustments)) {
+    for (const entry of adjustments) {
+      if (!entry || typeof entry !== "object") continue
+      const chip = formatOneAdjustmentChip(entry.kind, entry.value, entry.text)
+      if (chip) chips.push(chip)
+    }
+    return chips
+  }
+  if (adjustments && typeof adjustments === "object") {
+    for (const [kind, value] of Object.entries(adjustments)) {
+      if (value === false || value == null) continue
+      const chip = formatOneAdjustmentChip(kind, value, "")
+      if (chip) chips.push(chip)
+    }
+  }
+  return chips
+}
+
+/**
+ * Derives visibility, sizing, disabled state, and labels for every control in
+ * the portrait edit modal across its two distinct modes:
+ * - "request": two-column editor with [Edit] only
+ * - "review": single-column before/after review with centered [Discard] + [Publish]
+ */
+export function resolveImageEditDialogUiState({
+  mode = "request",
+  job = null,
+  loading = false,
+  discarding = false,
+  publishing = false,
+  encryptionConfigured = false,
+  isFreeProvider = false,
+  hasSelectedProvider = false,
+  hasAdjustment = false,
+} = {}) {
+  const normalizedMode = mode === "review" ? "review" : "request"
+  if (normalizedMode === "request") {
+    return {
+      mode: "request",
+      dialogSize: "wide",
+      controlsHidden: false,
+      reviewSummaryHidden: true,
+      editHidden: false,
+      editDisabled: Boolean(
+        loading ||
+        (!encryptionConfigured && !isFreeProvider) ||
+        !hasSelectedProvider ||
+        !hasAdjustment,
+      ),
+      editLabel: loading && !discarding ? (isFreeProvider ? "Queueing..." : "Editing...") : "Edit",
+      discardHidden: true,
+      discardDisabled: true,
+      discardLabel: "Discard",
+      publishHidden: true,
+      publishDisabled: true,
+      publishLabel: "Publish",
+    }
+  }
+
+  const jobStatus = String((job && job.status) || "")
+    .trim()
+    .toLowerCase()
+  const isPublished = Boolean(job && job.published)
+  const canDiscard = Boolean(
+    job && !isPublished && (jobStatus === "succeeded" || jobStatus === "failed"),
+  )
+  const canPublish = Boolean(job && !isPublished && jobStatus === "succeeded")
+  const isPublishing = Boolean(publishing || (loading && !discarding && canPublish))
+
+  return {
+    mode: "review",
+    dialogSize: "standard",
+    controlsHidden: true,
+    reviewSummaryHidden: false,
+    editHidden: true,
+    editDisabled: true,
+    editLabel: "Edit",
+    discardHidden: false,
+    discardDisabled: Boolean(loading || !canDiscard),
+    discardLabel: discarding ? "Discarding..." : "Discard",
+    publishHidden: false,
+    publishDisabled: Boolean(loading || !canPublish),
+    publishLabel: isPublishing ? "Publishing..." : "Publish",
+  }
+}

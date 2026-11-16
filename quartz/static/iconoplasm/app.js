@@ -50,9 +50,11 @@ import {
 import {
   buildImageEditProviderOptions,
   createImageEditJobWatcher,
+  formatImageEditAdjustmentChips,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
-} from "./image-edit-dialog-live.js?v=6891c21b3e60c734"
+  resolveImageEditDialogUiState,
+} from "./image-edit-dialog-live.js?v=9a7a8b811985b60d"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
@@ -6879,6 +6881,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   var imageEditDialogState = {
     dialog: null,
+    mode: "request",
     source: null,
     providers: [],
     supportedProviders: [],
@@ -6886,6 +6889,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     job: null,
     loading: false,
     discarding: false,
+    publishing: false,
     encryptionConfigured: false,
     sessionVersion: 0,
   }
@@ -6906,6 +6910,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (!imageEditDialogState.dialog || !imageEditDialogState.dialog.open) return
       imageEditDialogState.job = job
       imageEditDialogState.loading = false
+      setImageEditDialogMode("review")
+      setDialogTitle(imageEditDialogState.dialog, "Review portrait edit")
+      renderImageEditReviewSummary(job)
       showImageEditResult(job, imageEditDialogState.source || {})
       updateImageEditButtons()
       void requestInbox.refresh()
@@ -6918,6 +6925,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // its "last used" marker.
     imageEditJobWatcher.stop()
     imageEditDialogState.sessionVersion += 1
+    imageEditDialogState.mode = "request"
     imageEditDialogState.source = null
     imageEditDialogState.providers = []
     imageEditDialogState.supportedProviders = []
@@ -6925,10 +6933,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
     imageEditDialogState.discarding = false
+    imageEditDialogState.publishing = false
     imageEditDialogState.encryptionConfigured = false
     var dialog = imageEditDialogState.dialog
     if (!dialog) return
     if (dialog.open) dialog.close()
+    setImageEditDialogMode("request")
+    renderImageEditReviewSummary(null)
     renderImageEditProviders()
   }
 
@@ -6938,11 +6949,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       title: "Edit portrait",
       size: "wide",
       className: "icono-image-edit-dialog",
-      attributes: "data-icono-image-edit-dialog",
+      attributes: 'data-icono-image-edit-dialog data-icono-image-edit-mode="request"',
       body:
         '<div class="icono-image-edit-shell">' +
+        '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
         '<div class="icono-image-edit-body">' +
         '<section class="icono-image-edit-preview">' +
+        '<div class="icono-image-edit-review-summary" data-icono-image-edit-review-summary aria-label="Applied adjustments" hidden></div>' +
         '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source portrait" loading="eager"></div>' +
         '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
         '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
@@ -6952,9 +6965,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</img-comparison-slider>" +
         "</div>" +
         "</section>" +
-        '<section class="icono-image-edit-controls">' +
+        '<section class="icono-image-edit-controls" data-icono-image-edit-controls>' +
         '<sl-select label="Editing API" hoist data-icono-image-edit-provider></sl-select>' +
-        '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
         '<section class="icono-image-edit-adjustments" aria-label="Adjustments">' +
         '<div class="icono-image-edit-adjustment-row icono-image-edit-adjustment-row--solo" data-icono-image-edit-adjustment-row="remove_ai_generation_errors"><sl-checkbox data-icono-image-edit-adjustment="remove_ai_generation_errors">Remove visible AI errors</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="remove_ai_generation_errors">Uses the source portrait only</span></div>' +
         '<div class="icono-image-edit-adjustment-row" data-icono-image-edit-adjustment-row="sex"><sl-checkbox data-icono-image-edit-adjustment="sex">Sex</sl-checkbox><span class="icono-image-edit-adjustment-value" data-icono-image-edit-adjustment-value="sex"></span></div>' +
@@ -6969,9 +6981,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         "</div>",
       footerClass: "icono-image-edit-actions",
       footer:
-        '<button type="button" class="icono-button icono-button--danger icono-image-edit-action-button icono-image-edit-discard-button" data-icono-image-edit-discard hidden>Discard</button>' +
+        '<button type="button" class="icono-button icono-button--danger icono-image-edit-action-button icono-image-edit-discard-button" data-icono-image-edit-discard hidden disabled>Discard</button>' +
         '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-submit disabled>Edit</button>' +
-        '<button type="button" class="icono-button icono-image-edit-action-button" data-icono-image-edit-publish disabled>Publish</button>',
+        '<button type="button" class="icono-button icono-button--primary icono-image-edit-action-button" data-icono-image-edit-publish hidden disabled>Publish</button>',
     })
   }
 
@@ -7026,53 +7038,78 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return false
   }
 
+  function setImageEditDialogMode(mode) {
+    var nextMode = mode === "review" ? "review" : "request"
+    imageEditDialogState.mode = nextMode
+    var dialog = ensureImageEditDialog()
+    dialog.setAttribute("data-icono-image-edit-mode", nextMode)
+    dialog.classList.toggle("icono-dialog--wide", nextMode === "request")
+    dialog.classList.toggle("icono-dialog--standard", nextMode === "review")
+    var controls = dialog.querySelector("[data-icono-image-edit-controls]")
+    if (controls) controls.hidden = nextMode !== "request"
+    var summary = dialog.querySelector("[data-icono-image-edit-review-summary]")
+    if (summary && nextMode !== "review") summary.hidden = true
+  }
+
+  function renderImageEditReviewSummary(job) {
+    var dialog = ensureImageEditDialog()
+    var summary = dialog.querySelector("[data-icono-image-edit-review-summary]")
+    if (!summary) return
+    var chips = formatImageEditAdjustmentChips(job && job.adjustments)
+    if (imageEditDialogState.mode !== "review" || !chips.length) {
+      summary.innerHTML = ""
+      summary.hidden = true
+      return
+    }
+    summary.innerHTML = chips
+      .map(function (chip) {
+        var toneAttr = chip.toneHex
+          ? ' style="--icono-context-color:' + esc(chip.toneHex) + '"'
+          : ""
+        var cls =
+          "icono-image-edit-review-chip" +
+          (chip.toneHex ? " icono-image-edit-review-chip--tone" : "")
+        return '<span class="' + cls + '"' + toneAttr + ">" + esc(chip.label) + "</span>"
+      })
+      .join("")
+    summary.hidden = false
+  }
+
   function updateImageEditButtons() {
     var dialog = ensureImageEditDialog()
+    var controls = dialog.querySelector("[data-icono-image-edit-controls]")
     var discardButton = dialog.querySelector("[data-icono-image-edit-discard]")
     var editButton = dialog.querySelector("[data-icono-image-edit-submit]")
     var publishButton = dialog.querySelector("[data-icono-image-edit-publish]")
-    var isFree = isSelectedImageEditProviderFree()
+    var ui = resolveImageEditDialogUiState({
+      mode: imageEditDialogState.mode,
+      job: imageEditDialogState.job,
+      loading: imageEditDialogState.loading,
+      discarding: imageEditDialogState.discarding,
+      publishing: imageEditDialogState.publishing,
+      encryptionConfigured: imageEditDialogState.encryptionConfigured,
+      isFreeProvider: isSelectedImageEditProviderFree(),
+      hasSelectedProvider: Boolean(imageEditSelectedProvider()),
+      hasAdjustment: imageEditHasAdjustment(),
+    })
+    dialog.setAttribute("data-icono-image-edit-mode", ui.mode)
+    dialog.classList.toggle("icono-dialog--wide", ui.dialogSize === "wide")
+    dialog.classList.toggle("icono-dialog--standard", ui.dialogSize === "standard")
+    if (controls) controls.hidden = ui.controlsHidden
     if (discardButton) {
-      var canDiscard = Boolean(
-        imageEditDialogState.job &&
-        !imageEditDialogState.job.published &&
-        (imageEditDialogState.job.status === "succeeded" ||
-          imageEditDialogState.job.status === "failed"),
-      )
-      discardButton.hidden = !canDiscard
-      discardButton.disabled = imageEditDialogState.loading || !canDiscard
-      discardButton.textContent = imageEditDialogState.discarding ? "Discarding..." : "Discard"
+      discardButton.hidden = ui.discardHidden
+      discardButton.disabled = ui.discardDisabled
+      discardButton.textContent = ui.discardLabel
     }
     if (editButton) {
-      editButton.disabled =
-        imageEditDialogState.loading ||
-        (!imageEditDialogState.encryptionConfigured && !isFree) ||
-        !imageEditSelectedProvider() ||
-        !imageEditHasAdjustment()
-      editButton.textContent =
-        imageEditDialogState.loading && !imageEditDialogState.discarding
-          ? isFree
-            ? "Queueing..."
-            : "Editing..."
-          : "Edit"
+      editButton.hidden = ui.editHidden
+      editButton.disabled = ui.editDisabled
+      editButton.textContent = ui.editLabel
     }
     if (publishButton) {
-      var shouldShowPublish =
-        imageEditDialogState.job &&
-        imageEditDialogState.job.status === "succeeded" &&
-        !imageEditDialogState.job.published
-      // The next step wears the primary style: Edit until a result exists, then Publish.
-      publishButton.classList.toggle("icono-button--primary", !!shouldShowPublish)
-      if (editButton) editButton.classList.toggle("icono-button--primary", !shouldShowPublish)
-      publishButton.disabled =
-        imageEditDialogState.loading ||
-        !imageEditDialogState.job ||
-        imageEditDialogState.job.status !== "succeeded" ||
-        imageEditDialogState.job.published
-      publishButton.textContent =
-        imageEditDialogState.loading && !imageEditDialogState.discarding
-          ? "Publishing..."
-          : "Publish"
+      publishButton.hidden = ui.publishHidden
+      publishButton.disabled = ui.publishDisabled
+      publishButton.textContent = ui.publishLabel
     }
   }
 
@@ -7377,6 +7414,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.source = source
     imageEditDialogState.job = null
     imageEditDialogState.loading = false
+    imageEditDialogState.discarding = false
+    imageEditDialogState.publishing = false
+    setImageEditDialogMode("request")
+    renderImageEditReviewSummary(null)
     clearImageEditComparisonPreview(dialog)
     var sourceImg = dialog.querySelector("[data-icono-image-edit-source-img]")
     var sourceViewer = dialog.querySelector("[data-icono-image-edit-source-viewer]")
@@ -7448,7 +7489,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (sourceViewer) sourceViewer.hidden = false
     if (result) result.hidden = true
     imageEditDialogState.loading = true
+    imageEditDialogState.discarding = false
+    imageEditDialogState.publishing = false
     imageEditDialogState.job = null
+    setImageEditDialogMode("request")
+    renderImageEditReviewSummary(null)
     updateImageEditButtons()
     imageEditSetStatus(
       isSelectedImageEditProviderFree() ? "Queueing free edit..." : "Editing portrait...",
@@ -7496,10 +7541,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           imageEditDialogState.loading = false
           imageEditDialogState.job = queuedJob
           imageEditSetStatus(
-            String(
-              payload.message ||
-                "Free edit queued for the workstation. You will be notified in your Request Inbox when it finishes.",
-            ),
+            "Free edit queued for the workstation. Keep this window open to review when ready, or check your Request Inbox later.",
             "success",
           )
           void requestInbox.refresh()
@@ -7515,6 +7557,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         var job = payload && payload.job
         imageEditDialogState.job = job
         imageEditDialogState.loading = false
+        if (job && job.status === "succeeded") {
+          setImageEditDialogMode("review")
+          setDialogTitle(dialog, "Review portrait edit")
+          renderImageEditReviewSummary(job)
+        }
         showImageEditResult(job, source)
         updateImageEditButtons()
       })
@@ -7575,10 +7622,13 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
     if (sourceViewer) sourceViewer.hidden = true
     if (result) result.hidden = false
-    imageEditSetStatus(
-      job.published ? "Edit already published." : "Edit ready to publish.",
-      "success",
-    )
+    if (job.published) {
+      imageEditSetStatus("Edit already published.", "success")
+    } else if (imageEditDialogState.mode === "review") {
+      imageEditSetStatus("", "")
+    } else {
+      imageEditSetStatus("Edit ready to publish.", "success")
+    }
   }
 
   function openImageEditJobDialog(jobId, options) {
@@ -7617,6 +7667,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     imageEditDialogState.source = initialSource
     imageEditDialogState.job = null
     imageEditDialogState.loading = true
+    imageEditDialogState.discarding = false
+    imageEditDialogState.publishing = false
+    setImageEditDialogMode("review")
+    renderImageEditReviewSummary(null)
     setDialogTitle(dialog, "Review portrait edit")
     if (sourceImg && initialSource.image_url) {
       portraitDelivery.bind(sourceImg, initialSource.image_url)
@@ -7624,10 +7678,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (sourceViewer) sourceViewer.hidden = false
     if (result) result.hidden = true
     imageEditSetStatus("Loading edit...", "")
-    renderImageEditContext(initialSource)
     updateImageEditButtons()
     openDialog(dialog)
-    loadImageEditProviders({ preserveStatus: true })
     fetchAuthedJSON("/api/iconoplasm/image-edit/jobs/" + encodeURIComponent(cleanJobId))
       .then(function (payload) {
         if (openSessionVersion !== imageEditDialogState.sessionVersion) return
@@ -7662,18 +7714,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           ),
           width: Number((matchingCandidate && matchingCandidate.width) || 0),
           height: Number((matchingCandidate && matchingCandidate.height) || 0),
-          adjustments: cachedGene
-            ? imageEditSourceAdjustmentContext(
-                cachedGene,
-                matchingCandidate || cachedGene.portrait || {},
-              )
-            : {},
+          adjustments: {},
         }
         imageEditDialogState.source = source
         imageEditDialogState.job = job
         imageEditDialogState.loading = false
-        renderImageEditContext(source)
-        applyImageEditModelConstraints()
+        renderImageEditReviewSummary(job)
         if (sourceImg) {
           var syncJobSourceRatio = function () {
             if (!source.width && sourceImg.naturalWidth > 0) source.width = sourceImg.naturalWidth
@@ -7699,36 +7745,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           showImageEditResult(job, source)
         }
         updateImageEditButtons()
-        if (symbol && !cachedGene) {
-          fetchGeneDetail(symbol)
-            .then(function (genePayload) {
-              if (!genePayload || openSessionVersion !== imageEditDialogState.sessionVersion) return
-              var activeJob = imageEditDialogState.job || job
-              var candidate = Array.isArray(genePayload.portrait_candidates)
-                ? genePayload.portrait_candidates.find(function (item) {
-                    return normalizedAssetSha(item && item.asset_sha256) === sourceSha
-                  }) || null
-                : null
-              source.adjustments = imageEditSourceAdjustmentContext(
-                genePayload,
-                candidate || genePayload.portrait || {},
-              )
-              if (imageEditDialogState.dialog && imageEditDialogState.dialog.open) {
-                var wasShowingResult = result && !result.hidden && activeJob.status === "succeeded"
-                renderImageEditContext(source)
-                applyImageEditModelConstraints()
-                if (wasShowingResult) {
-                  imageEditSetStatus(
-                    activeJob.published ? "Edit already published." : "Edit ready to publish.",
-                    "success",
-                  )
-                } else if (isImageEditJobPendingStatus(activeJob.status)) {
-                  imageEditSetStatus("Free edit is still queued for the workstation.", "")
-                }
-              }
-            })
-            .catch(function () {})
-        }
       })
       .catch(function (error) {
         if (openSessionVersion !== imageEditDialogState.sessionVersion) return
@@ -7810,6 +7826,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var state = imageEditDialogState
     if (!state.job || !state.job.id) return
     state.loading = true
+    state.publishing = true
     updateImageEditButtons()
     imageEditSetStatus("Publishing candidate portrait...", "")
     fetchAuthedJSON(
@@ -7821,6 +7838,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       .then(function (payload) {
         state.job = payload && payload.job ? payload.job : state.job
         state.loading = false
+        state.publishing = false
         updateImageEditButtons()
         seedPublisherVoteSnapshotAfterImageEditPublish(payload)
         void requestInbox.refresh()
@@ -7849,6 +7867,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       })
       .catch(function (error) {
         state.loading = false
+        state.publishing = false
         if (error && error.payload && error.payload.job) state.job = error.payload.job
         imageEditSetStatus(
           publishFailureMessage(error, "Could not publish edit.", "edited image"),
@@ -7892,6 +7911,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       imageEditDialogState.sessionVersion += 1
       imageEditDialogState.loading = false
       imageEditDialogState.discarding = false
+      imageEditDialogState.publishing = false
     })
     dialog.addEventListener("change", function (event) {
       if (event.target && event.target.matches("[data-icono-image-edit-provider]")) {

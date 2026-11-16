@@ -5,8 +5,10 @@ import {
   buildImageEditProviderOptions,
   createImageEditJobWatcher,
   formatFreeImageEditModelLabel,
+  formatImageEditAdjustmentChips,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
+  resolveImageEditDialogUiState,
 } from "./image-edit-dialog-live.js"
 
 function createFakeTimers() {
@@ -250,4 +252,128 @@ test("buildImageEditProviderOptions puts free models first and prefixes labels w
     ],
   )
   assert.equal(built.selectedValue, "openai:gpt-image-1.5")
+})
+
+test("formatImageEditAdjustmentChips formats stored job adjustments for Review mode", () => {
+  assert.deepEqual(
+    formatImageEditAdjustmentChips([
+      { kind: "remove_ai_generation_errors", text: "..." },
+      { kind: "sex", value: "female" },
+      { kind: "age_years", value: 20 },
+      { kind: "mass_kg", value: 25.6 },
+      { kind: "surface_tone_hex", value: "#483a36" },
+      {
+        kind: "fantastical_feature",
+        value: "remove all fantastical features, restore human anatomy",
+      },
+      { kind: "fantastical_feature", value: "wings" },
+      { kind: "fashion_styles", value: ["baroque", "cyberpunk"] },
+    ]),
+    [
+      { kind: "remove_ai_generation_errors", label: "Remove visible AI errors", toneHex: "" },
+      { kind: "sex", label: "Sex · female", toneHex: "" },
+      { kind: "age_years", label: "Age · 20 years", toneHex: "" },
+      { kind: "mass_kg", label: "Mass · 25.6 kg", toneHex: "" },
+      { kind: "surface_tone_hex", label: "Surface tone · #483a36", toneHex: "#483a36" },
+      { kind: "fantastical_feature", label: "Remove fantastical features", toneHex: "" },
+      { kind: "fantastical_feature", label: "Feature · wings", toneHex: "" },
+      { kind: "fashion_styles", label: "Style mix · baroque + cyberpunk", toneHex: "" },
+    ],
+  )
+  assert.deepEqual(
+    formatImageEditAdjustmentChips({
+      remove_ai_generation_errors: true,
+      age_years: 42,
+      surface_tone_hex: "#e3f4e7",
+    }),
+    [
+      { kind: "remove_ai_generation_errors", label: "Remove visible AI errors", toneHex: "" },
+      { kind: "age_years", label: "Age · 42 years", toneHex: "" },
+      { kind: "surface_tone_hex", label: "Surface tone · #e3f4e7", toneHex: "#e3f4e7" },
+    ],
+  )
+})
+
+test("resolveImageEditDialogUiState separates Request and Review modes cleanly", () => {
+  const reqIdle = resolveImageEditDialogUiState({
+    mode: "request",
+    isFreeProvider: true,
+    hasSelectedProvider: true,
+    hasAdjustment: true,
+  })
+  assert.deepEqual(reqIdle, {
+    mode: "request",
+    dialogSize: "wide",
+    controlsHidden: false,
+    reviewSummaryHidden: true,
+    editHidden: false,
+    editDisabled: false,
+    editLabel: "Edit",
+    discardHidden: true,
+    discardDisabled: true,
+    discardLabel: "Discard",
+    publishHidden: true,
+    publishDisabled: true,
+    publishLabel: "Publish",
+  })
+
+  const reqQueueing = resolveImageEditDialogUiState({
+    mode: "request",
+    loading: true,
+    isFreeProvider: true,
+    hasSelectedProvider: true,
+    hasAdjustment: true,
+  })
+  assert.equal(reqQueueing.editHidden, false)
+  assert.equal(reqQueueing.editDisabled, true)
+  assert.equal(reqQueueing.editLabel, "Queueing...")
+  assert.equal(reqQueueing.discardHidden, true)
+  assert.equal(reqQueueing.publishHidden, true)
+
+  const reviewLoading = resolveImageEditDialogUiState({
+    mode: "review",
+    job: null,
+    loading: true,
+  })
+  assert.equal(reviewLoading.dialogSize, "standard")
+  assert.equal(reviewLoading.controlsHidden, true)
+  assert.equal(reviewLoading.editHidden, true)
+  assert.equal(reviewLoading.discardHidden, false)
+  assert.equal(reviewLoading.publishHidden, false)
+  assert.equal(reviewLoading.discardDisabled, true)
+  assert.equal(reviewLoading.publishDisabled, true)
+  assert.equal(reviewLoading.publishLabel, "Publish")
+
+  const reviewPending = resolveImageEditDialogUiState({
+    mode: "review",
+    job: { id: "request-7", status: "running", published: false },
+    loading: false,
+  })
+  assert.equal(reviewPending.discardHidden, false)
+  assert.equal(reviewPending.publishHidden, false)
+  assert.equal(reviewPending.discardDisabled, true)
+  assert.equal(reviewPending.publishDisabled, true)
+
+  const reviewReady = resolveImageEditDialogUiState({
+    mode: "review",
+    job: { id: "request-7", status: "succeeded", published: false },
+    loading: false,
+  })
+  assert.equal(reviewReady.controlsHidden, true)
+  assert.equal(reviewReady.reviewSummaryHidden, false)
+  assert.equal(reviewReady.editHidden, true)
+  assert.equal(reviewReady.discardHidden, false)
+  assert.equal(reviewReady.publishHidden, false)
+  assert.equal(reviewReady.discardDisabled, false)
+  assert.equal(reviewReady.publishDisabled, false)
+
+  const reviewFailed = resolveImageEditDialogUiState({
+    mode: "review",
+    job: { id: "request-8", status: "failed", published: false },
+    loading: false,
+  })
+  assert.equal(reviewFailed.discardHidden, false)
+  assert.equal(reviewFailed.publishHidden, false)
+  assert.equal(reviewFailed.discardDisabled, false)
+  assert.equal(reviewFailed.publishDisabled, true)
 })
