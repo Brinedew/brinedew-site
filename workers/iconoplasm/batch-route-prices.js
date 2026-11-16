@@ -45,8 +45,8 @@ const perItem = (field, unit, criticality = "sheddable_plus") =>
 const OWN_ACTION = "the owner's own action on one gene, role or setting"
 
 export const BATCH_ROUTE_PRICES = Object.freeze({
-  // The Drain's view of readers' open requests and its plan for them.
-  admin_requests_open: batch(SMALL_READ),
+  // The Drain polls readers' open requests every minute to check if a person is waiting.
+  admin_requests_open: critical("a reader's request: checking whether readers are waiting"),
   admin_requests_history: owner(SMALL_READ),
   admin_gene_request_diagnostics: owner(SMALL_READ),
   // Each call moves one lease of a reader's request; the request is a person's.
