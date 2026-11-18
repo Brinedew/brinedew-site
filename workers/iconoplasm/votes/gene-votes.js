@@ -50,6 +50,26 @@ const ELIGIBLE_CANDIDATE_SQL =
 // The actor recorded on the publish event an automatic election writes.
 export const GENE_VOTE_ELECTION_ACTOR = "vote_authority"
 
+// B-1147: once a vote promotes a gene's winner, any second+ winner flip within
+// this cooldown window marks icono_gene_elections_due instead of projecting
+// 9 D1 rows + republishing on every alternating vote during a viral spike.
+export const HOT_GENE_ELECTION_WINDOW_MS = 5 * 60 * 1000
+
+/** Formats an epoch millisecond timestamp in SQLite CURRENT_TIMESTAMP UTC shape. */
+export function sqlUtcTimestamp(ms = Date.now()) {
+  return new Date(ms).toISOString().slice(0, 19).replace("T", " ")
+}
+
+function parseSqlUtcMs(value) {
+  if (!value) return null
+  const text = String(value).trim()
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)
+    ? `${text.replace(" ", "T")}Z`
+    : text
+  const ms = Date.parse(iso)
+  return Number.isFinite(ms) ? ms : null
+}
+
 const SHA256 = /^[a-f0-9]{64}$/
 
 function sha(value) {
@@ -106,7 +126,7 @@ const MARK_DUE_SQL = `INSERT INTO icono_gene_elections_due (gene_symbol) VALUES 
  * version, then the pure election over them. `shedable`: an election after a
  * vote, which also reads whether today is shed (`shed`).
  */
-export async function readGeneElection(db, symbol, { shedable = false } = {}) {
+export async function readGeneElection(db, symbol, { shedable = false, now = Date.now() } = {}) {
   const [candidates, caretaker, state, version, shedRead] = await db.batch([
     db
       .prepare(
@@ -126,7 +146,8 @@ export async function readGeneElection(db, symbol, { shedable = false } = {}) {
     db.prepare(`${caretakerSupervoteOfGeneSql("?1")} LIMIT 1`).bind(symbol),
     db
       .prepare(
-        `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override
+        `SELECT current_asset_sha256, COALESCE(admin_override, 0) AS admin_override,
+                updated_by, updated_at
            FROM icono_publish_state
           WHERE gene_symbol = ?1
           LIMIT 1`,
@@ -148,6 +169,13 @@ export async function readGeneElection(db, symbol, { shedable = false } = {}) {
       vote_count: row.vote_count,
     }))
   const stateRow = state?.results?.[0] || null
+  const stateUpdatedMs = parseSqlUtcMs(stateRow?.updated_at)
+  const cooldown =
+    shedable &&
+    stateRow?.updated_by === GENE_VOTE_ELECTION_ACTOR &&
+    stateUpdatedMs !== null &&
+    now - stateUpdatedMs >= 0 &&
+    now - stateUpdatedMs < HOT_GENE_ELECTION_WINDOW_MS
   const currentAssetSha = sha(stateRow?.current_asset_sha256) || null
   const adminOverride = Number(stateRow?.admin_override || 0) > 0
   const caretakerInput = caretakerElectionInput(caretaker?.results?.[0])
@@ -171,6 +199,7 @@ export async function readGeneElection(db, symbol, { shedable = false } = {}) {
     winner: election.winner,
     rows: election.rows,
     shed: Number(shedRead?.results?.[0]?.shed || 0) === 1,
+    cooldown,
   }
 }
 
@@ -204,9 +233,9 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
   if (election?.overflow) return outcome("CANDIDATE_SET_EXCEEDS_BOUND")
   if (!to) return outcome("NO_CANDIDATE")
   if (to === from) return outcome("UNCHANGED")
-  if (election?.shed) {
+  if (election?.shed || election?.cooldown) {
     await db.prepare(MARK_DUE_SQL).bind(symbol).run()
-    return outcome("SHED")
+    return outcome(election.shed ? "SHED" : "COOLDOWN")
   }
   const guard = `${GENE_VOTE_VERSION_SQL} = ?3
     AND EXISTS (
@@ -267,10 +296,10 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
 export async function electAndProjectGeneWinner(
   db,
   symbol,
-  { actor, reason, bump = false, shedable = false } = {},
+  { actor, reason, bump = false, shedable = false, now = Date.now() } = {},
 ) {
   if (bump) await geneVoteVersionBumpStatement(db, symbol).run()
-  const election = await readGeneElection(db, symbol, { shedable })
+  const election = await readGeneElection(db, symbol, { shedable, now })
   const projection = await projectGeneElection(db, election, { actor, reason })
   return { election, projection }
 }

@@ -30,7 +30,12 @@
 // each of those voters sees their own vote in their own box.
 import { BATCH_METERS, admitBatchWork, batchSpendNow, priceOf } from "../batch-admission.js"
 import { accountD1Usage } from "../operation-cost-account-usage.js"
-import { GENE_VOTE_ELECTION_ACTOR, electAndProjectGeneWinner } from "./gene-votes.js"
+import {
+  GENE_VOTE_ELECTION_ACTOR,
+  HOT_GENE_ELECTION_WINDOW_MS,
+  electAndProjectGeneWinner,
+  sqlUtcTimestamp,
+} from "./gene-votes.js"
 
 // One read batch and at most one write batch per gene, plus five. Cloudflare
 // allows 1,000 calls to its own services per invocation; production requests
@@ -39,9 +44,16 @@ export const DEFERRED_ELECTIONS_PER_RUN = 100
 
 // The due genes with the vote version each had when this run read it. Every
 // vote and supervote advances its gene's version in its own write batch.
+// Hot genes whose vote-driven promotion updated icono_publish_state within
+// HOT_GENE_ELECTION_WINDOW_MS stay parked here until the cooldown clears.
 const DUE_SQL = `SELECT due.gene_symbol, COALESCE(v.version, 0) AS version
                    FROM icono_gene_elections_due AS due
                    LEFT JOIN icono_gene_vote_version AS v USING (gene_symbol)
+                   LEFT JOIN icono_publish_state AS ps USING (gene_symbol)
+                  WHERE ps.gene_symbol IS NULL
+                     OR ps.updated_by IS NOT ?2
+                     OR ps.updated_at IS NULL
+                     OR ps.updated_at <= ?3
                   ORDER BY due.gene_symbol LIMIT ?1`
 // Runs can be a minute apart and overlap. A mark leaves only while its gene's
 // version is still the one read above, so a vote that marked the gene again
@@ -73,7 +85,13 @@ export async function sweepDeferredElections(db, { usage, now = Date.now() } = {
   // A shed day stays shed, so votes never mark a gene while this elects it.
   const [shedToday, due] = await db.batch([
     db.prepare("SELECT 1 AS shed FROM icono_publication_shed_days WHERE day = ?1").bind(usage.day),
-    db.prepare(DUE_SQL).bind(DEFERRED_ELECTIONS_PER_RUN),
+    db
+      .prepare(DUE_SQL)
+      .bind(
+        DEFERRED_ELECTIONS_PER_RUN,
+        GENE_VOTE_ELECTION_ACTOR,
+        sqlUtcTimestamp(now - HOT_GENE_ELECTION_WINDOW_MS),
+      ),
   ])
   if (shedToday?.results?.length) return { ok: true, shed: usage.day }
   const versions = new Map((due?.results || []).map((row) => [row.gene_symbol, row.version]))

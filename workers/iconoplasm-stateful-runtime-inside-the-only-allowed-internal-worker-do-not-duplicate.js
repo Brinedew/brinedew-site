@@ -13495,12 +13495,17 @@ async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
 // Erasure and role changes stay immediate: they change whose name a reader
 // sees. Any other rebuild of a due gene (an upload, the publisher) projects its
 // winner as on any day; the sweep then finds it unchanged and clears the mark.
-async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}) {
+async function electGeneAfterVote(
+  env,
+  symbol,
+  { reason, shedable = false, now = Date.now() } = {},
+) {
   try {
     const { election, projection } = await electAndProjectGeneWinner(env.ICONOPLASM_DB, symbol, {
       actor: GENE_VOTE_ELECTION_ACTOR,
       reason,
       shedable,
+      now,
     })
     return { ...projection, vote_version: election?.version ?? null }
   } catch (error) {
@@ -13512,9 +13517,14 @@ async function electGeneAfterVote(env, symbol, { reason, shedable = false } = {}
   }
 }
 
-export async function settleGeneAfterVote(env, ctx, symbol, { reason, shedable = false } = {}) {
-  const projection = await electGeneAfterVote(env, symbol, { reason, shedable })
-  if (projection?.code === "SHED") return projection
+export async function settleGeneAfterVote(
+  env,
+  ctx,
+  symbol,
+  { reason, shedable = false, now = Date.now() } = {},
+) {
+  const projection = await electGeneAfterVote(env, symbol, { reason, shedable, now })
+  if (projection?.code === "SHED" || projection?.code === "COOLDOWN") return projection
   republishGeneAfterResponse(env, ctx, symbol)
   return projection
 }

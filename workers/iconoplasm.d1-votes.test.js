@@ -65,12 +65,14 @@ import {
 import { sweepDeferredElections } from "./iconoplasm/votes/deferred-elections.js"
 import {
   GENE_VOTE_IMPORT_CHUNK,
+  HOT_GENE_ELECTION_WINDOW_MS,
   electAndProjectGeneWinner,
   importGeneVotes,
   projectGeneElection,
   readGeneElection,
   readGeneVoteSnapshots,
   setGeneVote,
+  sqlUtcTimestamp,
 } from "./iconoplasm/votes/gene-votes.js"
 import {
   invalidateCaretakerSupervote,
@@ -2459,4 +2461,123 @@ test("35: a vote that moves the winner names it, and the page's build of it is t
     ])
   assert.deepEqual(pool(predicted), pool(written))
   assert.equal(reader.withWinner(page, { asset_sha256: sha("z"), vote_version: 9 }), null)
+})
+
+// 36. On a non-shed day, repeated winner flips on one hot gene within
+// HOT_GENE_ELECTION_WINDOW_MS fold into icono_gene_elections_due instead of
+// rewriting 9 D1 rows per flip, park until the window expires, and then elect
+// once in sweepDeferredElections.
+test("36: hot-gene winner changes inside cooldown fold into icono_gene_elections_due until window elapses", async () => {
+  const db = new SqliteD1()
+  for (const symbol of ["TP53", "BRCA1"]) {
+    seedGene(db, symbol)
+    seedAsset(db, symbol, sha("a"), { createdAt: "2026-01-03 00:00:00" })
+    seedAsset(db, symbol, sha("b"), { createdAt: "2026-01-02 00:00:00" })
+    seedAsset(db, symbol, sha("c"), { createdAt: "2026-01-01 00:00:00" })
+    seedPublished(db, symbol, sha("a"))
+  }
+  const t0 = Date.now()
+  const today = new Date(t0).toISOString().slice(0, 10)
+  const due = () =>
+    db.rows("SELECT gene_symbol FROM icono_gene_elections_due").map((r) => r.gene_symbol)
+
+  // First vote-driven promotion (`seed` -> `vote_authority`) applies at once.
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("b"), userId: "r1", voteValue: 1 })
+  const firstCtx = waitUntilRecorder()
+  const first = await settleGeneAfterVote({ ICONOPLASM_DB: db }, firstCtx, "TP53", {
+    reason: "vote",
+    shedable: true,
+    now: t0,
+  })
+  assert.equal(first.code, "PROMOTED")
+  assert.equal(current(db, "TP53"), sha("b"))
+  assert.equal(firstCtx.promises.length, 1)
+  assert.deepEqual(due(), [])
+
+  // Normalize updated_at to t0 so simulated clock steps match SQLite CURRENT_TIMESTAMP.
+  db.exec(
+    "UPDATE icono_publish_state SET updated_at = ? WHERE gene_symbol = 'TP53'",
+    sqlUtcTimestamp(t0),
+  )
+
+  // Two more flips within the cooldown window fold into a single due row without projecting or republishing.
+  const tDuring = t0 + 60_000
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("c"), userId: "r2", voteValue: 1 })
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("c"), userId: "r3", voteValue: 1 })
+  const flip1Ctx = waitUntilRecorder()
+  const flip1 = await settleGeneAfterVote({ ICONOPLASM_DB: db }, flip1Ctx, "TP53", {
+    reason: "vote",
+    shedable: true,
+    now: tDuring,
+  })
+  assert.equal(flip1.code, "COOLDOWN")
+  assert.equal(flip1.changed, false)
+  assert.equal(flip1Ctx.promises.length, 0)
+  assert.equal(current(db, "TP53"), sha("b"))
+  assert.deepEqual(due(), ["TP53"])
+
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("a"), userId: "r4", voteValue: 1 })
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("a"), userId: "r5", voteValue: 1 })
+  await setGeneVote(db, { symbol: "TP53", assetSha256: sha("a"), userId: "r6", voteValue: 1 })
+  const flip2Ctx = waitUntilRecorder()
+  const flip2 = await settleGeneAfterVote({ ICONOPLASM_DB: db }, flip2Ctx, "TP53", {
+    reason: "vote",
+    shedable: true,
+    now: tDuring + 30_000,
+  })
+  assert.equal(flip2.code, "COOLDOWN")
+  assert.equal(flip2Ctx.promises.length, 0)
+  assert.deepEqual(due(), ["TP53"])
+  assert.equal(
+    db.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE gene_symbol = 'TP53'")[0].n,
+    1,
+  )
+
+  // Sweep inside the cooldown window leaves TP53 parked in icono_gene_elections_due.
+  const earlySweep = await sweepDeferredElections(db, {
+    usage: usageSample(today, 1_000, tDuring + 30_000),
+    now: tDuring + 30_000,
+  })
+  assert.deepEqual({ ok: earlySweep.ok, elected: earlySweep.elected }, { ok: true, elected: 0 })
+  assert.deepEqual(due(), ["TP53"])
+  assert.equal(current(db, "TP53"), sha("b"))
+
+  // Once HOT_GENE_ELECTION_WINDOW_MS has elapsed, the sweep promotes the final winner once.
+  const tAfter = t0 + HOT_GENE_ELECTION_WINDOW_MS + 1_000
+  const afterSweep = await sweepDeferredElections(db, {
+    usage: usageSample(today, 1_000, tAfter),
+    now: tAfter,
+  })
+  assert.deepEqual(
+    { ok: afterSweep.ok, elected: afterSweep.elected, promoted: afterSweep.promoted },
+    { ok: true, elected: 1, promoted: 1 },
+  )
+  assert.equal(current(db, "TP53"), sha("a"))
+  assert.deepEqual(due(), [])
+  assert.equal(
+    db.rows("SELECT COUNT(*) AS n FROM icono_publish_events WHERE gene_symbol = 'TP53'")[0].n,
+    2,
+  )
+
+  // Non-vote erasure/role change (`shedable: false`) promotes at once even right after a vote promotion.
+  await setGeneVote(db, { symbol: "BRCA1", assetSha256: sha("b"), userId: "r7", voteValue: 1 })
+  await settleGeneAfterVote({ ICONOPLASM_DB: db }, waitUntilRecorder(), "BRCA1", {
+    reason: "vote",
+    shedable: true,
+    now: tAfter,
+  })
+  db.exec(
+    "UPDATE icono_publish_state SET updated_at = ? WHERE gene_symbol = 'BRCA1'",
+    sqlUtcTimestamp(tAfter),
+  )
+  await setGeneVote(db, { symbol: "BRCA1", assetSha256: sha("c"), userId: "r8", voteValue: 1 })
+  await setGeneVote(db, { symbol: "BRCA1", assetSha256: sha("c"), userId: "r9", voteValue: 1 })
+  const immediateCtx = waitUntilRecorder()
+  const immediate = await settleGeneAfterVote({ ICONOPLASM_DB: db }, immediateCtx, "BRCA1", {
+    reason: "caretaker_role_erased",
+    now: tAfter + 5_000,
+  })
+  assert.equal(immediate.code, "PROMOTED")
+  assert.equal(current(db, "BRCA1"), sha("c"))
+  assert.equal(immediateCtx.promises.length, 1)
 })

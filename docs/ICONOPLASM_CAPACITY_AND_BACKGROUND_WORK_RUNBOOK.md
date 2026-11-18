@@ -149,6 +149,49 @@ GET /api/iconoplasm/admin/d1-usage?quote_written=N&quote_read=M
 Do not use application D1 reads to discover whether D1 read capacity is already
 exhausted. Use provider analytics.
 
+### Per-statement D1 analytics (`d1QueriesAdaptiveGroups`)
+
+`workers/lib/the-only-request-record.js` only wraps HTTP `fetch` requests:
+scheduled (`cron`) handlers, queue consumers, and Durable Object alarms do not
+emit request records, which caused the request record on 2026-10-29 to miss
+about two thirds of production D1 reads. Always check Cloudflare's per-statement
+D1 analytics alongside request records when diagnosing unexpected read or write
+burn:
+
+```powershell
+node scripts/check-iconoplasm-d1-statement-burns.mjs
+```
+
+That script queries `viewer.accounts[0].d1QueriesAdaptiveGroups` over a trailing
+window (`limit: 200`, `orderBy: [sum_rowsRead_DESC]`):
+
+```graphql
+query StatementBurns($accountTag: String!, $since: Time!, $until: Time!) {
+  viewer {
+    accounts(filter: { accountTag: $accountTag }) {
+      d1QueriesAdaptiveGroups(
+        limit: 200
+        filter: { datetime_geq: $since, datetime_leq: $until }
+        orderBy: [sum_rowsRead_DESC]
+      ) {
+        dimensions {
+          databaseId
+          query
+        }
+        sum {
+          rowsRead
+          rowsWritten
+        }
+      }
+    }
+  }
+}
+```
+
+Swap `orderBy` to `[sum_rowsWritten_DESC]` (or pass `--hours N`) when hunting a
+write spike, and measure a rolling window rather than a full UTC day so a fixed
+burn does not mask a newer one.
+
 ### Who did what, and what it cost (B-1147)
 
 Every request to the stateful Worker leaves one record, written by
