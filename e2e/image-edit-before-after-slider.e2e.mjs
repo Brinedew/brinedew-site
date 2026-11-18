@@ -74,6 +74,8 @@ function editJobPayload({
   beforeUrl,
   afterUrl,
   status = "succeeded",
+  model = "flux-3-klein",
+  modelLabel = model === "qwen-image-2.1-turbo" ? "Qwen-Image-2.1 Turbo" : "FLUX.3 Klein",
   adjustments = [
     { kind: "surface_tone_hex", value: "#483a36" },
     { kind: "age_years", value: 20 },
@@ -85,7 +87,8 @@ function editJobPayload({
       id: jobId,
       status,
       provider_id: "comfyui",
-      model: "flux-3-klein",
+      model,
+      model_label: modelLabel,
       source_gene_symbol: "TP53",
       source_asset_sha256: "a".repeat(64),
       published: false,
@@ -336,7 +339,71 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
             afterUrl: `${HOST}/_e2e/after-880x1200.svg`,
           })
         }
+        if (pathname === "/api/iconoplasm/image-edit/jobs/request-model-flux") {
+          return editJobPayload({
+            jobId: "request-model-flux",
+            beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+            afterUrl: `${HOST}/_e2e/after-384x501.svg`,
+            model: "flux-3-klein",
+            modelLabel: "FLUX.3 Klein",
+            adjustments: [
+              { kind: "remove_ai_generation_errors", text: "Remove visible AI errors" },
+            ],
+          })
+        }
+        if (pathname === "/api/iconoplasm/image-edit/jobs/request-model-qwen") {
+          return editJobPayload({
+            jobId: "request-model-qwen",
+            beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+            afterUrl: `${HOST}/_e2e/after-384x501.svg`,
+            model: "qwen-image-2.1-turbo",
+            modelLabel: "Qwen-Image-2.1 Turbo",
+            adjustments: [
+              { kind: "remove_ai_generation_errors", text: "Remove visible AI errors" },
+            ],
+          })
+        }
         if (pathname === "/api/iconoplasm/notifications") {
+          if (notifPhase === "ready-multi-model") {
+            return {
+              ok: true,
+              authenticated: true,
+              unread_count: 2,
+              ready_count: 2,
+              open_count: 0,
+              ready_requests: [
+                {
+                  notification_id: 911,
+                  request_id: 801,
+                  request_kind: "edit_image",
+                  edit_job_id: "request-model-flux",
+                  edit_provider_id: "comfyui",
+                  edit_model: "flux-3-klein",
+                  edit_model_label: "FLUX.3 Klein",
+                  unread: true,
+                  gene_symbol: "TP53",
+                  gene_url: "/gene/TP53",
+                  requested_emulsion_label: "FLUX.3 Klein",
+                  image_url: `${HOST}/_e2e/after-384x501.svg`,
+                },
+                {
+                  notification_id: 912,
+                  request_id: 802,
+                  request_kind: "edit_image",
+                  edit_job_id: "request-model-qwen",
+                  edit_provider_id: "comfyui",
+                  edit_model: "qwen-image-2.1-turbo",
+                  edit_model_label: "Qwen-Image-2.1 Turbo",
+                  unread: true,
+                  gene_symbol: "TP53",
+                  gene_url: "/gene/TP53",
+                  requested_emulsion_label: "Qwen-Image-2.1 Turbo",
+                  image_url: `${HOST}/_e2e/after-384x501.svg`,
+                },
+              ],
+              open_requests: [],
+            }
+          }
           if (notifPhase === "ready") {
             return {
               ok: true,
@@ -499,7 +566,7 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
         publishDisabled: false,
       })
       assert.equal(scenario1State.summaryVisible, true)
-      assert.deepEqual(scenario1State.chips, ["Remove visible AI errors"])
+      assert.deepEqual(scenario1State.chips, ["Model · FLUX.3 Klein", "Remove visible AI errors"])
 
       // Close dialog and test B-1231 fast return from Discord (<30s, >2s) while an order is waiting
       await page.keyboard.press("Escape")
@@ -534,7 +601,7 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
         discardDisabled: true,
         publishDisabled: true,
       })
-      assert.deepEqual(pendingState.chips, ["Surface tone · #483a36"])
+      assert.deepEqual(pendingState.chips, ["Model · FLUX.3 Klein", "Surface tone · #483a36"])
       if (screenshotDir) {
         await page.waitForTimeout(300)
         await dialog.screenshot({ path: path.join(screenshotDir, "review-pending-desktop.png") })
@@ -569,13 +636,71 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
         publishDisabled: false,
       })
       assert.equal(reviewShortState.summaryVisible, true)
-      assert.deepEqual(reviewShortState.chips, ["Surface tone · #483a36", "Age · 20 years"])
+      assert.deepEqual(reviewShortState.chips, [
+        "Model · FLUX.3 Klein",
+        "Surface tone · #483a36",
+        "Age · 20 years",
+      ])
       const shortMetrics = await measureComparisonGeometry(page)
       assertComparisonAligned(shortMetrics, "desktop 384x512 vs 384x501")
       if (screenshotDir) {
         await page.waitForTimeout(300)
         await dialog.screenshot({ path: path.join(screenshotDir, "review-desktop-short.png") })
       }
+
+      // B-1262: two simultaneous Ready sidebar edit receipts distinguish models and open Review modals labeled with each model
+      notifPhase = "ready-multi-model"
+      await page.goto(`${HOST}/gene/TP53`)
+      await page.waitForSelector('[data-icono-edit-job-id="request-model-flux"]', {
+        timeout: 15_000,
+      })
+      await page.waitForSelector('[data-icono-edit-job-id="request-model-qwen"]', {
+        timeout: 15_000,
+      })
+      assert.equal(
+        (
+          await page
+            .locator(
+              '[data-icono-edit-job-id="request-model-flux"] .icono-request-inbox__receipt-meta',
+            )
+            .textContent()
+        )?.trim(),
+        "FLUX.3 Klein",
+      )
+      assert.equal(
+        (
+          await page
+            .locator(
+              '[data-icono-edit-job-id="request-model-qwen"] .icono-request-inbox__receipt-meta',
+            )
+            .textContent()
+        )?.trim(),
+        "Qwen-Image-2.1 Turbo",
+      )
+      await page.locator('[data-icono-edit-job-id="request-model-qwen"]').click()
+      await dialog.waitFor({ state: "visible", timeout: 15_000 })
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector("[data-icono-image-edit-review-model]")
+          return Boolean(el && /Qwen-Image-2\.1 Turbo/.test(el.textContent || ""))
+        },
+        null,
+        { timeout: 15_000 },
+      )
+      await page.keyboard.press("Escape")
+      await dialog.waitFor({ state: "hidden", timeout: 10_000 })
+      await page.locator('[data-icono-edit-job-id="request-model-flux"]').click()
+      await dialog.waitFor({ state: "visible", timeout: 15_000 })
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector("[data-icono-image-edit-review-model]")
+          return Boolean(el && /FLUX\.3 Klein/.test(el.textContent || ""))
+        },
+        null,
+        { timeout: 15_000 },
+      )
+      await page.keyboard.press("Escape")
+      await dialog.waitFor({ state: "hidden", timeout: 10_000 })
 
       // Also check taller-after case
       notifPhase = "open"

@@ -9,7 +9,10 @@ export const REQUEST_INBOX_COUNTS_SQL = `SELECT ready_count, unread_count,
 // partial index of migration 0116 holds only unread receipts, so this page reads
 // at most its LIMIT however long a person's read history grows.
 export const REQUEST_INBOX_PAGE_SQL = `SELECT n.*,
-  gr.created_at AS request_created_at, pa.created_at AS asset_created_at,
+  gr.created_at AS request_created_at,
+  gr.fulfilled_provider_id AS fulfilled_provider_id,
+  gr.fulfilled_model_id AS fulfilled_model_id,
+  pa.created_at AS asset_created_at,
   pa.candidate_image_id
   FROM icono_request_inbox_members membership INDEXED BY idx_icono_request_inbox_unread_page
   CROSS JOIN icono_request_notifications n ON n.id = membership.notification_id

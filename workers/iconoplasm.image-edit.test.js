@@ -194,6 +194,7 @@ class FakeStatement {
         prompt: this.args[11],
         status: this.args[12],
         inherited_upvotes: this.args[13],
+        model: this.args[14] || "",
         created_at: "2026-05-16T00:00:00.000Z",
         updated_at: "2026-05-16T00:00:00.000Z",
       }
@@ -2047,4 +2048,104 @@ test("B-1230: retired local ComfyUI models are rejected on new edit requests wit
   const defaultPayload = await defaultResp.json()
   assert.equal(defaultResp.status, 200, JSON.stringify(defaultPayload))
   assert.equal(defaultPayload.model, "flux-3-klein")
+})
+
+test("B-1262: concurrent free queued edits with different models persist and report exact model_label and legacy fallback", async () => {
+  const world = await seedWorld()
+  const textSha = await sha256Hex("TP53 guardian prose for multi-model visibility.")
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT OR IGNORE INTO icono_gene_catalog (gene_symbol, full_name)
+     VALUES ('TP53', 'tumor protein p53')`,
+  ).run()
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT OR REPLACE INTO icono_gene_texts
+       (gene_symbol, gene_id, text_id, version, text_sha256, tags, fields_json)
+     VALUES ('TP53', 'gene_tp53_b1262', 'rev_tp53_b1262', 1, ?, 'guardian, steel', '{}')`,
+  )
+    .bind(textSha)
+    .run()
+
+  const cookie = await sessionCookieFor({ user_id: OTHER_USER, username: OTHER_NAME }, world.env)
+  const queueEdit = async (model) => {
+    const resp =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: cookie,
+            Origin: "https://iconoplasm.brinedew.bio",
+          },
+          body: JSON.stringify({
+            provider_id: "comfyui",
+            model,
+            source_gene_symbol: "TP53",
+            source_asset_sha256: ASSET.alice,
+            adjustments: { remove_ai_generation_errors: true },
+          }),
+        }),
+        world.env,
+        { waitUntil() {} },
+      )
+    assert.equal(resp.status, 200)
+    return resp.json()
+  }
+
+  const fluxPayload = await queueEdit("flux-3-klein")
+  const qwenPayload = await queueEdit("qwen-image-2.1-turbo")
+
+  assert.equal(fluxPayload.job.model, "flux-3-klein")
+  assert.equal(fluxPayload.job.model_label, "FLUX.3 Klein")
+  assert.equal(qwenPayload.job.model, "qwen-image-2.1-turbo")
+  assert.equal(qwenPayload.job.model_label, "Qwen-Image-2.1 Turbo")
+  assert.notEqual(fluxPayload.job.id, qwenPayload.job.id)
+
+  for (const [jobId, expectedModel, expectedLabel] of [
+    [fluxPayload.job.id, "flux-3-klein", "FLUX.3 Klein"],
+    [qwenPayload.job.id, "qwen-image-2.1-turbo", "Qwen-Image-2.1 Turbo"],
+  ]) {
+    const jobResp =
+      await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+        new Request(`https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/${jobId}`, {
+          headers: { Cookie: cookie },
+        }),
+        world.env,
+        { waitUntil() {} },
+      )
+    assert.equal(jobResp.status, 200)
+    const jobBody = await jobResp.json()
+    assert.equal(jobBody.job.model, expectedModel)
+    assert.equal(jobBody.job.model_label, expectedLabel)
+  }
+
+  // Legacy pre-0152 row in icono_image_edit_jobs (model = '') resolves via icono_generation_requests fallback.
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_image_edit_jobs (
+       id, user_id, provider_id, model, source_gene_symbol, source_asset_sha256, status, created_at, updated_at
+     ) VALUES (?, ?, 'comfyui', '', 'TP53', ?, 'succeeded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+  )
+    .bind("request-9100", OTHER_USER, ASSET.alice)
+    .run()
+  await world.env.ICONOPLASM_DB.prepare(
+    `INSERT INTO icono_generation_requests (
+       id, gene_symbol, requester_user_id, requester_username, request_kind, request_mode,
+       requested_vision_id, fulfilled_provider_id, fulfilled_model_id, status
+     ) VALUES (9100, 'TP53', ?, ?, 'edit_image', 'specific', 'comfyui-edit:qwen-image-2.1-turbo', 'comfyui', 'qwen-image-2.1-turbo', 'fulfilled')`,
+  )
+    .bind(OTHER_USER, OTHER_NAME)
+    .run()
+
+  const legacyResp =
+    await handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate(
+      new Request("https://iconoplasm.brinedew.bio/api/iconoplasm/image-edit/jobs/request-9100", {
+        headers: { Cookie: cookie },
+      }),
+      world.env,
+      { waitUntil() {} },
+    )
+  assert.equal(legacyResp.status, 200)
+  const legacyBody = await legacyResp.json()
+  assert.equal(legacyBody.job.provider_id, "comfyui")
+  assert.equal(legacyBody.job.model, "qwen-image-2.1-turbo")
+  assert.equal(legacyBody.job.model_label, "Qwen-Image-2.1 Turbo")
 })

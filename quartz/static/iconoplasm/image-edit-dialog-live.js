@@ -403,3 +403,16 @@ export function resolveImageEditDialogUiState({
     publishLabel: isPublishing ? "Publishing..." : "Publish",
   }
 }
+
+export function formatImageEditModelLabel(job) {
+  if (!job || typeof job !== "object") return ""
+  const explicit = String(job.model_label || "").trim()
+  if (explicit) return explicit
+  const rawModel = String(job.model || "").trim()
+  if (!rawModel) return ""
+  return rawModel
+    .replace(/^comfyui-edit:/i, "")
+    .replace(/^\s*\(Free\)\s+/i, "")
+    .replace(/\s*\(Free\)\s*$/i, "")
+    .trim()
+}
