@@ -84,13 +84,13 @@ test("asset/audit counts retain exact meaning across source lifecycle and no-ops
       "INSERT INTO icono_portrait_assets(gene_symbol,asset_sha256,r2_key_full,r2_key_thumb) VALUES ('TP53','a','full','thumb'),('TP53','b','full','thumb'),('OUTSIDE','c','full','thumb')",
     )
     exec(
-      "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,audit_state,is_current,last_audited_at) VALUES ('TP53','a','renderable',1,'2026-08-01T04:05:06Z'),('TP53','b','unknown',0,NULL),('OUTSIDE','c','broken',1,'2025-12-31 23:59:59')",
+      "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,status,audit_state,is_current,last_audited_at) VALUES ('TP53','a','completed','renderable',1,'2026-08-01T04:05:06Z'),('TP53','b','queued','unknown',0,NULL),('OUTSIDE','c','completed','broken',1,'2025-12-31 23:59:59')",
     )
     db.exec(ASSET_SUMMARY_SQL)
     verify(db)
     const changes = [
-      "UPDATE icono_storage_audit_queue SET audit_state='regionally_divergent',last_audited_at='2026-09-12T17:00:00Z' WHERE asset_sha256='b'",
-      "UPDATE icono_storage_audit_queue SET audit_state='regionally_divergent',last_audited_at='2026-09-12T17:00:00Z' WHERE asset_sha256='b'",
+      "UPDATE icono_storage_audit_queue SET status='completed',audit_state='regionally_divergent',last_audited_at='2026-09-12T17:00:00Z' WHERE asset_sha256='b'",
+      "UPDATE icono_storage_audit_queue SET status='completed',audit_state='regionally_divergent',last_audited_at='2026-09-12T17:00:00Z' WHERE asset_sha256='b'",
       "UPDATE icono_portrait_assets SET is_legacy=1,is_stale=1 WHERE asset_sha256='a'",
       "UPDATE icono_portrait_assets SET is_legacy=0,status='rejected' WHERE asset_sha256='a'",
       "UPDATE icono_portrait_assets SET status='draft' WHERE asset_sha256='a'",
@@ -192,7 +192,7 @@ test(
         .run()
       await db
         .prepare(
-          "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,audit_state,is_current,last_audited_at) SELECT gene_symbol,asset_sha256,CASE WHEN rowid%3=0 THEN 'broken' WHEN rowid%3=1 THEN 'regionally_divergent' ELSE 'renderable' END,rowid%2,datetime('0001-01-01','+'||(rowid%2048)||' years','+'||(rowid%86400)||' seconds') FROM icono_portrait_assets WHERE rowid<=50000",
+          "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,status,audit_state,is_current,last_audited_at) SELECT gene_symbol,asset_sha256,'completed',CASE WHEN rowid%3=0 THEN 'broken' WHEN rowid%3=1 THEN 'regionally_divergent' ELSE 'renderable' END,rowid%2,datetime('0001-01-01','+'||(rowid%2048)||' years','+'||(rowid%86400)||' seconds') FROM icono_portrait_assets WHERE rowid<=50000",
         )
         .run()
       // 0104 creates the counters and seeds them from the rows above.
@@ -222,12 +222,12 @@ test(
         .run()
       const audited = await db
         .prepare(
-          "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,audit_state,is_current,last_audited_at) VALUES ('G1',printf('%064x',100001),'renderable',1,'2026-09-12T17:00:00Z')",
+          "INSERT INTO icono_storage_audit_queue(gene_symbol,asset_sha256,status,audit_state,is_current,last_audited_at) VALUES ('G1',printf('%064x',100001),'completed','renderable',1,'2026-09-12T17:00:00Z')",
         )
         .run()
       const repeated = await db
         .prepare(
-          "UPDATE icono_storage_audit_queue SET audit_state='renderable',is_current=1,last_audited_at='2026-09-12T17:00:00Z' WHERE gene_symbol='G1' AND asset_sha256=printf('%064x',100001)",
+          "UPDATE icono_storage_audit_queue SET status='completed',audit_state='renderable',is_current=1,last_audited_at='2026-09-12T17:00:00Z' WHERE gene_symbol='G1' AND asset_sha256=printf('%064x',100001)",
         )
         .run()
       console.log(
