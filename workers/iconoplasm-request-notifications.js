@@ -24,6 +24,10 @@ import {
   readReadyDeliveryLeaders,
   claimReadyDeliveryGroup,
 } from "./iconoplasm/request-delivery-selection.js"
+import {
+  resolveImageEditModelPresentation,
+  stripImageEditFreePrefix,
+} from "./lib/iconoplasm-image-edit-models.js"
 
 const REQUEST_OUTBOX_TABLE = DISCORD_OUTBOX_TABLES.REQUEST_FULFILLMENT
 
@@ -76,6 +80,58 @@ function requestKind(value) {
   return boundedText(value, 64) === "edit_image" ? "edit_image" : "new_candidate"
 }
 
+const GENERIC_EDIT_EMULSION_LABELS = new Set([
+  "specific emulsion",
+  "random default",
+  "your selected emulsion",
+  "edited portrait",
+])
+
+function resolveEditNotificationPresentation(row) {
+  const presentation = resolveImageEditModelPresentation({
+    providerId: row?.fulfilled_provider_id || row?.provider_id || row?.edit_provider_id || "",
+    model: row?.model || row?.edit_model || "",
+    fulfilledProviderId: row?.fulfilled_provider_id || "",
+    fulfilledModelId: row?.fulfilled_model_id || "",
+    fulfilledVisionId: row?.fulfilled_vision_id || "",
+    requestedVisionId: row?.requested_vision_id || "",
+  })
+  if (presentation.model_label) return presentation
+  const explicitLabel = boundedText(row?.edit_model_label, 255)
+  if (explicitLabel) {
+    return {
+      ...presentation,
+      model_label: stripImageEditFreePrefix(explicitLabel) || explicitLabel,
+    }
+  }
+  const rawLabel = boundedText(row?.requested_emulsion_label, 255)
+  if (rawLabel && !GENERIC_EDIT_EMULSION_LABELS.has(rawLabel.toLowerCase())) {
+    const cleaned = stripImageEditFreePrefix(rawLabel.replace(/^comfyui-edit:/i, "")) || rawLabel
+    return { ...presentation, model_label: cleaned }
+  }
+  return presentation
+}
+
+function discordEditModelLabel(row) {
+  const presentation = resolveEditNotificationPresentation(row)
+  return presentation.model_label || presentation.provider_label || ""
+}
+
+function discordEditReviewUrl(row, symbol) {
+  const requestId = positiveInteger(row?.request_id)
+  const base = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}`
+  return requestId ? `<${base}?edit_job=request-${requestId}>` : `<${base}>`
+}
+
+function attachmentModelSlug(modelLabel) {
+  return String(modelLabel || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+}
+
 function nextDiscordRetryAt(attemptCount) {
   return nextDiscordOutboxRetryAt(attemptCount, { table: REQUEST_OUTBOX_TABLE })
 }
@@ -102,6 +158,12 @@ function mapReadyNotification(row, portraitUrlForAsset) {
   const kind = requestKind(row?.request_kind)
   const sha = assetSha(row?.fulfilled_asset_sha256)
   const readAt = boundedText(row?.read_at, 64)
+  const editPresentation = kind === "edit_image" ? resolveEditNotificationPresentation(row) : null
+  const requestedEmulsionLabel =
+    kind === "edit_image" && editPresentation?.model_label
+      ? editPresentation.model_label
+      : boundedText(row?.requested_emulsion_label, 255) ||
+        (row?.request_mode === "specific" ? "Specific emulsion" : "Random default")
   return {
     id: requestId,
     request_id: requestId,
@@ -109,10 +171,11 @@ function mapReadyNotification(row, portraitUrlForAsset) {
     kind: "request_fulfilled",
     request_kind: kind,
     edit_job_id: kind === "edit_image" && requestId ? `request-${requestId}` : "",
+    edit_provider_id: editPresentation?.provider_id || "",
+    edit_model: editPresentation?.model || "",
+    edit_model_label: editPresentation?.model_label || "",
     gene_symbol: symbol,
-    requested_emulsion_label:
-      boundedText(row?.requested_emulsion_label, 255) ||
-      (row?.request_mode === "specific" ? "Specific emulsion" : "Random default"),
+    requested_emulsion_label: requestedEmulsionLabel,
     fulfilled_asset_sha256: sha,
     fulfilled_vision_id: boundedText(row?.fulfilled_vision_id, 255),
     fulfillment_publication_id: boundedText(row?.fulfillment_publication_id, 255),
@@ -179,11 +242,20 @@ export async function readRequestNotificationInbox(
     ready_requests: ready.map((row) => mapReadyNotification(row, portraitUrlForAsset)),
     open_requests: pending.map((row) => {
       const symbol = geneSymbol(row?.gene_symbol)
+      const kind = requestKind(row?.request_kind)
+      const editPresentation =
+        kind === "edit_image" ? resolveEditNotificationPresentation(row) : null
       return {
         request_id: positiveInteger(row?.id),
+        request_kind: kind,
         gene_symbol: symbol,
         requested_emulsion_label:
-          boundedText(row?.requested_emulsion_label, 255) || "Random default",
+          kind === "edit_image" && editPresentation?.model_label
+            ? editPresentation.model_label
+            : boundedText(row?.requested_emulsion_label, 255) || "Random default",
+        edit_provider_id: editPresentation?.provider_id || "",
+        edit_model: editPresentation?.model || "",
+        edit_model_label: editPresentation?.model_label || "",
         created_at: boundedText(row?.created_at, 64),
         gene_url: symbol ? `/gene/${encodeURIComponent(symbol)}` : "/",
       }
@@ -301,15 +373,40 @@ function discordMessage(rows, previewCount) {
   const symbol = geneSymbol(row.gene_symbol) || "your gene"
   const isEdit = requestKind(row.request_kind) === "edit_image"
   if (total > 1) {
-    const noun = isEdit ? "portrait edits" : "candidate portraits"
+    if (isEdit) {
+      const shownCount = Math.max(1, Math.min(total, positiveInteger(previewCount) || total))
+      const lines = [
+        `Your ${total} free queue portrait edits for **${symbol}** are ready.`,
+        `Showing ${shownCount} of ${total} previews:`,
+        ...group.slice(0, shownCount).map((entry, index) => {
+          const modelLabel = discordEditModelLabel(entry) || "Free queue editor"
+          return `${index + 1}. **${modelLabel}** — Review: ${discordEditReviewUrl(entry, symbol)}`
+        }),
+      ]
+      if (total > shownCount) {
+        lines.push(
+          `Review all ${total} on **${symbol}**: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
+        )
+      }
+      return lines.join("\n")
+    }
     return [
-      `Your ${total} free queue ${noun} for **${symbol}** are ready.`,
+      `Your ${total} free queue candidate portraits for **${symbol}** are ready.`,
       `Showing ${previewCount} of ${total} previews.`,
       `Review all ${total} here: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
     ].join("\n")
   }
+  if (isEdit) {
+    const modelLabel = discordEditModelLabel(row)
+    return [
+      "Your free queue edit request is ready.",
+      `Gene: **${symbol}**`,
+      `Model: **${modelLabel || "Free queue editor"}**`,
+      `Review it here: ${discordEditReviewUrl(row, symbol)}`,
+    ].join("\n")
+  }
   return [
-    isEdit ? "Your free queue edit request is ready." : "Your free queue request is ready.",
+    "Your free queue request is ready.",
     `Gene: **${symbol}**`,
     discordEmulsionLine(row),
     `Review it here: <https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}>`,
@@ -458,13 +555,21 @@ async function loadFulfilledPortraitAttachment(env, row) {
       error: "Fulfilled portrait is not a valid WebP image.",
     }
   }
-  const filename = `iconoplasm-${symbol.toLowerCase()}-${sha.slice(0, 12)}.webp`
-  const requestLabel =
-    requestKind(row?.request_kind) === "edit_image" ? "portrait edit" : "candidate portrait"
+  const isEdit = requestKind(row?.request_kind) === "edit_image"
+  const modelLabel = isEdit ? discordEditModelLabel(row) : ""
+  const modelSlug = isEdit ? attachmentModelSlug(modelLabel) : ""
+  const filename = modelSlug
+    ? `iconoplasm-${symbol.toLowerCase()}-${modelSlug}-${sha.slice(0, 12)}.webp`
+    : `iconoplasm-${symbol.toLowerCase()}-${sha.slice(0, 12)}.webp`
+  const description = isEdit
+    ? modelLabel
+      ? `${symbol} portrait edit (${modelLabel}) from Iconoplasm's free generation queue`
+      : `${symbol} portrait edit from Iconoplasm's free generation queue`
+    : `${symbol} candidate portrait from Iconoplasm's free generation queue`
   return {
     ok: true,
     filename,
-    description: `${symbol} ${requestLabel} from Iconoplasm's free generation queue`,
+    description,
     blob: new Blob([bytes], { type: "image/webp" }),
     byte_length: bytes.byteLength,
   }
@@ -616,8 +721,11 @@ export async function deliverPendingRequestFulfillmentNotifications(
     if (!leaderId || !requesterId || !publicationId || !symbol) continue
 
     const groupResponse = await env.ICONOPLASM_DB.prepare(
-      `SELECT n.*
+      `SELECT n.*,
+              gr.fulfilled_provider_id AS fulfilled_provider_id,
+              gr.fulfilled_model_id AS fulfilled_model_id
        FROM icono_request_notifications n
+       LEFT JOIN icono_generation_requests gr ON gr.id = n.request_id
        WHERE n.requester_user_id = ?
          AND n.fulfillment_publication_id = ?
          AND n.gene_symbol = ?

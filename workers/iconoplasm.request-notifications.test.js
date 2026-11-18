@@ -7,6 +7,7 @@ import {
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import {
   deliverPendingRequestFulfillmentNotifications,
+  readRequestNotificationInbox,
   resolveIconoplasmFulfillmentDeliveryPolicy,
 } from "./iconoplasm-request-notifications.js"
 import { iconoplasmGenerationFingerprint } from "./lib/iconoplasm-generation-provenance.js"
@@ -328,6 +329,8 @@ class NotificationDb {
             fulfilled_at: row.created_at,
             fulfilled_asset_sha256: row.fulfilled_asset_sha256,
             fulfilled_vision_id: row.fulfilled_vision_id,
+            fulfilled_provider_id: row.fulfilled_provider_id || "",
+            fulfilled_model_id: row.fulfilled_model_id || "",
           }))
   }
 
@@ -2026,4 +2029,170 @@ test("B-1231: fast tab return while orders are open refreshes immediately withou
     await flushMicrotasks()
     assert.equal(notifCalls, 2)
   })
+})
+
+test("B-1262: single and grouped edit_image Discord DMs and Request Inbox identify the exact editing model per image", async () => {
+  // 1. Single edit DM shows clean Model line, direct ?edit_job= link, and model-labeled attachment.
+  const singleRow = notificationRow({
+    id: 201,
+    request_id: 401,
+    gene_symbol: "TP53",
+    request_kind: "edit_image",
+    request_mode: "specific",
+    requested_vision_id: "comfyui-edit:qwen-image-2.1-turbo",
+    requested_emulsion_label: "comfyui-edit:qwen-image-2.1-turbo",
+    fulfilled_vision_id: "comfyui-edit:qwen-image-2.1-turbo",
+    fulfilled_provider_id: "comfyui",
+    fulfilled_model_id: "qwen-image-2.1-turbo",
+    fulfilled_asset_sha256: "b".repeat(64),
+    fulfillment_publication_id: "order-single-edit",
+    fulfillment_group_size: 1,
+  })
+  const singleDb = new NotificationDb([singleRow])
+  const singlePayloads = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-edit" })
+    singlePayloads.push(JSON.parse(String(init?.body?.get("payload_json") || "{}")))
+    return Response.json({ id: `discord-msg-${singlePayloads.length}` })
+  }
+  try {
+    const res = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(singleDb), {
+      requestIds: [401],
+    })
+    assert.equal(res.delivered, 1)
+    assert.equal(singlePayloads.length, 1)
+    assert.equal(
+      singlePayloads[0].content,
+      [
+        "Your free queue edit request is ready.",
+        "Gene: **TP53**",
+        "Model: **Qwen-Image-2.1 Turbo**",
+        "Review it here: <https://iconoplasm.brinedew.bio/gene/TP53?edit_job=request-401>",
+      ].join("\n"),
+    )
+    assert.equal(
+      singlePayloads[0].attachments[0].filename,
+      `iconoplasm-tp53-qwen-image-2-1-turbo-${"b".repeat(12)}.webp`,
+    )
+    assert.match(singlePayloads[0].attachments[0].description, /Qwen-Image-2\.1 Turbo/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  // 2. Simultaneous two-model edits grouped in one order list numbered models matching attachments 1 & 2.
+  const multiRows = [
+    notificationRow({
+      id: 301,
+      request_id: 501,
+      gene_symbol: "TP53",
+      request_kind: "edit_image",
+      request_mode: "specific",
+      requested_vision_id: "comfyui-edit:flux-3-klein",
+      requested_emulsion_label: "comfyui-edit:flux-3-klein",
+      fulfilled_vision_id: "comfyui-edit:flux-3-klein",
+      fulfilled_provider_id: "comfyui",
+      fulfilled_model_id: "flux-3-klein",
+      fulfilled_asset_sha256: "c".repeat(64),
+      fulfillment_publication_id: "order-two-model-edits",
+      fulfillment_group_size: 2,
+    }),
+    notificationRow({
+      id: 302,
+      request_id: 502,
+      gene_symbol: "TP53",
+      request_kind: "edit_image",
+      request_mode: "specific",
+      requested_vision_id: "comfyui-edit:qwen-image-2.1-turbo",
+      requested_emulsion_label: "comfyui-edit:qwen-image-2.1-turbo",
+      fulfilled_vision_id: "comfyui-edit:qwen-image-2.1-turbo",
+      fulfilled_provider_id: "comfyui",
+      fulfilled_model_id: "qwen-image-2.1-turbo",
+      fulfilled_asset_sha256: "d".repeat(64),
+      fulfillment_publication_id: "order-two-model-edits",
+      fulfillment_group_size: 2,
+    }),
+  ]
+  const multiDb = new NotificationDb(multiRows, [
+    {
+      id: 601,
+      gene_symbol: "TP53",
+      requester_user_id: BRINEDEW_USER_ID,
+      request_kind: "edit_image",
+      requested_vision_id: "comfyui-edit:flux-3-klein",
+      requested_emulsion_label: "comfyui-edit:flux-3-klein",
+      status: "open",
+      created_at: "2026-11-18T10:00:00Z",
+    },
+  ])
+  const multiPayloads = []
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("storage.bunnycdn.com")) return validWebpResponse()
+    if (String(url).endsWith("/users/@me/channels")) return Response.json({ id: "dm-channel-edit" })
+    multiPayloads.push(JSON.parse(String(init?.body?.get("payload_json") || "{}")))
+    return Response.json({ id: `discord-multi-${multiPayloads.length}` })
+  }
+  try {
+    const res = await deliverPendingRequestFulfillmentNotifications(deliveryEnv(multiDb), {
+      requestIds: [501, 502],
+    })
+    assert.equal(res.delivered, 1)
+    assert.equal(res.delivered_requests, 2)
+    assert.equal(
+      multiPayloads[0].content,
+      [
+        "Your 2 free queue portrait edits for **TP53** are ready.",
+        "Showing 2 of 2 previews:",
+        "1. **FLUX.3 Klein** — Review: <https://iconoplasm.brinedew.bio/gene/TP53?edit_job=request-501>",
+        "2. **Qwen-Image-2.1 Turbo** — Review: <https://iconoplasm.brinedew.bio/gene/TP53?edit_job=request-502>",
+      ].join("\n"),
+    )
+    assert.equal(
+      multiPayloads[0].attachments[0].filename,
+      `iconoplasm-tp53-flux-3-klein-${"c".repeat(12)}.webp`,
+    )
+    assert.equal(
+      multiPayloads[0].attachments[1].filename,
+      `iconoplasm-tp53-qwen-image-2-1-turbo-${"d".repeat(12)}.webp`,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  // 3. Request Inbox payload + UI render clean model names for each Edit receipt card.
+  const inboxDb = new NotificationDb(multiRows, multiDb.openRequests)
+  const payload = await readRequestNotificationInbox(deliveryEnv(inboxDb), {
+    requesterUserId: BRINEDEW_USER_ID,
+    openRequests: multiDb.openRequests,
+    openCount: 1,
+    portraitUrlForAsset: (sha) => `https://cdn.example/${sha}.webp`,
+  })
+  assert.equal(payload.ready_requests.length, 2)
+  assert.equal(payload.ready_requests[0].edit_model, "flux-3-klein")
+  assert.equal(payload.ready_requests[0].edit_model_label, "FLUX.3 Klein")
+  assert.equal(payload.ready_requests[0].requested_emulsion_label, "FLUX.3 Klein")
+  assert.equal(payload.ready_requests[1].edit_model, "qwen-image-2.1-turbo")
+  assert.equal(payload.ready_requests[1].edit_model_label, "Qwen-Image-2.1 Turbo")
+  assert.equal(payload.open_requests[0].edit_model_label, "FLUX.3 Klein")
+
+  const opened = []
+  const inbox = createRequestInbox({
+    fetchJSON: async () => payload,
+    getCurrentUser: () => ({ id: BRINEDEW_USER_ID }),
+    renderSidebar() {},
+    escapeHtml: (value) => String(value ?? ""),
+    onOpenEditJob: (info) => opened.push(info),
+  })
+  await inbox.refresh()
+  const markup = inbox.panelMarkup()
+  assert.match(markup, /data-icono-edit-job-id="request-501"/)
+  assert.match(markup, /data-icono-edit-model-label="FLUX\.3 Klein"/)
+  assert.match(markup, /<span class="icono-request-inbox__receipt-meta">FLUX\.3 Klein<\/span>/)
+  assert.match(markup, /data-icono-edit-job-id="request-502"/)
+  assert.match(markup, /data-icono-edit-model-label="Qwen-Image-2\.1 Turbo"/)
+  assert.match(
+    markup,
+    /<span class="icono-request-inbox__receipt-meta">Qwen-Image-2\.1 Turbo<\/span>/,
+  )
 })

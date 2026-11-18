@@ -7532,3 +7532,10 @@ body[data-slug^="apps/iconoplasm"] .sidebar.left .search-button {
     grid-row: 2;
   }
 }
+
+.icono-image-edit-review-chip--model {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--ui-border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--ui-bg));
+  color: var(--dark);
+  font-weight: 600;
+}

@@ -6,6 +6,7 @@ import {
   createImageEditJobWatcher,
   formatFreeImageEditModelLabel,
   formatImageEditAdjustmentChips,
+  formatImageEditModelLabel,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
   resolveImageEditDialogUiState,
@@ -376,4 +377,18 @@ test("resolveImageEditDialogUiState separates Request and Review modes cleanly",
   assert.equal(reviewFailed.publishHidden, false)
   assert.equal(reviewFailed.discardDisabled, false)
   assert.equal(reviewFailed.publishDisabled, true)
+})
+
+test("formatImageEditModelLabel returns clean labels from model_label or raw model slugs", () => {
+  assert.equal(formatImageEditModelLabel(null), "")
+  assert.equal(formatImageEditModelLabel({ provider_id: "comfyui" }), "")
+  assert.equal(
+    formatImageEditModelLabel({ model: "flux-3-klein", model_label: "FLUX.3 Klein" }),
+    "FLUX.3 Klein",
+  )
+  assert.equal(
+    formatImageEditModelLabel({ model: "comfyui-edit:qwen-image-2.1-turbo" }),
+    "qwen-image-2.1-turbo",
+  )
+  assert.equal(formatImageEditModelLabel({ model: "(Free) FLUX.3 Klein" }), "FLUX.3 Klein")
 })
