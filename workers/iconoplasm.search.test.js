@@ -602,373 +602,41 @@ test.after(() => {
   resetIconoplasmRuntimeCachesForTest()
 })
 
-test("catalog search changes portraits only after the publisher replaces its snapshot", async () => {
-  const env = buildEnv({
-    publishedPortraits: [
-      {
-        symbol: "PRL",
-        asset_sha256: "a".repeat(64),
-        ph: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/full.webp`,
-        pt: `portraits/v1/${"a".repeat(2)}/${"a".repeat(64)}/medium.webp`,
-        updated_at: "2026-04-05T00:00:01Z",
-      },
-    ],
-  })
-
-  const firstResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
-    env,
-    {},
-  )
-  const firstPayload = await firstResponse.json()
-
-  assert.equal(firstResponse.status, 200)
-  assert.match(firstPayload?.genes?.[0]?.pt || "", /a{64}\/medium\.webp$/)
-  assert.match(firstPayload?.genes?.[0]?.ph || "", /a{64}\/full\.webp$/)
-
-  env.gatewayDb.setPublishedPortraits([
-    {
-      symbol: "PRL",
-      asset_sha256: "b".repeat(64),
-      ph: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/full.webp`,
-      pt: `portraits/v1/${"b".repeat(2)}/${"b".repeat(64)}/medium.webp`,
-      updated_at: "2026-04-05T00:00:01Z",
-    },
-  ])
-
-  publishPortraitFixture(env.KV, Array.from(env.gatewayDb.publishedPortraits.values()))
-
-  resetIconoplasmRuntimeCachesForTest()
-
-  const secondResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=prl&scope=catalog&limit=5"),
-    env,
-    {},
-  )
-  const secondPayload = await secondResponse.json()
-
-  assert.equal(secondResponse.status, 200)
-  assert.match(secondPayload?.genes?.[0]?.pt || "", /b{64}\/medium\.webp$/)
-  assert.match(secondPayload?.genes?.[0]?.ph || "", /b{64}\/full\.webp$/)
-})
-
-// Match strength comes first (exact, then prefix, then substring), and the
-// field only breaks ties within a strength (symbol, then alias, then full
-// name). The old rule ranked by field first, so any partial symbol hit beat
-// an exact alias: on 25 Sep "p53" listed CFAP53 and NOP53 above TP53.
-test("catalog search ranks exact matches before prefixes before substrings, then by field", async () => {
+test("public genes/search endpoint is retired with 410 Gone and touches no KV or D1", async () => {
   const env = buildEnv()
-  const response = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=guardian&scope=catalog&limit=10"),
-    env,
-    {},
-  )
-  const payload = await response.json()
+  const kvGets = []
+  const kvPuts = []
+  const d1Queries = []
+  const origGet = env.KV.get.bind(env.KV)
+  const origPut = env.KV.put.bind(env.KV)
+  const origPrepare = env.gatewayDb.prepare.bind(env.gatewayDb)
+  env.KV.get = async (key) => {
+    kvGets.push(key)
+    return origGet(key)
+  }
+  env.KV.put = async (key, value) => {
+    kvPuts.push(key)
+    return origPut(key, value)
+  }
+  env.gatewayDb.prepare = (sql) => {
+    d1Queries.push(sql)
+    return origPrepare(sql)
+  }
 
-  assert.equal(response.status, 200)
-  assert.equal(payload?.scope_applied, "catalog")
-  assert.deepEqual(
-    payload?.genes?.slice(0, 3).map((gene) => [gene.symbol, gene.matched_by]),
-    [
-      ["MDM2", "alias"], // alias GUARDIAN is exact
-      ["GUARDIAN1", "symbol"], // symbol prefix
-      ["BAX", "full_name"], // full-name prefix
-    ],
-  )
-})
-
-test("an exact literature alias outranks symbols that merely contain the query", async () => {
-  const artifact = buildCatalogArtifact()
-  artifact.genes.push(
-    { s: "CFAP53", n: "Cilia and flagella associated protein 53", c: "#777777", a: [] },
-    { s: "NOP53", n: "NOP53 ribosome biogenesis factor", c: "#777777", a: [] },
-    { s: "TP53BP1", n: "Tumor protein p53 binding protein 1", c: "#777777", a: ["53BP1"] },
-  )
-  artifact.gene_count = artifact.genes.length
-  const env = buildEnv({ artifact })
-  const response = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=p53&scope=catalog&limit=10"),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.deepEqual(
-    payload?.genes?.slice(0, 2).map((gene) => [gene.symbol, gene.matched_by]),
-    [
-      ["TP53", "alias"],
-      ["CFAP53", "symbol"],
-    ],
-  )
-  // TP53 appears once, at its best match, not again for its symbol substring.
-  assert.equal(payload.genes.filter((gene) => gene.symbol === "TP53").length, 1)
-})
-
-test("catalog search resolves bootstrap publication aliases", async () => {
-  const artifact = buildCatalogArtifact()
-  artifact.genes.push(
-    {
-      s: "RELA",
-      n: "RELA proto-oncogene, NF-kB subunit",
-      c: "#4f6457",
-      tmh: false,
-      a: [],
-    },
-    {
-      s: "CCNH",
-      n: "CDK-activating cyclin component",
-      c: "#6b705c",
-      tmh: false,
-      a: [],
-    },
-  )
-  artifact.gene_count = artifact.genes.length
-  const env = buildEnv({ artifact })
-
-  for (const [query, expectedSymbol] of [
-    ["p65", "RELA"],
-    ["Cyclin%20H", "CCNH"],
+  for (const [path, cookie] of [
+    ["/api/public/v1/genes/search?q=tp53&scope=catalog&limit=10", ""],
+    ["/api/public/v1/genes/search?q=tp53&scope=shared&limit=10", ""],
+    ["/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", ALEX],
+    ["/api/public/v1/genes/search?q=tp53&scope=catalog&limit=10", ALEX],
   ]) {
-    const response = await viaStatefulWorker(
-      buildRequest(`/api/public/v1/genes/search?q=${query}&scope=catalog&limit=5`),
-      env,
-      {},
-    )
+    const response = await viaStatefulWorker(buildRequest(path, { cookie }), env, {})
     const payload = await response.json()
-
-    assert.equal(response.status, 200)
-    assert.equal(payload?.genes?.[0]?.symbol, expectedSymbol)
-    assert.equal(payload?.genes?.[0]?.matched_by, "alias")
+    assert.equal(response.status, 410, path)
+    assert.equal(payload.code, "GENE_SEARCH_RETIRED")
+    assert.equal(payload.catalog_url, "https://img.brinedew.bio/catalog/v3/index.json")
+    assert.equal(response.headers.get("Cache-Control"), "public, max-age=3600")
   }
-})
-
-test("catalog search resolves an administrator-published alias KV revision", async () => {
-  const artifact = buildCatalogArtifact()
-  artifact.genes.push({
-    s: "CXCL8",
-    n: "C-X-C motif chemokine ligand 8",
-    c: "#89685f",
-    tmh: false,
-    a: [],
-  })
-  artifact.gene_count = artifact.genes.length
-  const aliases = await iconoplasmPublicationAliasManifestFromPolicy({
-    by_symbol: { CXCL8: ["IL8"] },
-    remove_by_symbol: {},
-  })
-  const blocklistVersion = `ebl1-${createHash("sha256")
-    .update(JSON.stringify([]))
-    .digest("hex")
-    .slice(0, 16)}`
-  const env = buildEnv({
-    artifact,
-    kvEntries: {
-      [iconoplasmPublicationAliasKvKey(2)]: JSON.stringify(aliases),
-      [iconoplasmRecognitionPairKvKey(2, 1)]: JSON.stringify({
-        schema_version: 1,
-        alias_revision: 2,
-        blocklist_revision: 1,
-        alias_depends_on_blocklist_revision: null,
-        blocklist_depends_on_alias_revision: null,
-        publication_aliases: aliases,
-        extension_blocklist: {
-          schema_version: 1,
-          revision: 1,
-          version: blocklistVersion,
-          term_count: 0,
-          terms: [],
-        },
-      }),
-    },
-  })
-  const response = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=IL8&scope=catalog&limit=5"),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.genes?.[0]?.symbol, "CXCL8")
-  assert.equal(payload?.genes?.[0]?.matched_by, "alias")
-})
-
-test("guest discovery search falls back to the starter trio instead of the full catalog", async () => {
-  const env = buildEnv()
-
-  const starterResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10"),
-    env,
-    {},
-  )
-  const starterPayload = await starterResponse.json()
-
-  assert.equal(starterResponse.status, 200)
-  assert.equal(starterPayload?.scope_applied, "starter")
-  assert.deepEqual(
-    starterPayload?.genes?.map((gene) => gene.symbol),
-    ["RHO"],
-  )
-  assert.equal(starterResponse.headers.get("Cache-Control"), "no-store")
-
-  const hiddenResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10"),
-    env,
-    {},
-  )
-  const hiddenPayload = await hiddenResponse.json()
-
-  assert.equal(hiddenResponse.status, 200)
-  assert.deepEqual(hiddenPayload?.genes, [])
-})
-
-test("signed-in discovery search uses virtual starters without mutating an empty account", async () => {
-  const env = buildEnv()
-
-  const starterResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=rho&scope=discoveries&limit=10", {
-      cookie: ALEX,
-    }),
-    env,
-    {},
-  )
-  const starterPayload = await starterResponse.json()
-
-  assert.equal(starterResponse.status, 200)
-  assert.equal(starterPayload?.scope_applied, "discoveries")
-  assert.deepEqual(
-    starterPayload?.genes?.map((gene) => gene.symbol),
-    ["RHO"],
-  )
-  assert.deepEqual(
-    env.gatewayDb.listDiscoverySymbols("user-123").map((row) => row.gene_symbol),
-    [],
-  )
-
-  env.gatewayDb.seedDiscovery("user-123", "TP53")
-
-  const discoveredResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=tp53&scope=discoveries&limit=10", {
-      cookie: ALEX,
-    }),
-    env,
-    {},
-  )
-  const discoveredPayload = await discoveredResponse.json()
-
-  assert.equal(discoveredResponse.status, 200)
-  assert.deepEqual(
-    discoveredPayload?.genes?.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-
-  const hiddenResponse = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=guardian&scope=discoveries&limit=10", {
-      cookie: ALEX,
-    }),
-    env,
-    {},
-  )
-  const hiddenPayload = await hiddenResponse.json()
-
-  assert.equal(hiddenResponse.status, 200)
-  assert.deepEqual(hiddenPayload?.genes, [])
-  assert.equal(hiddenResponse.headers.get("Cache-Control"), "no-store")
-})
-
-// B-1094: the page holds one window of a signed-in reader's collection, so
-// catalog search marks each result discovered or not for them. Ways this can
-// fail: a discovered gene comes back false (the bug: INS shown "Undiscovered"
-// to its discoverer); a guest's cached answer carries someone's flags; a
-// signed-in answer is cached as public.
-test("catalog search tells a signed-in reader which results they discovered, and a guest nothing", async () => {
-  const env = buildEnv()
-  env.gatewayDb.seedDiscovery("user-123", "TP53")
-
-  const search = async (q, cookie = "") => {
-    const response = await viaStatefulWorker(
-      buildRequest(`/api/public/v1/genes/search?q=${q}&scope=catalog&limit=10`, { cookie }),
-      env,
-      {},
-    )
-    return { response, payload: await response.json() }
-  }
-
-  const mine = await search("tp53", ALEX)
-  assert.equal(mine.response.status, 200)
-  assert.deepEqual(
-    mine.payload.genes.map((gene) => [gene.symbol, gene.discovered]),
-    [["TP53", true]],
-  )
-  assert.equal(mine.response.headers.get("Cache-Control"), "no-store")
-
-  const notMine = await search("rho", ALEX)
-  assert.deepEqual(
-    notMine.payload.genes.map((gene) => [gene.symbol, gene.discovered]),
-    [["RHO", false]],
-  )
-
-  const guest = await search("tp53")
-  assert.equal(guest.response.status, 200)
-  assert.deepEqual(
-    guest.payload.genes.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-  assert.equal("discovered" in guest.payload.genes[0], false)
-  assert.equal(guest.response.headers.get("Cache-Control"), "public, max-age=30")
-})
-
-test("shared discovery search is public and reads the shared symbol cache", async () => {
-  const env = buildEnv({
-    kvEntries: {
-      "iconoplasm:shared-gene-discovery-symbols:v1": JSON.stringify({
-        schema: "iconoplasm.sharedGeneDiscoverySymbols.v1",
-        symbols: ["TP53", "PRL"],
-      }),
-    },
-  })
-
-  const response = await viaStatefulWorker(
-    buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared&limit=10"),
-    env,
-    {},
-  )
-  const payload = await response.json()
-
-  assert.equal(response.status, 200)
-  assert.equal(payload?.scope_applied, "shared")
-  assert.deepEqual(
-    payload?.genes?.map((gene) => gene.symbol),
-    ["TP53"],
-  )
-  assert.equal(response.headers.get("Cache-Control"), "public, max-age=30")
-})
-
-test("unavailable shared publications never perform reader-triggered database repair or KV writes", async () => {
-  for (const value of [null, "invalid-json", JSON.stringify({ symbols: [] })]) {
-    const env = buildEnv({
-      kvEntries: value === null ? {} : { "iconoplasm:shared-gene-discovery-symbols:v1": value },
-    })
-    const before = new Map(env.KV.entries)
-    const queries = []
-    const prepare = env.gatewayDb.prepare.bind(env.gatewayDb)
-    env.gatewayDb.prepare = (sql) => {
-      queries.push(sql)
-      return prepare(sql)
-    }
-    const response = await viaStatefulWorker(
-      buildRequest("/api/public/v1/genes/search?q=tp53&scope=shared"),
-      env,
-      {},
-    )
-    assert.equal(response.status, 503)
-    assert.equal(response.headers.get("Cache-Control"), "no-store")
-    assert.equal((await response.json()).code, "SHARED_DISCOVERY_PUBLICATION_UNAVAILABLE")
-    assert.deepEqual(env.KV.entries, before)
-    assert.equal(
-      queries.some((sql) => /icono_shared_gene_discoveries/.test(sql)),
-      false,
-    )
-  }
+  assert.deepEqual(kvGets, [])
+  assert.deepEqual(kvPuts, [])
+  assert.deepEqual(d1Queries, [])
 })

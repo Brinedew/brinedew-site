@@ -77,6 +77,20 @@ const targets = [
       )}`,
     ],
   },
+  {
+    // B-1136: blot fingerprint & CDN key derivation shared with Diagram Studio.
+    source: path.join(repoRoot, "workers", "lib", "iconoplasm-blot.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "blot-identity.js"),
+    ],
+  },
+  {
+    // B-1136: compact resolver binary search shared with browser CDN fallback.
+    source: path.join(repoRoot, "workers", "lib", "iconoplasm-resolver-index.js"),
+    outputs: [
+      path.join(repoRoot, "quartz", "static", "iconoplasm", "generated", "resolver-index.js"),
+    ],
+  },
 ]
 
 function renderIconoplasmExtensionFontRuntime() {
@@ -291,6 +305,30 @@ await writeFile(
 )
 
 if (!extensionOnly) {
+  const { ICONOPLASM_DEFAULT_PUBLICATION_ALIASES } =
+    await import("../workers/iconoplasm-publication-aliases.js")
+  const publicationAliasBootstrapPath = path.join(
+    repoRoot,
+    "quartz",
+    "static",
+    "iconoplasm",
+    "generated",
+    "publication-alias-bootstrap.js",
+  )
+  await mkdir(path.dirname(publicationAliasBootstrapPath), { recursive: true })
+  await writeFile(
+    publicationAliasBootstrapPath,
+    `/* GENERATED FILE. Edit workers/iconoplasm-publication-aliases.js and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\nexport const ICONOPLASM_PUBLICATION_ALIAS_BOOTSTRAP = ${JSON.stringify(
+      {
+        by_symbol: ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.by_symbol,
+        remove_by_symbol: ICONOPLASM_DEFAULT_PUBLICATION_ALIASES.remove_by_symbol,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  )
+
   const { syncStaticImportVersions, syncStudioImportVersions } =
     await import("./lib/static-import-versions.mjs")
   const staticRoot = path.join(repoRoot, "quartz", "static")
@@ -312,9 +350,21 @@ if (!extensionOnly) {
     "iconoplasm/app.js",
     "iconoplasm/gene-card-thumb-delivery.js",
   ])
+  await syncStaticImportVersions(
+    staticRoot,
+    "iconoplasm/generated/publication-alias-bootstrap.js",
+    ["iconoplasm/publication-reader.js"],
+  )
+  await syncStaticImportVersions(staticRoot, "iconoplasm/generated/resolver-index.js", [
+    "iconoplasm/publication-reader.js",
+  ])
   await syncStaticImportVersions(staticRoot, "iconoplasm/publication-reader.js", [
     "iconoplasm/diagram-studio.js",
     "iconoplasm/app.js",
+    "iconoplasm/admin.js",
+  ])
+  await syncStaticImportVersions(staticRoot, "iconoplasm/generated/blot-identity.js", [
+    "iconoplasm/diagram-studio.js",
   ])
   await syncStudioImportVersions(staticRoot)
 

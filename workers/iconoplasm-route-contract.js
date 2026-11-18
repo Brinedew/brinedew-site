@@ -164,6 +164,16 @@ const DECLARED_ROUTES = Object.freeze([
     rateLimit: rateLimit("card_object", 120),
   }),
   contract({
+    // B-1136: shared-discovery symbol list, canonical-origin fallback only when CDN lacks it.
+    id: "public_shared_discoveries_object",
+    match: exact("/api/public/v1/shared-discoveries.json"),
+    methods: GET,
+    auth: "public",
+    cache: "handler-defined",
+    gatewayHandler: "public_shared_discoveries_object",
+    rateLimit: rateLimit("card_object", 120),
+  }),
+  contract({
     // B-898: the one stable object per gene, canonical-origin fallback only.
     id: "public_stable_gene_object",
     match: pattern(/^\/api\/public\/v1\/stable-genes\/([A-Z0-9][A-Z0-9._-]{0,63})\.json$/, [
@@ -917,16 +927,17 @@ export const ICONOPLASM_ROUTE_CALLERS = Object.freeze({
   public_catalog_artifact: ["extension"],
   public_scanner_artifact: ["extension"],
   public_catalog_dump: ["outside"],
-  public_gene_search: ["site"],
+  public_gene_search: ["none-known"],
   public_caretakers: ["site", "outside"],
   public_stable_catalog_object: ["site"],
+  public_shared_discoveries_object: ["site"],
   public_stable_gene_object: ["site", "ops"],
   public_card_snapshot_gene: ["extension"],
   public_card_snapshot_portrait_locator: ["extension"],
   public_gene_batch: ["workstation"],
   mobile_card_manifest: ["site", "ops"],
-  public_resolve: ["site", "ops", "outside"],
-  public_image_resolve: ["site", "outside"],
+  public_resolve: ["ops", "outside"],
+  public_image_resolve: ["outside"],
   public_media: ["outside"],
   portrait: ["site", "extension"],
   gene_card_asset: ["site", "extension"],

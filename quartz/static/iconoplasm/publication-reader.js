@@ -33,6 +33,11 @@ const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
 // "p21" listed PAK1 before CDKN1A.
 const STABLE_ALIASES_PATH = "/catalog/v3/aliases.json"
 const STABLE_ALIASES_OBJECT_LIMIT = 4 * 1024 * 1024
+const STABLE_SHARED_DISCOVERIES_PATH = "/catalog/v3/shared-discoveries.json"
+const STABLE_SHARED_DISCOVERIES_ORIGIN_PATH = "/api/public/v1/shared-discoveries.json"
+const STABLE_SHARED_DISCOVERIES_OBJECT_LIMIT = 2 * 1024 * 1024
+const STABLE_RESOLVER_PATH = "/catalog/v3/resolve.json"
+const STABLE_RESOLVER_OBJECT_LIMIT = 8 * 1024 * 1024
 
 function normalizedSymbol(value) {
   const symbol = String(value || "")
@@ -90,6 +95,10 @@ export function createIconoplasmPublicationReader(options = {}) {
   let geneMetricsCache = null
   let stableCatalogPromise = null
   let aliasIndexPromise = null
+  let aliasBootstrapPromise = null
+  let sharedDiscoveriesPromise = null
+  let cdnResolverPromise = null
+  let compactResolverHelperPromise = null
 
   if (!fetchImpl) throw new Error("Iconoplasm publication reader requires fetch")
 
@@ -302,31 +311,118 @@ export function createIconoplasmPublicationReader(options = {}) {
   }
 
   // Fetched on the first search only, so a page that never searches loads
-  // nothing more (188 KB compressed). Search without it still answers by symbol
-  // and name, so a failed read is not a reader error; the next search retries.
-  function aliasIndex() {
+  function aliasBootstrap() {
+    if (aliasBootstrapPromise) return aliasBootstrapPromise
+    aliasBootstrapPromise = import("./generated/publication-alias-bootstrap.js?v=53603570fb701510")
+      .then((mod) => mod?.ICONOPLASM_PUBLICATION_ALIAS_BOOTSTRAP || null)
+      .catch(() => null)
+    return aliasBootstrapPromise
+  }
+
+  function compactResolverHelper() {
+    if (compactResolverHelperPromise) return compactResolverHelperPromise
+    compactResolverHelperPromise = import("./generated/resolver-index.js?v=9135a2db1264bd40").catch(
+      () => null,
+    )
+    return compactResolverHelperPromise
+  }
+
+  function cdnResolverIndex() {
+    if (cdnResolverPromise) return cdnResolverPromise
+    cdnResolverPromise = fromCdn(STABLE_RESOLVER_PATH, STABLE_RESOLVER_OBJECT_LIMIT).catch(
+      () => null,
+    )
+    return cdnResolverPromise
+  }
+
+  function normalizeAliasInput(value) {
+    return String(value ?? "")
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 64)
+  }
+
+  // The names biologists type: Bunny's static aliases file plus the small curated
+  // bootstrap policy (E-cadherin, Cyclin H, cadherin retraction). When the CDN
+  // file is unreachable, search retries on the next call rather than pinning a
+  // failed read.
+  async function aliasData() {
     if (aliasIndexPromise) return aliasIndexPromise
-    aliasIndexPromise = fromCdn(STABLE_ALIASES_PATH, STABLE_ALIASES_OBJECT_LIMIT).then((value) => {
-      if (value?.schema !== 1 || !value.aliases || typeof value.aliases !== "object")
-        throw new Error("Invalid published Iconoplasm alias file")
-      const bySymbol = new Map()
-      for (const [symbol, names] of Object.entries(value.aliases)) {
+    const promise = Promise.all([
+      fromCdn(STABLE_ALIASES_PATH, STABLE_ALIASES_OBJECT_LIMIT)
+        .then((value) => {
+          if (value?.schema !== 1 || !value.aliases || typeof value.aliases !== "object")
+            throw new Error("Invalid published Iconoplasm alias file")
+          return { ok: true, aliases: value.aliases }
+        })
+        .catch(() => ({ ok: false, aliases: {} })),
+      aliasBootstrap(),
+    ]).then(([cdnResult, bootstrap]) => {
+      if (!cdnResult.ok) aliasIndexPromise = null
+      const rawMap = new Map()
+      for (const [symbol, names] of Object.entries(cdnResult.aliases)) {
         const key = normalizedSymbol(symbol)
         if (!key || !Array.isArray(names)) continue
-        const lower = names.map((name) => String(name || "").toLowerCase()).filter(Boolean)
-        bySymbol.set(key, { names: lower, compact: new Set(lower.map(compactName)) })
+        rawMap.set(key, names.map((name) => normalizeAliasInput(name)).filter(Boolean))
       }
-      return bySymbol
+      if (bootstrap?.remove_by_symbol) {
+        for (const [symbol, removed] of Object.entries(bootstrap.remove_by_symbol)) {
+          const key = normalizedSymbol(symbol)
+          if (!key || !Array.isArray(removed)) continue
+          const drop = new Set(removed.map((item) => normalizeAliasInput(item)).filter(Boolean))
+          const current = rawMap.get(key)
+          if (current)
+            rawMap.set(
+              key,
+              current.filter((item) => !drop.has(item)),
+            )
+        }
+      }
+      if (bootstrap?.by_symbol) {
+        for (const [symbol, added] of Object.entries(bootstrap.by_symbol)) {
+          const key = normalizedSymbol(symbol)
+          if (!key || !Array.isArray(added)) continue
+          const current = rawMap.get(key) || []
+          const seen = new Set(current)
+          for (const raw of added) {
+            const cleaned = normalizeAliasInput(raw)
+            if (!cleaned || seen.has(cleaned)) continue
+            seen.add(cleaned)
+            current.push(cleaned)
+          }
+          rawMap.set(key, current)
+        }
+      }
+      const bySymbol = new Map()
+      const exactOwners = new Map()
+      const foldedOwners = new Map()
+      for (const [key, list] of rawMap) {
+        if (!list.length) continue
+        const lower = list.map((name) => name.toLowerCase())
+        bySymbol.set(key, { names: lower, compact: new Set(lower.map(compactName)) })
+        for (const alias of list) {
+          const priorExact = exactOwners.get(alias)
+          if (priorExact === undefined) exactOwners.set(alias, key)
+          else if (priorExact !== key) exactOwners.set(alias, null)
+          const folded = compactName(alias.toLowerCase())
+          if (folded) {
+            const priorFolded = foldedOwners.get(folded)
+            if (priorFolded === undefined) foldedOwners.set(folded, key)
+            else if (priorFolded !== key) foldedOwners.set(folded, null)
+          }
+        }
+      }
+      return { bySymbol, exactOwners, foldedOwners }
     })
-    aliasIndexPromise.catch(() => {
-      aliasIndexPromise = null
-    })
-    return aliasIndexPromise
+    aliasIndexPromise = promise
+    return promise
   }
 
   // "PD-L1", "pdl1" and "PD L1" are one name.
   function compactName(value) {
-    return value.replace(/[^a-z0-9]/g, "")
+    return value.replace(/[^a-z0-9\u0370-\u03ff]/gu, "")
   }
 
   function searchRank(needle, compact, rawSymbol, rawName, aliases) {
@@ -352,15 +448,16 @@ export function createIconoplasmPublicationReader(options = {}) {
       .trim()
       .toLowerCase()
     if (!needle) return { genes: [], query: "" }
-    const allowed = symbols ? new Set(symbols.map(normalizedSymbol).filter(Boolean)) : null
+    const allowed = symbols ? new Set(Array.from(symbols, normalizedSymbol).filter(Boolean)) : null
     const size = Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 12))
-    const [stable, aliases] = await Promise.all([stableCatalog(), aliasIndex().catch(() => null)])
+    const [stable, aliasState] = await Promise.all([stableCatalog(), aliasData().catch(() => null)])
+    const aliases = aliasState?.bySymbol || null
     const compact = compactName(needle)
     const ranked = []
     for (const entry of stable.entries) {
-      if (allowed && !allowed.has(entry.symbol)) continue
+      if (allowed && !allowed.has(normalizedSymbol(entry.symbol))) continue
       // The catalogue keeps "C1orf112"; the alias file is keyed upper-case.
-      const geneAliases = aliases?.get(entry.symbol.toUpperCase())
+      const geneAliases = aliases?.get(normalizedSymbol(entry.symbol))
       const rank = searchRank(needle, compact, entry.symbol, entry.full_name, geneAliases)
       if (rank) ranked.push({ rank, entry })
     }
@@ -369,6 +466,125 @@ export function createIconoplasmPublicationReader(options = {}) {
         left.rank - right.rank || left.entry.symbol.localeCompare(right.entry.symbol),
     )
     return { genes: ranked.slice(0, size).map((item) => item.entry), query: needle.toUpperCase() }
+  }
+
+  // B-1136: shared-discovery symbols published hourly to catalog/v3/shared-discoveries.json
+  // with a one-time origin fallback only if the CDN does not have it yet.
+  async function sharedDiscoverySymbols() {
+    if (sharedDiscoveriesPromise) return sharedDiscoveriesPromise
+    sharedDiscoveriesPromise = (async () => {
+      let value = null
+      try {
+        value = await fromCdn(
+          STABLE_SHARED_DISCOVERIES_PATH,
+          STABLE_SHARED_DISCOVERIES_OBJECT_LIMIT,
+        )
+      } catch {
+        value = await fetchFrom(
+          ORIGIN,
+          STABLE_SHARED_DISCOVERIES_ORIGIN_PATH,
+          STABLE_SHARED_DISCOVERIES_OBJECT_LIMIT,
+          undefined,
+          STABLE_FETCH,
+        )
+      }
+      if (!Array.isArray(value?.symbols)) {
+        throw new Error("Invalid published Iconoplasm shared-discovery list")
+      }
+      return Array.from(new Set(value.symbols.map(normalizedSymbol).filter(Boolean)))
+    })()
+    sharedDiscoveriesPromise.catch(() => {
+      sharedDiscoveriesPromise = null
+    })
+    return sharedDiscoveriesPromise
+  }
+
+  // B-1136: resolve gene symbols, aliases and UniProt accessions directly from
+  // the CDN catalog + aliases files (and resolve.json only when needed for UniProt
+  // or uncached aliases), avoiding stateful Worker cold-start scans.
+  async function resolve(identifiers) {
+    const requestedList = Array.from(identifiers || [], (item) => String(item ?? "").trim())
+    if (!requestedList.length) return []
+    const stable = await stableCatalog()
+    if (!stable.symbolSet) {
+      stable.symbolSet = new Set(
+        stable.entries.map((entry) => normalizedSymbol(entry.symbol)).filter(Boolean),
+      )
+    }
+    const results = requestedList.map((requested) => {
+      const symbol = normalizedSymbol(requested)
+      if (symbol && stable.symbolSet.has(symbol)) {
+        return { requested, canonical_symbol: symbol, matched_by: "symbol", found: true }
+      }
+      return null
+    })
+    if (results.every(Boolean)) return results
+
+    const { exactOwners, foldedOwners } = await aliasData()
+    for (let index = 0; index < requestedList.length; index += 1) {
+      if (results[index]) continue
+      const aliasKey = normalizeAliasInput(requestedList[index])
+      if (!aliasKey) continue
+      const exact = exactOwners.get(aliasKey)
+      if (exact && stable.symbolSet.has(exact)) {
+        results[index] = {
+          requested: requestedList[index],
+          canonical_symbol: exact,
+          matched_by: "alias",
+          found: true,
+        }
+        continue
+      }
+      if (exact === undefined) {
+        const folded = compactName(aliasKey.toLowerCase())
+        const foldedOwner = folded ? foldedOwners.get(folded) : null
+        if (foldedOwner && stable.symbolSet.has(foldedOwner)) {
+          results[index] = {
+            requested: requestedList[index],
+            canonical_symbol: foldedOwner,
+            matched_by: "alias",
+            found: true,
+          }
+        }
+      }
+    }
+    if (results.every(Boolean)) return results
+
+    const [compactIndex, helper, bootstrap] = await Promise.all([
+      cdnResolverIndex(),
+      compactResolverHelper(),
+      aliasBootstrap(),
+    ])
+    const compactOverlay =
+      compactIndex && helper?.buildCompactResolverOverlay && bootstrap
+        ? helper.buildCompactResolverOverlay(compactIndex, bootstrap)
+        : null
+    for (let index = 0; index < requestedList.length; index += 1) {
+      if (results[index]) continue
+      const requested = requestedList[index]
+      if (
+        compactIndex &&
+        helper?.isValidCompactResolverIndex?.(compactIndex) &&
+        typeof helper.resolveIdentifierFromCompactIndex === "function"
+      ) {
+        const match = helper.resolveIdentifierFromCompactIndex(
+          compactIndex,
+          requested,
+          compactOverlay,
+        )
+        if (match?.found) {
+          results[index] = match
+          continue
+        }
+      }
+      results[index] = {
+        requested,
+        canonical_symbol: null,
+        matched_by: null,
+        found: false,
+      }
+    }
+    return results
   }
 
   // B-885: the home sort fields, per gene, from the catalog this page already
@@ -558,7 +774,18 @@ export function createIconoplasmPublicationReader(options = {}) {
     })
   }
 
-  return { gene, genes, search, gallery, geneMetrics, metadata, catalogIndex, withWinner }
+  return {
+    gene,
+    genes,
+    search,
+    sharedDiscoverySymbols,
+    resolve,
+    gallery,
+    geneMetrics,
+    metadata,
+    catalogIndex,
+    withWinner,
+  }
 }
 
 export const iconoplasmPublicationReader = createIconoplasmPublicationReader()

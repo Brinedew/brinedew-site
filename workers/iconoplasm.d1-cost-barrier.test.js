@@ -9,6 +9,10 @@ import {
   mergePublishedPortraitRefsIntoArtifact,
 } from "./iconoplasm-stateful-runtime-inside-the-only-allowed-internal-worker-do-not-duplicate.js"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
+import {
+  buildCompactResolverIndex,
+  COMPACT_RESOLVER_KV_PREFIX,
+} from "./lib/iconoplasm-resolver-index.js"
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 
 const amidBlocklistVersion = `ebl1-${createHash("sha256")
@@ -282,6 +286,12 @@ class FakeSharedKv {
       `iconoplasm:hydrated-catalog-artifact:a${hydrated.schema_version}c${hydrated.contract_revision}:${buildPortraitAwareManifestHash(hash, fingerprint)}`,
       JSON.stringify(hydrated),
     )
+    this.store.set(
+      `${COMPACT_RESOLVER_KV_PREFIX}${hash}`,
+      JSON.stringify(
+        buildCompactResolverIndex(JSON.parse(this.store.get(`iconoplasm:catalog:${hash}`)).genes),
+      ),
+    )
   }
 
   async get(key) {
@@ -420,27 +430,42 @@ test("DO NOT DELETE: missing publication metadata is retryable without a D1 repa
   assert.equal(db.fingerprintReads, 0)
 })
 
-test("DO NOT DELETE: search consumes publisher-owned portrait refs across isolate resets", async () => {
+test("B-1136: retired search returns 410 and resolver uses compact index without hydrated catalog or D1", async () => {
   const kv = new FakeSharedKv()
   const db = new FakeCostBarrierDb()
+  const resolveBody = JSON.stringify({ identifiers: ["A1BG", "TP53"] })
 
-  resetIconoplasmRuntimeCachesForTest()
-  const first = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
-    buildEnv(kv, db),
-    { waitUntil() {} },
-  )
-  assert.equal(first.status, 200)
-  assert.equal(db.portraitRefReads, 0)
+  for (let isolate = 0; isolate < 2; isolate += 1) {
+    resetIconoplasmRuntimeCachesForTest()
+    const searchResponse = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
+      buildEnv(kv, db),
+      { waitUntil() {} },
+    )
+    assert.equal(searchResponse.status, 410)
+    assert.equal((await searchResponse.json()).code, "GENE_SEARCH_RETIRED")
 
-  resetIconoplasmRuntimeCachesForTest()
-  const second = await viaStatefulWorker(
-    new Request("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha"),
-    buildEnv(kv, db),
-    { waitUntil() {} },
-  )
-  assert.equal(second.status, 200)
+    const resolveResponse = await viaStatefulWorker(
+      new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: resolveBody,
+      }),
+      buildEnv(kv, db),
+      { waitUntil() {} },
+    )
+    assert.equal(resolveResponse.status, 200)
+    assert.deepEqual(
+      (await resolveResponse.json()).results.map((item) => item.canonical_symbol),
+      ["A1BG", "TP53"],
+    )
+  }
   assert.equal(db.portraitRefReads, 0)
+  assert.equal(db.fingerprintReads, 0)
+  const hydratedReads = [...kv.getCounts.entries()].filter(
+    ([key, count]) => key.startsWith("iconoplasm:hydrated-catalog-artifact:") && count > 0,
+  )
+  assert.deepEqual(hydratedReads, [])
 })
 
 test("cold catalog readers perform no D1 work or KV writes, including missing and repaired artifacts", async () => {
@@ -460,7 +485,7 @@ test("cold catalog readers perform no D1 work or KV writes, including missing an
   kv.put = async () => {
     throw new Error("reader attempted a KV write")
   }
-  const read = (url) => viaStatefulWorker(new Request(url), env, { waitUntil() {} })
+  const read = (url, init) => viaStatefulWorker(new Request(url, init), env, { waitUntil() {} })
   for (let isolate = 0; isolate < 5; isolate++) {
     resetIconoplasmRuntimeCachesForTest()
     const response = await read(artifactUrl)
@@ -468,6 +493,16 @@ test("cold catalog readers perform no D1 work or KV writes, including missing an
     assert.deepEqual(await response.json(), JSON.parse(published))
     assert.equal(
       (await read("https://iconoplasm.brinedew.bio/api/public/v1/genes/search?q=alpha")).status,
+      410,
+    )
+    assert.equal(
+      (
+        await read("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifiers: ["A1BG"] }),
+        })
+      ).status,
       200,
     )
   }
