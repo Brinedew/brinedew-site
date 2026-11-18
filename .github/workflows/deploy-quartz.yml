@@ -202,14 +202,14 @@ jobs:
             pnpm exec wrangler deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$ICONOPLASM_INSTALLED_SHA" --var "SENTRY_RELEASE:$GITHUB_SHA"
           else
             pnpm exec wrangler versions upload --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$ICONOPLASM_INSTALLED_SHA" --tag "code-prepages-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-            pnpm exec wrangler versions deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --version-tag "code-prepages-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
+            node scripts/wrangler-versions-deploy-with-retry.mjs pnpm exec wrangler versions deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --version-tag "code-prepages-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
           fi
 
       - name: Deploy the compatible public edge Worker
         run: |
           set -euo pipefail
           pnpm exec wrangler versions upload --env="" --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --tag "edge-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          pnpm exec wrangler versions deploy --env="" --version-tag "edge-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
+          node scripts/wrangler-versions-deploy-with-retry.mjs pnpm exec wrangler versions deploy --env="" --version-tag "edge-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
 
       # A version upload leaves routes alone, so every release checks them:
       # each pattern logs "Route already points at..." when it is right, and is
@@ -256,7 +256,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm exec wrangler versions upload --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --var "ICONOPLASM_HTML_SHELL_CACHE_VERSION:$CACHE_BUST" --tag "code-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          pnpm exec wrangler versions deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --version-tag "code-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
+          node scripts/wrangler-versions-deploy-with-retry.mjs pnpm exec wrangler versions deploy --env="" --config wrangler.the-only-allowed-internal-stateful-worker-do-not-duplicate.toml --version-tag "code-$CACHE_BUST-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --percentage 100 --yes
 
       # The Worker's trigger strings and the installed ones must be the same set
       # once every stateful deploy above has run, or the recurring jobs are
