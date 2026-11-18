@@ -58,6 +58,14 @@
         "rows_written": 10,
         "requests": 1
       }
+    },
+    "iconoplasm/0153_storage_audit_queue_invariants.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 0,
+        "rows_written": 0,
+        "requests": 1
+      }
     }
   }
 }
