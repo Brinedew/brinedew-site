@@ -20,7 +20,7 @@ function database() {
     INSERT INTO icono_portrait_assets VALUES('TP53','a'),('TP53','b'),('OTHER','a'),('TP53','c');
     INSERT INTO icono_request_notifications VALUES(1,1,'user','TP53','a','sent',NULL,'publication','2026-09-06'),(2,2,'user','TP53','b','sent',NULL,'publication','2026-09-06'),(3,3,'user','OTHER','a','sent','read','','2026-09-06'),(4,4,'user','TP53','c','sent',NULL,'publication','2026-09-06');`)
   db.exec(
-    "ALTER TABLE icono_generation_requests ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN candidate_image_id INTEGER DEFAULT 1",
+    "ALTER TABLE icono_generation_requests ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_generation_requests ADD COLUMN fulfilled_provider_id TEXT NOT NULL DEFAULT ''; ALTER TABLE icono_generation_requests ADD COLUMN fulfilled_model_id TEXT NOT NULL DEFAULT ''; ALTER TABLE icono_portrait_assets ADD COLUMN created_at TEXT DEFAULT '2026-09-06'; ALTER TABLE icono_portrait_assets ADD COLUMN candidate_image_id INTEGER DEFAULT 1",
   )
   db.exec(
     "ALTER TABLE icono_request_notifications ADD COLUMN fulfillment_group_size INTEGER NOT NULL DEFAULT 1; ALTER TABLE icono_request_notifications ADD COLUMN request_kind TEXT NOT NULL DEFAULT 'new_candidate'; ALTER TABLE icono_request_notifications ADD COLUMN discord_next_attempt_at TEXT; CREATE INDEX idx_icono_request_notifications_fulfillment_publication ON icono_request_notifications(requester_user_id,fulfillment_publication_id,gene_symbol,discord_status,id)",

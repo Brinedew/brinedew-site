@@ -129,7 +129,11 @@ export function createRequestInbox({
       "<span><strong>" +
       escapeHtml(notification.gene_symbol) +
       "</strong><small>" +
-      escapeHtml(notification.requested_emulsion_label || "Your requested portrait") +
+      escapeHtml(
+        notification.edit_model_label ||
+          notification.requested_emulsion_label ||
+          "Your requested portrait",
+      ) +
       "</small></span>"
     document.body.appendChild(notice)
     if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
@@ -479,6 +483,25 @@ export function createRequestInbox({
     )
   }
 
+  function editModelLabelForItem(item) {
+    if (!item || typeof item !== "object") return ""
+    var explicit = String(item.edit_model_label || "").trim()
+    if (explicit) return explicit
+    var raw = String(item.edit_model || "").trim()
+    if (raw) {
+      return raw
+        .replace(/^comfyui-edit:/i, "")
+        .replace(/^\s*\(Free\)\s+/i, "")
+        .replace(/\s*\(Free\)\s*$/i, "")
+        .trim()
+    }
+    var emulsion = String(item.requested_emulsion_label || "").trim()
+    if (/^comfyui-edit:/i.test(emulsion)) {
+      return emulsion.replace(/^comfyui-edit:/i, "").trim()
+    }
+    return ""
+  }
+
   // B-1029: the Ready list holds unread results only, one entry per gene. Every
   // unread batch of a gene merges into it and its count is the sum of their
   // images; the result leaves once the gene's page has been opened. Discord's
@@ -499,6 +522,7 @@ export function createRequestInbox({
       var editJobId = isEdit
         ? String(item.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
         : ""
+      var editModelLabel = isEdit ? editModelLabelForItem(item) : ""
       var key =
         isEdit && editJobId
           ? "edit:" + editJobId
@@ -513,6 +537,7 @@ export function createRequestInbox({
           href: receiptHref(item),
           is_edit: Boolean(isEdit && editJobId),
           edit_job_id: editJobId,
+          edit_model_label: editModelLabel,
           expected_size: 0,
           unread: true,
           items: [],
@@ -520,6 +545,7 @@ export function createRequestInbox({
         byKey[key] = group
         groups.push(group)
       }
+      if (editModelLabel && !group.edit_model_label) group.edit_model_label = editModelLabel
       group.items.push(item)
       group.expected_size = group.items.length
     }
@@ -649,6 +675,7 @@ export function createRequestInbox({
         "</span>"
     }
     var isEdit = Boolean(group.is_edit && group.edit_job_id)
+    var editModelLabel = isEdit ? String(group.edit_model_label || "").trim() : ""
     var countText = isEdit ? "Edit" : String(total)
     var countAria = isEdit ? "Edit ready" : String(total) + (total === 1 ? " image" : " images")
     return (
@@ -662,6 +689,7 @@ export function createRequestInbox({
         ? '" data-icono-request-kind="edit_image" data-icono-edit-job-id="' +
           escapeHtml(group.edit_job_id || "")
         : "") +
+      (editModelLabel ? '" data-icono-edit-model-label="' + escapeHtml(editModelLabel) : "") +
       '"><span class="icono-request-inbox__receipt-head"><strong>' +
       escapeHtml(group.gene_symbol || "Gene") +
       '</strong><span class="icono-request-inbox__receipt-count" aria-label="' +
@@ -669,6 +697,11 @@ export function createRequestInbox({
       '">' +
       escapeHtml(countText) +
       "</span></span>" +
+      (editModelLabel
+        ? '<span class="icono-request-inbox__receipt-meta">' +
+          escapeHtml(editModelLabel) +
+          "</span>"
+        : "") +
       '<span class="icono-request-inbox__previews" aria-hidden="true">' +
       previewMarkup +
       "</span></a>"

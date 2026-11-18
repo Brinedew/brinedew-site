@@ -50,6 +50,14 @@
         "rows_written": 10,
         "requests": 1
       }
+    },
+    "iconoplasm/0152_image_edit_job_model.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 10,
+        "rows_written": 10,
+        "requests": 1
+      }
     }
   }
 }

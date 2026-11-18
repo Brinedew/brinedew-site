@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=2bef6101a62dd049"
+import { createRequestInbox } from "./request-inbox.js?v=e0584ccc3e85d62d"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
@@ -51,10 +51,11 @@ import {
   buildImageEditProviderOptions,
   createImageEditJobWatcher,
   formatImageEditAdjustmentChips,
+  formatImageEditModelLabel,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
   resolveImageEditDialogUiState,
-} from "./image-edit-dialog-live.js?v=9a7a8b811985b60d"
+} from "./image-edit-dialog-live.js?v=9167a74cd2a93f13"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
@@ -6955,7 +6956,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<p data-icono-image-edit-status class="icono-image-edit-status" role="status" hidden></p>' +
         '<div class="icono-image-edit-body">' +
         '<section class="icono-image-edit-preview">' +
-        '<div class="icono-image-edit-review-summary" data-icono-image-edit-review-summary aria-label="Applied adjustments" hidden></div>' +
+        '<div class="icono-image-edit-review-summary" data-icono-image-edit-review-summary aria-label="Edit summary" hidden></div>' +
         '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source portrait" loading="eager"></div>' +
         '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
         '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
@@ -7055,23 +7056,29 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var dialog = ensureImageEditDialog()
     var summary = dialog.querySelector("[data-icono-image-edit-review-summary]")
     if (!summary) return
+    var modelLabel = formatImageEditModelLabel(job)
     var chips = formatImageEditAdjustmentChips(job && job.adjustments)
-    if (imageEditDialogState.mode !== "review" || !chips.length) {
+    if (imageEditDialogState.mode !== "review" || (!modelLabel && !chips.length)) {
       summary.innerHTML = ""
       summary.hidden = true
       return
     }
-    summary.innerHTML = chips
-      .map(function (chip) {
-        var toneAttr = chip.toneHex
-          ? ' style="--icono-context-color:' + esc(chip.toneHex) + '"'
-          : ""
-        var cls =
-          "icono-image-edit-review-chip" +
-          (chip.toneHex ? " icono-image-edit-review-chip--tone" : "")
-        return '<span class="' + cls + '"' + toneAttr + ">" + esc(chip.label) + "</span>"
-      })
-      .join("")
+    var parts = []
+    if (modelLabel) {
+      parts.push(
+        '<span class="icono-image-edit-review-chip icono-image-edit-review-chip--model" data-icono-image-edit-review-model>' +
+          esc("Model · " + modelLabel) +
+          "</span>",
+      )
+    }
+    for (var index = 0; index < chips.length; index++) {
+      var chip = chips[index]
+      var toneAttr = chip.toneHex ? ' style="--icono-context-color:' + esc(chip.toneHex) + '"' : ""
+      var cls =
+        "icono-image-edit-review-chip" + (chip.toneHex ? " icono-image-edit-review-chip--tone" : "")
+      parts.push('<span class="' + cls + '"' + toneAttr + ">" + esc(chip.label) + "</span>")
+    }
+    summary.innerHTML = parts.join("")
     summary.hidden = false
   }
 
