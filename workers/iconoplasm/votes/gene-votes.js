@@ -106,16 +106,9 @@ export function caretakerElectionInput(row) {
   return { asset_sha256: asset, direction, active: true }
 }
 
-// B-1147: on a UTC day whose batch share is spent (icono_publication_shed_days,
-// written by deferred-elections.js), a winner change after a vote is
-// publication work and waits. The election's own read batch asks whether today
-// is shed; a winner change then marks its gene due (1 row, or none when it is
-// already due) instead of projecting (9 rows), in the round trip the
-// projection would have taken, and the sweep elects it after the reset. An
-// election that keeps the winner writes nothing either way. The vote itself
-// was a reader's own action and is already written.
-const SHED_TODAY_SQL = `SELECT EXISTS (
-  SELECT 1 FROM icono_publication_shed_days WHERE day = date('now')) AS shed`
+// B-1147: when a gene is marked due (repeated winner flips inside
+// HOT_GENE_ELECTION_WINDOW_MS), record it once (1 row, or 0 if already due)
+// instead of projecting 9 D1 rows on every alternating vote.
 const MARK_DUE_SQL = `INSERT INTO icono_gene_elections_due (gene_symbol) VALUES (?1)
   ON CONFLICT (gene_symbol) DO NOTHING`
 
@@ -124,10 +117,10 @@ const MARK_DUE_SQL = `INSERT INTO icono_gene_elections_due (gene_symbol) VALUES 
  * their vote summaries (one pass over the gene's candidate rows, one summary
  * probe each), the caretaker supervote, the published state and the vote
  * version, then the pure election over them. `shedable`: an election after a
- * vote, which also reads whether today is shed (`shed`).
+ * vote or supervote, debounced inside HOT_GENE_ELECTION_WINDOW_MS.
  */
 export async function readGeneElection(db, symbol, { shedable = false, now = Date.now() } = {}) {
-  const [candidates, caretaker, state, version, shedRead] = await db.batch([
+  const [candidates, caretaker, state, version] = await db.batch([
     db
       .prepare(
         `SELECT pa.asset_sha256, pa.status, pa.autopick_eligible, pa.is_stale, pa.is_legacy,
@@ -154,7 +147,6 @@ export async function readGeneElection(db, symbol, { shedable = false, now = Dat
       )
       .bind(symbol),
     db.prepare(`SELECT ${GENE_VOTE_VERSION_SQL} AS version`).bind(symbol),
-    ...(shedable ? [db.prepare(SHED_TODAY_SQL)] : []),
   ])
   const candidateRows = candidates?.results || []
   const summaryRows = candidateRows
@@ -198,7 +190,6 @@ export async function readGeneElection(db, symbol, { shedable = false, now = Dat
     caretaker: caretakerInput,
     winner: election.winner,
     rows: election.rows,
-    shed: Number(shedRead?.results?.[0]?.shed || 0) === 1,
     cooldown,
   }
 }
@@ -233,9 +224,9 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
   if (election?.overflow) return outcome("CANDIDATE_SET_EXCEEDS_BOUND")
   if (!to) return outcome("NO_CANDIDATE")
   if (to === from) return outcome("UNCHANGED")
-  if (election?.shed || election?.cooldown) {
+  if (election?.cooldown) {
     await db.prepare(MARK_DUE_SQL).bind(symbol).run()
-    return outcome(election.shed ? "SHED" : "COOLDOWN")
+    return outcome("DEFERRED")
   }
   const guard = `${GENE_VOTE_VERSION_SQL} = ?3
     AND EXISTS (
@@ -290,8 +281,8 @@ export async function projectGeneElection(db, election, { actor, reason } = {}) 
  * the rows they just changed (a rejection, an unstale, a restored keep) are
  * election inputs, so the version advances before the read and any election
  * that read the older rows can no longer project. Elections after a vote pass
- * `shedable: true`: on a shed day a winner change is marked due instead
- * (projection code "SHED").
+ * `shedable: true`: inside HOT_GENE_ELECTION_WINDOW_MS a second+ winner flip
+ * marks the gene due instead (projection code "DEFERRED").
  */
 export async function electAndProjectGeneWinner(
   db,

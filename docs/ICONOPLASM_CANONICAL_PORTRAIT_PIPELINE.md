@@ -168,26 +168,16 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
    between, materializes and writes again from the fresh rows, at most three
    passes. A failed publish never fails the vote.
 
-**Shed days (B-1147).** The vote is a reader's own action and runs to
-Cloudflare's wall; the winner change it causes is publication, which stops at
-85% of a D1 meter like other batch work. The `electionsDue` job
-(`workers/iconoplasm/votes/deferred-elections.js`, every minute but those of
-other jobs and 58, never 6 minutes apart) reads Cloudflare's meter and, once
-batch work's share of the UTC day is spent, records the day in
-`icono_publication_shed_days`. The flag is late by up to 6 minutes plus the
-meter's lag, so it starts shedding before the wall only while votes write under
-about 1,760 rows a minute (about 6,700 votes an hour). Step 2 reads that row in
-its own batch. On a shed day a winner change marks its gene in
-`icono_gene_elections_due` (1 row, or none when it already is) instead of
-projecting it (9 rows), and the gene isn't republished, because the publisher
-would project the winner itself. A vote that keeps the winner republishes as on
-any day. After 00:00 UTC the same job elects up to 100 due genes a run, let in
-by their price (`vote_election` in `batch-admission.js`); each projection's
-`publish` event makes the Actions publisher republish the gene. Each voter sees
-their own vote in their own box meanwhile. Erasure and caretaker role changes
-never wait: they change whose name a reader sees. The vote path never asks
-Cloudflare's analytics itself: its GraphQL API allows 300 queries per 5 minutes
-per token, which isolates asking every 30 s would spend at viral scale.
+**Hot-gene election debounce (B-1147).** The first vote-driven promotion on a
+quiet gene runs immediately (9 D1 rows) and republishes inline so the voter
+sees the new winner at once. Any further winner flips on that same gene inside
+`HOT_GENE_ELECTION_WINDOW_MS` (5 minutes) instead mark `icono_gene_elections_due`
+(1 D1 row once, `0` rows for later flips) and skip the inline republish. The
+`electionsDue` job (`workers/iconoplasm/votes/deferred-elections.js`) reads that
+dirty queue; idle runs touch nothing outside D1, and when cooled-down genes are
+ready it checks batch admission (`vote_election` in `batch-admission.js`) and
+elects and republishes up to 100 due genes once for the accumulated burst.
+Erasure and caretaker role changes never wait.
 
 **Daily vote allowance.** Each person may change 200 votes per UTC day
 (`VOTE_PERSON_DAILY_LIMIT`, `icono_vote_person_day`, migration 0123, B-1065).
