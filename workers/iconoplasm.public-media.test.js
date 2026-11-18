@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url"
 
 import { readIconoplasmPublisherAuthority } from "../scripts/lib/iconoplasm-publisher-authority.mjs"
 import { iconoplasmExtensionBlocklistKvKey } from "./iconoplasm-extension-blocklist-policy.js"
+import {
+  COMPACT_RESOLVER_KV_PREFIX,
+  buildCompactResolverIndex,
+} from "./lib/iconoplasm-resolver-index.js"
 import { iconoplasmBlotFingerprint, iconoplasmBlotObjectKey } from "./lib/iconoplasm-blot.js"
 import { iconoplasmPublicationAliasManifestFromPolicy } from "./iconoplasm-publication-aliases.js"
 import { iconoplasmPublicationAliasKvKey } from "./iconoplasm-publication-alias-policy.js"
@@ -375,6 +379,12 @@ function buildCatalogResolveKv() {
     }),
     "iconoplasm:published-portrait-refs:v3-none": "[]",
     [`iconoplasm:scanner-catalog:${hash}`]: scannerJson,
+    [`${COMPACT_RESOLVER_KV_PREFIX}${hash}`]: JSON.stringify(
+      buildCompactResolverIndex([
+        { s: "A1BG", u: "P04217", a: [] },
+        { s: "SOSTDC1", u: "Q6X4U4", a: ["USAG1"] },
+      ]),
+    ),
     [iconoplasmExtensionBlocklistKvKey(1)]: JSON.stringify({
       schema_version: 1,
       revision: 1,
@@ -850,6 +860,20 @@ test("public image resolver reads one stable object per canonical symbol and rep
   assert.equal(response.status, 200)
   assert.deepEqual(storageReads, [stableObjectPath("A1BG"), stableObjectPath("SOSTDC1")])
   assert.deepEqual(publicationTreeKvReads(kvReads), [])
+  assert.equal(
+    kvReads.some(
+      (key) =>
+        key.startsWith("iconoplasm:hydrated-catalog-artifact:") ||
+        key.startsWith("iconoplasm:catalog:"),
+    ),
+    false,
+    "public image resolver uses compact resolver index instead of hydrated catalogue",
+  )
+  assert.equal(
+    kvReads.includes("iconoplasm:resolver-index:aliascatalog01"),
+    true,
+    "public image resolver reads compact resolver index from KV",
+  )
   assert.equal(payload.results[0]?.images?.gene_blot?.type, "gene_blot")
   assert.equal(payload.results[1]?.canonical_symbol, "SOSTDC1")
   assert.equal(payload.results[1]?.images, null)

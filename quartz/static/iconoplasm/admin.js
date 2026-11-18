@@ -3544,25 +3544,29 @@
       els.publicationAliasGeneQuery.setAttribute("aria-busy", "true")
     if (els.publicationAliasGeneStatus)
       els.publicationAliasGeneStatus.textContent = "Searching genes."
-    var timeoutId = null
     var timedOut = false
-    if (controller) {
-      timeoutId = window.setTimeout(function () {
-        timedOut = true
-        controller.abort()
-      }, ADMIN_READ_TIMEOUT_MS)
-    }
+    var timeoutId = window.setTimeout(function () {
+      timedOut = true
+      if (controller) controller.abort()
+    }, ADMIN_READ_TIMEOUT_MS)
     try {
-      var response = await fetch(
-        "/api/public/v1/genes/search?scope=catalog&limit=8&q=" + encodeURIComponent(query),
-        {
-          credentials: "include",
-          ...(controller ? { signal: controller.signal } : {}),
-        },
-      )
-      if (!response.ok)
-        throw new Error("Gene search failed with HTTP " + String(response.status) + ".")
-      var data = await response.json()
+      var reader =
+        window.IconoplasmPublicationReader ||
+        (await import("./publication-reader.js?v=cb1f92f5bf20504d")).iconoplasmPublicationReader
+      if (!reader?.search) throw new Error("Catalog search reader unavailable.")
+      var data = await Promise.race([
+        reader.search(query, { limit: 8 }),
+        new Promise(function (_resolve, reject) {
+          if (!controller) return
+          controller.signal.addEventListener(
+            "abort",
+            function () {
+              reject(new Error(timedOut ? "Gene search timed out." : "Aborted"))
+            },
+            { once: true },
+          )
+        }),
+      ])
       if (
         requestId !== state.publicationAliasSearchRequestId ||
         String(els.publicationAliasGeneQuery?.value || "").trim() !== query

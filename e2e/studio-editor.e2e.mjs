@@ -67,6 +67,12 @@ async function openStudio(browser, origin, { width, height, theme = "light", tou
   const page = await context.newPage()
   const errors = []
   page.on("pageerror", (error) => errors.push(error.message))
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname
+    if (/^\/api\/public\/v1\/(?:images\/resolve|resolve|genes\/search)$/.test(pathname)) {
+      errors.push(`forbidden Worker resolver/search request from Studio: ${pathname}`)
+    }
+  })
   await page.goto(`${HOST}/studio`)
   await page.waitForSelector('[data-studio-root][data-ready="true"]', { timeout: 45_000 })
   return { context, page, errors }

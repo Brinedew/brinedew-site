@@ -3,6 +3,10 @@ import test from "node:test"
 
 import { viaStatefulWorker } from "./test-helpers/via-stateful-worker.js"
 import {
+  buildCompactResolverIndex,
+  COMPACT_RESOLVER_KV_PREFIX,
+} from "./lib/iconoplasm-resolver-index.js"
+import {
   handleIconoplasmRequestInsideTheOnlyAllowedInternalStatefulWorkerDoNotDuplicate,
   resetIconoplasmRuntimeCachesForTest,
   mergePublishedPortraitRefsIntoArtifact,
@@ -271,6 +275,9 @@ function buildEnv(overrides = {}, { bindGateway = true } = {}) {
       "iconoplasm:published-portrait-refs:v3-1-resolveportraitv1": JSON.stringify([
         { symbol: "PRL", asset_sha256: "a".repeat(64) },
       ]),
+      [`${COMPACT_RESOLVER_KV_PREFIX}${hash}`]: JSON.stringify(
+        buildCompactResolverIndex(artifact.genes),
+      ),
     }),
     ICONOPLASM_DB: gatewayDb,
     ...overrides,
@@ -378,4 +385,30 @@ test("legacy resolve accepts the same keys as the image resolver and refuses unu
   const tooMany = await post({ identifiers: Array.from({ length: 251 }, () => "INS") })
   assert.equal(tooMany.status, 400)
   assert.equal(tooMany.payload.max_identifiers, 250)
+})
+
+test("B-1136: resolve never reads hydrated-catalog-artifact when compact resolver index is in KV", async () => {
+  const env = buildEnv()
+  const reads = []
+  const origGet = env.KV.get.bind(env.KV)
+  env.KV.get = async (key) => {
+    reads.push(key)
+    return origGet(key)
+  }
+  const response = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiers: ["P53", "E-cadherin", "cadherin", "INS"] }),
+    }),
+    env,
+    {},
+  )
+  assert.equal(response.status, 200)
+  assert.equal(
+    reads.some((k) => k.startsWith("iconoplasm:hydrated-catalog-artifact:")),
+    false,
+    "never loads the full hydrated catalog artifact",
+  )
+  assert.equal(reads.includes("iconoplasm:resolver-index:resolvefixture01"), true)
 })
