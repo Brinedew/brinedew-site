@@ -13487,14 +13487,11 @@ async function iconoVoteSnapshots(env, { userId = "", items = [] } = {}) {
 // leaves a winner change to the Actions publisher (the projection wrote a
 // `publish` event) and a count-only change to the next vote on the gene.
 //
-// B-1147: `shedable` (votes and supervotes): on a UTC day whose batch share is
-// spent, a winner change is marked due instead (projection code "SHED") and
-// the gene isn't republished, because the gene object's builder would project
-// the winner itself; workers/iconoplasm/votes/deferred-elections.js elects it
-// after the reset. A vote that keeps the winner republishes as on any day.
-// Erasure and role changes stay immediate: they change whose name a reader
-// sees. Any other rebuild of a due gene (an upload, the publisher) projects its
-// winner as on any day; the sweep then finds it unchanged and clears the mark.
+// B-1147: `shedable` (votes and supervotes): a second+ winner flip inside
+// HOT_GENE_ELECTION_WINDOW_MS is marked due instead (projection code
+// "DEFERRED") and the gene isn't republished inline;
+// workers/iconoplasm/votes/deferred-elections.js elects it once after cooldown.
+// Erasure and role changes stay immediate: they change whose name a reader sees.
 async function electGeneAfterVote(
   env,
   symbol,
@@ -13524,7 +13521,7 @@ export async function settleGeneAfterVote(
   { reason, shedable = false, now = Date.now() } = {},
 ) {
   const projection = await electGeneAfterVote(env, symbol, { reason, shedable, now })
-  if (projection?.code === "SHED" || projection?.code === "COOLDOWN") return projection
+  if (projection?.code === "DEFERRED") return projection
   republishGeneAfterResponse(env, ctx, symbol)
   return projection
 }

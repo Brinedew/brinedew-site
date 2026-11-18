@@ -1,34 +1,9 @@
-// B-1147: once batch work has spent its share of a D1 meter for the UTC day, a
-// winner change after a vote waits for the reset, and this sweep elects it then.
-//
-// Shed by who is waiting (shared/iconoplasm-d1-budget-policy.js): a vote is a
-// reader's own action and runs to Cloudflare's wall; the winner change it
-// causes is publication, which stops at 85%. A vote writes 4 to 6 rows and a
-// winner change 9 (migration 0149). On a shed day a winner change marks its
-// gene due, 1 row or none when the gene already is, and a vote that keeps the
-// winner writes what it writes on any day, so shedding never writes more than
-// not shedding. A gene whose winner changed ten times that day is elected once.
-//
-// Why a flag in D1 and not the meter itself: the vote path can't ask
-// Cloudflare's GraphQL analytics, which allows 300 queries per 5 minutes per
-// token (developers.cloudflare.com/analytics/graphql-api/limits/, read
-// 2026-10-30). At viral scale many isolates, each asking every 30 s, would
-// spend that and blind batch admission everywhere. This sweep asks once per
-// run and writes the day as shed; a vote reads the flag inside the election
-// batch it already sends (gene-votes.js).
-//
-// The flag is late by up to one gap between runs (6 minutes) plus the meter's
-// lag (about 2.5). Votes alone cross the 15,000 rows between 85% and the wall
-// in that time only above about 1,760 rows a minute, about 6,700 votes an hour
-// at the 15.7 rows each predicted from 2026-10-27 to 30's receipts; faster than
-// that, the wall comes before the flag, as it would without one. At four runs
-// an hour the flag held only to about 770 rows a minute.
-//
-// After the reset the sweep elects the due genes, admitted by their price. The
-// winner change writes a `publish` event, so the Actions publisher republishes
-// that gene's object, with the counts of the votes that waited. Until then
-// each of those voters sees their own vote in their own box.
-import { BATCH_METERS, admitBatchWork, batchSpendNow, priceOf } from "../batch-admission.js"
+// B-1147: periodic dirty-queue sweep for hot-gene winner elections. Votes that
+// flip a gene's winner again inside HOT_GENE_ELECTION_WINDOW_MS mark
+// icono_gene_elections_due (1 D1 row, 0 while already due) instead of projecting
+// 9 rows + republishing on every alternating vote. Idle ticks execute one cheap
+// D1 read and return without touching Cloudflare's GraphQL analytics.
+import { admitBatchWork, priceOf } from "../batch-admission.js"
 import { accountD1Usage } from "../operation-cost-account-usage.js"
 import {
   GENE_VOTE_ELECTION_ACTOR,
@@ -37,9 +12,6 @@ import {
   sqlUtcTimestamp,
 } from "./gene-votes.js"
 
-// One read batch and at most one write batch per gene, plus five. Cloudflare
-// allows 1,000 calls to its own services per invocation; production requests
-// have made 89 D1 calls and succeeded (request record, 2026-10-27 to 30).
 export const DEFERRED_ELECTIONS_PER_RUN = 100
 
 // The due genes with the vote version each had when this run read it. Every
@@ -65,40 +37,22 @@ const CLEAR_SQL = `DELETE FROM icono_gene_elections_due
                          SELECT COALESCE(MAX(version), 0) FROM icono_gene_vote_version
                           WHERE gene_symbol = json_extract(value, '$[0]')))`
 
-export async function sweepDeferredElections(db, { usage, now = Date.now() } = {}) {
-  // A meter that can't be read stops batch work and marks no day. It is a
-  // failure, so the scheduled handler logs it: a dead analytics token would
-  // otherwise leave every day unshed and due genes unelected without a word.
-  if (!usage) return { ok: false, waiting: "D1_METER_UNAVAILABLE" }
-  const spend = await batchSpendNow(db, usage, "sheddable_plus", now)
-  const spent = BATCH_METERS.find((meter) => spend[meter].projected >= spend[meter].stop)
-  if (spent) {
-    await db
-      .prepare(
-        `INSERT INTO icono_publication_shed_days (day, meter, projected, stop)
-         VALUES (?1, ?2, ?3, ?4) ON CONFLICT (day) DO NOTHING`,
-      )
-      .bind(usage.day, spent, spend[spent].projected, spend[spent].stop)
-      .run()
-    return { ok: true, shed: usage.day, meter: spent, ...spend[spent] }
-  }
-  // A shed day stays shed, so votes never mark a gene while this elects it.
-  const [shedToday, due] = await db.batch([
-    db.prepare("SELECT 1 AS shed FROM icono_publication_shed_days WHERE day = ?1").bind(usage.day),
-    db
-      .prepare(DUE_SQL)
-      .bind(
-        DEFERRED_ELECTIONS_PER_RUN,
-        GENE_VOTE_ELECTION_ACTOR,
-        sqlUtcTimestamp(now - HOT_GENE_ELECTION_WINDOW_MS),
-      ),
-  ])
-  if (shedToday?.results?.length) return { ok: true, shed: usage.day }
+export async function sweepDeferredElections(db, { usage, getUsage, now = Date.now() } = {}) {
+  const due = await db
+    .prepare(DUE_SQL)
+    .bind(
+      DEFERRED_ELECTIONS_PER_RUN,
+      GENE_VOTE_ELECTION_ACTOR,
+      sqlUtcTimestamp(now - HOT_GENE_ELECTION_WINDOW_MS),
+    )
+    .all()
   const versions = new Map((due?.results || []).map((row) => [row.gene_symbol, row.version]))
   const symbols = [...versions.keys()]
   if (!symbols.length) return { ok: true, elected: 0 }
+  const meter = usage !== undefined ? usage : await getUsage?.()
+  if (!meter) return { ok: false, waiting: "D1_METER_UNAVAILABLE" }
   const admission = await admitBatchWork(db, {
-    usage,
+    usage: meter,
     criticality: "sheddable_plus",
     price: priceOf("vote_election", symbols.length),
     now,
@@ -129,6 +83,6 @@ export async function sweepDeferredElections(db, { usage, now = Date.now() } = {
 
 export async function sweepDeferredElectionsForScheduled(env) {
   return sweepDeferredElections(env.ICONOPLASM_DB, {
-    usage: await accountD1Usage(env).catch(() => null),
+    getUsage: () => accountD1Usage(env).catch(() => null),
   })
 }

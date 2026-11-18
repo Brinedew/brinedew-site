@@ -406,29 +406,32 @@ test(
       assert.equal(within.result.projection.code, "PROMOTED")
       assert.ok(within.actual.rows_written <= 9, JSON.stringify(within.actual))
 
-      // A shed day: an election that keeps the winner writes nothing, and a
-      // winner change marks its gene due instead of projecting.
+      // Hot-gene cooldown: first vote promotion writes normally, then a flip
+      // inside HOT_GENE_ELECTION_WINDOW_MS marks due once (1 row, 0 if already
+      // due), and a kept winner writes 0.
       await db
         .prepare(
-          "INSERT INTO icono_publication_shed_days (day, meter, projected, stop) VALUES (date('now'), 'rows_written', 86000, 85000)",
+          "UPDATE icono_publish_state SET updated_by = ?1, updated_at = datetime('now') WHERE gene_symbol = 'KRAS'",
         )
+        .bind("vote_authority")
         .run()
-      const held = await measure("shed day, winner held", elect("KRAS", { shedable: true }))
+      const held = await measure("hot gene, winner held", elect("KRAS", { shedable: true }))
       assert.equal(held.result.projection.code, "UNCHANGED")
       assert.equal(held.actual.rows_written, 0)
       await seedScore("KRAS", 2, 5)
       await vote("KRAS", 2, 1)(db)
-      const shed = await measure("shed election", elect("KRAS", { shedable: true }))
-      assert.equal(shed.result.projection.code, "SHED")
-      assert.equal(shed.actual.rows_written, 1)
-      const shedAgain = await measure(
-        "shed election, gene already due",
+      const deferred = await measure("hot-gene deferred mark", elect("KRAS", { shedable: true }))
+      assert.equal(deferred.result.projection.code, "DEFERRED")
+      assert.equal(deferred.actual.rows_written, 1)
+      const deferredAgain = await measure(
+        "hot-gene deferred mark, already due",
         elect("KRAS", { shedable: true }),
       )
-      assert.equal(shedAgain.actual.rows_written, 0)
+      assert.equal(deferredAgain.result.projection.code, "DEFERRED")
+      assert.equal(deferredAgain.actual.rows_written, 0)
 
-      // The sweep after the reset: one gene, a winner change, within its price.
-      const after = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:07:00Z`) + 86_400_000
+      // The sweep after cooldown: one gene, a winner change, within its price.
+      const after = Date.now() + 10 * 60 * 1000
       const swept = await measure("sweep of one due gene", (metered) =>
         sweepDeferredElections(metered, {
           usage: {
@@ -446,8 +449,6 @@ test(
         { elected: swept.result.elected, promoted: swept.result.promoted },
         { elected: 1, promoted: 1 },
       )
-      // The run's own reads (the admission ledger, the shed day, the due list)
-      // fit inside the gene's read price; its admission row is ADMISSION_COST.
       const price = priceOf("vote_election", 1)
       for (const meter of ["rows_written", "rows_read"])
         assert.ok(
