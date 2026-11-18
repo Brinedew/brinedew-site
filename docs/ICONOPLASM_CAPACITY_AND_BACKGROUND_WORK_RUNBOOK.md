@@ -310,12 +310,13 @@ The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-po
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
   coverage, assets, storage audit, repair scope, the gallery listing).
 
-A vote is critical, but the winner change it causes is sheddable_plus: once
-the `electionsDue` job sees batch work's share of the UTC day spent, it records
-the day in `icono_publication_shed_days`, and until 00:00 UTC a winner change
-marks its gene due (1 row) instead of projecting it (9 rows). The job elects
-the due genes after the reset, by their price. Details and costs:
-`ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`, "Shed days".
+A vote is critical, but repeated winner flips on one hot gene are debounced: if a
+vote promotes a gene's winner and another vote flips it again within 5 minutes
+(`HOT_GENE_ELECTION_WINDOW_MS`), the vote marks `icono_gene_elections_due` (1
+row once, 0 thereafter) instead of projecting inline (9 rows) and waits for the
+`electionsDue` sweep. When `icono_gene_elections_due` has eligible work, that
+sweep checks batch admission at `sheddable_plus` and elects once for the burst.
+Details and costs: `ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
 
 A price's unit is a D1 row, the provider's own meter, which counts every index
 entry and trigger write behind a statement. It is not a statement count: the
