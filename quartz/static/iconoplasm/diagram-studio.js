@@ -38,7 +38,15 @@ import {
   templateSymbols,
   templateThumbnail,
 } from "./diagram-templates.js?v=220602dd298fbe51"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=fd5a190b9585cb17"
+import {
+  ICONOPLASM_BLOT_HEIGHT,
+  ICONOPLASM_BLOT_WIDTH,
+  iconoplasmBlotCdnUrl,
+  iconoplasmBlotFilename,
+  iconoplasmBlotFingerprint,
+  iconoplasmBlotObjectKey,
+} from "./generated/blot-identity.js?v=562534e2aefc2f41"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=cb1f92f5bf20504d"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.
@@ -439,33 +447,108 @@ function parseSymbols(value) {
   return symbols.slice(0, ICONOPLASM_DIAGRAM_LIMITS.nodes)
 }
 
+function blotEnvelopeFromGeneObject(symbol, geneObject) {
+  if (!geneObject || typeof geneObject !== "object") return { present: false, blot: null }
+  const portrait =
+    geneObject.portrait && typeof geneObject.portrait === "object" ? geneObject.portrait : null
+  const sha = String(portrait?.asset_sha256 || "")
+    .trim()
+    .toLowerCase()
+  if (portrait?.status !== "published" || !/^[a-f0-9]{64}$/.test(sha)) {
+    return { present: true, blot: null }
+  }
+  const fingerprint = iconoplasmBlotFingerprint(geneObject)
+  const objectKey = iconoplasmBlotObjectKey(symbol, fingerprint)
+  if (!objectKey) return { present: true, blot: null }
+  const origin = "https://iconoplasm.brinedew.bio"
+  return {
+    present: true,
+    blot: {
+      type: "gene_blot",
+      width: ICONOPLASM_BLOT_WIDTH,
+      height: ICONOPLASM_BLOT_HEIGHT,
+      canonical_url: `${origin}/blot/${encodeURIComponent(symbol)}.webp`,
+      immutable_url: `${origin}/${objectKey}`,
+      cdn_url: iconoplasmBlotCdnUrl(null, objectKey),
+      info_url: `${origin}/api/public/v1/media/${encodeURIComponent(symbol)}`,
+      blot_fingerprint: fingerprint,
+      filename: iconoplasmBlotFilename(symbol),
+      rights: "CC0 1.0 Universal",
+      license_url: "https://creativecommons.org/publicdomain/zero/1.0/",
+      usage_url: `${origin}/license`,
+      embedding_permitted: true,
+      hotlinking_permitted: true,
+      modification_permitted: true,
+      commercial_use_permitted: true,
+      attribution_required: false,
+    },
+  }
+}
+
 async function resolveGeneAssets(symbols) {
   const identifiers = parseSymbols(Array.isArray(symbols) ? symbols.join(",") : symbols)
   if (!identifiers.length) throw new TypeError("Enter at least one valid gene symbol.")
-  const apiOrigin = publicApiOrigin()
-  const batches = []
-  for (let index = 0; index < identifiers.length; index += 50)
-    batches.push(identifiers.slice(index, index + 50))
-  const payloads = await Promise.all(
-    batches.map(async (batch) => {
-      const response = await fetch(`${apiOrigin}/api/public/v1/images/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifiers: batch }),
-      })
-      const payload = await response.json().catch(() => null)
-      if (!response.ok || !payload) {
-        throw new Error(
-          (payload && payload.error) || `Image resolver returned HTTP ${response.status}.`,
-        )
+  const reader = publicationReader()
+  const resolved = await reader.resolve(identifiers)
+  const uniqueSymbols = Array.from(
+    new Set(resolved.map((item) => normalizeGeneSymbol(item?.canonical_symbol)).filter(Boolean)),
+  )
+  const geneObjects = new Map()
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(12, uniqueSymbols.length) }, async () => {
+      while (cursor < uniqueSymbols.length) {
+        const index = cursor
+        cursor += 1
+        const symbol = uniqueSymbols[index]
+        geneObjects.set(symbol, await reader.gene(symbol))
       }
-      return payload
     }),
   )
+  let snapshotVersion = ""
+  const results = resolved.map((identity) => {
+    const symbol = normalizeGeneSymbol(identity?.canonical_symbol)
+    if (!identity?.found || !symbol) {
+      return {
+        requested: identity?.requested || "",
+        canonical_symbol: null,
+        matched_by: null,
+        found: false,
+        images: null,
+      }
+    }
+    const geneObject = geneObjects.get(symbol) || null
+    const { present, blot } = blotEnvelopeFromGeneObject(symbol, geneObject)
+    const publishedAt = String(geneObject?.published_at || "").trim()
+    if (publishedAt > snapshotVersion) snapshotVersion = publishedAt
+    const pageUrl = `https://iconoplasm.brinedew.bio/gene/${encodeURIComponent(symbol)}`
+    if (!present) {
+      return {
+        requested: identity.requested,
+        canonical_symbol: symbol,
+        matched_by: identity.matched_by,
+        found: true,
+        page_url: pageUrl,
+        images: null,
+      }
+    }
+    return {
+      requested: identity.requested,
+      canonical_symbol: symbol,
+      matched_by: identity.matched_by,
+      found: true,
+      page_url: pageUrl,
+      card_snapshot_version: publishedAt,
+      images: { gene_blot: blot },
+    }
+  })
   return {
-    ...(payloads[0] || {}),
+    api_version: "v1",
+    canonical_key: "symbol",
+    card_snapshot_version: snapshotVersion,
+    max_symbols: ICONOPLASM_DIAGRAM_LIMITS.nodes,
     requested: identifiers,
-    results: payloads.flatMap((payload) => payload.results || []),
+    results,
   }
 }
 

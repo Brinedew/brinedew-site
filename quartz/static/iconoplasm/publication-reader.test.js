@@ -313,3 +313,148 @@ test("the names biologists type find their gene, ahead of genes whose name merel
     ["CDKN1A", "PAK1"],
   )
 })
+
+test("search filters to shared symbols case-insensitively and applies curated bootstrap aliases", async () => {
+  const row = (symbol, name) => [symbol, name, "", "#888888", 0, null, 10, 1, 1990, ""]
+  const genes = [
+    row("C1orf112", "chromosome 1 open reading frame 112"),
+    row("CCNH", "cyclin H"),
+    row("CDH1", "cadherin 1"),
+    row("CDH17", "cadherin 17"),
+  ]
+  const aliases = {
+    CDH17: ["cadherin", "HPT-1"],
+  }
+  const { reader } = recordingReader((parsed) => {
+    if (parsed.pathname === "/catalog/v3/index.json")
+      return new Response(
+        JSON.stringify({
+          schema: 3,
+          generated_at: "2026-11-18T00:00:00.000Z",
+          watermark_event_id: 1,
+          genes,
+        }),
+        { status: 200 },
+      )
+    if (parsed.pathname === "/catalog/v3/aliases.json")
+      return new Response(JSON.stringify({ schema: 1, aliases }), { status: 200 })
+    return new Response(null, { status: 404 })
+  })
+
+  // Shared-scope search normalizes mixed-case catalog symbols like C1orf112.
+  const sharedHit = await reader.search("C1orf112", { limit: 12, symbols: ["C1ORF112"] })
+  assert.deepEqual(
+    sharedHit.genes.map((gene) => gene.symbol),
+    ["C1orf112"],
+  )
+
+  // Curated bootstrap adds E-cadherin for CDH1 and retracts bare "cadherin" from CDH17.
+  const eCadherin = await reader.search("E-cadherin", { limit: 12 })
+  assert.equal(eCadherin.genes[0]?.symbol, "CDH1")
+  const retracted = await reader.search("HPT-1", { limit: 12 })
+  assert.equal(retracted.genes[0]?.symbol, "CDH17")
+})
+
+test("sharedDiscoverySymbols reads CDN catalog/v3/shared-discoveries.json and falls back once on 404", async () => {
+  let cdnStatus = 404
+  const { reader, requests } = recordingReader((parsed) => {
+    if (parsed.pathname === "/catalog/v3/shared-discoveries.json") {
+      return cdnStatus === 200
+        ? new Response(JSON.stringify({ schema: 1, symbols: ["tp53", "ERBB2"] }), { status: 200 })
+        : new Response(null, { status: cdnStatus })
+    }
+    if (parsed.pathname === "/api/public/v1/shared-discoveries.json") {
+      return new Response(JSON.stringify({ schema: 1, symbols: ["tp53", "ERBB2", "TP53"] }), {
+        status: 200,
+      })
+    }
+    return new Response(null, { status: 404 })
+  })
+  assert.deepEqual(await reader.sharedDiscoverySymbols(), ["TP53", "ERBB2"])
+  assert.deepEqual(requests, [
+    `${BUNNY}/catalog/v3/shared-discoveries.json`,
+    `${CANONICAL}/api/public/v1/shared-discoveries.json`,
+  ])
+
+  const happy = recordingReader((parsed) =>
+    parsed.pathname === "/catalog/v3/shared-discoveries.json"
+      ? new Response(JSON.stringify({ schema: 1, symbols: ["TP53", "EGFR"] }), { status: 200 })
+      : new Response(null, { status: 404 }),
+  )
+  assert.deepEqual(await happy.reader.sharedDiscoverySymbols(), ["TP53", "EGFR"])
+  assert.deepEqual(happy.requests, [`${BUNNY}/catalog/v3/shared-discoveries.json`])
+})
+
+test("resolve resolves symbols, aliases, bootstrap rules, and lazy CDN UniProt entries without Worker calls", async () => {
+  const { buildCompactResolverIndex } = await import("./generated/resolver-index.js")
+  const row = (symbol, name) => [symbol, name, "", "#888888", 0, null, 10, 1, 1990, ""]
+  const genes = [
+    row("CD274", "CD274 molecule"),
+    row("CDH1", "cadherin 1"),
+    row("CDH17", "cadherin 17"),
+    row("NOLC1", "nucleolar phosphoprotein"),
+    row("RBL2", "RB transcriptional corepressor like 2"),
+    row("SOSTDC1", "sclerostin domain containing 1"),
+    row("TP53", "tumor protein p53"),
+  ]
+  const aliases = {
+    CD274: ["PD-L1"],
+    CDH17: ["cadherin", "HPT-1"],
+    NOLC1: ["P130"],
+    RBL2: ["p130"],
+    SOSTDC1: ["USAG1"],
+    TP53: ["LFS1", "p53"],
+  }
+  const resolveIndex = buildCompactResolverIndex([
+    { s: "CDH17", u: "Q12864", a: ["cadherin", "HPT-1"] },
+    { s: "TP53", u: "P04637", a: ["LFS1", "p53"] },
+  ])
+  const { reader, requests } = recordingReader((parsed) => {
+    if (parsed.pathname === "/catalog/v3/index.json") {
+      return new Response(
+        JSON.stringify({
+          schema: 3,
+          generated_at: "2026-11-18T00:00:00.000Z",
+          watermark_event_id: 1,
+          genes,
+        }),
+        { status: 200 },
+      )
+    }
+    if (parsed.pathname === "/catalog/v3/aliases.json") {
+      return new Response(JSON.stringify({ schema: 1, aliases }), { status: 200 })
+    }
+    if (parsed.pathname === "/catalog/v3/resolve.json") {
+      return new Response(JSON.stringify(resolveIndex), { status: 200 })
+    }
+    return new Response(null, { status: 404 })
+  })
+
+  // Canonical-only resolution loads index.json only.
+  assert.deepEqual(await reader.resolve(["tp53", "CDH1"]), [
+    { requested: "tp53", canonical_symbol: "TP53", matched_by: "symbol", found: true },
+    { requested: "CDH1", canonical_symbol: "CDH1", matched_by: "symbol", found: true },
+  ])
+  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`])
+
+  // Aliases resolve via aliases.json + bootstrap without resolve.json.
+  assert.deepEqual(await reader.resolve(["P130", "p130", "pdl1", "E-cadherin"]), [
+    { requested: "P130", canonical_symbol: "NOLC1", matched_by: "alias", found: true },
+    { requested: "p130", canonical_symbol: "RBL2", matched_by: "alias", found: true },
+    { requested: "pdl1", canonical_symbol: "CD274", matched_by: "alias", found: true },
+    { requested: "E-cadherin", canonical_symbol: "CDH1", matched_by: "alias", found: true },
+  ])
+  assert.deepEqual(requests, [`${BUNNY}/catalog/v3/index.json`, `${BUNNY}/catalog/v3/aliases.json`])
+
+  // Unmatched UniProt IDs lazily read CDN resolve.json cleanly, while retracted aliases stay unmapped.
+  assert.deepEqual(await reader.resolve(["cadherin", "P04637", "UNKNOWN_X"]), [
+    { requested: "cadherin", canonical_symbol: null, matched_by: null, found: false },
+    { requested: "P04637", canonical_symbol: "TP53", matched_by: "uniprot", found: true },
+    { requested: "UNKNOWN_X", canonical_symbol: null, matched_by: null, found: false },
+  ])
+  assert.equal(
+    requests.some((url) => url.startsWith(CANONICAL)),
+    false,
+    "never calls the stateful Worker for resolve",
+  )
+})

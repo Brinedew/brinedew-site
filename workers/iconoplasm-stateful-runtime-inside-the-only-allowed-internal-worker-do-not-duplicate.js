@@ -62,9 +62,18 @@ import {
   canonicalPublishedJson,
   PUBLISHED_OBJECT_STORAGE_UNAVAILABLE,
   REQUEST_PICKER_OBJECT_KEY,
+  SHARED_DISCOVERIES_OBJECT_KEY,
   STABLE_GENE_OBJECT_CACHE_CONTROL,
   stableGeneObjectKey,
 } from "./lib/iconoplasm-published-objects.js"
+import {
+  COMPACT_RESOLVER_KV_PREFIX,
+  COMPACT_RESOLVER_OBJECT_KEY,
+  buildCompactResolverIndex,
+  buildCompactResolverOverlay,
+  isValidCompactResolverIndex,
+  resolveIdentifierFromCompactIndex,
+} from "./lib/iconoplasm-resolver-index.js"
 import { publishGeneCommentsObject } from "./lib/gene-comments-publication.js"
 import { createPublishedObjectDeliveryHandlers } from "./lib/iconoplasm-published-object-delivery.js"
 import { isAdmin } from "./admin.js"
@@ -231,7 +240,6 @@ import {
   iconoplasmBlotObjectKey,
   iconoplasmCdnUrl,
 } from "./lib/iconoplasm-blot.js"
-import { applyIconoplasmPublicationAliasPolicyToGene } from "./iconoplasm-publication-aliases.js"
 import {
   readIconoplasmPublicationAliasPolicy,
   resetIconoplasmPublicationAliasPublicCacheForTests,
@@ -396,6 +404,7 @@ const KV_PUBLISHED_PORTRAIT_FINGERPRINT_PREFIX = "iconoplasm:published-portrait-
 const KV_PUBLIC_STATS = "iconoplasm:public-stats:v1"
 const KV_OBSERVABILITY_SNAPSHOT = "iconoplasm:observability-snapshot:v1"
 const KV_SHARED_GENE_DISCOVERY_SYMBOLS = "iconoplasm:shared-gene-discovery-symbols:v1"
+const KV_RESOLVER_INDEX_PREFIX = COMPACT_RESOLVER_KV_PREFIX
 const KV_HYDRATED_CATALOG_ARTIFACT_PREFIX = `iconoplasm:hydrated-catalog-artifact:${CATALOG_ARTIFACT_VERSION_TOKEN}:`
 const CARD_ARTIFACT_UNAVAILABLE = "CARD_ARTIFACT_UNAVAILABLE"
 const MOBILE_CARD_VM_SYMBOL_BATCH_SAFETY_LIMIT = 25000
@@ -419,19 +428,15 @@ const DISCOVERY_TRIGGER_HOVER_DWELL = "hover_dwell"
 const DISCOVERY_TRIGGER_GUEST_BUFFER_MERGE = "guest_buffer_merge"
 const DISCOVERY_TRIGGER_STARTER_SEED = "starter_seed"
 const DISCOVERY_TRIGGER_GENE_PAGE_VISIT = "gene_page_visit"
-const ICONOPLASM_STARTER_GENE_SYMBOLS = ["INS", "RHO", "PRL"]
 
-const catalogCache = {
-  hash: null,
-  catalogHash: null,
-  generatedAt: null,
-  genes: Object.freeze([]),
-  bySymbol: new Map(),
-  symbolByUniprot: new Map(),
-  symbolByAlias: new Map(),
+const resolverCache = {
+  baseHash: null,
+  overlayVersion: null,
+  index: null,
+  overlay: null,
   loadedAt: 0,
 }
-const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000
+const RESOLVER_CACHE_TTL_MS = 5 * 60 * 1000
 // Cost barrier: local worker memory is not a billing barrier. Cloudflare can run
 // many isolates at once, so any O(N) snapshot that lives only in module memory can
 // multiply globally and burn D1 even when each isolate "looks cached" locally.
@@ -9857,16 +9862,35 @@ async function readSharedGeneDiscoverySymbolsFromD1(env, { limit = 20000 } = {})
 async function writeSharedGeneDiscoverySymbolCache(
   env,
   symbols,
-  { ordinals = null, fullRebuildDay = "", now = Date.now() } = {},
+  { ordinals = null, fullRebuildDay = "", now = Date.now(), priorCdnPublishedAt = "" } = {},
 ) {
   if (!env.KV) return
   const normalized = normalizeSharedDiscoverySymbolList(symbols)
+  const timestamp = new Date(now).toISOString()
+  let cdnPublishedAt = String(priorCdnPublishedAt || "")
+  if (canWriteExternalPortraitStorage(env)) {
+    try {
+      await createPublishedObjectStore(env).writeStable(SHARED_DISCOVERIES_OBJECT_KEY, {
+        schema: 1,
+        published_at: timestamp,
+        symbols: normalized,
+      })
+      cdnPublishedAt = timestamp
+    } catch (error) {
+      console.warn(
+        `[shared-discoveries] CDN publish failed; KV updated and CDN will retry next run: ${String(
+          error?.message || error,
+        )}`,
+      )
+    }
+  }
   await env.KV.put(
     KV_SHARED_GENE_DISCOVERY_SYMBOLS,
     JSON.stringify({
       schema: "iconoplasm.sharedGeneDiscoverySymbols.v1",
-      updated_at: new Date(now).toISOString(),
+      updated_at: timestamp,
       symbols: normalized,
+      ...(cdnPublishedAt ? { cdn_published_at: cdnPublishedAt } : {}),
       ...(Array.isArray(ordinals) ? { ordinals, full_rebuild_day: fullRebuildDay } : {}),
     }),
   )
@@ -9881,24 +9905,6 @@ async function readSharedGeneDiscoverySymbolPayload(env) {
       ? published
       : null
   } catch {
-    return null
-  }
-}
-
-async function readSharedGeneDiscoverySymbols(env) {
-  try {
-    const raw = await env.KV?.get(KV_SHARED_GENE_DISCOVERY_SYMBOLS)
-    if (raw == null) return null
-    const published = JSON.parse(raw)
-    if (
-      published?.schema !== "iconoplasm.sharedGeneDiscoverySymbols.v1" ||
-      !Array.isArray(published.symbols)
-    )
-      return null
-    return normalizeSharedDiscoverySymbolList(published)
-  } catch {
-    // The hourly publisher owns this overlay. A cold or unavailable publication
-    // must not turn simultaneous reader searches into corpus scans and KV writes.
     return null
   }
 }
@@ -9926,6 +9932,13 @@ export async function publishSharedGeneDiscoverySymbols(env, { now = Date.now() 
     if ([...prior].every((ordinal) => current.has(ordinal))) {
       const added = ordinals.filter((ordinal) => !prior.has(ordinal))
       if (!added.length) {
+        if (!published.cdn_published_at && canWriteExternalPortraitStorage(env)) {
+          await writeSharedGeneDiscoverySymbolCache(env, published.symbols, {
+            ordinals,
+            fullRebuildDay: today,
+            now,
+          })
+        }
         return { ok: true, changed: false, symbol_count: published.symbols.length }
       }
       const names = await readCanonicalSymbolsForOrdinals(env.ICONOPLASM_DB, added)
@@ -9946,7 +9959,12 @@ export async function publishSharedGeneDiscoverySymbols(env, { now = Date.now() 
     published.symbols.every((symbol, index) => symbol === symbols[index])
   // Always rewrite on a full run (at most once per UTC day, or after an
   // ordinal vanished) so the next hours have today's ordinals to diff against.
-  await writeSharedGeneDiscoverySymbolCache(env, symbols, { ordinals, fullRebuildDay: today, now })
+  await writeSharedGeneDiscoverySymbolCache(env, symbols, {
+    ordinals,
+    fullRebuildDay: today,
+    now,
+    priorCdnPublishedAt: unchanged ? published?.cdn_published_at || "" : "",
+  })
   return { ok: true, changed: !unchanged, symbol_count: symbols.length, named: ordinals.length }
 }
 
@@ -10829,11 +10847,6 @@ function normalizeCatalogAliases(raw, { maxItems = 48, maxLen = 64, allowSpaces 
   return out
 }
 
-function normalizeCatalogAliasLookupKey(raw) {
-  const aliases = normalizeCatalogAliases([raw], { maxItems: 1, allowSpaces: true })
-  return aliases.length ? String(aliases[0]) : ""
-}
-
 function normalizeAestheticsList(raw) {
   return normalizeTextList(raw)
 }
@@ -11520,112 +11533,60 @@ function publicGeneBlotMediaEnvelope(url, symbol, geneObject, env) {
   }
 }
 
-async function warmCatalogCache(env) {
+async function loadCompactResolverState(env) {
   const manifest = await catalogManifestObj(env)
-  if (!manifest?.current_hash || !env.KV) return
+  if (!manifest?.current_hash || !env?.KV) return { index: null, overlay: null }
   const baseHash = catalogBaseHash(manifest.current_hash)
-  if (!baseHash) return
-  const portraitAwareHash =
-    buildPortraitAwareManifestHash(baseHash, await sharedPublishedPortraitFingerprint(env)) ||
-    baseHash
+  if (!baseHash) return { index: null, overlay: null }
   const publicationAliases = (await readCoherentPublishedIconoplasmRecognitionPolicies(env.KV))
     .publication_aliases
-  const cacheHash = `${portraitAwareHash}:${publicationAliases.version}`
   const now = Date.now()
   if (
-    catalogCache.hash === cacheHash &&
-    now - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS &&
-    catalogCache.bySymbol.size > 0
+    resolverCache.baseHash === baseHash &&
+    resolverCache.index &&
+    now - resolverCache.loadedAt < RESOLVER_CACHE_TTL_MS
   ) {
-    return
+    if (resolverCache.overlayVersion !== publicationAliases.version || !resolverCache.overlay) {
+      resolverCache.overlay = buildCompactResolverOverlay(resolverCache.index, publicationAliases)
+      resolverCache.overlayVersion = publicationAliases.version
+    }
+    return { index: resolverCache.index, overlay: resolverCache.overlay }
   }
 
-  // Cost barrier: search/resolve/gallery warm-up runs on hot public routes. Do
-  // not rebuild the hydrated catalog from scratch here on every cold isolate.
-  // Load the shared versioned hydrated artifact instead.
-  const artifact = await hydratedCatalogArtifact(env, portraitAwareHash)
-  if (!artifact) return
-
-  const bySymbol = new Map()
-  const symbolByUniprot = new Map()
-  const symbolByAlias = new Map()
-  const ambiguousAliases = new Set()
-  for (const g of artifact?.genes || []) {
-    const s = normalizeSymbol(g?.s)
-    if (!s) continue
-    bySymbol.set(s, g)
-    const u = normalizeUniprot(g?.u)
-    if (u && !symbolByUniprot.has(u)) symbolByUniprot.set(u, s)
-    for (const alias of normalizeCatalogAliases(g?.a || [])) {
-      const key = normalizeCatalogAliasLookupKey(alias)
-      if (!key || ambiguousAliases.has(key)) continue
-      const existingOwner = symbolByAlias.get(key)
-      if (existingOwner && existingOwner !== s) {
-        symbolByAlias.delete(key)
-        ambiguousAliases.add(key)
-      } else if (!existingOwner) {
-        symbolByAlias.set(key, s)
-      }
+  let index = null
+  try {
+    const rawCompact = await env.KV.get(`${KV_RESOLVER_INDEX_PREFIX}${baseHash}`)
+    if (rawCompact) {
+      const parsed = JSON.parse(rawCompact)
+      if (isValidCompactResolverIndex(parsed)) index = parsed
     }
+  } catch {}
+
+  if (!index) {
+    // Rollout / legacy-fixture fallback before the next CI catalog release populates
+    // iconoplasm:resolver-index:<hash>: build once per isolate from the lean base catalog
+    // without touching portrait snapshots or hydrated-catalog-artifact.
+    try {
+      const rawBaseCatalog = await env.KV.get(`${KV_CATALOG_PREFIX}${baseHash}`)
+      if (rawBaseCatalog) {
+        const parsedCatalog = JSON.parse(rawBaseCatalog)
+        if (Array.isArray(parsedCatalog?.genes)) {
+          index = buildCompactResolverIndex(parsedCatalog.genes, {
+            generatedAt: parsedCatalog.generated_at || manifest.generated_at,
+          })
+        }
+      }
+    } catch {}
   }
 
-  for (const [symbol, aliases] of Object.entries(publicationAliases.remove_by_symbol)) {
-    if (!bySymbol.has(symbol)) continue
-    for (const alias of aliases) {
-      const key = normalizeCatalogAliasLookupKey(alias)
-      const existingOwner = key ? symbolByAlias.get(key) : null
-      if (existingOwner && existingOwner !== symbol) {
-        throw new TypeError(
-          `Publication alias removal ${alias} for ${symbol} is owned by ${existingOwner}`,
-        )
-      }
-      if (key && existingOwner === symbol) symbolByAlias.delete(key)
-    }
-    bySymbol.set(
-      symbol,
-      applyIconoplasmPublicationAliasPolicyToGene(bySymbol.get(symbol), symbol, publicationAliases),
-    )
-  }
-
-  for (const [symbol, aliases] of Object.entries(publicationAliases.by_symbol)) {
-    // A generated catalog may legitimately predate a newly curated symbol. Do
-    // not take the entire public search API down during that deployment window;
-    // the extension rejects an overlay whose target is absent from its cache.
-    if (!bySymbol.has(symbol)) continue
-    for (const alias of aliases) {
-      const key = normalizeCatalogAliasLookupKey(alias)
-      if (key === key.toUpperCase() && bySymbol.has(key) && key !== symbol) {
-        throw new TypeError(
-          `Publication alias ${alias} for ${symbol} conflicts with canonical catalog symbol ${key}`,
-        )
-      }
-      const existingOwner = key ? symbolByAlias.get(key) : null
-      if (existingOwner && existingOwner !== symbol) {
-        throw new TypeError(
-          `Publication alias ${alias} for ${symbol} conflicts with catalog alias owned by ${existingOwner}`,
-        )
-      }
-    }
-
-    const gene = applyIconoplasmPublicationAliasPolicyToGene(
-      bySymbol.get(symbol),
-      symbol,
-      publicationAliases,
-    )
-    bySymbol.set(symbol, gene)
-    for (const alias of aliases) {
-      const key = normalizeCatalogAliasLookupKey(alias)
-      if (key) symbolByAlias.set(key, symbol)
-    }
-  }
-  catalogCache.hash = cacheHash
-  catalogCache.catalogHash = baseHash
-  catalogCache.generatedAt = artifact.generated_at || manifest.generated_at || null
-  catalogCache.genes = Object.freeze(Array.from(bySymbol.values()))
-  catalogCache.loadedAt = now
-  catalogCache.bySymbol = bySymbol
-  catalogCache.symbolByUniprot = symbolByUniprot
-  catalogCache.symbolByAlias = symbolByAlias
+  if (!index) return { index: null, overlay: null }
+  const overlay = buildCompactResolverOverlay(index, publicationAliases)
+  resolverCache.baseHash = baseHash
+  resolverCache.index = index
+  resolverCache.overlayVersion = publicationAliases.version
+  resolverCache.overlay = overlay
+  resolverCache.loadedAt = now
+  return { index, overlay }
 }
 
 function normalizeCatalogPayloadItem(rawItem) {
@@ -15308,14 +15269,11 @@ function clearSharedD1CostCaches() {
 // fresh isolate so they can prove the shared KV snapshots, not just module memory,
 // are what keep public traffic off D1.
 export function resetIconoplasmRuntimeCachesForTest() {
-  catalogCache.hash = null
-  catalogCache.catalogHash = null
-  catalogCache.generatedAt = null
-  catalogCache.genes = Object.freeze([])
-  catalogCache.bySymbol = new Map()
-  catalogCache.symbolByUniprot = new Map()
-  catalogCache.symbolByAlias = new Map()
-  catalogCache.loadedAt = 0
+  resolverCache.baseHash = null
+  resolverCache.overlayVersion = null
+  resolverCache.index = null
+  resolverCache.overlay = null
+  resolverCache.loadedAt = 0
   clearSharedD1CostCaches()
   resetIconoplasmPublicationAliasPublicCacheForTests()
   resetIconoplasmRecognitionPolicyPublicCacheForTests()
@@ -15704,89 +15662,42 @@ function normalizeRequestedSymbols(rawSymbols, maxCount = PUBLIC_MAX_GENE_BATCH_
   )
 }
 
-function normalizePublicGeneSearchScope(raw) {
-  const value = String(raw || "")
-    .trim()
-    .toLowerCase()
-  if (value === "discoveries") return "discoveries"
-  if (value === "shared") return "shared"
-  if (value === "starter") return "starter"
-  return "catalog"
-}
-
-function normalizeSearchNeedle(raw) {
-  return String(raw || "")
-    .trim()
-    .replace(/\s+/g, " ")
-}
-
-function scorePublicGeneSearchValue(queryUpper, queryLower, rawValue, category) {
-  const value = normalizeSearchNeedle(rawValue)
-  if (!value) return null
-  const valueUpper = value.toUpperCase()
-  const valueLower = value.toLowerCase()
-  // Strength first (exact 0, prefix 10, substring 20), field second (symbol,
-  // alias, full name). Ranking by field first let any partial symbol hit beat
-  // an exact alias, so "p53" listed CFAP53 and NOP53 above TP53.
-  const field = category === "symbol" ? 0 : category === "alias" ? 1 : 2
-  let strength = null
-  if (valueUpper === queryUpper) strength = 0
-  else if (valueUpper.startsWith(queryUpper)) strength = 10
-  else if (valueLower.includes(queryLower)) strength = 20
-  if (strength === null) return null
-  return { rank: strength + field, matched_by: category, matched_value: value }
-}
-
-function scorePublicGeneSearchMatch(queryUpper, queryLower, symbol, gene) {
-  const candidates = []
-  const symbolMatch = scorePublicGeneSearchValue(queryUpper, queryLower, symbol, "symbol")
-  if (symbolMatch) candidates.push(symbolMatch)
-
-  const fullName = normalizeSearchNeedle(gene?.n || symbol)
-  const fullNameMatch = scorePublicGeneSearchValue(queryUpper, queryLower, fullName, "full_name")
-  if (fullNameMatch) candidates.push(fullNameMatch)
-
-  for (const alias of normalizeCatalogAliases(gene?.a || [], { allowSpaces: true })) {
-    const aliasMatch = scorePublicGeneSearchValue(queryUpper, queryLower, alias, "alias")
-    if (aliasMatch) candidates.push(aliasMatch)
-  }
-
-  if (!candidates.length) return null
-  candidates.sort((left, right) => {
-    return (
-      Number(left.rank || 0) - Number(right.rank || 0) ||
-      String(left.matched_value || "").length - String(right.matched_value || "").length ||
-      compareNullableTextAsc(left.matched_value, right.matched_value)
+async function handlePublicSharedDiscoveriesObject(env) {
+  let payload = await readSharedGeneDiscoverySymbolPayload(env)
+  if (payload?.symbols) {
+    return new Response(
+      JSON.stringify({
+        schema: 1,
+        published_at: payload.updated_at || new Date().toISOString(),
+        symbols: payload.symbols,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+          "Access-Control-Allow-Origin": "*",
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
     )
+  }
+  try {
+    const object = await createPublishedObjectStore(env).readStable(SHARED_DISCOVERIES_OBJECT_KEY)
+    if (object) {
+      return new Response(object.bytes, {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": STABLE_GENE_OBJECT_CACHE_CONTROL,
+          "Access-Control-Allow-Origin": "*",
+          "X-Content-Type-Options": "nosniff",
+        },
+      })
+    }
+  } catch {}
+  return new Response(null, {
+    status: 404,
+    headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
   })
-  return candidates[0]
-}
-
-function publicGeneSearchEntry(url, env, symbol, gene, match) {
-  const entry = {
-    symbol,
-    color: gene?.c || "#888",
-    full_name: gene?.n || symbol,
-    matched_by: match?.matched_by || null,
-    matched_value: match?.matched_value || null,
-    match_rank: Number(match?.rank ?? 999),
-  }
-  if (gene?.p) {
-    // B-855/B-846: thumbnails come straight from Bunny. Our own /portraits/*
-    // host costs one Worker request per image, so a search results list of 8
-    // would cost 9 requests instead of 1.
-    entry.pt = portraitCdnUrl(env, gene.p, "medium")
-    entry.ph = portraitCdnUrl(env, gene.p, "full")
-  }
-  return entry
-}
-
-function portraitCdnUrl(env, asset, preferred) {
-  const renditions = asset?.renditions || {}
-  const path = [preferred, "medium", "full", "small"]
-    .map((size) => renditions?.[size]?.path)
-    .find(Boolean)
-  return path ? iconoplasmCdnUrl(env, path) : portraitAssetUrl(asset, preferred)
 }
 
 async function parseJsonBody(request) {
@@ -15798,47 +15709,11 @@ async function parseJsonBody(request) {
   }
 }
 
-async function resolvePublicIdentifier(env, rawIdentifier) {
-  await warmCatalogCache(env)
-  const symbol = normalizeSymbol(rawIdentifier)
-  if (symbol && catalogCache.bySymbol.has(symbol)) {
-    return {
-      requested: String(rawIdentifier || ""),
-      canonical_symbol: symbol,
-      matched_by: "symbol",
-      found: true,
-    }
-  }
-  const uniprot = normalizeUniprot(rawIdentifier)
-  if (uniprot) {
-    const resolvedSymbol = catalogCache.symbolByUniprot.get(uniprot)
-    if (resolvedSymbol) {
-      return {
-        requested: String(rawIdentifier || ""),
-        canonical_symbol: resolvedSymbol,
-        matched_by: "uniprot",
-        found: true,
-      }
-    }
-  }
-  const aliasKey = normalizeCatalogAliasLookupKey(rawIdentifier)
-  if (aliasKey) {
-    const resolvedSymbol = catalogCache.symbolByAlias.get(aliasKey)
-    if (resolvedSymbol) {
-      return {
-        requested: String(rawIdentifier || ""),
-        canonical_symbol: resolvedSymbol,
-        matched_by: "alias",
-        found: true,
-      }
-    }
-  }
-  return {
-    requested: String(rawIdentifier || ""),
-    canonical_symbol: null,
-    matched_by: null,
-    found: false,
-  }
+async function resolvePublicIdentifiers(env, identifiers) {
+  const state = await loadCompactResolverState(env)
+  return identifiers.map((identifier) =>
+    resolveIdentifierFromCompactIndex(state.index, identifier, state.overlay),
+  )
 }
 
 async function handlePublicMetadata(request, env) {
@@ -16529,10 +16404,7 @@ async function handlePublicResolve(request, env) {
   if (!identifiers.length) return refuse("identifiers must be a non-empty array")
   if (identifiers.length > PUBLIC_MAX_RESOLVE_BATCH_LIMIT)
     return refuse(`Too many identifiers (max ${PUBLIC_MAX_RESOLVE_BATCH_LIMIT})`)
-  const results = []
-  for (const identifier of identifiers) {
-    results.push(await resolvePublicIdentifier(env, identifier))
-  }
+  const results = await resolvePublicIdentifiers(env, identifiers)
   return json({
     api_version: PUBLIC_API_VERSION,
     schema_version: API_SCHEMA_VERSION,
@@ -16564,10 +16436,7 @@ async function handlePublicImageResolve(request, env) {
     )
   }
 
-  const resolved = []
-  for (const identifier of identifiers) {
-    resolved.push(await resolvePublicIdentifier(env, identifier))
-  }
+  const resolved = await resolvePublicIdentifiers(env, identifiers)
   const canonicalSymbols = Array.from(
     new Set(resolved.map((item) => item.canonical_symbol).filter(Boolean)),
   )
@@ -16747,129 +16616,22 @@ async function readStableGeneObjectProjection(env, symbol) {
   return { kind: "available", version, payload }
 }
 
-async function listUserDiscoveredGeneSymbols(env, { userId, limit = 10000 } = {}) {
-  if (!env.ICONOPLASM_DB) return []
-  const userIdNorm = normalizeUserId(userId || "")
-  if (!userIdNorm || isGuestUserId(userIdNorm)) return []
-  const cleanedLimit = Math.max(
-    1,
-    Math.min(10000, Number.parseInt(String(limit || "10000"), 10) || 10000),
+// B-1136: homepage ("catalog" & "shared") and admin gene searches all read the
+// CDN catalogue index directly in the browser, so this server-side 19k scan is
+// retired rather than letting stray callers burn 10 ms Free-plan CPU.
+function handlePublicGeneSearch() {
+  return json(
+    {
+      error:
+        "Gene search moved to the browser catalog index on the CDN (catalog/v3/index.json and catalog/v3/aliases.json).",
+      code: "GENE_SEARCH_RETIRED",
+      catalog_url: "https://img.brinedew.bio/catalog/v3/index.json",
+      aliases_url: "https://img.brinedew.bio/catalog/v3/aliases.json",
+      shared_discoveries_url: "https://img.brinedew.bio/catalog/v3/shared-discoveries.json",
+    },
+    410,
+    { "Cache-Control": "public, max-age=3600" },
   )
-  const isAdmin = iconoplasmDiscoveryUserIsConfiguredAdmin(env, userIdNorm)
-  const state = await readCompactUserStateForRequest(env, {
-    userId: userIdNorm,
-  })
-  if (!state) return []
-  const chronology = await readCompactDiscoveryChronology(env.ICONOPLASM_DB, userIdNorm)
-  return compactShelfRowsFromChronology(chronology)
-    .slice(0, cleanedLimit)
-    .map((row) => row.gene_symbol)
-}
-
-// Which of a search's genes the signed-in reader has discovered (B-1094). The
-// page only ever holds one window of a large collection, so it cannot tell on
-// its own: a reader with 2,144 discoveries saw INS as "Undiscovered" because
-// it was not in the cards on screen. Costs the session check, one dictionary
-// row per result (12 at most) and the reader's one compact state row; guests
-// and an unreadable session get no flags, never a wrong one.
-async function signedInDiscoveredAmong(request, env, symbols) {
-  if (!symbols.length) return null
-  let user = null
-  try {
-    user = await iconoplasmSessionUser(request, env)
-  } catch {
-    return null
-  }
-  if (!user?.user_id) return null
-  return new Set(await readCompactDiscoveryMembership(env, { userId: user.user_id, symbols }))
-}
-
-async function handlePublicGeneSearch(request, env) {
-  const url = new URL(request.url)
-  const requestedScope = normalizePublicGeneSearchScope(url.searchParams.get("scope"))
-  const rawQuery = normalizeSearchNeedle(url.searchParams.get("q") || "")
-  const qUpper = rawQuery.toUpperCase()
-  const qLower = rawQuery.toLowerCase()
-  if (!rawQuery)
-    return json({ genes: [], query: "", scope_applied: requestedScope }, 200, {
-      "Cache-Control":
-        requestedScope === "catalog" || requestedScope === "shared"
-          ? iconoplasmCacheControl("publicSearch")
-          : iconoplasmCacheControl("sensitive"),
-    })
-  const sharedSymbols =
-    requestedScope === "shared" ? await readSharedGeneDiscoverySymbols(env) : undefined
-  if (sharedSymbols === null)
-    return json(
-      {
-        error: "Shared discoveries are temporarily unavailable",
-        code: "SHARED_DISCOVERY_PUBLICATION_UNAVAILABLE",
-      },
-      503,
-      { "Cache-Control": "no-store" },
-    )
-  await warmCatalogCache(env)
-  const limit = Math.max(
-    1,
-    Math.min(100, Number.parseInt(url.searchParams.get("limit") || "20", 10)),
-  )
-  let appliedScope = requestedScope
-  let candidateSymbols = []
-  if (requestedScope === "discoveries") {
-    const sessionUser = await iconoplasmSessionUser(request, env)
-    if (sessionUser?.user_id) {
-      candidateSymbols = await listUserDiscoveredGeneSymbols(env, { userId: sessionUser.user_id })
-      if (!candidateSymbols.length) {
-        // Empty-account starters are a presentation default, not a discovery.
-        // A passive search must never spend mutation capacity or manufacture
-        // durable personal state on behalf of the reader.
-        candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
-      }
-    } else {
-      appliedScope = "starter"
-      candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
-    }
-  } else if (requestedScope === "shared") {
-    candidateSymbols = sharedSymbols
-  } else if (requestedScope === "starter") {
-    candidateSymbols = ICONOPLASM_STARTER_GENE_SYMBOLS.slice()
-  } else {
-    candidateSymbols = Array.from(catalogCache.bySymbol.keys())
-  }
-
-  const matches = []
-  for (const symbol of candidateSymbols) {
-    const gene = catalogCache.bySymbol.get(symbol)
-    if (!gene) continue
-    const match = scorePublicGeneSearchMatch(qUpper, qLower, symbol, gene)
-    if (!match) continue
-    matches.push(publicGeneSearchEntry(url, env, symbol, gene, match))
-  }
-
-  matches.sort((left, right) => {
-    return (
-      Number(left.match_rank || 0) - Number(right.match_rank || 0) ||
-      compareNullableTextAsc(left.symbol, right.symbol)
-    )
-  })
-
-  const genes = matches.slice(0, limit)
-  const discovered =
-    requestedScope === "catalog"
-      ? await signedInDiscoveredAmong(
-          request,
-          env,
-          genes.map((gene) => gene.symbol),
-        )
-      : null
-  if (discovered) for (const gene of genes) gene.discovered = discovered.has(gene.symbol)
-  const cacheControl =
-    !discovered && (requestedScope === "catalog" || requestedScope === "shared")
-      ? iconoplasmCacheControl("publicSearch")
-      : iconoplasmCacheControl("sensitive")
-  return json({ genes, query: qUpper, scope_applied: appliedScope }, 200, {
-    "Cache-Control": cacheControl,
-  })
 }
 
 // Posts a freshly-created gene-page comment to the #Iconoplasm Discord channel,
@@ -17089,6 +16851,8 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(args.request, await publishedObjectDeliveryHandlers.stableGene(args)),
   public_stable_catalog_object: async (args) =>
     asHead(args.request, await publishedObjectDeliveryHandlers.stableCatalog(args)),
+  public_shared_discoveries_object: async ({ request, env }) =>
+    asHead(request, await handlePublicSharedDiscoveriesObject(env)),
   public_openapi: ({ request }) => asHead(request, handlePublicOpenApi()),
   public_metadata: ({ request, env }) => handlePublicMetadata(request, env),
   public_schema: ({ request }) => asHead(request, handlePublicSchema()),
@@ -17099,7 +16863,7 @@ const ICONOPLASM_DECLARED_GATEWAY_HANDLER_REGISTRY = Object.freeze({
     asHead(request, await handlePublicScannerArtifact(env, path)),
   public_catalog_dump: async ({ request, env, path }) =>
     asHead(request, await handlePublicCatalogJsonlDump(env, path)),
-  public_gene_search: ({ request, env }) => handlePublicGeneSearch(request, env),
+  public_gene_search: () => handlePublicGeneSearch(),
   public_caretakers: async ({ request, env, ctx }) =>
     asHead(request, await handlePublicCaretakers(request, env, ctx)),
   public_card_snapshot_gene: async ({ match, request, env, ctx }) =>
@@ -17390,6 +17154,8 @@ export async function publishCatalogArtifact(env) {
   // stable gene object details, where visible/hovered genes hydrate them on demand.
   const { scanner, byteSize: scannerByteSize } = buildPublishedScannerArtifact(artifact)
   const scannerJson = JSON.stringify(scanner)
+  const resolverIndex = buildCompactResolverIndex(genes, { generatedAt: artifact.generated_at })
+  const resolverJson = JSON.stringify(resolverIndex)
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(artifactJson))
   const hash = Array.from(new Uint8Array(digest))
     .map((n) => n.toString(16).padStart(2, "0"))
@@ -17428,6 +17194,10 @@ export async function publishCatalogArtifact(env) {
       cacheControl: "public, max-age=31536000, immutable",
     })
   }
+  if (canWriteExternalPortraitStorage(env)) {
+    // B-1136: publish the compact resolver index next to catalog/v3/aliases.json on Bunny.
+    await createPublishedObjectStore(env).writeStable(COMPACT_RESOLVER_OBJECT_KEY, resolverIndex)
+  }
   const manifest = {
     current_hash: hash,
     filename,
@@ -17451,6 +17221,7 @@ export async function publishCatalogArtifact(env) {
 
   await env.KV.put(`${KV_CATALOG_PREFIX}${hash}`, artifactJson)
   await env.KV.put(`${KV_SCANNER_CATALOG_PREFIX}${hash}`, scannerJson)
+  await env.KV.put(`${KV_RESOLVER_INDEX_PREFIX}${hash}`, resolverJson)
   await publishIconoplasmRecognitionValidationIndex(env.KV, recognitionIndex)
   const validationTarget = iconoplasmRecognitionValidationTarget({
     scannerVersion: hash,
@@ -17467,14 +17238,11 @@ export async function publishCatalogArtifact(env) {
   // the receipt that the index matches the policy it was built from.
   await env.KV.put(KV_CATALOG_MANIFEST, JSON.stringify(manifest))
 
-  catalogCache.hash = null
-  catalogCache.catalogHash = null
-  catalogCache.generatedAt = null
-  catalogCache.genes = Object.freeze([])
-  catalogCache.bySymbol = new Map()
-  catalogCache.symbolByUniprot = new Map()
-  catalogCache.symbolByAlias = new Map()
-  catalogCache.loadedAt = 0
+  resolverCache.baseHash = null
+  resolverCache.overlayVersion = null
+  resolverCache.index = null
+  resolverCache.overlay = null
+  resolverCache.loadedAt = 0
 
   return {
     ok: true,

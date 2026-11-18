@@ -68,7 +68,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=fd5a190b9585cb17"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=cb1f92f5bf20504d"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -6061,10 +6061,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             results.innerHTML = ""
             return
           }
-          fetchJSON(
-            "/api/public/v1/genes/search?scope=catalog&limit=8&q=" + encodeURIComponent(query),
-            { credentials: "include" },
-          )
+          var publicationReader = window.IconoplasmPublicationReader
+          var searchPromise = publicationReader?.search
+            ? publicationReader.search(query, { limit: 8 })
+            : Promise.reject(new Error("Gene search unavailable."))
+          searchPromise
             .then(function (payload) {
               renderCopyResults(Array.isArray(payload && payload.genes) ? payload.genes : [])
             })
@@ -10874,12 +10875,20 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         input.setAttribute("aria-expanded", "false")
         return
       }
-      fetchAuthedJSON(
-        "/api/public/v1/genes/search?q=" +
-          encodeURIComponent(query) +
-          "&limit=12&scope=" +
-          encodeURIComponent(scope),
-      )
+      var publicationReader = window.IconoplasmPublicationReader
+      if (!publicationReader?.search) {
+        currentSearchResults = []
+        resultsEl.innerHTML = ""
+        input.setAttribute("aria-expanded", "false")
+        return
+      }
+      var searchPromise =
+        scope === "shared"
+          ? publicationReader.sharedDiscoverySymbols().then(function (symbols) {
+              return publicationReader.search(query, { limit: 12, symbols: symbols })
+            })
+          : publicationReader.search(query, { limit: 12 })
+      searchPromise
         .then(function (data) {
           if (requestId !== activeSearchRequest || input.value.trim() !== query) return
           currentSearchResults = data.genes || []
@@ -11749,16 +11758,12 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function resolveGeneAliasPath(symbol) {
     var requested = String(symbol || "").trim()
     if (!requested) return Promise.resolve("")
-    return fetch("/api/public/v1/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifiers: [requested] }),
-    })
-      .then(function (response) {
-        return response.ok ? response.json() : null
-      })
-      .then(function (payload) {
-        var hit = payload && Array.isArray(payload.results) ? payload.results[0] : null
+    var publicationReader = window.IconoplasmPublicationReader
+    if (!publicationReader?.resolve) return Promise.resolve("")
+    return publicationReader
+      .resolve([requested])
+      .then(function (results) {
+        var hit = Array.isArray(results) ? results[0] : null
         var canonical = hit && hit.found ? normalizedSymbol(hit.canonical_symbol) : ""
         return canonical && canonical !== normalizedSymbol(requested)
           ? "/gene/" + encodeURIComponent(canonical)
@@ -13631,7 +13636,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=fb72acbc89ff6f42").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=619ed27471ce3bc3").then(
         function (module) {
           diagramStudio = module
           return module

@@ -3,6 +3,10 @@ import {
   externalPortraitStorageUrl,
   fetchPortraitStorage,
 } from "./iconoplasm-portrait-storage.js"
+import {
+  COMPACT_RESOLVER_OBJECT_KEY,
+  COMPACT_RESOLVER_OBJECT_LIMIT,
+} from "./iconoplasm-resolver-index.js"
 
 // THE ONLY writer and first-party reader of the published objects on Bunny
 // Storage: one stable object per gene (genes/v3/<SYMBOL>.json), the catalog
@@ -50,6 +54,11 @@ export function stableGeneObjectKey(symbol) {
 export const STABLE_CATALOG_OBJECT_KEY = "catalog/v3/index.json"
 export const STABLE_CATALOG_OBJECT_LIMIT = 16 * 1024 * 1024
 
+// B-1136: sorted shared-discovery symbols from the hourly publisher, served from
+// the CDN so shared-gallery search runs in the browser with zero Worker hits.
+export const SHARED_DISCOVERIES_OBJECT_KEY = "catalog/v3/shared-discoveries.json"
+export const SHARED_DISCOVERIES_OBJECT_LIMIT = 2 * 1024 * 1024
+
 // B-965: the GeneGuessr leaderboard, five entries with their avatars embedded as data: URIs
 // (workers/lib/leaderboard-publication.js builds it; 5 x 8 KiB of avatar at most).
 export const LEADERBOARD_OBJECT_KEY = "leaderboard/v1/top.json"
@@ -78,6 +87,10 @@ export function geneCommentsObjectKey(symbol) {
 
 function stableGeneObjectIdentity(key) {
   if (key === STABLE_CATALOG_OBJECT_KEY) return { symbol: "", limit: STABLE_CATALOG_OBJECT_LIMIT }
+  if (key === SHARED_DISCOVERIES_OBJECT_KEY)
+    return { symbol: "", limit: SHARED_DISCOVERIES_OBJECT_LIMIT }
+  if (key === COMPACT_RESOLVER_OBJECT_KEY)
+    return { symbol: "", limit: COMPACT_RESOLVER_OBJECT_LIMIT }
   if (key === REQUEST_PICKER_OBJECT_KEY) return { symbol: "", limit: REQUEST_PICKER_OBJECT_LIMIT }
   if (key === LEADERBOARD_OBJECT_KEY) return { symbol: "", limit: LEADERBOARD_OBJECT_LIMIT }
   // A comments object is rewritten, never deleted (its symbol is not a gene object's).

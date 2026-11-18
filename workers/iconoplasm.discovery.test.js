@@ -541,3 +541,60 @@ test("the hourly symbol publisher names only new shared ordinals (B-887)", async
   await publish(day1 + 25 * 3_600_000)
   assert.equal(named.length, 0)
 })
+
+test("B-1136: hourly symbol publisher writes catalog/v3/shared-discoveries.json to Bunny and fallback route serves KV", async (t) => {
+  const env = await buildEnv()
+  const storage = new Map()
+  const puts = []
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  globalThis.fetch = async (url, init = {}) => {
+    const parsed = new URL(url instanceof Request ? url.url : String(url))
+    if (parsed.hostname !== "storage.test") return originalFetch(url, init)
+    const key = parsed.pathname
+    if (init.method === "PUT") {
+      puts.push(key)
+      storage.set(key, Buffer.from(init.body).toString("utf8"))
+      return new Response(null, { status: 201 })
+    }
+    if (storage.has(key)) {
+      return new Response(storage.get(key), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }
+    return new Response(null, { status: 404 })
+  }
+  Object.assign(env.gatewayEnv, {
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "test-zone",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.test",
+    ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "test-password",
+    ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: "0",
+  })
+
+  await postBatch(env, {
+    userId: "reader",
+    batchId: "device-a:1",
+    encounters: [hoverEncounter("TP53", 1000)],
+  })
+  await drainIconoplasmSharedDiscoveryDeliveriesForScheduled(env.gatewayEnv)
+  await publishSharedGeneDiscoverySymbols(env.gatewayEnv)
+  assert.deepEqual(puts, ["/test-zone/catalog/v3/shared-discoveries.json"])
+  const cdnObj = JSON.parse(storage.get("/test-zone/catalog/v3/shared-discoveries.json"))
+  assert.deepEqual(cdnObj.symbols, ["TP53"])
+
+  // Quiet hour does not rewrite Bunny once cdn_published_at is stamped.
+  await publishSharedGeneDiscoverySymbols(env.gatewayEnv)
+  assert.equal(puts.length, 1)
+
+  const fallbackResponse = await viaStatefulWorker(
+    new Request("https://iconoplasm.brinedew.bio/api/public/v1/shared-discoveries.json"),
+    env,
+    {},
+  )
+  assert.equal(fallbackResponse.status, 200)
+  const fallbackPayload = await fallbackResponse.json()
+  assert.deepEqual(fallbackPayload.symbols, ["TP53"])
+})
