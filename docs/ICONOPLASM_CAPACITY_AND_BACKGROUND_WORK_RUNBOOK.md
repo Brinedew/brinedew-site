@@ -310,14 +310,6 @@ The tier follows who is waiting for the request (`shared/iconoplasm-d1-budget-po
 - sheddable, refused at 60%: admin diagnostics and summaries (overview,
   coverage, assets, storage audit, repair scope, the gallery listing).
 
-A vote is critical, but repeated winner flips on one hot gene are debounced: if a
-vote promotes a gene's winner and another vote flips it again within 5 minutes
-(`HOT_GENE_ELECTION_WINDOW_MS`), the vote marks `icono_gene_elections_due` (1
-row once, 0 thereafter) instead of projecting inline (9 rows) and waits for the
-`electionsDue` sweep. When `icono_gene_elections_due` has eligible work, that
-sweep checks batch admission at `sheddable_plus` and elects once for the burst.
-Details and costs: `ICONOPLASM_CANONICAL_PORTRAIT_PIPELINE.md`.
-
 A price's unit is a D1 row, the provider's own meter, which counts every index
 entry and trigger write behind a statement. It is not a statement count: the
 provider allows 1,000 D1 calls per invocation and counts a batch as one. (D1's

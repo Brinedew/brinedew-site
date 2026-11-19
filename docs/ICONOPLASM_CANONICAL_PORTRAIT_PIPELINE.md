@@ -168,17 +168,6 @@ upvote) runs `workers/iconoplasm/votes/gene-votes.js` inside the request:
    between, materializes and writes again from the fresh rows, at most three
    passes. A failed publish never fails the vote.
 
-**Hot-gene election debounce (B-1147).** The first vote-driven promotion on a
-quiet gene runs immediately (9 D1 rows) and republishes inline so the voter
-sees the new winner at once. Any further winner flips on that same gene inside
-`HOT_GENE_ELECTION_WINDOW_MS` (5 minutes) instead mark `icono_gene_elections_due`
-(1 D1 row once, `0` rows for later flips) and skip the inline republish. The
-`electionsDue` job (`workers/iconoplasm/votes/deferred-elections.js`) reads that
-dirty queue; idle runs touch nothing outside D1, and when cooled-down genes are
-ready it checks batch admission (`vote_election` in `batch-admission.js`) and
-elects and republishes up to 100 due genes once for the accumulated burst.
-Erasure and caretaker role changes never wait.
-
 **Daily vote allowance.** Each person may change 200 votes per UTC day
 (`VOTE_PERSON_DAILY_LIMIT`, `icono_vote_person_day`, migration 0123, B-1065).
 Their reader votes, the votes their image edit or generated candidate brings
