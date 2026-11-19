@@ -85,8 +85,8 @@
     },
     {
       "ref": "public_reads_no_browser_integrity_check",
-      "description": "B-1130: Cloudflare's Browser Integrity Check answers 403 (error 1010) to Python's built-in downloader, the default in chatbot sandboxes and scripts. Public images, the public API and llms.txt stay open to it; the crawler rule still blocks training crawlers",
-      "expression": "(http.host eq \"img.brinedew.bio\") or (http.host eq \"iconoplasm.brinedew.bio\" and (starts_with(http.request.uri.path, \"/api/public/\") or starts_with(http.request.uri.path, \"/blot/\") or starts_with(http.request.uri.path, \"/blots/\") or http.request.uri.path in {\"/llms.txt\" \"/robots.txt\" \"/developers\"}))",
+      "description": "B-1130/B-833: Cloudflare's Browser Integrity Check answers 403 (error 1010) to Python's built-in downloader, the default in chatbot sandboxes and scripts. Public images, the public API, llms.txt, and important static pages on brinedew.bio and iconoplasm.brinedew.bio stay open to it; the crawler rule still blocks training crawlers",
+      "expression": "(http.host eq \"img.brinedew.bio\") or (http.host eq \"brinedew.bio\" and (http.request.uri.path in {\"/\" \"/llms.txt\" \"/robots.txt\" \"/sitemap.xml\" \"/index.xml\"} or starts_with(http.request.uri.path, \"/posts/\") or starts_with(http.request.uri.path, \"/wiki/\"))) or (http.host eq \"iconoplasm.brinedew.bio\" and (starts_with(http.request.uri.path, \"/api/public/\") or starts_with(http.request.uri.path, \"/blot/\") or starts_with(http.request.uri.path, \"/blots/\") or starts_with(http.request.uri.path, \"/docs/\") or http.request.uri.path in {\"/\" \"/llms.txt\" \"/robots.txt\" \"/sitemap.xml\" \"/developers\" \"/docs\" \"/license\" \"/privacy\"}))",
       "bic": false
     }
   ],

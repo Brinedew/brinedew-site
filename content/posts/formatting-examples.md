@@ -2,7 +2,7 @@
 title: Formatting Examples
 date: 2025-09-20
 noindex: true
-draft: false
+draft: true
 tags:
   - meta
 ---
