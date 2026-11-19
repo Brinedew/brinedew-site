@@ -145,6 +145,43 @@ test("a reader that reaches neither source gets an error, never a fabricated gen
   await assert.rejects(reader.gene("TP53"), /published gene object is unavailable/)
 })
 
+test("fromOrigin reads the canonical origin first, returns null on 404, and falls back to CDN on 429 or 503 (B-1265)", async () => {
+  const { reader, requests } = recordingReader((parsed) => {
+    if (
+      parsed.origin === CANONICAL &&
+      parsed.pathname === "/api/public/v1/stable-genes/TP53.json"
+    ) {
+      return new Response(JSON.stringify(stableGeneFixture()), { status: 200 })
+    }
+    if (parsed.origin === BUNNY) {
+      return new Response(JSON.stringify(stableGeneFixture()), { status: 200 })
+    }
+    return new Response(null, { status: 404 })
+  })
+  const gene = await reader.gene("tp53", { fromOrigin: true })
+  assert.equal(gene.symbol, "TP53")
+  assert.deepEqual(requests, [`${CANONICAL}/api/public/v1/stable-genes/TP53.json`])
+
+  const missing = await reader.gene("MISSING", { fromOrigin: true })
+  assert.equal(missing, null)
+  assert.deepEqual(requests.at(-1), `${CANONICAL}/api/public/v1/stable-genes/MISSING.json`)
+
+  for (const status of [429, 503]) {
+    const fallback = recordingReader((parsed) => {
+      if (parsed.origin === CANONICAL) return new Response(null, { status })
+      return parsed.pathname === "/genes/v3/TP53.json"
+        ? new Response(JSON.stringify(stableGeneFixture()), { status: 200 })
+        : new Response(null, { status: 404 })
+    })
+    const recovered = await fallback.reader.gene("TP53", { fromOrigin: true })
+    assert.equal(recovered.symbol, "TP53", `origin ${status} should fall back to CDN`)
+    assert.deepEqual(fallback.requests, [
+      `${CANONICAL}/api/public/v1/stable-genes/TP53.json`,
+      `${BUNNY}/genes/v3/TP53.json`,
+    ])
+  }
+})
+
 test("home, gallery and search read the one stable catalog object (B-898)", async () => {
   const { reader, requests } = recordingReader((parsed) =>
     parsed.pathname === "/catalog/v3/index.json"
