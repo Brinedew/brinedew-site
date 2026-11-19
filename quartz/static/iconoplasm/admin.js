@@ -3552,7 +3552,7 @@
     try {
       var reader =
         window.IconoplasmPublicationReader ||
-        (await import("./publication-reader.js?v=cb1f92f5bf20504d")).iconoplasmPublicationReader
+        (await import("./publication-reader.js?v=9066513ea089543c")).iconoplasmPublicationReader
       if (!reader?.search) throw new Error("Catalog search reader unavailable.")
       var data = await Promise.race([
         reader.search(query, { limit: 8 }),
