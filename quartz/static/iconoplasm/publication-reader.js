@@ -170,7 +170,7 @@ export function createIconoplasmPublicationReader(options = {}) {
     try {
       return await fetchFrom(ORIGIN, originPath, limit, undefined, STABLE_FETCH)
     } catch (error) {
-      if (isHttpError(error) && !error.message.endsWith(" 429")) return null
+      if (isHttpError(error) && error.message.endsWith(" 404")) return null
     }
     return stableObject(cdnPath, originPath, limit, unavailable)
   }

@@ -15,7 +15,10 @@ export function createRequestInbox({
   resolvePortraitUrl,
   navigate,
   onOpenEditJob,
+  onOpenCandidateReceipt,
   onReadyEditJobs,
+  onReadyCandidates,
+  canMarkGeneViewed,
   loadCaretakerFilm,
 }) {
   var state = {
@@ -107,6 +110,42 @@ export function createRequestInbox({
     )
   }
 
+  function isPlainPrimaryClick(event) {
+    return !(
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      (typeof event.button === "number" && event.button !== 0)
+    )
+  }
+
+  function openReceiptTarget({ isEdit, editJobId, geneSymbol, href, link, assetShas }) {
+    if (isEdit && editJobId && typeof onOpenEditJob === "function") {
+      onOpenEditJob({
+        editJobId: editJobId,
+        geneSymbol: geneSymbol,
+        href: href,
+        link: link,
+      })
+      return
+    }
+    if (!isEdit && typeof onOpenCandidateReceipt === "function") {
+      onOpenCandidateReceipt({
+        geneSymbol: geneSymbol,
+        href: href,
+        link: link,
+        assetShas: Array.isArray(assetShas) ? assetShas : [],
+      })
+      return
+    }
+    if (typeof navigate === "function") {
+      navigate(href, link)
+    } else {
+      window.location.assign(href)
+    }
+  }
+
   function showFulfilledNotice(notification) {
     if (
       !notification ||
@@ -121,7 +160,8 @@ export function createRequestInbox({
     var notice = document.createElement("a")
     notice.id = "icono-request-ready-notice"
     notice.className = "icono-request-ready-notice"
-    notice.href = receiptHref(notification)
+    var href = receiptHref(notification)
+    notice.href = href
     notice.setAttribute("role", "status")
     notice.setAttribute("aria-live", "polite")
     notice.innerHTML =
@@ -135,6 +175,34 @@ export function createRequestInbox({
           "Your requested portrait",
       ) +
       "</small></span>"
+    if (typeof notice.addEventListener === "function") {
+      notice.addEventListener("click", function (event) {
+        if (!isPlainPrimaryClick(event)) return
+        event.preventDefault()
+        if (notice.parentNode) notice.remove()
+        var isEdit = notification.request_kind === "edit_image"
+        var requestId = Number(notification.request_id || notification.id || 0) || 0
+        var editJobId = isEdit
+          ? String(notification.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
+          : ""
+        var geneSymbol = String(notification.gene_symbol || "")
+          .trim()
+          .toUpperCase()
+        var seenShas = new Set(unreadCandidateShasFor(geneSymbol))
+        var noticeSha = String(notification.fulfilled_asset_sha256 || "")
+          .trim()
+          .toLowerCase()
+        if (noticeSha) seenShas.add(noticeSha)
+        openReceiptTarget({
+          isEdit: Boolean(isEdit && editJobId),
+          editJobId: editJobId,
+          geneSymbol: geneSymbol,
+          href: href,
+          link: notice,
+          assetShas: Array.from(seenShas),
+        })
+      })
+    }
     document.body.appendChild(notice)
     if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
       window.setTimeout(function () {
@@ -234,6 +302,17 @@ export function createRequestInbox({
         })
         if (readyEditJobs.length && typeof onReadyEditJobs === "function") {
           onReadyEditJobs(readyEditJobs)
+        }
+        var readyCandidates = readyRequests.filter(function (item) {
+          return (
+            item && item.unread === true && item.request_kind !== "edit_image" && item.gene_symbol
+          )
+        })
+        if (readyCandidates.length && typeof onReadyCandidates === "function") {
+          await Promise.resolve(onReadyCandidates(readyCandidates)).catch(function () {
+            return null
+          })
+          if (version !== requestRefreshVersion || currentAccountKey() !== accountKey) return null
         }
         if (pendingViewedGene) void noteGeneViewed(pendingViewedGene)
         if (opts.announce && wasLoaded && newestUnread) {
@@ -570,6 +649,22 @@ export function createRequestInbox({
     )
   }
 
+  function unreadCandidateShasFor(symbol) {
+    var items = unreadItemsFor(symbol)
+    var seen = new Set()
+    var shas = []
+    for (var i = 0; i < items.length; i += 1) {
+      var sha = String((items[i] && items[i].fulfilled_asset_sha256) || "")
+        .trim()
+        .toLowerCase()
+      if (sha && !seen.has(sha)) {
+        seen.add(sha)
+        shas.push(sha)
+      }
+    }
+    return shas
+  }
+
   // B-1029: a result counts as seen once its gene page opens, however the person got
   // there (sidebar, Discord link, search). The page's own inbox load can finish after
   // the gene renders, so the symbol waits for that load. Results that arrive while the
@@ -589,11 +684,19 @@ export function createRequestInbox({
         return item && item.unread === true
       },
     ).length
+    var seen = unreadItemsFor(wanted)
     // Unread results beyond the loaded page may belong to this gene too.
-    if (!unreadItemsFor(wanted).length && state.unread_count <= loadedUnread) {
+    if (!seen.length && state.unread_count <= loadedUnread) {
       return Promise.resolve(null)
     }
-    var seen = unreadItemsFor(wanted)
+    if (
+      seen.length &&
+      typeof canMarkGeneViewed === "function" &&
+      !canMarkGeneViewed(wanted, seen)
+    ) {
+      pendingViewedGene = wanted
+      return Promise.resolve(null)
+    }
     state.ready_requests = state.ready_requests.filter(function (item) {
       return seen.indexOf(item) === -1
     })
@@ -1026,26 +1129,21 @@ export function createRequestInbox({
         if (link._iconoRequestInboxWired) return
         link._iconoRequestInboxWired = true
         link.addEventListener("click", function (event) {
+          if (!isPlainPrimaryClick(event)) return
           // Opening the gene page marks candidate results seen; ready edit jobs
           // open the before/after review modal directly.
           event.preventDefault()
           var editJobId = link.getAttribute("data-icono-edit-job-id") || ""
           var geneSymbol = link.getAttribute("data-icono-request-gene-symbol") || ""
           var href = link.getAttribute("href") || "/"
-          if (editJobId && typeof onOpenEditJob === "function") {
-            onOpenEditJob({
-              editJobId: editJobId,
-              geneSymbol: geneSymbol,
-              href: href,
-              link: link,
-            })
-            return
-          }
-          if (typeof navigate === "function") {
-            navigate(href, link)
-          } else {
-            window.location.assign(href)
-          }
+          openReceiptTarget({
+            isEdit: Boolean(editJobId),
+            editJobId: editJobId,
+            geneSymbol: geneSymbol,
+            href: href,
+            link: link,
+            assetShas: editJobId ? [] : unreadCandidateShasFor(geneSymbol),
+          })
         })
       })(links[i])
     }
@@ -1147,6 +1245,7 @@ export function createRequestInbox({
     reset,
     start,
     stop,
+    unreadCandidateShasFor,
     updateCaretakerSupervote,
     wire,
   }

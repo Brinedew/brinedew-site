@@ -137,35 +137,68 @@ test("a gene's address starts the published gene object the app's reader takes",
   }
 })
 
-test("origin-fresh gene marker skips CDN prefetch in stub boot so F5 reads origin (B-1223)", () => {
-  const requests = []
-  const window = {}
-  const document = {
-    documentElement: { classList: { add() {}, remove() {} }, setAttribute() {} },
-    cookie: "",
-    title: "",
-  }
+test("origin-fresh gene marker skips CDN prefetch in stub boot across sessionStorage, localStorage, and restricted storage (B-1223, B-1265)", () => {
   const boot = iconoplasmGenePageHtml({ symbol: "TP53", fullName: "tumor protein p53" })
     .match(/<script>\(function\(\)[\s\S]*?<\/script>/)[0]
     .replace(/<\/?script>/g, "")
-  new Function("window", "document", "location", "localStorage", "sessionStorage", "fetch", boot)(
-    window,
-    document,
-    { pathname: "/gene/tp53" },
-    { getItem: () => null },
+
+  for (const scenario of [
     {
-      getItem: (key) =>
-        key === "iconoplasm:origin-fresh-genes"
-          ? JSON.stringify({ TP53: Date.now() + 60000 })
-          : null,
+      name: "sessionStorage marker",
+      localStorage: { getItem: () => null },
+      sessionStorage: {
+        getItem: (key) =>
+          key === "iconoplasm:origin-fresh-genes"
+            ? JSON.stringify({ TP53: Date.now() + 60000 })
+            : null,
+      },
     },
-    (url) => {
-      requests.push(url)
-      return new Promise(() => {})
+    {
+      name: "localStorage marker",
+      localStorage: {
+        getItem: (key) =>
+          key === "iconoplasm:origin-fresh-genes"
+            ? JSON.stringify({ TP53: Date.now() + 60000 })
+            : null,
+      },
+      sessionStorage: { getItem: () => null },
     },
-  )
-  assert.deepEqual(requests, ["/"])
-  assert.equal(window.__iconoplasmGenePrefetch, undefined)
+    {
+      name: "throwing localStorage falls back to sessionStorage",
+      localStorage: {
+        getItem: () => {
+          throw new Error("SecurityError")
+        },
+      },
+      sessionStorage: {
+        getItem: (key) =>
+          key === "iconoplasm:origin-fresh-genes"
+            ? JSON.stringify({ TP53: Date.now() + 60000 })
+            : null,
+      },
+    },
+  ]) {
+    const requests = []
+    const window = {}
+    const document = {
+      documentElement: { classList: { add() {}, remove() {} }, setAttribute() {} },
+      cookie: "",
+      title: "",
+    }
+    new Function("window", "document", "location", "localStorage", "sessionStorage", "fetch", boot)(
+      window,
+      document,
+      { pathname: "/gene/tp53" },
+      scenario.localStorage,
+      scenario.sessionStorage,
+      (url) => {
+        requests.push(url)
+        return new Promise(() => {})
+      },
+    )
+    assert.deepEqual(requests, ["/"], scenario.name)
+    assert.equal(window.__iconoplasmGenePrefetch, undefined, scenario.name)
+  }
 })
 
 test("gene names are escaped in HTML and JSON-LD", () => {

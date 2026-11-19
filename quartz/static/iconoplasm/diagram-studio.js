@@ -46,7 +46,7 @@ import {
   iconoplasmBlotFingerprint,
   iconoplasmBlotObjectKey,
 } from "./generated/blot-identity.js?v=562534e2aefc2f41"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=cb1f92f5bf20504d"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=9066513ea089543c"
 
 // ARCHITECTURE FENCE [IPD-003]: humans and WebMCP agents edit the same visible
 // document, and both obtain characters through the bounded canonical resolver.

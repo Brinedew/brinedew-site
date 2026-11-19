@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=e0584ccc3e85d62d"
+import { createRequestInbox } from "./request-inbox.js?v=8c29264cbf8c871a"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
@@ -68,7 +68,7 @@ import {
   showCandidateDeleteNotice,
 } from "./candidate-delete-dialog.js?v=3848ccad31004e24"
 import { ICONOPLASM_ANIMA_EMULSION_SLOT_CONTRACT } from "./generated/anima-emulsion-slot-contract.js?v=ce7f645ab10163e9"
-import { iconoplasmPublicationReader } from "./publication-reader.js?v=cb1f92f5bf20504d"
+import { iconoplasmPublicationReader } from "./publication-reader.js?v=9066513ea089543c"
 import {
   ICONOPLASM_HOME_TITLE,
   iconoplasmGenePageTitle,
@@ -191,6 +191,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var imageEditProvidersPromise = Object.create(null)
   var homeMasonryInstances = new Map()
   var activeGeneRenderId = 0
+  var activeGeneOriginSyncSignatures = new Set()
   var lastGenePageDiscoveryVisitKey = ""
   var websiteGuestDiscoveryMergePromise = null
   var websiteGuestDiscoveryMergeRemaining = WEBSITE_GUEST_DISCOVERY_MERGE_BATCH_SIZE
@@ -1274,8 +1275,50 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       openImageEditJobDialog(info.editJobId, { symbol: symbol })
     },
+    onOpenCandidateReceipt: function (info) {
+      var symbol = normalizedSymbol(info && info.geneSymbol)
+      if (symbol) {
+        markGeneOriginFresh(symbol)
+        invalidateGeneDetail(symbol)
+      }
+      var href = (info && info.href) || (symbol ? "/gene/" + encodeURIComponent(symbol) : "/")
+      var route = getRoute()
+      if (symbol && route.page === "gene" && normalizedSymbol(route.symbol) === symbol) {
+        var currentHref =
+          window.location.pathname + window.location.search + (window.location.hash || "")
+        if (href !== currentHref) {
+          window.history.replaceState(buildNavigationState(href), "", href)
+        }
+        rerenderCurrentGeneRoute({ forceFresh: true, fromOrigin: true })
+        return
+      }
+      navigateTo(href, info && info.link ? info.link : null, {
+        geneOptions: { forceFresh: true, fromOrigin: true },
+      })
+    },
     onReadyEditJobs: function (items) {
       imageEditJobWatcher.notifyReadyJobs(items)
+    },
+    onReadyCandidates: function (items) {
+      return syncReadyCandidatesForOpenGene(items)
+    },
+    canMarkGeneViewed: function (symbol, unreadItems) {
+      var key = normalizedSymbol(symbol)
+      var route = getRoute()
+      if (!key || route.page !== "gene" || normalizedSymbol(route.symbol) !== key) return false
+      var contentEl = document.getElementById("icono-gene-content")
+      var payload = contentEl && contentEl._iconoGenePayload
+      if (!payload) return false
+      if (contentEl._iconoGeneOriginVerified === true) return true
+      var expectedShas = []
+      var list = Array.isArray(unreadItems) ? unreadItems : []
+      for (var i = 0; i < list.length; i += 1) {
+        var sha = String((list[i] && list[i].fulfilled_asset_sha256) || "")
+          .trim()
+          .toLowerCase()
+        if (sha && expectedShas.indexOf(sha) === -1) expectedShas.push(sha)
+      }
+      return missingCandidateShas(payload, expectedShas).length === 0
     },
     // B-996: the caretaker film needs the gene's portrait and molecular
     // weight. Signed-in caretakers only, once per symbol, through the same static
@@ -1844,37 +1887,57 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   var ORIGIN_FRESH_GENES_STORAGE_KEY = "iconoplasm:origin-fresh-genes"
-  var ORIGIN_FRESH_GENE_TTL_MS = 90000
+  var ORIGIN_FRESH_GENE_TTL_MS = 300000
 
-  function readOriginFreshGenes() {
+  function readOriginFreshGenesFromStorage(storage, now, target) {
     try {
-      if (typeof sessionStorage === "undefined") return {}
-      var raw = sessionStorage.getItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
-      if (!raw) return {}
+      if (!storage) return
+      var raw = storage.getItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
+      if (!raw) return
       var parsed = JSON.parse(raw)
-      if (!parsed || typeof parsed !== "object") return {}
-      var now = Date.now()
-      var active = {}
+      if (!parsed || typeof parsed !== "object") return
       Object.keys(parsed).forEach(function (key) {
         var expiresAt = Number(parsed[key])
-        if (Number.isFinite(expiresAt) && expiresAt > now) active[key] = expiresAt
+        if (Number.isFinite(expiresAt) && expiresAt > now) {
+          target[key] = Math.max(Number(target[key] || 0), expiresAt)
+        }
       })
-      return active
     } catch (_error) {
-      return {}
+      /* ignore storage failures */
+    }
+  }
+
+  function readOriginFreshGenes() {
+    var now = Date.now()
+    var active = {}
+    if (typeof localStorage !== "undefined") {
+      readOriginFreshGenesFromStorage(localStorage, now, active)
+    }
+    if (typeof sessionStorage !== "undefined") {
+      readOriginFreshGenesFromStorage(sessionStorage, now, active)
+    }
+    return active
+  }
+
+  function writeOriginFreshGenesToStorage(storage, map) {
+    try {
+      if (!storage) return
+      if (!map || !Object.keys(map).length) {
+        storage.removeItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
+        return
+      }
+      storage.setItem(ORIGIN_FRESH_GENES_STORAGE_KEY, JSON.stringify(map))
+    } catch (_error) {
+      /* ignore storage failures */
     }
   }
 
   function writeOriginFreshGenes(map) {
-    try {
-      if (typeof sessionStorage === "undefined") return
-      if (!map || !Object.keys(map).length) {
-        sessionStorage.removeItem(ORIGIN_FRESH_GENES_STORAGE_KEY)
-        return
-      }
-      sessionStorage.setItem(ORIGIN_FRESH_GENES_STORAGE_KEY, JSON.stringify(map))
-    } catch (_error) {
-      /* ignore sessionStorage failures */
+    if (typeof localStorage !== "undefined") {
+      writeOriginFreshGenesToStorage(localStorage, map)
+    }
+    if (typeof sessionStorage !== "undefined") {
+      writeOriginFreshGenesToStorage(sessionStorage, map)
     }
   }
 
@@ -1886,19 +1949,33 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     writeOriginFreshGenes(active)
   }
 
-  function isGeneOriginFresh(symbol) {
+  function geneOriginFreshUntil(symbol) {
     var key = normalizedSymbol(symbol)
-    if (!key) return false
+    if (!key) return 0
     var active = readOriginFreshGenes()
-    return Number(active[key] || 0) > Date.now()
+    return Number(active[key] || 0)
+  }
+
+  function isGeneOriginFresh(symbol) {
+    return geneOriginFreshUntil(symbol) > Date.now()
   }
 
   function fetchGeneDetail(symbol, options) {
     var key = normalizedSymbol(symbol)
     if (!key) return Promise.resolve(null)
     options = options || {}
-    if (!options.fromOrigin && isGeneOriginFresh(key)) {
-      options = Object.assign({}, options, { fromOrigin: true })
+    var originFreshUntil = geneOriginFreshUntil(key)
+    if (originFreshUntil > Date.now()) {
+      if (!options.fromOrigin) {
+        options = Object.assign({}, options, { fromOrigin: true })
+      }
+      if (
+        !options.forceFresh &&
+        portraitDetailCache[key] &&
+        Number(portraitDetailCache[key]._iconoOriginFreshUntil || 0) < originFreshUntil
+      ) {
+        options = Object.assign({}, options, { forceFresh: true })
+      }
     }
     if (options.forceFresh) {
       // When a vote auto-promotes a new canonical portrait, the Worker still marks
@@ -1917,6 +1994,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // should sync from catalog snapshots + changes instead of crawling one gene at a time.
     portraitDetailPromiseCache[key] = fetchCompleteGeneDetailFromEndpoint(key, options)
       .then(function (data) {
+        if (options.fromOrigin && data && typeof data === "object") {
+          data._iconoOriginFreshUntil = Math.max(originFreshUntil, Date.now())
+        }
         portraitDetailCache[key] = data
         return data
       })
@@ -1934,6 +2014,179 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     delete portraitDetailPromiseCache[key]
     delete geneCardArtifactCache[key]
     delete geneRequestSummaryCache[key]
+  }
+
+  function genePayloadHasAssetSha(genePayload, sha) {
+    var wanted = String(sha || "")
+      .trim()
+      .toLowerCase()
+    if (!wanted || !genePayload || typeof genePayload !== "object") return false
+    var leadSha = String((genePayload.portrait && genePayload.portrait.asset_sha256) || "")
+      .trim()
+      .toLowerCase()
+    if (leadSha && leadSha === wanted) return true
+    var candidates = Array.isArray(genePayload.portrait_candidates)
+      ? genePayload.portrait_candidates
+      : []
+    for (var i = 0; i < candidates.length; i += 1) {
+      var candidateSha = String((candidates[i] && candidates[i].asset_sha256) || "")
+        .trim()
+        .toLowerCase()
+      if (candidateSha === wanted) return true
+    }
+    return false
+  }
+
+  function missingCandidateShas(genePayload, shas) {
+    var list = Array.isArray(shas) ? shas : []
+    var seen = new Set()
+    var missing = []
+    for (var i = 0; i < list.length; i += 1) {
+      var sha = String(list[i] || "")
+        .trim()
+        .toLowerCase()
+      if (!sha || seen.has(sha)) continue
+      seen.add(sha)
+      if (!genePayloadHasAssetSha(genePayload, sha)) missing.push(sha)
+    }
+    return missing
+  }
+
+  function reconcileGeneCandidatesInPlace(container, refreshed) {
+    if (!container || !container.isConnected || !refreshed) return false
+    var previous = container._iconoGenePayload || null
+    var previousLeadSha = String(
+      (previous && previous.portrait && previous.portrait.asset_sha256) || "",
+    )
+      .trim()
+      .toLowerCase()
+    var nextLeadSha = String((refreshed.portrait && refreshed.portrait.asset_sha256) || "")
+      .trim()
+      .toLowerCase()
+    container._iconoGenePayload = refreshed
+    container._iconoGeneOriginVerified = true
+    var key = normalizedSymbol(refreshed.symbol)
+    if (key) portraitDetailCache[key] = refreshed
+
+    if (previousLeadSha !== nextLeadSha) {
+      var leadCard = container.querySelector(".icono-gene-lead-card")
+      if (leadCard) {
+        var leadTemplate = document.createElement("template")
+        leadTemplate.innerHTML = buildGeneLeadCardMarkup(refreshed)
+        if (leadTemplate.content.firstElementChild) {
+          leadCard.replaceWith(leadTemplate.content.firstElementChild)
+        }
+      }
+      var rail = container.querySelector("[data-icono-canonical-rail]")
+      if (rail) {
+        var toolbarMeta = rail.querySelector(".icono-candidate-toolbar-meta")
+        if (toolbarMeta) {
+          var metaTemplate = document.createElement("template")
+          metaTemplate.innerHTML = renderCanonicalToolbarMetaMarkup(refreshed)
+          if (metaTemplate.content.firstElementChild) {
+            toolbarMeta.replaceWith(metaTemplate.content.firstElementChild)
+          }
+        }
+      }
+      wireGeneVoteBox(container, refreshed)
+      wirePrintCopyRequests(container, refreshed)
+      wireGeneEditImagePanel(container, refreshed)
+      syncEmulsionFavoriteButtons(container)
+      var updatedLeadCard = container.querySelector(".icono-gene-lead-card")
+      if (updatedLeadCard && isMobileLabelReviewEnabled()) wireMobileLabelCard(updatedLeadCard)
+    }
+
+    var candidatesPart = container.querySelector('[data-icono-gene-part="candidates"]')
+    if (!candidatesPart) return false
+    candidatesPart.innerHTML = renderCandidateGallery(refreshed)
+    syncGeneTabs(container)
+    syncServerGenePortraitUrls(container, refreshed)
+    hydrateServerCandidateActionIslands(candidatesPart, refreshed)
+    wireCandidateVoteBoxes(container, refreshed)
+    wireGeneEditImagePanel(container, refreshed)
+    wireCandidateRemoveButtons(candidatesPart, refreshed)
+    wireCandidateCopyForms(candidatesPart, refreshed)
+    syncEmulsionFavoriteButtons(candidatesPart)
+    refreshPortraitLightbox()
+
+    if (iconoSidebarState.gene) {
+      iconoSidebarState.gene.hasPortrait = !!publishedPortraitUrl(refreshed, "medium")
+      iconoSidebarState.gene.candidateCount = Array.isArray(refreshed.portrait_candidates)
+        ? refreshed.portrait_candidates.length
+        : 0
+      renderIconoplasmSidebar()
+    }
+    return true
+  }
+
+  function syncReadyCandidatesForOpenGene(items) {
+    var list = Array.isArray(items) ? items : []
+    var shasBySymbol = Object.create(null)
+    for (var i = 0; i < list.length; i += 1) {
+      var item = list[i]
+      if (!item || item.request_kind === "edit_image") continue
+      var symbol = normalizedSymbol(item.gene_symbol)
+      if (!symbol) continue
+      if (!shasBySymbol[symbol]) shasBySymbol[symbol] = []
+      var sha = String(item.fulfilled_asset_sha256 || "")
+        .trim()
+        .toLowerCase()
+      if (sha && shasBySymbol[symbol].indexOf(sha) === -1) shasBySymbol[symbol].push(sha)
+    }
+    var symbols = Object.keys(shasBySymbol)
+    if (!symbols.length) return Promise.resolve(null)
+    for (var s = 0; s < symbols.length; s += 1) {
+      var touched = symbols[s]
+      markGeneOriginFresh(touched)
+      delete geneRequestSummaryCache[touched]
+      var cached = portraitDetailCache[touched]
+      var expectedForCached = shasBySymbol[touched]
+      if (
+        cached &&
+        (!expectedForCached.length || missingCandidateShas(cached, expectedForCached).length > 0)
+      ) {
+        invalidateGeneDetail(touched)
+      }
+    }
+    var route = getRoute()
+    if (!route || route.page !== "gene") return Promise.resolve(null)
+    var activeSymbol = normalizedSymbol(route.symbol)
+    var expectedShas = shasBySymbol[activeSymbol]
+    if (!expectedShas) return Promise.resolve(null)
+    var contentEl = document.getElementById("icono-gene-content")
+    if (!contentEl || !contentEl._iconoGenePayload) return Promise.resolve(null)
+    var missing = missingCandidateShas(contentEl._iconoGenePayload, expectedShas)
+    if (!missing.length) return Promise.resolve(null)
+    var signature = activeGeneRenderId + ":" + activeSymbol + ":" + missing.slice().sort().join(",")
+    if (activeGeneOriginSyncSignatures.has(signature)) return Promise.resolve(null)
+    activeGeneOriginSyncSignatures.add(signature)
+    var syncRenderId = activeGeneRenderId
+    return fetchGeneDetail(activeSymbol, { forceFresh: true, fromOrigin: true })
+      .then(function (refreshed) {
+        if (!refreshed) return null
+        return ensurePortraitDelivery(refreshed).then(function () {
+          return refreshed
+        })
+      })
+      .then(function (refreshed) {
+        var currentRoute = getRoute()
+        if (
+          !refreshed ||
+          syncRenderId !== activeGeneRenderId ||
+          !contentEl.isConnected ||
+          !currentRoute ||
+          currentRoute.page !== "gene" ||
+          normalizedSymbol(currentRoute.symbol) !== activeSymbol
+        ) {
+          return null
+        }
+        reconcileGeneCandidatesInPlace(contentEl, refreshed)
+        return refreshed
+      })
+      .catch(function () {
+        activeGeneOriginSyncSignatures.delete(signature)
+        return null
+      })
   }
 
   function fetchGeneRequestSummary(symbol, options) {
@@ -3264,6 +3517,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       resetImageEditDialogState()
     }
     if (currentUser) {
+      var activeRoute = getRoute()
+      var activeGeneContent = document.getElementById("icono-gene-content")
+      if (
+        !previousHadUser &&
+        activeRoute &&
+        activeRoute.page === "gene" &&
+        activeGeneContent &&
+        activeGeneContent._iconoGenePayload
+      ) {
+        void requestInbox.noteGeneViewed(
+          normalizedSymbol(activeGeneContent._iconoGenePayload.symbol || activeRoute.symbol),
+        )
+      }
       requestInbox.start()
       if (previousUserId !== currentUserId) emulsionFavorites.reset()
       emulsionFavorites
@@ -11621,7 +11887,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function renderGene(root, symbol, options) {
     var opts = options || {}
     var renderId = ++activeGeneRenderId
+    activeGeneOriginSyncSignatures.clear()
     var resolvedSymbol = normalizedSymbol(symbol)
+    var fetchedFromOrigin = Boolean(opts.fromOrigin || isGeneOriginFresh(resolvedSymbol))
     iconoSidebarState.page = "gene"
     iconoSidebarState.homeLayout = resolveHomeLayout()
     iconoSidebarState.gene = {
@@ -11674,6 +11942,22 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (renderId !== activeGeneRenderId) return
       var g = result && result.data
       if (!g) throw new Error("Gene not found")
+      if (!fetchedFromOrigin && !opts._originRetried) {
+        var unreadShas =
+          typeof requestInbox.unreadCandidateShasFor === "function"
+            ? requestInbox.unreadCandidateShasFor(resolvedSymbol)
+            : []
+        if (unreadShas.length && missingCandidateShas(g, unreadShas).length) {
+          markGeneOriginFresh(resolvedSymbol)
+          invalidateGeneDetail(resolvedSymbol)
+          renderGene(
+            root,
+            resolvedSymbol,
+            Object.assign({}, opts, { forceFresh: true, fromOrigin: true, _originRetried: true }),
+          )
+          return
+        }
+      }
       document.title = geneProfileDocumentTitle(g, symbol)
       syncDocumentCanonical(
         "/gene/" + encodeURIComponent(normalizedSymbol(g.symbol || symbol)),
@@ -11696,8 +11980,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         geneHeading.textContent =
           normalizedSymbol(g.symbol || symbol) + (headingName ? " — " + headingName : "")
       }
-      // B-1029: the gene page is where requested results are seen.
-      void requestInbox.noteGeneViewed(normalizedSymbol(g.symbol || symbol))
       iconoSidebarState.gene = {
         symbol: normalizedSymbol(g && g.symbol ? g.symbol : symbol),
         error: false,
@@ -11708,7 +11990,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         aliasCount: Array.isArray(g && g.aliases) ? g.aliases.length : 0,
       }
       renderIconoplasmSidebar()
+      contentEl._iconoGeneOriginVerified = fetchedFromOrigin
       renderGeneContent(contentEl, g)
+      // B-1029: the gene page is where requested results are seen.
+      void requestInbox.noteGeneViewed(normalizedSymbol(g.symbol || symbol))
       recordGenePageVisitDiscovery(g && g.symbol ? g.symbol : symbol)
     }
     var renderGeneFailure = function (err) {
@@ -12876,7 +13161,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return nextState
   }
 
-  function navigateTo(path, link) {
+  function navigateTo(path, link, options) {
     var currentRoute = getRoute()
     var leavingHomeForGene = !!(
       currentRoute &&
@@ -12887,7 +13172,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     syncHomeHistoryState(true, { restoreOnGeneBack: leavingHomeForGene })
     window.history.pushState(buildNavigationState(path), "", path)
     pendingHomeAnchor = null
-    render()
+    render(options)
   }
 
   /* ─── Rendering: Clans page ─── */
@@ -13636,7 +13921,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=619ed27471ce3bc3").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=b6f7041dccaa17c0").then(
         function (module) {
           diagramStudio = module
           return module
@@ -13650,7 +13935,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return diagramStudioPromise
   }
 
-  function render() {
+  function render(options) {
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     mobileLabelReviewMode = isMobileLabelReviewEnabled()
@@ -13705,7 +13990,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       refreshPortraitLightbox()
     } else if (route.page === "gene") {
       scrollWindowInstantly(0, 0)
-      renderGene(root, route.symbol)
+      renderGene(root, route.symbol, options && options.geneOptions)
     } else if (route.page === "genes") {
       scrollWindowInstantly(0, 0)
       renderGenesPage(root, route)
