@@ -9,7 +9,7 @@ import {
   ICONOPLASM_DISCOVERY_DEFAULT_ORDER,
   ICONOPLASM_GALLERY_DEFAULT_ORDER,
 } from "./home-orders.js?v=97b23d988663c9b7"
-import { createRequestInbox } from "./request-inbox.js?v=53b0c7189f685d3b"
+import { createRequestInbox } from "./request-inbox.js?v=8c29264cbf8c871a"
 import { createGeneRequestControls } from "./caretaker-gene-requests.js?v=6ff68aed1cbeb5c9"
 import { IMAGE_ORIGIN, portraitDelivery } from "./portrait-delivery.js?v=df8daed0d00d6780"
 import { thumbHashToDataURL } from "./vendor/thumbhash.js?v=228a125e608e4955"
@@ -3517,6 +3517,19 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       resetImageEditDialogState()
     }
     if (currentUser) {
+      var activeRoute = getRoute()
+      var activeGeneContent = document.getElementById("icono-gene-content")
+      if (
+        !previousHadUser &&
+        activeRoute &&
+        activeRoute.page === "gene" &&
+        activeGeneContent &&
+        activeGeneContent._iconoGenePayload
+      ) {
+        void requestInbox.noteGeneViewed(
+          normalizedSymbol(activeGeneContent._iconoGenePayload.symbol || activeRoute.symbol),
+        )
+      }
       requestInbox.start()
       if (previousUserId !== currentUserId) emulsionFavorites.reset()
       emulsionFavorites

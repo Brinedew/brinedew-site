@@ -175,32 +175,34 @@ export function createRequestInbox({
           "Your requested portrait",
       ) +
       "</small></span>"
-    notice.addEventListener("click", function (event) {
-      if (!isPlainPrimaryClick(event)) return
-      event.preventDefault()
-      if (notice.parentNode) notice.remove()
-      var isEdit = notification.request_kind === "edit_image"
-      var requestId = Number(notification.request_id || notification.id || 0) || 0
-      var editJobId = isEdit
-        ? String(notification.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
-        : ""
-      var geneSymbol = String(notification.gene_symbol || "")
-        .trim()
-        .toUpperCase()
-      var seenShas = new Set(unreadCandidateShasFor(geneSymbol))
-      var noticeSha = String(notification.fulfilled_asset_sha256 || "")
-        .trim()
-        .toLowerCase()
-      if (noticeSha) seenShas.add(noticeSha)
-      openReceiptTarget({
-        isEdit: Boolean(isEdit && editJobId),
-        editJobId: editJobId,
-        geneSymbol: geneSymbol,
-        href: href,
-        link: notice,
-        assetShas: Array.from(seenShas),
+    if (typeof notice.addEventListener === "function") {
+      notice.addEventListener("click", function (event) {
+        if (!isPlainPrimaryClick(event)) return
+        event.preventDefault()
+        if (notice.parentNode) notice.remove()
+        var isEdit = notification.request_kind === "edit_image"
+        var requestId = Number(notification.request_id || notification.id || 0) || 0
+        var editJobId = isEdit
+          ? String(notification.edit_job_id || (requestId ? "request-" + requestId : "")).trim()
+          : ""
+        var geneSymbol = String(notification.gene_symbol || "")
+          .trim()
+          .toUpperCase()
+        var seenShas = new Set(unreadCandidateShasFor(geneSymbol))
+        var noticeSha = String(notification.fulfilled_asset_sha256 || "")
+          .trim()
+          .toLowerCase()
+        if (noticeSha) seenShas.add(noticeSha)
+        openReceiptTarget({
+          isEdit: Boolean(isEdit && editJobId),
+          editJobId: editJobId,
+          geneSymbol: geneSymbol,
+          href: href,
+          link: notice,
+          assetShas: Array.from(seenShas),
+        })
       })
-    })
+    }
     document.body.appendChild(notice)
     if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
       window.setTimeout(function () {
