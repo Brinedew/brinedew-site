@@ -66,3 +66,44 @@ test("ordinary same-origin page clicks still belong to Quartz", () => {
   assert.equal(result.prevented, true)
   assert.deepEqual(result.requests, ["https://example.test/next"])
 })
+
+test("cross-origin redirects leave the SPA instead of morphing into the wrong subdomain", async () => {
+  const { window } = parseHTML(
+    "<html><head><title>Iconoplasm</title></head><body><main>Iconoplasm</main></body></html>",
+  )
+  const { document } = window
+  const assigned = []
+  const pushed = []
+  const location = new URL("https://iconoplasm.brinedew.bio/docs")
+  location.assign = (href) => assigned.push(String(href))
+  window.location = location
+  window.scrollTo = () => {}
+  const history = { pushState: (...args) => pushed.push(args) }
+  runInNewContext(bundle.outputFiles[0].text, {
+    window,
+    document,
+    history,
+    URL,
+    console,
+    HTMLElement: window.HTMLElement,
+    customElements: window.customElements,
+    CustomEvent: window.CustomEvent,
+    DOMParser: window.DOMParser,
+    fetch: async () => ({
+      url: "https://brinedew.bio/posts/some-article",
+      headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+      clone() {
+        return this
+      },
+      async text() {
+        return "<html><head><title>Blog</title></head><body><main>Blog</main></body></html>"
+      },
+    }),
+    setTimeout,
+    clearTimeout,
+  })
+  await window.spaNavigate(new URL("https://iconoplasm.brinedew.bio/posts/some-article#intro"))
+  assert.deepEqual(assigned, ["https://brinedew.bio/posts/some-article#intro"])
+  assert.deepEqual(pushed, [])
+  assert.equal(document.querySelector("main")?.textContent, "Iconoplasm")
+})
