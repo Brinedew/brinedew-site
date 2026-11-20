@@ -94,20 +94,20 @@ The [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]] uses t
 [^2]: Harris VK, Schiffman JD, Boddy AM. *Evolution of Cancer Defense Mechanisms Across Species*. 2017.
 
     > [!info]- Source excerpt (Harris et al., 2017)
-    > ![[valerieharris2017-p5-b6-c5e6b7de77.png|Harris et al., 2017 — passage defining gatekeeper tumor suppressor genes.]]
+    > ![[valerieharris2017-p5-b6-c5e6b7de77.png]]
     >
     > "Gatekeepers serve to prevent cancer by directly inhibiting the growth of dysplastic cells through arrested mitosis or apoptosis."
 
 [^3]: Deininger P. *Genetic Instability in Cancer: Caretaker and Gatekeeper Genes*. Ochsner Journal. 1999;1(4):206-209. [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC3145442/).
 
     > [!info]- Review excerpt (Deininger, 1999)
-    > ![[deininger1999-caretaker-passage.png|Deininger, 1999 — passage defining caretaker genes and their mutation-suppressing role.]]
+    > ![[deininger1999-caretaker-passage.png]]
     >
     > **HTML excerpt:** "Caretaker genes are genes responsible for keeping other genes healthy (i.e. suppressing mutation)." (`https://pmc.ncbi.nlm.nih.gov/articles/PMC3145442/`, Caretaker Genes section)
 
 [^4]: Rajabi S, Alix-Panabières C, Sharbatdar Alaei A, et al. *Looking at Thyroid Cancer from the Tumor-Suppressor Genes Point of View*. Cancers. 2022;14(10):2461. [doi:10.3390/cancers14102461](https://doi.org/10.3390/cancers14102461). [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC9139614/).
 
     > [!info]- Review excerpt (Rajabi et al., 2022)
-    > ![[rajabi2022-landscaper-passage.png|Rajabi et al., 2022 — passage defining landscaper tumor suppressor genes and their microenvironmental mechanism.]]
+    > ![[rajabi2022-landscaper-passage.png]]
     >
     > **HTML excerpt:** "When mutated, these genes contribute to tumor growth by creating a favorable microenvironment for uncontrolled cell proliferation... the mechanisms of action of landscaper genes involve the direct or indirect regulation of extracellular matrix proteins, cell-surface markers, adhesion molecules, and growth factors." (`https://pmc.ncbi.nlm.nih.gov/articles/PMC9139614/`, section 2.3)

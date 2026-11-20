@@ -76,21 +76,21 @@ Specification mode shapes how development evolves. In two annelids with the same
 [^1]: Song S, Villoutreix P. "Assessing the relative contributions of mosaic and regulatory developmental modes from single-cell trajectories." *PLOS Computational Biology*. 2025;21(12):e1012352. [doi:10.1371/journal.pcbi.1012352](https://doi.org/10.1371/journal.pcbi.1012352).
 
     > [!info]- Primary source excerpt (Song & Villoutreix, 2025 — the two modes)
-    > ![[song2025-p2-b6-86e3307ba3.png|Song & Villoutreix, 2025 — regulative development depends on interactions with the environment, and both modes often co-exist.]]
+    > ![[song2025-p2-b6-86e3307ba3.png]]
     >
     > "the fate of a cell depends on its interactions with its environment. Both modes often co-exist"
 
 [^2]: Alicea B, Gordon R. "Quantifying Mosaic Development: Towards an Evo-Devo Postmodern Synthesis of the Evolution of Development via Differentiation Trees of Embryos." *Biology (Basel)*. 2016;5(3):33. [doi:10.3390/biology5030033](https://doi.org/10.3390/biology5030033).
 
     > [!info]- Source excerpt (Alicea & Gordon, 2016 — cutting an embryo in two, and the eutely association)
-    > ![[alicea2016-intro.png|Alicea & Gordon, 2016 — regulative embryos cut in two produce whole embryos, mosaic embryos produce half embryos; mosaic organisms tend to be eutelic, and regulating embryos adjust to cell number.]]
+    > ![[alicea2016-intro.png]]
     >
     > "This is seen most dramatically if an early embryo is cut in two: regulative embryos produce two smaller, but whole embryos, whereas mosaic embryos produce two half embryos. … Organisms that develop in a mosaic fashion also tend to be eutelic, having a fixed number of cells per adult individual across a particular species, whereas regulating embryos easily adjust to the number of cells available, whether varied by cutting or by ploidy."
 
 [^3]: Rock AQ, Srivastava M. "The gain and loss of plasticity during development and evolution." *Trends in Cell Biology*. 2025;35(10):823–839. [doi:10.1016/j.tcb.2025.01.008](https://doi.org/10.1016/j.tcb.2025.01.008).
 
     > [!info]- Primary source excerpt (Rock & Srivastava, 2025 — Roux's half-embryo and its correction)
-    > ![[rock2025-p21-b4-6a0c6a1982.png|Rock & Srivastava, 2025 — Roux left exogenous cytoplasm from the cytolyzed blastomere in contact with the survivor, and it interfered with development.]]
+    > ![[rock2025-p21-b4-6a0c6a1982.png]]
     >
     > "Roux had failed to fully isolate the blastomere, leaving behind exogenous cytoplasm from the cytolyzed blastomere"
 
@@ -99,7 +99,7 @@ Specification mode shapes how development evolves. In two annelids with the same
 [^5]: Suzuki H, Yaguchi J, Tsuyuzaki K, Yaguchi S. "Unraveling the regulative development and molecular mechanisms of identical sea urchin twins." *Nature Communications*. 2025;16:8005. [doi:10.1038/s41467-025-63111-z](https://doi.org/10.1038/s41467-025-63111-z).
 
     > [!info]- Primary source excerpt (Suzuki et al., 2025 — Driesch's experiment and identical twins)
-    > ![[suzuki2025-p1-b8-c691e3eb28.png|Suzuki et al., 2025 — Driesch's 1891 isolation of sea urchin blastomeres, and the link between self-organization and identical twins.]]
+    > ![[suzuki2025-p1-b8-c691e3eb28.png]]
     >
     > "In 1891, Hans Driesch demonstrated that isolated 2-cell and 4-cell stage sea urchin blastomeres can each develop into a complete individual"
 
@@ -108,69 +108,69 @@ Specification mode shapes how development evolves. In two annelids with the same
 [^7]: Suzuki H, Yaguchi J, Tsuyuzaki K, Yaguchi S. "Unraveling the regulative development and molecular mechanisms of identical sea urchin twins." *Nature Communications*. 2025;16:8005. [doi:10.1038/s41467-025-63111-z](https://doi.org/10.1038/s41467-025-63111-z).
 
     > [!info]- Primary source excerpt (Suzuki et al., 2025 — the halved embryo rejoins the normal program)
-    > ![[suzuki2025-p2-b5-81f524b533.png|Suzuki et al., 2025 — once the blastula has formed, halved embryos gastrulate and form a pluteus like intact embryos.]]
+    > ![[suzuki2025-p2-b5-81f524b533.png]]
     >
     > "such as mesenchyme cell ingression, gastrulation, and pluteus"
 
 [^8]: Rothman J, Jarriault S. "Developmental Plasticity and Cellular Reprogramming in *Caenorhabditis elegans*." *Genetics*. 2019;213(3):723–757. [doi:10.1534/genetics.119.302333](https://doi.org/10.1534/genetics.119.302333). The original lineage maps: Sulston JE, Horvitz HR. *Developmental Biology*. 1977;56(1):110–156; Sulston JE, Schierenberg E, White JG, Thomson JN. *Developmental Biology*. 1983;100(1):64–119.
 
     > [!info]- Primary source excerpt (Rothman & Jarriault, 2019 — invariant lineage)
-    > ![[rothman2019-p4-b8-838ffa56ca.png|Rothman & Jarriault, 2019 — cell ancestry and fate stay correlated, and cell positioning is largely invariant across C. elegans embryos.]]
+    > ![[rothman2019-p4-b8-838ffa56ca.png]]
     >
     > "cell ancestry and cell fate, as well as largely invariant cell positioning"
 
 [^9]: Rock AQ, Srivastava M. "The gain and loss of plasticity during development and evolution." *Trends in Cell Biology*. 2025;35(10):823–839. [doi:10.1016/j.tcb.2025.01.008](https://doi.org/10.1016/j.tcb.2025.01.008).
 
     > [!info]- Primary source excerpt (Rock & Srivastava, 2025 — maternal determinants)
-    > ![[rock2025-p8-b4-9c238c3def.png|Rock & Srivastava, 2025 — macho-1 localizes to the yellow cytoplasm of the tunicate egg and is required for muscle fate.]]
+    > ![[rock2025-p8-b4-9c238c3def.png]]
     >
     > "macho-1 is maternally-loaded and localized within the yellow cytoplasm"
 
 [^10]: Spemann H, Mangold H. "Induction of embryonic primordia by implantation of organizers from a different species" (1923). *International Journal of Developmental Biology*. 2001;45(1):13–38.
 
     > [!info]- Source excerpt (Rock & Srivastava, 2025 — the Spemann–Mangold organizer graft)
-    > ![[rock2025-p22-b2-71e9580fb1.png|Rock & Srivastava, 2025 — the transplanted Spemann–Mangold organizer induces surrounding host cells to build a secondary axis.]]
+    > ![[rock2025-p22-b2-71e9580fb1.png]]
     >
     > "The transplanted piece of tissue, the Spemann-Mangold organizer, is able to induce surrounding cells"
 
 [^11]: Rothman J, Jarriault S. "Developmental Plasticity and Cellular Reprogramming in *Caenorhabditis elegans*." *Genetics*. 2019;213(3):723–757. [doi:10.1534/genetics.119.302333](https://doi.org/10.1534/genetics.119.302333).
 
     > [!info]- Primary source excerpt (Rothman & Jarriault, 2019 — induction of ABp)
-    > ![[rothman2019-p8-b7-6a097ac329.png|Rothman & Jarriault, 2019 — the AB descendant that contacts P2 receives the Notch ligand APX-1 and becomes ABp.]]
+    > ![[rothman2019-p8-b7-6a097ac329.png]]
     >
     > "only the posterior one contacts P2, which expresses the Notch ligand APX-1"
 
 [^12]: Drozdov A, Lebedev E, Adonin L. "Comparative Analysis of Bivalve and Sea Urchin Genetics and Development: Investigating the Dichotomy in Bilateria." *International Journal of Molecular Sciences*. 2023;24(24):17163. [doi:10.3390/ijms242417163](https://doi.org/10.3390/ijms242417163).
 
     > [!info]- Primary source excerpt (Drozdov et al., 2023 — complete larvae from divided blastomeres)
-    > ![[drozdov2023-p3-b3-a516b8d8c7.png|Drozdov et al., 2023 — dividing the first two or four blastomeres yields two, three, or four complete pluteus larvae.]]
+    > ![[drozdov2023-p3-b3-a516b8d8c7.png]]
     >
     > "It is possible to obtain two, three, or four fully formed larvae at the pluteus stage"
 
 [^13]: Rock AQ, Srivastava M. "The gain and loss of plasticity during development and evolution." *Trends in Cell Biology*. 2025;35(10):823–839. [doi:10.1016/j.tcb.2025.01.008](https://doi.org/10.1016/j.tcb.2025.01.008).
 
     > [!info]- Primary source excerpt (Rock & Srivastava, 2025 — progressive loss of potency)
-    > ![[rock2025-p7-b3-ca21788e4b.png|Rock & Srivastava, 2025 — at the sixteen-cell stage every tier has restricted potency, and the cells keep limited plasticity.]]
+    > ![[rock2025-p7-b3-ca21788e4b.png]]
     >
     > "producing an embryo where no tier is totipotent, but the cells still retain limited plasticity"
 
 [^14]: Nolte T, Halabian R, Israel S, Suzuki Y, Avelar RA, Palmer D, Fuellen G, Makalowski W, Boiani M. "Animal and vegetal materials of mouse oocytes segregate at first zygotic cleavage: a simple mechanism that makes the two-cell blastomeres differ reciprocally from the start." *Molecular Human Reproduction*. 2025;31(1):gaae045. [doi:10.1093/molehr/gaae045](https://doi.org/10.1093/molehr/gaae045). For the classical mouse blastomere separation experiments, see Tarkowski AK. *Nature*. 1959;184:1286–1287.
 
     > [!info]- Primary source excerpt (Nolte et al., 2025 — sister blastomeres differ)
-    > ![[nolte2025-p2-b6-414803818d.png|Nolte et al., 2025 — after separation at the two-cell stage, usually a single mouse blastomere develops into a viable blastocyst or a live mouse.]]
+    > ![[nolte2025-p2-b6-414803818d.png]]
     >
     > "only one blastomere is able to develop into a viable blastocyst or a live mouse"
 
 [^15]: Liang Y, Wei J, Kang Y, Carrillo-Baltodano AM, Martín-Durán JM. "Cell fate specification modes shape transcriptome evolution in the highly conserved spiral cleavage." *EMBO Reports*. 2025;26(20):5088–5114. [doi:10.1038/s44319-025-00569-4](https://doi.org/10.1038/s44319-025-00569-4).
 
     > [!info]- Primary source excerpt (Liang et al., 2025 — specification modes compared)
-    > ![[liang2025-p1-b5-43c30e328e.png|Liang et al., 2025 — two annelids share spiral cleavage but specify their primary progenitor cells differently.]]
+    > ![[liang2025-p1-b5-43c30e328e.png]]
     >
     > "with spiral cleavage but different modes of specifying their primary progenitor cells"
 
 [^16]: Kirillova A, Genikhovich G, Pukhlyakova E, Demilly A, Kraus Y, Technau U. "Germ-layer commitment and axis formation in sea anemone embryonic cell aggregates." *Proceedings of the National Academy of Sciences of the USA*. 2018;115(8):1813–1818. [doi:10.1073/pnas.1711516115](https://doi.org/10.1073/pnas.1711516115).
 
     > [!info]- Primary source excerpt (Kirillova et al., 2018 — regulative capacity was present early)
-    > ![[kirillova2018-p6-b1-7cbb59b253.png|Kirillova et al., 2018 — plasticity and the capacity for regulative development were likely present at the earliest stages of animal evolution.]]
+    > ![[kirillova2018-p6-b1-7cbb59b253.png]]
     >
     > "the capacity for regulative development were present already at the earliest stages of animal evolution"

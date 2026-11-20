@@ -340,7 +340,7 @@ Comparative anatomy confirms why different lineages settle on radically differen
 [^braun2025]: Braun T, Afgin N, Sapozhnikov L, Sivan E, Bergmann A, Baena-Lopez LA, Yacobi-Sharon K, Arama E. Apoptosis-resistant cells drive compensatory proliferation via cell-autonomous and non-autonomous functions of the initiator caspase Dronc. *Nature Communications*. 2025;16:10871. [doi:10.1038/s41467-025-65996-2](https://doi.org/10.1038/s41467-025-65996-2).
 
     > [!info]- Primary source excerpt — hemocyte-independent Duox/Nox ROS and Wengen signaling
-    > ![[comp-prolif-braun2025-duox-wgn.png|Excerpt from Braun et al., Nature Communications 16:10871 (2025), establishing cell-intrinsic ROS production via Duox and Nox driving DARE proliferation independently of hemocytes.]]
+    > ![[comp-prolif-braun2025-duox-wgn.png]]
     >
     > *"ROS produced by Duox and Nox in DARE cells promote their proliferation independently of hemocyte-derived mediators. We next investigated the molecular mechanism through which non-lethal Dronc drives DARE cell proliferation. Given that membrane-localized Dronc promotes AiP by activating the NADPH oxidase Duox to generate extracellular ROS (eROS), which attracts hemocytes that in turn secrete Eiger (Egr) to activate JNK and promote AiP, we examined whether a similar mechanism operates in DARE cells following irradiation. Using the DCFH-DA probe to detect intracellular ROS and dihydroethidium (DHE) for superoxide detection, we observed strong ROS accumulation in IR-treated discs at 48 hours post-irradiation (Fig. 1g–j)."*
 [^li2010]: Li F, Huang Q, Chen J, et al. Apoptotic cells activate the "phoenix rising" pathway to promote wound healing and tissue regeneration. *Science Signaling*. 2010;3(110):ra13. [doi:10.1126/scisignal.2000634](https://doi.org/10.1126/scisignal.2000634).
@@ -359,7 +359,7 @@ Comparative anatomy confirms why different lineages settle on radically differen
 [^losick2016]: Losick VP, Jun AS, Spradling AC. Wound-induced polyploidization: regulation by Hippo and JNK signaling and conservation in mammals. *PLOS ONE*. 2016;11(3):e0151251. [doi:10.1371/journal.pone.0151251](https://doi.org/10.1371/journal.pone.0151251).
 
     > [!info]- Primary source excerpt — AP-1/JNK brakes Yorkie during WIP, p. 8
-    > ![[comp-prolif-losick2016-jnk-brake.png|Discussion excerpt from Losick, Jun & Spradling, PLOS ONE 11(3):e0151251 (2016), p. 8.]]
+    > ![[comp-prolif-losick2016-jnk-brake.png]]
     >
     > *"Here we have observed that AP-1 surprisingly functions as a brake to limit Yki activation, and consequently WIP appears to be restrained and does not overcompensate and produce excess tissue mass."*
 [^ahmeddeprado2024]: Ahmed-de-Prado S, Estella C, Baonza A. Temporal dynamics of apoptosis-induced proliferation in pupal wing development: implications for regenerative ability. *BMC Biology*. 2024;22:98. [doi:10.1186/s12915-024-01894-1](https://doi.org/10.1186/s12915-024-01894-1).

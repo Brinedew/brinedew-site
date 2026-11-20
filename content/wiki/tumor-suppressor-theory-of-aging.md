@@ -185,7 +185,7 @@ The tumor suppression theory doesn't explain all of aging, but it provides a fra
 [^wolf2021]: Wolf AM (2021). "The tumor suppression theory of aging". *Mechanisms of Ageing and Development*. 200: 111583. [doi:10.1016/j.mad.2021.111583](https://doi.org/10.1016/j.mad.2021.111583)
 
     > [!info]- Primary source excerpt — Abstract, p. 1
-    > ![[wolf2021-p1-b6-f699ce333f.png|Abstract of Wolf (2021) stating that oncogenic transformation and clonal expansion—rather than functional impairment—are the relevant consequences of somatic mutation driving aging.]]
+    > ![[wolf2021-p1-b6-f699ce333f.png]]
     >
     > *"The tumor suppression theory of aging introduced here proposes somatic mutation as the proximal cause of aging, but postulates that oncogenic transformation and clonal expansion, not functional impairment, are the relevant consequences of somatic mutation."*
 
@@ -195,7 +195,7 @@ The tumor suppression theory doesn't explain all of aging, but it provides a fra
 [^cagan2022]: Cagan A, Baez-Ortega A, Brzozowska N, Abascal F, Coorens THH, et al. (2022). "Somatic mutation rates scale with lifespan across mammals". *Nature*. 604 (7906): 517–524. [doi:10.1038/s41586-022-04618-z](https://doi.org/10.1038/s41586-022-04618-z)
 
     > [!info]- Primary source excerpt — Abstract, p. 1
-    > ![[cagan2022-p1-b8-956fb7b23f.png|Abstract of Cagan et al. (2022) reporting that annual somatic mutation rates across 16 mammalian species scale inversely with lifespan while end-of-life burden varies only ~3-fold despite a ~40,000-fold body-mass range.]]
+    > ![[cagan2022-p1-b8-956fb7b23f.png]]
     >
     > *"Notably, the somatic mutation rate per year varied greatly across species and exhibited a strong inverse relationship with species lifespan, with no other life-history trait studied showing a comparable association. Despite widely different life histories among the species we examined – including variation of around 30-fold in lifespan and around 40,000-fold in body mass – the somatic mutation burden at the end of lifespan varied only by a factor of around 3."*
 

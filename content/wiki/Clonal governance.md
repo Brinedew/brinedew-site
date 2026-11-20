@@ -103,14 +103,14 @@ Steady-state clonal governance sets the baseline ceiling ($f_{\text{base}}$) and
 [^nelson2017]: Nelson P, Masel J. Intercellular competition and the inevitability of multicellular aging. *Proc Natl Acad Sci U S A*. 2017;114(49):12982–12987. [doi:10.1073/pnas.1618854114](https://doi.org/10.1073/pnas.1618854114).
 
     > [!info]- Primary source excerpt — Significance statement, p. 12982
-    > ![[comp-prolif-nelson2017-significance.png|Significance box from Nelson & Masel (2017), stating that multicellular organisms would age even under perfect selection because intercellular competition cannot simultaneously purge low-vigor cells and prevent cooperative cheaters.]]
+    > ![[comp-prolif-nelson2017-significance.png]]
     >
     > *"Current understanding of the evolution of aging holds that aging is due to the weakness of selection to remove alleles that increase mortality only late in life. Our model, while fully compatible with current theory, makes a stronger statement: Multicellular organisms would age even if selection were perfect."*
 
 [^michaels2023]: Michaels TCT, Mahadevan L. Optimal intercellular competition in senescence and cancer. *Proc R Soc A*. 2023;479:20230204. [doi:10.1098/rspa.2023.0204](https://doi.org/10.1098/rspa.2023.0204).[^signtypo]
 
     > [!info]- Primary source excerpt — Eqs. 5b–5c, p. 4
-    > ![[comp-prolif-michaels2023-eq5bc.png|Analytical solution (Eqs. 5b–5c) in Michaels & Mahadevan (2023) decomposing organismal cell-state dynamics into vigor retention pv(t) and cooperation survival pc(t).]]
+    > ![[comp-prolif-michaels2023-eq5bc.png]]
     >
     > *"The analytical solution reveals that $\rho(t, v, c)$ is the product of two independent binomial distributions in vigor and cooperation spaces, with $p_v(t)$ and $p_c(t)$ representing the (time-dependent) probabilities of cells having one unit of vigor or cooperation, respectively."*
 [^signtypo]: For consistency across Eq. (3), Eq. (5c), and the fitness boundaries $f(1,1) = f_0(1-k)$ and $f(1,0) = f_0$, cheater selective edge is $f_c = +f_0 k / m > 0$; the prose summary on p. 4 of Michaels and Mahadevan prints a typographical minus sign on $f_c$.
@@ -126,7 +126,7 @@ Steady-state clonal governance sets the baseline ceiling ($f_{\text{base}}$) and
 [^cannataro2017]: Cannataro VL, McKinley SA, St. Mary CM. The evolutionary trade-off between stem cell niche size, aging, and tumorigenesis. *Evol Appl*. 2017;10(6):590–602. [doi:10.1111/eva.12476](https://doi.org/10.1111/eva.12476).
 
     > [!info]- Primary source excerpt — Section 4.1.1, p. 11
-    > ![[comp-prolif-cannataro2017-attrition.png|Section 4.1.1 excerpt from Cannataro et al. (2017) calculating accelerated epithelial tissue attrition under genetic drift when human intestinal crypt stem-cell niche size is small (6 cells vs. 20 cells).]]
+    > ![[comp-prolif-cannataro2017-attrition.png]]
     >
     > *"If the true stem cell niche size in humans is closer to the lower estimate of six cells, we calculate a much higher rate of tissue attrition, with the epithelium decreasing over 10% and over 20% in the division and differentiation scenarios, respectively. This is due to the much stronger influence of deleterious mutations drifting to fixation at smaller population sizes."*
 [^alvarado2018]: Alvarado C, Fider NA, Wearing HJ, Komarova NL. Optimizing homeostatic cell renewal in hierarchical tissues. *PLoS Comput Biol*. 2018;14(2):e1005967. [doi:10.1371/journal.pcbi.1005967](https://doi.org/10.1371/journal.pcbi.1005967).

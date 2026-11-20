@@ -54,7 +54,7 @@ The doctrine was named and first systematically examined by George John Romanes 
 [^1]: Weismann A. *The Germ-Plasm: A Theory of Heredity*. Translated by W. Newton Parker and Harriet Rönnfeldt. Charles Scribner's Sons; 1893. [Internet Archive scan](https://archive.org/details/germplasmatheor01weisgoog). Also see Zou Y. ["The Germ-Plasm: the Theory of Heredity (1893), by August Weismann"](https://embryo.asu.edu/pages/germ-plasm-theory-heredity-1893-august-weismann). *Embryo Project Encyclopedia*. 2015.
 
     > [!info]- Primary source excerpt (Weismann, 1893 — preface)
-    > ![[weismann-barrier-weismann-1893-preface.jpg|Weismann, 1893 — preface distinguishing the hereditary substance from the perishable body.]]
+    > ![[weismann-barrier-weismann-1893-preface.jpg]]
     >
     > "a special organised and living hereditary substance, which in all multicellular organisms, unlike the substance composing the perishable body of the individual, is transmitted from generation to generation. This is the theory of the continuity of the germ-plasm." (preface, p. xi)
 
@@ -63,7 +63,7 @@ The doctrine was named and first systematically examined by George John Romanes 
 [^3]: Romanes GJ. *An Examination of Weismannism*. Chicago: Open Court; 1893.
 
     > [!info]- Primary source excerpt (Romanes, 1893 — continuity as alternative; Galton's anticipation)
-    > ![[romanes1893-p17-b2.png|Romanes, 1893 — the 'continuity of germ-plasm' as an alternative to Darwin's pangenesis; Galton answered the acquired characters question first.]]
+    > ![[romanes1893-p17-b2.png]]
     >
     > "the idea of what is now called a 'continuity of germ-plasm' was present to Darwin's mind as a logically possible alternative to the one which he adopted in his theory of pangenesis ... Galton's 'Theory of Heredity' presented ... the question of the transmission of acquired characters, and answered it in almost exactly the same manner as Weismann did about ten years later."
 
@@ -74,7 +74,7 @@ The doctrine was named and first systematically examined by George John Romanes 
 [^6]: Gao Y, Park HJ, Traulsen A, Pichugin Y. "Evolution of irreversible somatic differentiation." *eLife*. 2021;10:e66711. [doi:10.7554/eLife.66711](https://doi.org/10.7554/eLife.66711).
 
     > [!info]- Primary source excerpt (Gao et al., 2021 — strict rule)
-    > ![[gao2021-p3-b3.png|Gao et al. 2021 — germ-role giving rise to soma-role, soma-role forbidden from giving rise to germ-role.]]
+    > ![[gao2021-p3-b3.png]]
     >
     > "the developmental strategy must allow germ-role cells to give rise to soma-role cells ... and must forbid soma-role cells to give rise to germ-role cells."
 
@@ -85,27 +85,27 @@ The doctrine was named and first systematically examined by George John Romanes 
 [^9]: Grosberg RK, Strathmann RR. "The Evolution of Multicellularity: Minor and Major Transitions." *Annual Review of Ecology, Evolution, and Systematics*. 2007;38:621–654. [doi:10.1146/annurev.ecolsys.36.102403.114735](https://doi.org/10.1146/annurev.ecolsys.36.102403.114735).
 
     > [!info]- Source excerpt (Grosberg & Strathmann, 2007 — timing)
-    > ![[richardk.grosberg2007-p12-b0.png|Grosberg & Strathmann 2007 — how a defector can still reach a germ line.]]
+    > ![[richardk.grosberg2007-p12-b0.png]]
     >
     > "the defectors must invade organisms that do not sequester a germ line (and which have mobile cells), strike before a host sequesters a germ line, or arise in a germ line or meristem."
 
 [^10]: Gao Y, Park HJ, Traulsen A, Pichugin Y. "Evolution of irreversible somatic differentiation." *eLife*. 2021;10:e66711. [doi:10.7554/eLife.66711](https://doi.org/10.7554/eLife.66711). Three necessary components.
 
     > [!info]- Primary source excerpt (Gao et al., 2021 — the three components)
-    > ![[gao2021-p1-b3.png|Gao et al. 2021 — the three components: costly differentiation, performance of the soma, and large size.]]
+    > ![[gao2021-p1-b3.png]]
     >
     > "three components are necessary for the evolution of irreversible somatic differentiation: (i) costly cell differentiation, (ii) vegetative cells that significantly improve the organism's performance even if present in small numbers, and (iii) large enough organism size."
 
 [^11]: Grosberg RK, Strathmann RR. "The Evolution of Multicellularity: Minor and Major Transitions." *Annual Review of Ecology, Evolution, and Systematics*. 2007;38:621–654. [doi:10.1146/annurev.ecolsys.36.102403.114735](https://doi.org/10.1146/annurev.ecolsys.36.102403.114735). Plant mutants / defector passage.
 
     > [!info]- Source excerpt (Grosberg & Strathmann, 2007 — plant mutants)
-    > ![[richardk.grosberg2007-p12-b2.png|Grosberg & Strathmann 2007 — plant mutants without meristematic origin, the animal somatic-mutant contrast.]]
+    > ![[richardk.grosberg2007-p12-b2.png]]
     >
     > "Defector mutants in organisms with rigid cell walls, unless they appear in meristematic tissue, will only succeed in damaging their host. The same is true of defectors in metazoans that sequester their germ line: Mutants that appear in somatic cells have little hope for a future of their own."
 
 [^12]: Romanes GJ. *An Examination of Weismannism*. Chicago: Open Court; 1893. Grafting episode.
 
     > [!info]- Primary source excerpt (Romanes, 1893 — grafting)
-    > ![[romanes1893-p101-b3.png|Romanes, 1893 — grafting somatic tissue and modifying the germinal endowments, disregarded by Weismann and followers.]]
+    > ![[romanes1893-p101-b3.png]]
     >
     > "Firstly, in certain cases—exceptional it is true, but this does not signify—somatic-tissues have been found capable of modifying the hereditary endowments of germinal elements by means of simple grafting. This line of evidence has also been disregarded both by Weismann and his followers ... For, if it be the case that the somatic-tissues of an organism A, by being merely grafted on those of organism B, can so affect the germinal elements of B as to cause their offspring to resemble A—or, contrariwise, if the somatic-tissues of A can thus act on B—then, although it may not be properly said that any 'acquired characters' have been transmitted from A to the progeny of B, such an a-sexual transmission of alien characters, in its relation to the theory of germ-plasm, is scarcely less awkward."
