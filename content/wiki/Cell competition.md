@@ -13,7 +13,7 @@ aliases:
 ---
 # Cell competition
 
-**Cell competition** is a cell-non-autonomous quality-control mechanism in multicellular tissues whereby neighboring cells compare relative metabolic and proliferative fitness at cell–cell boundaries, triggering apoptosis and extrusion of suboptimal ("loser") cells in favor of fitter ("winner") cells. First observed in *Drosophila melanogaster* by Ginés Morata and Pedro Ripoll (1975) in mosaic *Minute* wings, it eliminates slow-growing or damaged cells that would otherwise be viable in isolation—tempering strict somatic [[de-darwinization]] while creating an attack surface that pre-malignant **supercompetitors** can hijack to kill surrounding normal cells.
+**Cell competition** is a cell-non-autonomous quality-control mechanism in multicellular tissues whereby neighboring cells compare relative metabolic and proliferative fitness at cell–cell boundaries, triggering apoptosis and extrusion of suboptimal ("loser") cells in favor of fitter ("winner") cells. First observed in *Drosophila melanogaster* by Ginés Morata and Pedro Ripoll (1975) in mosaic *Minute* wings, it eliminates slow-growing or damaged cells that would otherwise be viable in isolation—tempering strict somatic [[de-darwinization|De-Darwinization]] while creating an attack surface that pre-malignant **supercompetitors** can hijack to kill surrounding normal cells.
 
 ## Distributed fitness sensing and execution
 
@@ -59,13 +59,13 @@ Normally, cell competition purges defective cells and suppresses nascent neoplas
 
 ## Evolutionary significance
 
-Cell competition illustrates the ambivalence of [[multicellular-cooperation|multicellular policing]]: the same comparative mechanism that clears damaged, slow-cycling cells during development and homeostasis can, once co-opted by a fitter oncogene clone, cull healthy wild-type neighbors—and conversely, in aged or inflamed stroma where background tissue fitness drops ([[adaptive-oncogenesis]]), mutant clones face weakened collective resistance.
+Cell competition illustrates the ambivalence of [[multicellular-cooperation|multicellular policing]]: the same comparative mechanism that clears damaged, slow-cycling cells during development and homeostasis can, once co-opted by a fitter oncogene clone, cull healthy wild-type neighbors—and conversely, in aged or inflamed stroma where background tissue fitness drops ([[adaptive-oncogenesis|Adaptive oncogenesis]]), mutant clones face weakened collective resistance.
 
 ## Related
 
 - [[flower-drosophila|Flower (Drosophila)]] — the *Lose*/*Win* transmembrane isoform code
 - [[Compensatory proliferation]] — damage- and apoptosis-triggered replacement division
 - [[Anti-frontrunner dynamics]] — EDAC, clonal interference, and collective suppression of outgrowing clones
-- [[adaptive-oncogenesis]] — how aging tissue environments flip selective winners
-- [[oncogene-classification]] — broader catalog of host-coordination evasion mechanisms
-- [[de-darwinization]] — suppression of intra-organismal cell-level selection
+- [[adaptive-oncogenesis|Adaptive oncogenesis]] — how aging tissue environments flip selective winners
+- [[oncogene-classification|How malignant cells evade host coordination systems]] — broader catalog of host-coordination evasion mechanisms
+- [[de-darwinization|De-Darwinization]] — suppression of intra-organismal cell-level selection

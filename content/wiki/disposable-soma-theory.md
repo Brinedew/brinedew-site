@@ -623,12 +623,12 @@ The disposable soma theory treats ageing as the accumulation of damage that the 
 
 The **hyperfunction theory** develops this alternative. Mikhail Blagosklonny argued that "molecular damage does not cause that aging that kills us", and that ageing continues growth programmes, driven by nutrient-sensing pathways such as TOR, after development is complete.[^blagosklonny2010] David Gems and colleagues argued that tests of the oxidative-damage theory in *C. elegans* have often failed, and that overactive biosynthesis carried over from development and reproduction is a plausible alternative.[^gemsguardia2013][^gems2022] In this view the late harm is done by the normal action of genes, not by a shortfall in repair.
 
-A third possibility concerns maintenance that itself causes decline. Some mechanisms that protect against cancer, such as the limit that shortening telomeres place on cell division, remain beneficial at old ages while contributing to tissue decline.[^campisi2005] (See [[antagonistic-pleiotropy-theory#misapplications|Antagonistic pleiotropy]] and [[tumor-suppressor-theory-of-aging]].)
+A third possibility concerns maintenance that itself causes decline. Some mechanisms that protect against cancer, such as the limit that shortening telomeres place on cell division, remain beneficial at old ages while contributing to tissue decline.[^campisi2005] (See [[antagonistic-pleiotropy-theory#misapplications|Antagonistic pleiotropy]] and [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]].)
 
 ## Relationship to other theories
 
-- **Antagonistic pleiotropy.** The disposable soma is a physiological mechanism for it: an allele that shifts resources from maintenance to early reproduction raises early fitness and lowers late survival.[^kirkwoodrose1991] (See [[antagonistic-pleiotropy-theory]].)
-- **Mutation accumulation.** Independent of the soma argument, but rests on the same declining force of selection. (See [[selection-shadow-theory]].)
+- **Antagonistic pleiotropy.** The disposable soma is a physiological mechanism for it: an allele that shifts resources from maintenance to early reproduction raises early fitness and lowers late survival.[^kirkwoodrose1991] (See [[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]].)
+- **Mutation accumulation.** Independent of the soma argument, but rests on the same declining force of selection. (See [[selection-shadow-theory|Selection shadow]].)
 - **Mortality rate models.** Allocation models generally predict an accelerating rise in mortality, but not specifically the Gompertz law.[^abramsludwig1995] (See [[Mortality rate models]].)
 
 ## History

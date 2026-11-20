@@ -43,7 +43,7 @@ Subsequent work, notably by Peter Godfrey-Smith, has refined the practical appli
   
 * **Transmission Bias:** The conditions describe the force of selection, but the net evolutionary change can be zero if transmission is biased. Factors like meiotic drive, mutation pressure, or biased cultural transmission can counteract or mask the effects of selection.
   
-* **Level-neutrality**. The "individuals" in the population can be genes, cells, organisms, colonies, or even species, so long as they meet the three conditions. This generality makes the framework a central tool in debates about the **units of selection** and in understanding major evolutionary transitions, where new, higher-level individuals emerge from collectives of lower-level ones ([[de-darwinization]])
+* **Level-neutrality**. The "individuals" in the population can be genes, cells, organisms, colonies, or even species, so long as they meet the three conditions. This generality makes the framework a central tool in debates about the **units of selection** and in understanding major evolutionary transitions, where new, higher-level individuals emerge from collectives of lower-level ones ([[de-darwinization|De-Darwinization]])
 
 ## See Also
 
@@ -51,7 +51,7 @@ Subsequent work, notably by Peter Godfrey-Smith, has refined the practical appli
 
 - Darwinian population
 
-- [[de-darwinization]]
+- [[de-darwinization|De-Darwinization]]
 
 - Heritability
 

@@ -83,7 +83,7 @@ Suppose an octopus develops a spontaneous endocrine tumor that secretes a metabo
 This distinction carries direct weight in aging biology. When a molecular pathway in an old animal destroys tissue or halts regeneration, an ahistorical circle-and-arrow diagram cannot tell whether the pathway is:
 - **Passive mechanical or transcriptional breakage** (such as bulky DNA lesions physically stalling RNA Polymerase II on long genes), which has no selected function;
 - **Unselected developmental run-on** (a growth program such as [[mtor-mtor-p42345|mTOR]] continuing to fire past reproductive maturity because selection in the [[selection-shadow-theory|selection shadow]] was too weak to install an off-switch); or
-- **An evolved defensive constraint** (such as [[p16ink4a-cdkn2a|p16]]/[[p53-tp53|p53]]-mediated [[cellular-senescence]] or stem-cell dormancy under the [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]]), where the tissue cost is the price of an actively maintained anti-cheater firewall ([[Clonal governance]]).
+- **An evolved defensive constraint** (such as [[p16ink4a-cdkn2a|p16]]/[[p53-tp53|p53]]-mediated [[cellular-senescence|Cellular senescence]] or stem-cell dormancy under the [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]]), where the tissue cost is the price of an actively maintained anti-cheater firewall ([[Clonal governance]]).
 
 Individuating a pathway as a *mechanism for* tumor suppression or programmed death rather than a disease process implicitly appeals to its selective etiology.[^garson2023]
 
@@ -113,7 +113,7 @@ Brett Calcott terms the required structure a **lineage explanation**: a continuo
 - [[Non-technical language in longevity]]
 - [[Novak–Tyson model]]
 - [[Goldbeter–Koshland module]]
-- [[tumor-suppressor-theory-of-aging]]
+- [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]]
 
 ## References
 

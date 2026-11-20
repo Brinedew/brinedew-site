@@ -22,7 +22,7 @@ Three questions run through the field. The first is how much senescent cells con
 
 ## Terminology
 
-- **Replicative senescence** is the arrest that ends the division of human cells in culture after a limited number of divisions, the *Hayflick limit*. It is triggered by short telomeres (see [[telomeres]] and [[hayflick-moorhead-experiment]]).
+- **Replicative senescence** is the arrest that ends the division of human cells in culture after a limited number of divisions, the *Hayflick limit*. It is triggered by short telomeres (see [[telomeres]] and [[hayflick-moorhead-experiment|Hayflick–Moorhead experiment]]).
 - **Oncogene-induced senescence** is senescence triggered by an activated oncogene, such as mutant *RAS* or *BRAF*, independently of the number of divisions.[^serrano1997][^michaloglou2005]
 - **Quiescence** is a reversible pause in division, from which a cell returns when conditions change. Senescence differs in being stable, and in the cell's changed shape, metabolism and secretions.[^campisi2007]
 - The **senescence-associated secretory phenotype (SASP)** is the set of proteins senescent cells secrete, including inflammatory cytokines such as IL-6 and IL-8.[^coppe2008] (See [[sasp]].)
@@ -85,7 +85,7 @@ Karin and colleagues proposed that senescent cells are produced at a rate that r
 
 ### Clearing senescent cells in mice
 
-Darren Baker, Jan van Deursen and colleagues built mice in which cells expressing p16 can be killed with a drug (see [[baker-ink-attac-experiment]]). In mice with a progeroid mutation, life-long removal of these cells delayed age-related disease in fat, muscle and eye, and removal late in life "attenuated progression of already established age-related disorders".[^baker2011] In normal mice, removal twice a week from 12 months of age extended median lifespan by 27% in one genetic background and 24% in another, delayed tumour formation and attenuated the deterioration of kidney, heart and fat.[^baker2016] Clearance was partial and did not reach liver or colon; maximum lifespan was not extended in C57BL/6 mice; and the authors noted that vehicle-injected male C57BL/6 controls were short-lived, "suggesting that repetitive vehicle injection stress may have negatively impacted C57BL/6 male longevity".[^baker2016] Removing cells that express high levels of p21, once a month from 20 months of age, extended both median and maximum lifespan.[^wang2024]
+Darren Baker, Jan van Deursen and colleagues built mice in which cells expressing p16 can be killed with a drug (see [[baker-ink-attac-experiment|Baker INK-ATTAC experiment]]). In mice with a progeroid mutation, life-long removal of these cells delayed age-related disease in fat, muscle and eye, and removal late in life "attenuated progression of already established age-related disorders".[^baker2011] In normal mice, removal twice a week from 12 months of age extended median lifespan by 27% in one genetic background and 24% in another, delayed tumour formation and attenuated the deterioration of kidney, heart and fat.[^baker2016] Clearance was partial and did not reach liver or colon; maximum lifespan was not extended in C57BL/6 mice; and the authors noted that vehicle-injected male C57BL/6 controls were short-lived, "suggesting that repetitive vehicle injection stress may have negatively impacted C57BL/6 male longevity".[^baker2016] Removing cells that express high levels of p21, once a month from 20 months of age, extended both median and maximum lifespan.[^wang2024]
 
 Transplanting small numbers of senescent cells into young mice caused persistent physical dysfunction and spread senescence to the host's tissues.[^xu2018] Drugs that remove senescent cells are described below and in [[senolytics|Senolytics]].
 
@@ -101,7 +101,7 @@ In people, no randomised trial has shown a clinical benefit. A phase 2 trial of 
 
 ## Senescence in theories of ageing
 
-Campisi proposed in 2005 that senescence is antagonistically pleiotropic: it promotes survival early in life by suppressing cancer, and limits it later as senescent cells accumulate.[^campisi2005] Silvia Giaimo and d'Adda di Fagagna questioned whether the evidence shows that the benefits fall mainly in youth and the costs mainly in old age.[^giaimo2012] Senescence also continues to suppress cancer in old organisms, which bears on whether removing senescent cells late in life is safe. (See [[antagonistic-pleiotropy-theory#cellular-senescence|Antagonistic pleiotropy]] and [[tumor-suppressor-theory-of-aging]].)
+Campisi proposed in 2005 that senescence is antagonistically pleiotropic: it promotes survival early in life by suppressing cancer, and limits it later as senescent cells accumulate.[^campisi2005] Silvia Giaimo and d'Adda di Fagagna questioned whether the evidence shows that the benefits fall mainly in youth and the costs mainly in old age.[^giaimo2012] Senescence also continues to suppress cancer in old organisms, which bears on whether removing senescent cells late in life is safe. (See [[antagonistic-pleiotropy-theory#cellular-senescence|Antagonistic pleiotropy]] and [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]].)
 
 ## History
 

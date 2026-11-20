@@ -60,7 +60,7 @@ Between 2021 and 2026, somatic-genomics evidence reshaped the debate between two
 | :--- | :--- | :--- |
 | **Human hypermutators** (*POLE*, *POLD1*, *MUTYH*; *Pms2*⁻/⁻ mice)[^robinson2021] | Elevated somatic point-mutation burdens from birth cause severe early cancer predisposition **without overt premature aging** | Severely weakens naive point-mutation erosion (classical SMTA); shows somatic tissues buffer high SNV loads while selection acts primarily through cancer/clonal sweeps |
 | **TC-NER progeria & GLTD** (*CSB*, *XPD*, *Ercc1*⁻/Δ)[^schumacher2021][^gyenis2023] | Unrepaired bulky DNA *lesions* (with normal or low point-mutation rates) stall RNA Polymerase II disproportionately on long maintenance genes and fire chronic DDR, driving severe premature aging without necessarily raising cancer | Fortifies lesion-based direct erosion (especially in post-mitotic brain and heart) while bridging into DDR-driven senescence |
-| **Mammalian scaling law** (16 species, 208 intestinal crypts)[^cagan2022] | Annual somatic substitution rate scales inversely with lifespan ($\propto 1/\text{lifespan}$), from $47\text{ yr}^{-1}$ in humans to $796\text{ yr}^{-1}$ in mice; giraffes ($99\text{ yr}^{-1}$, $800\text{ kg}$) and naked mole-rats ($93\text{ yr}^{-1}$, $35\text{ g}$) share nearly identical rates despite a 23,000-fold mass gap | End-of-life burden converges near ~3,200 substitutions/crypt (~2.9-fold spread); claimed by erosion models as an error ceiling and by TSTA as selection delaying oncogenic sweeps past reproductive age while body mass is solved by extra tumor-suppressor layers ([[petos-paradox]]) |
+| **Mammalian scaling law** (16 species, 208 intestinal crypts)[^cagan2022] | Annual somatic substitution rate scales inversely with lifespan ($\propto 1/\text{lifespan}$), from $47\text{ yr}^{-1}$ in humans to $796\text{ yr}^{-1}$ in mice; giraffes ($99\text{ yr}^{-1}$, $800\text{ kg}$) and naked mole-rats ($93\text{ yr}^{-1}$, $35\text{ g}$) share nearly identical rates despite a 23,000-fold mass gap | End-of-life burden converges near ~3,200 substitutions/crypt (~2.9-fold spread); claimed by erosion models as an error ceiling and by TSTA as selection delaying oncogenic sweeps past reproductive age while body mass is solved by extra tumor-suppressor layers ([[petos-paradox\|Peto's paradox]]) |
 | **Esophageal *NOTCH1* mosaicism**[^abby2023] | Positively selected *NOTCH1* mutant clones colonize a large fraction of histologically normal aged human esophageal epithelium and **epistatically outcompete nascent tumors** | Complicates pure TSTA: somatic clonal sweeps are not automatically fatal to cohesion and can even be co-opted as an anti-cancer firewall ([[Anti-frontrunner dynamics]]) |
 
 ```vega-lite
@@ -166,8 +166,8 @@ Therapeutic approaches aim to optimize the tumor suppression/tissue damage balan
 This theory connects directly to several other aging mechanisms:
 
 - [[Compensatory proliferation]] - damage-triggered replacement division bounded by mutational load and clonal cheating
-- [[cellular-senescence]] - the end result of chronic tumor suppressor activation
-- [[disposable-soma-theory]] - another theory about evolutionary trade-offs in aging
+- [[cellular-senescence|Cellular senescence]] - the end result of chronic tumor suppressor activation
+- [[disposable-soma-theory|Disposable soma theory]] - another theory about evolutionary trade-offs in aging
 - [[p53-tp53|p53]] - the key protein that mediates this trade-off
 - [[Conflict between development and tumor suppression]] - how embryonic growth and neoplasia share machinery
 - [[Anti-frontrunner dynamics]] - tissue-level collective suppression of outgrowing clones

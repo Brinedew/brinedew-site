@@ -27,7 +27,7 @@ The **force of selection** at an age is how much a small change in survival or r
 
 - The **selection shadow** is the range of ages over which the force of selection is small.
 - **Mutation accumulation** is the theory that ageing results, at least in part, from harmful alleles whose effects appear late in life. New mutations create them faster than selection removes them, so they persist at a balance between the two, called *mutation–selection balance*.[^charlesworth2000]
-- **Antagonistic pleiotropy** is the theory that ageing results, at least in part, from alleles that selection favours for their early benefits despite their late costs.[^williams1957] (See [[antagonistic-pleiotropy-theory]].)
+- **Antagonistic pleiotropy** is the theory that ageing results, at least in part, from alleles that selection favours for their early benefits despite their late costs.[^williams1957] (See [[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]].)
 - **Extrinsic mortality** is mortality from causes that would kill an individual regardless of its condition, such as predation or accidents. The distinction is a simplification: frailer individuals are also more likely to be caught by predators.
 - **Density dependence** is the slowing of population growth as a population becomes crowded, through fewer births, lower survival or both. Which of these it acts on matters for how extrinsic mortality affects the shadow.[^abrams1993]
 
@@ -698,10 +698,10 @@ Hamilton's original conclusion implies that senescence must evolve wherever the 
 
 ## Relationship to other theories
 
-- **Antagonistic pleiotropy.** Shares the declining force of selection. It differs in proposing that the late-acting alleles are favoured for their early effects rather than merely tolerated, and so predicts negative genetic correlations between early and late fitness; both theories can make additive genetic variance rise with age.[^charlesworthhughes1996][^mooradpromislow2009] (See [[antagonistic-pleiotropy-theory]].)
-- **Disposable soma.** A physiological version of antagonistic pleiotropy: limited resources are divided between reproduction and maintenance of the body. (See [[disposable-soma-theory]].)
+- **Antagonistic pleiotropy.** Shares the declining force of selection. It differs in proposing that the late-acting alleles are favoured for their early effects rather than merely tolerated, and so predicts negative genetic correlations between early and late fitness; both theories can make additive genetic variance rise with age.[^charlesworthhughes1996][^mooradpromislow2009] (See [[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]].)
+- **Disposable soma.** A physiological version of antagonistic pleiotropy: limited resources are divided between reproduction and maintenance of the body. (See [[disposable-soma-theory|Disposable soma theory]].)
 - **Mortality rate models.** In the simplest mutation-accumulation model the declining force of selection predicts an exponential rise in mortality,[^charlesworth2001] but this prediction does not survive once the effects of mutations are allowed to interact.[^wachter2013] (See [[Mortality rate models]].)
-- **Tumour suppression.** Some age-related decline may be the cost of anti-cancer mechanisms that remain beneficial at all ages, a constraint rather than an effect of the shadow. (See [[tumor-suppressor-theory-of-aging]].)
+- **Tumour suppression.** Some age-related decline may be the cost of anti-cancer mechanisms that remain beneficial at all ages, a constraint rather than an effect of the shadow. (See [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]].)
 
 ## History
 

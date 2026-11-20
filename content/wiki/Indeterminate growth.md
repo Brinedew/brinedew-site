@@ -54,8 +54,8 @@ Growth, actuarial senescence, reproductive senescence, and physiological deterio
 ## See also
 
 - [[eutely]]
-- [[weismann-barrier]]
-- [[selection-shadow-theory]]
+- [[weismann-barrier|Weismann Barrier]]
+- [[selection-shadow-theory|Selection shadow]]
 
 ## Citations
 
@@ -126,4 +126,4 @@ Growth, actuarial senescence, reproductive senescence, and physiological deterio
 
 - [[research-gaps|Research Gaps — Cnidarian Longevity & Rejuvenation]]
 - [[Mortality rate models]]
-- [[antagonistic-pleiotropy-theory]]
+- [[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]]

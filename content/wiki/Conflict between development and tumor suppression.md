@@ -21,7 +21,7 @@ This trade-off manifests across several evolutionary and developmental domains, 
 
 ### Multicellularity and somatic restraint
 
-The evolution of multicellularity required individual cells to subordinate their reproductive autonomy to the fitness of the organismal collective.[^MaynardSmith1995] In unicellular organisms, natural selection favors individual lineages that divide at maximum capacity. Within metazoans, cellular proliferation must be strictly regulated to coordinate tissue morphogenesis and prevent somatic cells from competing with the germline.[^Aktipis2015] (See [[multicellular-cooperation]], [[evolutionary-transitions-in-individuality]], and [[de-darwinization]].)
+The evolution of multicellularity required individual cells to subordinate their reproductive autonomy to the fitness of the organismal collective.[^MaynardSmith1995] In unicellular organisms, natural selection favors individual lineages that divide at maximum capacity. Within metazoans, cellular proliferation must be strictly regulated to coordinate tissue morphogenesis and prevent somatic cells from competing with the germline.[^Aktipis2015] (See [[multicellular-cooperation|Multicellular cooperation]], [[evolutionary-transitions-in-individuality|Evolutionary transitions in individuality]], and [[de-darwinization|De-Darwinization]].)
 
 Cancer is conceptualized in evolutionary biology as a breakdown of this cooperation, characterized by [[clonal-evolution|somatic selection]] for single-cell survival and proliferative autonomy.[^DeGregori2017] Because the cellular machinery for migration, tissue digestion, and rapid growth was developed during early eukaryote evolution, embryonic morphogenesis relies on many of the same conserved mechanisms. Tumor suppression mechanisms evolved as an internal enforcement apparatus to suppress these behaviors outside of designated developmental windows.[^Aktipis2015]
 
@@ -124,14 +124,14 @@ These experiments demonstrated that the expression of neoplastic traits depends 
 The contextual constraint of neoplasia forms the core of the Tissue Organization Field Theory (TOFT), developed by Ana Soto and Carlos Sonnenschein.[^Soto2004] TOFT challenges the classical Somatic Mutation Theory by arguing that the default cellular state in metazoans is continuous proliferation, which must be restrained by intact tissue architecture and morphogenetic signaling.[^Soto2004] Under this framework, cancer is conceptualized not as a series of cell-autonomous genetic mutations, but as an architectural collapse of tissue structure, releasing underlying cells back to an unconstrained, pseudo-embryonic developmental state.[^Soto2004]
 
 ## See also
-* [[antagonistic-pleiotropy-theory]]
-* [[tumor-suppressor-theory-of-aging]]
-* [[evolutionary-transitions-in-individuality]]
-* [[petos-paradox]]
+* [[antagonistic-pleiotropy-theory|Antagonistic pleiotropy]]
+* [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]]
+* [[evolutionary-transitions-in-individuality|Evolutionary transitions in individuality]]
+* [[petos-paradox|Peto's paradox]]
 * [[Compensatory proliferation]]
 * [[Clonal governance]]
-* [[clonal-evolution]]
-* [[oncogene-classification]]
+* [[clonal-evolution|Clonal evolution]]
+* [[oncogene-classification|How malignant cells evade host coordination systems]]
 * [[Terminal selectors]]
 
 ## References

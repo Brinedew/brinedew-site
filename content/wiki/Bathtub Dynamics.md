@@ -67,7 +67,7 @@ $$x(t) = \int_0^t [u(\tau) - r] \, d\tau$$
 ## See also
 
 - [[Goldbeter–Koshland module]]
-- [[saturating-removal-model-of-senescence]]
+- [[saturating-removal-model-of-senescence|Saturating-removal model of senescence]]
 - [[Huang-Ferrell model]]
 - [[Novak–Tyson model]]
 - [[Hopf bifurcation]]

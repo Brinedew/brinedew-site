@@ -25,7 +25,7 @@ Three questions run through the field. The first is how much telomere shortening
 - **Shelterin** is a complex of six proteins, TRF1, TRF2, POT1, TIN2, TPP1 and Rap1, that binds telomeric DNA and lets cells tell telomeres from DNA breaks.[^delange2005]
 - **Telomerase** is a reverse transcriptase that adds telomeric repeats to chromosome ends, copying them from a template in its own RNA. Its two core parts are the protein TERT and the RNA TERC.[^greiderblackburn1989][^feng1995][^lingner1997][^nakamura1997]
 - The **end-replication problem** is the inability of the DNA-copying machinery to copy a linear molecule to its very end, so that each round of replication would shorten it.[^watson1972][^olovnikov1973]
-- **Replicative senescence** is the permanent arrest of division that human cells enter after a limited number of divisions in culture, the Hayflick limit (see [[hayflick-moorhead-experiment]] and [[cellular-senescence]]).
+- **Replicative senescence** is the permanent arrest of division that human cells enter after a limited number of divisions in culture, the Hayflick limit (see [[hayflick-moorhead-experiment|Hayflick–Moorhead experiment]] and [[cellular-senescence|Cellular senescence]]).
 - **Alternative lengthening of telomeres (ALT)** is the maintenance of telomere length by recombination between telomeres rather than by telomerase.[^bryan1997][^dunham2000]
 
 ## Structure and maintenance

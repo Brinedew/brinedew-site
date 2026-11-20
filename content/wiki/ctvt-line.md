@@ -81,7 +81,7 @@ The existence of CTVT represents a catastrophic failure of multicellular coopera
 ### So You Want to Become a Transmissible Cancer
 
 Here's the sequence of achievements that a free-spirited cell must accomplish in order to become an independent cell line.
-1.  **Become a Tumor:** The founder cell must first acquire driver mutations that let it bypass adaptative multicellular restrictions on cell proliferation and survival (see [[clonal-evolution]] and [[oncogene-classification|how malignant cells evade host coordination]]). This way, the founder cell can repeatedly clone itself and form a cell mass - a tumor.
+1.  **Become a Tumor:** The founder cell must first acquire driver mutations that let it bypass adaptative multicellular restrictions on cell proliferation and survival (see [[clonal-evolution|Clonal evolution]] and [[oncogene-classification|how malignant cells evade host coordination]]). This way, the founder cell can repeatedly clone itself and form a cell mass - a tumor.
 2.  **(optional) Become Metastatic:** Some cell in the resulting tumor must then gain the ability to leave its original tissue, survive transit, and colonize new sites *within the original host*. The best locations to colonize are those that are in frequent rough contact with other hosts - genital skin works well.  
 3.  **Become Transmissible:** Finally, a cancer cell parts ways with the greater collective. It must:
 	- Be physically shed from the body in a way that allows transfer to a new host.
@@ -94,7 +94,7 @@ Problems 1 and 2 are routinely solved by mundane cancers. Very few cell lines ha
 CTVT lineage has survived for thousands of years, hopping between millions of hosts whose immune systems are designed to instantly recognize and destroy foreign tissue. Continuous immune evasion is plausibly much harder that a one-time feat of host-jumping. CTVT had to develop multi-pronged evasion strategy.
 #### Downregulating MHC
 
-The immune system's T-cells identify foreign or infected cells by inspecting proteins displayed on the cell surface by the **Major Histocompatibility Complex (MHC)** (see [[immune-surveillance]] and [[hla-a-hla-a-p04439|HLA-A]]). I think of MHC molecules as comics-style thought bubbles displayed on the cell surface. If "impure thoughts" are detected by T-cells, they will command the offending cell to initiate programmed cell death.
+The immune system's T-cells identify foreign or infected cells by inspecting proteins displayed on the cell surface by the **Major Histocompatibility Complex (MHC)** (see [[immune-surveillance|Immune Surveillance]] and [[hla-a-hla-a-p04439|HLA-A]]). I think of MHC molecules as comics-style thought bubbles displayed on the cell surface. If "impure thoughts" are detected by T-cells, they will command the offending cell to initiate programmed cell death.
 
 CTVT’s trick was to stop expressing MHC molecules on its surface. As Siddle et al. put it, this loss of MHC expression is likely "a key adaptation... that has allowed it to survive as a parasitic allograft" [Siddle, H. V. et al. (2013)](https://www.science.org/doi/10.1126/science.1237167). By making itself "unreadable" to T-cells, cancer cell can often establish an infection before the adaptive immune system even realizes it's there.
 
@@ -135,7 +135,7 @@ We have learned that CTVT has adapted to keep itself mild. But we also know that
 
 ### Maintaining Clonal Integrity
 
-CTVT appears to undergo strong **negative selection** (a form of [[multilevel-selection]] acting between transmissible clones). While CTVT has accumulated an enormous number of mutations and chromosomal aberrations compared to its dog host, it didn't seem to acquire most of them by slowly gaining new advantageous traits over time (positive selection). Instead, selection seems to be ruthlessly purging any new mutations that threaten CTVT's core, essential functions for being a transmissible parasite [Strakova, A. et al. (2021)](https://www.science.org/doi/10.1126/science.aay9924). 
+CTVT appears to undergo strong **negative selection** (a form of [[multilevel-selection|Multilevel selection]] acting between transmissible clones). While CTVT has accumulated an enormous number of mutations and chromosomal aberrations compared to its dog host, it didn't seem to acquire most of them by slowly gaining new advantageous traits over time (positive selection). Instead, selection seems to be ruthlessly purging any new mutations that threaten CTVT's core, essential functions for being a transmissible parasite [Strakova, A. et al. (2021)](https://www.science.org/doi/10.1126/science.aay9924). 
 
 What mutation would make a CTVT cell over-proliferate in the late phase of infection, compared to its neighbors? From [(Siddle, Kaufman 2014)](https://onlinelibrary.wiley.com/doi/10.1111/imm.12377), IFN-γ signal from the host's immune system seems to be the driver of CTVT's late-phase immune-sensitivity. So it seems likely to me that knocking out IFN-γ receptors on CTVT cells would be a good start for defection.
 
@@ -147,5 +147,5 @@ Unfortunately for any meta-defector cell, the immune-insensitive subclone would 
 
 - [[dftd]] - the other natural transmissible cancer, in Tasmanian devils
 - [[hela]] - an immortal cancer lineage in culture
-- [[scandal-hypothesis]] - can a cancer lineage become a new species?
-- [[immune-surveillance]] - how host immunity shapes transmissible tumors
+- [[scandal-hypothesis|SCANDAL Hypothesis]] - can a cancer lineage become a new species?
+- [[immune-surveillance|Immune Surveillance]] - how host immunity shapes transmissible tumors

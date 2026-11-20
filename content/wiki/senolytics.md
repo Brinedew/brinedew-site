@@ -25,7 +25,7 @@ Three questions run through the field. The first is whether the mouse results ar
 - **Senomorphic**: a drug that suppresses the [[sasp|senescence-associated secretory phenotype (SASP)]] without killing the cell. Inhibitors of JAK kinases reduce the SASP in cultured cells and frailty in old mice.[^xu2015] The two terms are used together as *senotherapeutics*.[^raffaele2022]
 - **Senescent-cell anti-apoptotic pathways (SCAPs)**: the survival pathways, such as those controlled by BCL-2 family proteins, PI3K and ephrins, that senescent cells depend on. The term came into use after the first senolytics were found.[^kirkland2020]
 - **Hit-and-run dosing**: giving a senolytic briefly and repeating it only after senescent cells have had time to reaccumulate, weeks later.[^kirkland2020]
-- **Genetic clearance**: removal of senescent cells in transgenic mice, such as the INK-ATTAC and p16-3MR strains, in which cells expressing *p16* can be killed with a drug. These are research tools, not senolytics, but they provide most of the evidence that removing senescent cells matters. (See [[baker-ink-attac-experiment]].)
+- **Genetic clearance**: removal of senescent cells in transgenic mice, such as the INK-ATTAC and p16-3MR strains, in which cells expressing *p16* can be killed with a drug. These are research tools, not senolytics, but they provide most of the evidence that removing senescent cells matters. (See [[baker-ink-attac-experiment|Baker INK-ATTAC experiment]].)
 
 ## Discovery
 
