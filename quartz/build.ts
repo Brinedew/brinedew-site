@@ -80,7 +80,12 @@ async function buildQuartz(argv: Argv, mut: Mutex, clientRefresh: () => void) {
   console.log(`Cleaned output directory \`${output}\` in ${perf.timeSince("clean")}`)
 
   perf.addEvent("glob")
-  const allFiles = await glob("**/*.*", argv.directory, cfg.configuration.ignorePatterns)
+  const isContentVault = path.basename(path.resolve(argv.directory)) === "content"
+  const includePatterns =
+    isContentVault && cfg.configuration.includePatterns?.length
+      ? cfg.configuration.includePatterns
+      : "**/*.*"
+  const allFiles = await glob(includePatterns, argv.directory, cfg.configuration.ignorePatterns)
   const markdownPaths = allFiles.filter((fp) => fp.endsWith(".md")).sort()
   console.log(
     `Found ${markdownPaths.length} input files from \`${argv.directory}\` in ${perf.timeSince("glob")}`,
@@ -136,6 +141,7 @@ async function startWatching(
   }
 
   const gitIgnoredMatcher = await isGitIgnored()
+  const isContentVault = path.basename(path.resolve(argv.directory)) === "content"
   const buildData: BuildData = {
     ctx,
     mut,
@@ -144,6 +150,13 @@ async function startWatching(
       const pathStr = toPosixPath(fp.toString())
       if (pathStr.startsWith(".git/")) return true
       if (gitIgnoredMatcher(pathStr)) return true
+      if (
+        isContentVault &&
+        cfg.configuration.includePatterns?.length &&
+        !cfg.configuration.includePatterns.some((pattern) => minimatch(pathStr, pattern))
+      ) {
+        return true
+      }
       for (const pattern of cfg.configuration.ignorePatterns) {
         if (minimatch(pathStr, pattern)) {
           return true

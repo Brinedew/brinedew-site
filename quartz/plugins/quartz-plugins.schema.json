@@ -168,6 +168,13 @@
           "type": "object",
           "description": "Analytics configuration"
         },
+        "includePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Allowlist of glob patterns to include from content/"
+        },
         "ignorePatterns": {
           "type": "array",
           "items": {

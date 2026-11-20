@@ -65,6 +65,8 @@ export interface GlobalConfiguration {
   enablePopovers: boolean
   /** Analytics mode */
   analytics: Analytics
+  /** Explicit allowlist of glob patterns to include from content/ (overrides default **\/*.*) */
+  includePatterns?: string[]
   /** Glob patterns to not search */
   ignorePatterns: string[]
   /** Base URL to use for CNAME files, sitemaps, and RSS feeds that require an absolute URL.

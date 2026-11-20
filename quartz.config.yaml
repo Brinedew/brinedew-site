@@ -77,6 +77,16 @@ configuration:
   enablePopovers: true
   locale: en-US
   baseUrl: brinedew.bio
+  includePatterns:
+    - wiki/*.md
+    - posts/**/*.md
+    - apps/**/*.md
+    - settings/**/*.md
+    - Attachments/**
+    - index.md
+    - About.md
+    - CNAME
+    - robots.txt
   ignorePatterns:
     - private
     - Templates
@@ -84,7 +94,7 @@ configuration:
     - .trash
     - .stfolder
     - .gemini
-    - Content Status Base.base
+    - "*.base"
   theme:
     fontOrigin: local
     cdnCaching: false
