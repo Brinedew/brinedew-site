@@ -11,11 +11,9 @@ aliases:
 ---
 # Pluripotency silencing
 
-The best-supported model for pluripotency silencing is lineage-specific initiation, followed by recruitment of partly shared transcriptional, post-transcriptional and epigenetic silencing machinery. There are several distinct molecular solutions for switching off OCT4, SOX2 and NANOG. Different developmental lineages recruit different combinations of repressors, while the chromatin machinery that consolidates the differentiated state overlaps substantially.
+The best-supported model for pluripotency silencing is lineage-specific initiation, followed by recruitment of partly shared transcriptional, post-transcriptional and epigenetic silencing machinery. Rather than a single leap from the preimplantation blastocyst into germ-layer differentiation, human pluripotency shutdown proceeds across two distinct tiers: **naïve exit** during implantation—where ancillary naïve-specific regulators (*KLF4*, *TFCP2L1*, *ESRRB*, *ZFP42*) are permanently extinguished as cells enter the formative and primed epiblast—and **core exit** at gastrulation, where the core battery (*OCT4*/*POU5F1*, *SOX2*, and *NANOG*) shifts super-enhancer usage and is dismantled selectively by germ-layer programmes.
 
-There is an important complication: the three core pluripotency factors do not necessarily disappear together. Some developmental programmes retain one of them because it acquires a new function in the differentiated lineage.
-
-Here the core pluripotency battery refers to OCT4 (POU5F1), SOX2 and NANOG, with KLF4, PRDM14, LIN28A and ZFP42 as associated components.
+Even during core exit, the three core pluripotency factors do not disappear together. Because each factor actively represses a different subset of developmental fates, emerging lineages typically extinguish the specific factor blocking their trajectory first while temporarily retaining—or permanently repurposing—another component in the differentiated state.
 
 The following is an enumeration of the major human developmental lineage decisions, organised chronologically. It covers the preimplantation lineages, postimplantation extraembryonic lineages, three germ layers and germline specification. I distinguish direct mechanistic evidence from lineage-marker observations.
 
@@ -45,25 +43,15 @@ This is important because the original pluripotency battery itself contains line
 
 A cell can begin differentiating by removing the particular factor that suppresses its intended fate. It subsequently dismantles the rest of the pluripotency network.
 
-2. Post-transcriptional degradation
+2. Post-transcriptional degradation and hysteretic sharpening
 
-A particularly interesting common mechanism is miR-145.
+A widely shared post-transcriptional loop centers on **miR-145**.
 
 Xu et al. (2009), MicroRNA-145 Regulates OCT4, SOX2, and KLF4 and Represses Pluripotency in Human Embryonic Stem Cells. Cell. [DOI: 10.1016/j.cell.2009.02.038](https://doi.org/10.1016/j.cell.2009.02.038).
 
-They showed that:
+In self-renewing human ESCs, OCT4 binds and represses the *MIR145* promoter, keeping miR-145 abundance low. Once lineage signals cause OCT4 transcription to dip below a threshold, *MIR145* repression lifts; miR-145 rises and binds the 3′ untranslated regions of *OCT4*, *SOX2*, and *KLF4* mRNAs, accelerating their clearance.
 
-- miR-145 is low in self-renewing human ESCs.
-
-- Its expression increases during differentiation.
-
-- It directly targets the 3′ untranslated regions of OCT4, SOX2 and KLF4.
-
-- OCT4 itself represses the miR-145 promoter.
-
-This creates a double-negative feedback circuit. Once differentiation induces miR-145, the microRNA suppresses several components of the original pluripotency network, reinforcing the transition.
-
-This is a shared mechanism available to multiple differentiation programmes, rather than a specific silencer belonging to one germ layer.
+In circuit terms, this mutual antagonism (`OCT4 ⊣ miR-145 ⊣ OCT4/SOX2/KLF4`) acts like a **Schmitt trigger** (a hysteretic threshold sharpener) layered onto the transcriptional switch—scavenging residual pluripotency mRNAs once OCT4 drops past the trip point so cells do not chatter back and forth across the commitment boundary. Crucially, however, miR-145 is a **kinetic noise damper rather than the primary circuit breaker**: when *MIR145* or the broader Dicer microRNA-processing machinery is deleted, human ESCs still extinguish pluripotency in response to differentiation cues, but execute the transition with slower kinetics and higher cell-to-cell variance.
 
 3. Polycomb-mediated repression
 
@@ -77,21 +65,13 @@ Consequently, Polycomb is a reusable component of lineage restriction. Its recru
 
 4. DNA methylation and other forms of chromatin consolidation
 
-An especially useful distinction emerges when looking at the three core factors individually.
+The three core pluripotency loci are locked down asymmetrically during terminal differentiation, reflecting whether a given factor is ever needed again in adult somatic tissues. An early survey by Barrand and Collas (2010) in embryonal carcinoma cells, mesenchymal stem cells, and fibroblasts noted dense promoter CpG methylation at *OCT4* alongside H3K27me3 enrichment at relatively unmethylated *NANOG* and *SOX2* promoters, inversely correlated with gene-body H3K36me3. Broader whole-genome bisulfite sequencing (WGBS) across ENCODE and Roadmap Epigenomics somatic tissues clarified the mature pattern:
 
-Barrand and Collas (2010) examined OCT4, NANOG and SOX2 chromatin in human embryonal carcinoma cells, mesenchymal stem cells and fibroblasts.
-
-They found:
-
-|Gene|Repressive mechanism observed|
-|---|---|
-|OCT4|Promoter CpG methylation associated with repression|
-|NANOG|H3K27me3 enrichment despite relatively unmethylated promoter DNA|
-|SOX2|H3K27me3 enrichment despite relatively unmethylated promoter DNA|
-
-They also found an inverse relationship between promoter H3K27me3 and gene-body H3K36me3.
-
-Thus, even when the three genes are all inactive in a differentiated cell, their regulatory regions can carry different repressive signatures.
+|Gene|Terminal somatic chromatin state|Functional reason|
+|---|---|---|
+|OCT4 (*POU5F1*)|Dense promoter and enhancer CpG methylation|Permanently locked off across all adult somatic lineages|
+|NANOG|Dense promoter CpG methylation in mature somatic tissues (after early H3K27me3 initiation)|Permanently locked off in terminal somatic cells|
+|SOX2|Promoter remains unmethylated and H3K27me3-repressed or bivalent (H3K4me3/H3K27me3) in many tissues|Retains physiological roles in adult somatic niches (neural stem cells, bronchial and lens epithelia)|
 
 A particularly relevant recent addition is ERH, Enhancer of Rudimentary Homolog.
 
@@ -496,25 +476,3 @@ This creates a developmental sequence with three distinguishable molecular event
 The germline demonstrates how selectively this process can operate: it preserves or reactivates OCT4 and NANOG while repressing SOX2 and installing a germline-specific transcriptional network.
 
 One particularly promising research question is whether the lineage-specific transcription factors primarily initiate pluripotency shutdown, while shared chromatin-maintenance machinery subsequently makes that shutdown durable. The TEtra experiments, the OCT4–WNT–PRC2 endoderm experiments and the 2026 ERH study provide three complementary experimental entry points into that problem.
-
-### Caveats on post-transcriptional and epigenetic mechanisms
-
-1. **The Role of miR-145 (Xu et al., 2009):**
-
-    - Correction: While miR-145 directly targets the 3′ UTRs of OCT4, SOX2, and KLF4, functional genetic studies have shown that microRNAs act as **kinetic buffers / noise filters**, not master switches. When the miR-145 or Dicer machinery is knocked out, human ESCs still shut down pluripotency and differentiate in response to lineage signals; they simply display delayed kinetics and noisier, less uniform transitions.
-
-2. **Promoter Methylation Status (Barrand & Collas, 2010):**
-
-    - Correction: That 2010 BBRC study suggested OCT4 undergoes promoter methylation while NANOG and SOX2 rely only on H3K27me3. Across broader ENCODE, Roadmap Epigenomics, and modern WGBS data:
-
-        - Both **OCT4 (POU5F1) and NANOG** promoters undergo dense CpG methylation during terminal somatic differentiation.
-
-        - **SOX2** remains distinct because its promoter remains unmethylated and H3K4me3-positive or bivalent (H3K4me3/H3K27me3) across several adult somatic niches (e.g., neural stem cells, bronchial epithelium, lens epithelium) where it retains physiological function.
-
-3. **The Multi-Tiered Pluripotency Transition (Naïve → Formative → Primed):**
-
-    - Correction: Pluripotency shutdown is not a single leap from preimplantation blastocyst into germ-layer gastrulation. It occurs in two distinct tiers:
-
-        - **Naïve exit (Pre- to Post-implantation):** Naïve-specific network members (**KLF4, TFCP2L1, ESRRB, ZFP42**) are permanently extinguished during the transition to the formative/primed epiblast.
-
-        - **Core exit (Gastrulation):** The core factors (**OCT4, SOX2, NANOG**) transition through different super-enhancer usage before being selectively displaced during germ layer specification.

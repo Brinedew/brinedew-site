@@ -46,6 +46,9 @@ Built-in “top–bottom” orientation of epithelial cells that lets tissues kn
 **[[apoptosis|Apoptosis]]**
 Controlled cell death process initiated by the cell itself (intrinsic apoptosis) or by other cells (extrinsic apoptosis) after intracellular stress or oncogene activation, as opposed to necrosis (uncontrolled cell death)
 
+**[[Compensatory proliferation|Apoptosis-induced proliferation (AiP)]]**
+Specialized subset of compensatory proliferation in which apoptotic cells deploy caspase-dependent signals (such as Wnt, ROS/JNK, or prostaglandin E₂) to stimulate mitosis in adjacent survivors before dying.
+
 **ATAC-seq**
 Lab method that maps which parts of DNA are open and active by tracking where enzymes can easily cut, giving a snapshot of gene control regions.
 
@@ -100,7 +103,7 @@ Describes a biological effect that runs inside an affected cell using that cell'
 **Cell non-autonomous**
 Describes a biological effect that reaches the affected cell from neighboring cells or the tissue environment, such as the survival, growth, or invasion support a clone receives from a changed stroma.
 
-**[[flower-drosophila|Cell competition]]**
+**[[Cell competition]]**
 Process where fitter cells eliminate less-fit neighbors, preserving tissue quality under mutation pressure.
 
 **Cell cycle**
@@ -130,6 +133,9 @@ One-off cancer-associated event where chromosomes are shattered and haphazardly 
 **[[peter-nowell|Clonal evolution]]**
 Model in which a tumor is a population of cells descended from a common ancestor, with heritable variation and selection driving progression.
 
+**[[Clonal governance]]**
+Steady-state somatic control holding replicating cell collectives in the corridor between zero-competition tissue atrophy (unpurged low-vigor cells) and unconstrained supercompetitor escape (oncogenic cheater sweep), implemented via bounded turnover, cell competition, and hierarchical compartment sizing.
+
 **Clonal cooperation**
 Interactions between distinct cell clones that collectively enhance growth, survival, or invasion beyond what single clones achieve.
 
@@ -138,6 +144,12 @@ Competitive interactions between cell lineages that expand at the same time.
 
 **Clonal selection**
 The natural-selection-like process by which cell lineages with growth or survival (fitness) advantages expand more than others.
+
+**[[Compensatory proliferation#non-proliferative-repair-and-developmental-lockouts|Compensatory cellular hypertrophy (CCH)]]**
+Non-mitotic restoration of lost tissue mass via surviving-cell enlargement or endoreplication (such as murine hepatocytes after 30% partial hepatectomy or postmitotic *Drosophila* follicle cells).
+
+**[[Compensatory proliferation]]**
+Damage- or cell-loss-triggered re-entry of surviving cells into the cell cycle to restore lost tissue mass or cell number (distinguished from [[Compensatory proliferation|AiP]], which specifically requires dying-cell caspase signaling).
 
 **Contact inhibition**
 Suppression of cell proliferation or migration upon cell crowding or direct cell contact in healthy tissues.

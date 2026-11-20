@@ -11,9 +11,35 @@ aliases:
 ---
 # Non-technical language in longevity
 
-**Non-technical language in longevity** refers to multi-level umbrella words—such as *"aging"*, *"senescence"*, *"immortality"*, *"rejuvenation"*, *"damage"*, and *"health"*—that are serviceable when speaking to journalists or general audiences but mislead research when used as technical categories. Technical terms in biogerontology must be **level-indexed**: tied strictly to the single level of biological organization (molecule, cell, tissue, organism, or demographic cohort) at which the quantity or mechanism is actually defined.
+**Non-technical language in longevity** refers to multi-level umbrella words—such as *"aging"*, *"senescence"*, *"immortality"*, *"rejuvenation"*, *"damage"*, and *"health"*—that are serviceable when speaking to journalists or general audiences but mislead research when used as technical categories. Technical terms in biogerontology must be **level-indexed**: tied strictly to the single level of biological organization (molecule, cell, organism) at which the quantity or mechanism is actually defined.
 
-Compare *"health"* with *"vital signs"* in medicine. Clinicians and commentators speak loosely of cellular health, organ health, personal health, and population health, applying one word to four different entities. Vital signs (core temperature, pulse rate, respiratory rate, blood pressure) cannot be defined for a single cell or an entire demographic cohort; they exist only at the organismal level because they measure integrated physiological regulation.
+As an example, compare the words *"health"* and *"vital signs"* in medicine. Clinicians and commentators speak loosely of healthy genes, healthy cells, personal health, and population health, applying the same word to different biological organization levels. In contrast, the technical term "Vital signs" (defined as core temperature, pulse rate, respiratory rate, blood pressure) cannot be misinterpreted for a single cell or an entire demographic cohort; vital signs exist only at the organismal level.
+
+## Examples of paradoxes rooted in non-technical language
+
+### Aging
+Syllogism 1:
+2. aging can be defined as a rise in mortality over lifespan
+    
+3. there can be an allele A that decreases mortality 10x below 50yo, and has no effect whatsoever on mortality after 50yo
+    
+4. as the organism with allele A transitions from 49 to 51yo, its mortality rises 10x (by definition, aging)
+    
+5. organisms with allele A have larger average lifespan
+    
+6. allele A caused the 10x rise in mortality on an organism's lifespan graph
+    
+7. therefore, allele A caused aging
+    
+8. therefore, the same allele can both increase lifespan and aging simultaneously
+
+
+Syllogism 2:
+1. aging can be defined as a degenerative process scaling in intensity over lifespan
+2. There can be an allele B that makes late-life bodies less degenerative
+3. In allele B bodies, late-life tumors get to grow in a less degenerative tissue
+4. Therefore, tumors grow faster
+5. Therefore, the same allele can both decrease aging and health simultaneously
 
 ## Cognitive failures prevented by level-indexed language
 

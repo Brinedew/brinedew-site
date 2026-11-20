@@ -36,6 +36,7 @@ If microenvironmental deterioration unlocks oncogenic selection, cancer preventi
 
 ## See also
 
+- [[Compensatory proliferation|Compensatory proliferation]]
 - [[clonal-evolution|Clonal evolution]]
 - [[tumor-suppressor-theory-of-aging|Tumor Suppressor Theory of Aging]]
 - [[james-degregori|James DeGregori]]

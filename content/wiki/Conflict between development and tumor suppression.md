@@ -45,6 +45,11 @@ Evolutionary developmental biologist Frietson Galis demonstrated that alteration
 
 ## Molecular and cellular mechanisms
 
+### The eumetazoan G1 restriction gate
+At its biochemical core, the eukaryotic cell-division cycle does not require dozens of specialized kinases: in synthetic fission-yeast experiments, a single oscillating cyclin–CDK fusion protein (paired with APC/C proteolysis and opposing phosphatases) suffices to drive both DNA replication and mitosis in order via quantitative activity thresholds (see [[Novak–Tyson model#the-quantitative-threshold-model-and-minimal-single-module-tests|Novak–Tyson model]]),[^Coudreuse2010] and mouse embryos lacking all four interphase CDKs (*Cdk2*, *Cdk3*, *Cdk4*, *Cdk6*) still cycle through mid-gestation using CDK1 alone.[^Santamaria2007] Nor did multiple cyclins and CDKs evolve solely in animals: the Last Eukaryotic Common Ancestor (LECA), unicellular yeasts, and plants (*Arabidopsis* encodes >49 cyclins) already expanded cyclin families for hydrophobic-patch substrate docking, transcriptional regulation (such as CDK7, CDK8, CDK9, CDK12, and CDK13), and nutrient sensing.[^Cao2014]
+
+What complex animals (**Eumetazoa**) specifically assembled alongside differentiated somatic tissues is the **Cyclin D–CDK4/6–[[p16ink4a-cdkn2a|INK4]]–[[rb-rb1|Rb]]** $G_1$ restriction module—present in placozoans, cnidarians, and bilaterians, but absent in fungi, choanoflagellates, and sponges.[^Cao2014] Unlike CDK1 and CDK2, CDK4 and CDK6 are narrowly specialized to phosphorylate Rb-family pocket proteins rather than general mitotic substrates. Their evolutionary role is to invert the default cellular state: whereas unicellular eukaryotes default to dividing whenever nutrients and cell size allow, long-lived animal tissues must park the vast majority of somatic cells in [[Quiescence depth|reversible $G_0$ quiescence]] or terminal arrest, permitting proliferation only when extrinsic morphogens or tissue-repair signals unlock the $G_1$ gate, and slamming it shut via INK4 ($p16^{\text{INK4a}}$) and CIP/KIP ($p21^{\text{CIP1}}$, $p27^{\text{KIP1}}$) inhibitors upon oncogenic or genotoxic stress.
+
 ### Epigenetic silencing of *CDKN2A*
 The *[[p16ink4a-cdkn2a|CDKN2A]]* genomic locus encodes two key tumor suppressors: p16<sup>INK4a</sup> and [[arf-p14arf|p14<sup>ARF</sup>]] (p19<sup>ARF</sup> in rodents). p16<sup>INK4a</sup> inhibits the cyclin-dependent kinases CDK4 and CDK6 to prevent phosphorylation of the [[rb-rb1|Retinoblastoma protein]] (pRb), maintaining $G_1$ cell cycle arrest. p14<sup>ARF</sup> binds and inhibits [[mdm2|MDM2]], preventing the degradation of p53 and promoting cell cycle arrest or apoptosis.[^Sharpless2007]
 
@@ -123,6 +128,8 @@ The contextual constraint of neoplasia forms the core of the Tissue Organization
 * [[tumor-suppressor-theory-of-aging]]
 * [[evolutionary-transitions-in-individuality]]
 * [[petos-paradox]]
+* [[Compensatory proliferation]]
+* [[Clonal governance]]
 * [[clonal-evolution]]
 * [[oncogene-classification]]
 * [[Terminal selectors]]
@@ -154,6 +161,9 @@ The contextual constraint of neoplasia forms the core of the Tissue Organization
 [^Kulesa2006]: Kulesa PM, Kasemeier-Kulesa JC, Teddy JM, Margaryan NV, Seftor EA, Seftor RE, Hendrix MJ. "Reprogramming metastatic melanoma cells to assume a diverse neural crest-like phenotype in an embryonic microenvironment." *Proceedings of the National Academy of Sciences of the United States of America*. 2006;103(10):3752–3757. doi:10.1073/pnas.0506977103.
 [^Bissell2001]: Bissell MJ, Radisky D. "Putting tumours in context." *Nature Reviews Cancer*. 2001;1(1):46–54. doi:10.1038/35094059.
 [^Soto2004]: Soto AM, Sonnenschein C. "The somatic mutation theory of cancer: growing problems with the paradigm?" *BioEssays*. 2004;26(10):1097–1107. doi:10.1002/bies.20087.
+[^Coudreuse2010]: Coudreuse D, Nurse P. "Driving the cell cycle with a minimal CDK control network." *Nature*. 2010;468(7327):1074–1079. doi:10.1038/nature09543.
+[^Santamaria2007]: Santamaría D, Barrière C, Cerqueira A, Hunt S, Tardy C, et al. "Cdk1 is sufficient to drive the mammalian cell cycle." *Nature*. 2007;448(7155):811–815. doi:10.1038/nature06046.
+[^Cao2014]: Cao L, Chen F, Yang X, Xu W, Xie J, Yu L. "Phylogenetic analysis of CDK and cyclin proteins in premetazoan lineages." *BMC Evolutionary Biology*. 2014;14:10. doi:10.1186/1471-2148-14-10.
 
 ## Further reading
 * Frank SA. *Dynamics of Cancer: Incidence, Inheritance, and Evolution*. Princeton University Press, 2007. ISBN 978-0-691-13366-9.

@@ -25,3 +25,4 @@ YAP1 amplification occurs in hepatocellular carcinoma, esophageal cancer, and ot
 ## Notes
 
 - Human gene symbol: YAP1; UniProt P46937; 504 amino acids; TEAD-binding, PDZ-binding, WW domains.
+- See also: [[Compensatory proliferation]] (how mechanical stretch after neighbor loss releases Hippo repression to trigger replacement mitosis) and [[taz-wwtr1|TAZ]].

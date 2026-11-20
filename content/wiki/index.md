@@ -67,6 +67,7 @@ Why the risk of death rises with age, and how fast:
 Key cellular and molecular processes:
 
 - **[[apoptosis]]** - Programmed cell death, intrinsic and extrinsic
+- **[[Compensatory proliferation]]** - Damage-triggered replacement division, genuine versus undead AiP, non-proliferative hypertrophy/endocycling, and the somatic turnover double bind
 - **[[cellular-senescence]]** - Stable arrest of cell division in damaged or stressed cells
 - **[[Quiescence depth]]** - Graded reversible arrest thresholds governed by Rb–E2F and lysosomal function
 - **[[Types of cell senescence and quiescence|Senescence and quiescence control loops]]** - Feedback loops and bifurcations separating reversible quiescence from irreversible senescence
@@ -78,6 +79,7 @@ Key cellular and molecular processes:
 - **[[Mosaic vs regulative development spectrum]]** - Autonomous lineage determinants vs. conditional neighbor signaling in embryos
 - **[[Classical embryology observations and their mechanisms]]** - Experimental embryology phenomena and their molecular mechanisms
 - **[[Tissue signalling archetypes]]** - Structural classification of intercellular signaling modes
+- **[[Post-genomic histological taxonomy]]** - Predicting 3D tissue micro-architecture from domain-general mechanical gene modules, and where steady-state transcriptomics hits a wall
 - **[[Terminal selectors]]** - Master transcription factors maintaining post-mitotic cell identity
 - **[[Pluripotency silencing]]** - Epigenetic lockdown of embryonic plasticity in somatic lineages
 - **[[History of biogerontology]]** - Eras and paradigm shifts in aging research
@@ -85,6 +87,7 @@ Key cellular and molecular processes:
 
 ## Reference & Methods
 
+- **[[Wiki Assessment]]** - Quality tiers (`Stub` to `FA`), summary-style/transclusion rules, cropped primary-source excerpt standards, visual/interactive standards, `vital_level` scale, and net-wiki LLM Court rules above `B`
 - **[[Glossary]]** - Key terminology across aging, clonal governance, and evolutionary oncology
 - **[[Flash-in-the-pan wet lab methods]]** - Historical assay transitions from bespoke bench protocols to high-throughput platforms
 - **[[Tier List cell lines]]** - Benchmark cancer and non-transformed cell lines ranked by biological utility

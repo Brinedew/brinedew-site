@@ -64,6 +64,7 @@ Cell competition illustrates the ambivalence of [[multicellular-cooperation|mult
 ## Related
 
 - [[flower-drosophila|Flower (Drosophila)]] — the *Lose*/*Win* transmembrane isoform code
+- [[Compensatory proliferation]] — damage- and apoptosis-triggered replacement division
 - [[Anti-frontrunner dynamics]] — EDAC, clonal interference, and collective suppression of outgrowing clones
 - [[adaptive-oncogenesis]] — how aging tissue environments flip selective winners
 - [[oncogene-classification]] — broader catalog of host-coordination evasion mechanisms

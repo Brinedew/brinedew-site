@@ -24,3 +24,4 @@ The WWTR1 locus participates in a defining translocation: WWTR1-CAMTA1, the sign
 ## Notes
 
 - Human gene symbol: WWTR1; UniProt Q9GZV5; 420 amino acids; TEAD-binding and PDZ-binding domains; 14-3-3 binding site at Ser89.
+- See also: [[Compensatory proliferation]] (mechanical stretch release of Hippo/TAZ contact inhibition)
