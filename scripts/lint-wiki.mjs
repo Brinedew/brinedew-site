@@ -35,6 +35,7 @@ function lintFile(filePath) {
   const findings = []
 
   let inCodeFence = false
+  let inExcerptCallout = false
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const lineNum = i + 1
@@ -54,6 +55,13 @@ function lintFile(filePath) {
     }
     if (inCodeFence) continue
 
+    // Track whether we are inside any primary-source/OCR excerpt callout (top-level or indented)
+    if (/^\s*>\s*\[!info\]-?.*(?:excerpt|ocr|primary source|source passage)/i.test(line)) {
+      inExcerptCallout = true
+    } else if (inExcerptCallout && !/^\s*>/.test(line)) {
+      inExcerptCallout = false
+    }
+
     // 1. Top-level (not indented inside a footnote) > [!info] primary-source / OCR excerpt callout
     if (/^>\s*\[!info\]-?.*(?:excerpt|ocr|primary source|source passage)/i.test(line)) {
       findings.push({
@@ -62,6 +70,17 @@ function lintFile(filePath) {
         rule: "ocr-callout-not-in-footnote",
         message:
           "OCR/primary-source screenshot callout is at top level (mid-page or detached from its footnote). Indent it 4 spaces directly inside its `[^key]:` footnote under `## References`.",
+      })
+    }
+
+    // 2. Descriptive |caption alias on OCR screenshot embed inside an excerpt callout
+    if (inExcerptCallout && /!\[\[[^\]|]+\.(?:png|jpe?g|webp|svg)\|[^\]]+\]\]/i.test(line)) {
+      findings.push({
+        file: relPath,
+        line: lineNum,
+        rule: "ocr-image-caption-description",
+        message:
+          "OCR screenshot embed has a `|description` alias (which renders a description under the screenshot). Use a bare `![[filename.png]]` embed followed only by the verbatim OCR text.",
       })
     }
 
