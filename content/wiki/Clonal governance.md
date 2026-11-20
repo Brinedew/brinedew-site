@@ -45,16 +45,6 @@ $$p_v(\tau) = \frac{\tilde{f}_v - 1}{\tilde{f}_v - e^{-(\tilde{f}_v - 1)\tau}}, 
 
 The two factors move in opposite directions under $\tilde{f}_0$: raising turnover $\tilde{f}_0$ holds vigorous fraction $p_v(\tau)$ higher by purging sluggish $v = 0$ cells, while forcing cooperative fraction $p_c(\tau)$ down exponentially at rate $\tilde{f}_c + r$ by multiplying cheater expansion. No positive constant value of $\tilde{f}_0$ prevents $\lim_{\tau \to \infty} p_c(\tau) = 0$.
 
-> [!info]- Primary source excerpt — Nelson & Masel (2017), p. 12982
-> ![[comp-prolif-nelson2017-significance.png|Significance box from Nelson & Masel (2017), stating that multicellular organisms would age even under perfect selection because intercellular competition cannot simultaneously purge low-vigor cells and prevent cooperative cheaters.]]
->
-> *"Current understanding of the evolution of aging holds that aging is due to the weakness of selection to remove alleles that increase mortality only late in life. Our model, while fully compatible with current theory, makes a stronger statement: Multicellular organisms would age even if selection were perfect."* — Significance statement, p. 12982 ([doi:10.1073/pnas.1618854114](https://doi.org/10.1073/pnas.1618854114)).
-
-> [!info]- Primary source excerpt — Michaels & Mahadevan (2023), Eqs. 5b–5c, p. 4
-> ![[comp-prolif-michaels2023-eq5bc.png|Analytical solution (Eqs. 5b–5c) in Michaels & Mahadevan (2023) decomposing organismal cell-state dynamics into vigor retention pv(t) and cooperation survival pc(t).]]
->
-> *"The analytical solution reveals that $\rho(t, v, c)$ is the product of two independent binomial distributions in vigor and cooperation spaces, with $p_v(t)$ and $p_c(t)$ representing the (time-dependent) probabilities of cells having one unit of vigor or cooperation, respectively."* — Eqs. 5b–5c, p. 4 ([doi:10.1098/rspa.2023.0204](https://doi.org/10.1098/rspa.2023.0204)).[^signtypo]
-
 Maximizing vitality $\tilde{V}(T)$ over an organism's evolutionary time horizon $T$ therefore sets a unique internal optimum $\tilde{f}_0^*(k, r, T)$:[^michaels2023]
 
 * Longer evolutionary target horizons demand tighter restraint. At baseline human $r = 0.01$ and $k = 0.5$, maximizing $\tilde{V}(T)$ puts optimal turnover near $\tilde{f}_0^* = 3.968$ at $T = 2\,\mu_v^{-1}$, shifts downward to $2.810$ at $T = 3\,\mu_v^{-1}$, and drops further to $2.014$ at $T = 4.6\,\mu_v^{-1}$.
@@ -94,11 +84,6 @@ Feedback from compartment boundaries enforces a second layer of clonal governanc
 * **Homeostatic crowding thresholds (`Grajzel et al., 2020`):** When cell division rates inside each hierarchical compartment are coupled to deviations between current compartment count $N_k(t)$ and homeostatic target $N_k^0$—mathematically equivalent to trapping compartment size inside a quadratic restoring potential—weakly advantageous mutants face a compartment-size-dependent selective threshold $S_m^*$ below which they drift to extinction rather than sweeping to fixation.[^grajzel2020] Shrinking compartment size raises $S_m^*$, culling marginal cheaters early.
 * **Stem-cell attrition vs. neutral washout (`Cannataro et al., 2017`):** Modeling an empirical yeast distribution of mutational fitness effects (`5.75%` beneficial, `94.25%` deleterious) in intestinal crypt niches uncovers a subtle tension between purging and drift.[^cannataro2017] When total differentiated crypt output is held strictly invariant across architectures, niche size $N$ cancels out of lifetime tumor risk (`Section 3.3`). Yet when overall putative crypt cell count is held fixed around ~36 cells while varying how many occupy the quiescent stem niche (`N = 6` vs. `N = 20`), per-stem differentiation rate shifts from $0.172\text{ day}^{-1}$ (`N = 6`) to $0.321\text{ day}^{-1}$ (`N = 20`), causing small 6-cell human niches to suffer substantially worse age-dependent tissue attrition under genetic drift (`>10%` under division-rate mutations and `>20%` under differentiation-rate mutations at 75 years post-adulthood, versus `~5%` in 20-cell niches).[^cannataro2017] Optimizing renewal rates jointly with niche compartment count confirms that low stem self-renewal paired with rapid progenitor flushing minimizes mutant retention unless injury repeatedly breaks compartmental quiescence.[^alvarado2018]
 
-> [!info]- Primary source excerpt — Cannataro et al. (2017), Section 4.1.1, p. 11
-> ![[comp-prolif-cannataro2017-attrition.png|Section 4.1.1 excerpt from Cannataro et al. (2017) calculating accelerated epithelial tissue attrition under genetic drift when human intestinal crypt stem-cell niche size is small (6 cells vs. 20 cells).]]
->
-> *"If the true stem cell niche size in humans is closer to the lower estimate of six cells, we calculate a much higher rate of tissue attrition, with the epithelium decreasing over 10% and over 20% in the division and differentiation scenarios, respectively. This is due to the much stronger influence of deleterious mutations drifting to fixation at smaller population sizes."* — Section 4.1.1, p. 11 ([doi:10.1111/eva.12476](https://doi.org/10.1111/eva.12476)).
-
 ## Boundary with adaptive repair
 
 Steady-state clonal governance sets the baseline ceiling ($f_{\text{base}}$) and architectural shielding ($D^*, S_m^*$) under quiet homeostasis. Acute trauma, toxic ablation, or localized ischemia temporarily breaks those ceilings by injecting a transient turnover pulse $f_0(t) = f_{\text{base}} + \delta_{\text{injury}}(t)$—or, where replication hazard outweighs cell replacement, switching into non-mitotic volume expansion or chromatin arrest. How tissues trigger, cap, and terminate those acute repair responses, and why chronic inflammation or failed braking converts wound repair into neoplasia, is the subject of [[Compensatory proliferation]].
@@ -116,7 +101,18 @@ Steady-state clonal governance sets the baseline ceiling ($f_{\text{base}}$) and
 ## References
 
 [^nelson2017]: Nelson P, Masel J. Intercellular competition and the inevitability of multicellular aging. *Proc Natl Acad Sci U S A*. 2017;114(49):12982–12987. [doi:10.1073/pnas.1618854114](https://doi.org/10.1073/pnas.1618854114).
-[^michaels2023]: Michaels TCT, Mahadevan L. Optimal intercellular competition in senescence and cancer. *Proc R Soc A*. 2023;479:20230204. [doi:10.1098/rspa.2023.0204](https://doi.org/10.1098/rspa.2023.0204).
+
+    > [!info]- Primary source excerpt — Significance statement, p. 12982
+    > ![[comp-prolif-nelson2017-significance.png|Significance box from Nelson & Masel (2017), stating that multicellular organisms would age even under perfect selection because intercellular competition cannot simultaneously purge low-vigor cells and prevent cooperative cheaters.]]
+    >
+    > *"Current understanding of the evolution of aging holds that aging is due to the weakness of selection to remove alleles that increase mortality only late in life. Our model, while fully compatible with current theory, makes a stronger statement: Multicellular organisms would age even if selection were perfect."*
+
+[^michaels2023]: Michaels TCT, Mahadevan L. Optimal intercellular competition in senescence and cancer. *Proc R Soc A*. 2023;479:20230204. [doi:10.1098/rspa.2023.0204](https://doi.org/10.1098/rspa.2023.0204).[^signtypo]
+
+    > [!info]- Primary source excerpt — Eqs. 5b–5c, p. 4
+    > ![[comp-prolif-michaels2023-eq5bc.png|Analytical solution (Eqs. 5b–5c) in Michaels & Mahadevan (2023) decomposing organismal cell-state dynamics into vigor retention pv(t) and cooperation survival pc(t).]]
+    >
+    > *"The analytical solution reveals that $\rho(t, v, c)$ is the product of two independent binomial distributions in vigor and cooperation spaces, with $p_v(t)$ and $p_c(t)$ representing the (time-dependent) probabilities of cells having one unit of vigor or cooperation, respectively."*
 [^signtypo]: For consistency across Eq. (3), Eq. (5c), and the fitness boundaries $f(1,1) = f_0(1-k)$ and $f(1,0) = f_0$, cheater selective edge is $f_c = +f_0 k / m > 0$; the prose summary on p. 4 of Michaels and Mahadevan prints a typographical minus sign on $f_c$.
 [^horizonNote]: The caption to Fig. 3a in Michaels and Mahadevan (2023) prints $T = 3\,\mu_c^{-1}$ while the curve itself and its Fig. 2a counterpart (`"same parameters as in Fig. 2(a)"`, $k = 0.3, r = 0.01$) correspond to $T = 3\,\mu_v^{-1}$ ($\tau = 3$).
 [^mitteldorf2018]: Mitteldorf J, Fahy GM. Questioning the inevitability of aging. *Proc Natl Acad Sci U S A*. 2018;115(4):E558. [doi:10.1073/pnas.1720331115](https://doi.org/10.1073/pnas.1720331115).
@@ -128,4 +124,9 @@ Steady-state clonal governance sets the baseline ceiling ($f_{\text{base}}$) and
 [^derényi2017]: Derényi I, Szöllősi GJ. Hierarchical tissue organization as a general mechanism to limit the accumulation of somatic mutations. *Nat Commun*. 2017;8:14545. [doi:10.1038/ncomms14545](https://doi.org/10.1038/ncomms14545).
 [^grajzel2020]: Grajzel D, Derényi I, Szöllősi GJ. A compartment size-dependent selective threshold limits mutation accumulation in hierarchical tissues. *Proc Natl Acad Sci U S A*. 2020;117(3):1606–1611. [doi:10.1073/pnas.1913104117](https://doi.org/10.1073/pnas.1913104117).
 [^cannataro2017]: Cannataro VL, McKinley SA, St. Mary CM. The evolutionary trade-off between stem cell niche size, aging, and tumorigenesis. *Evol Appl*. 2017;10(6):590–602. [doi:10.1111/eva.12476](https://doi.org/10.1111/eva.12476).
+
+    > [!info]- Primary source excerpt — Section 4.1.1, p. 11
+    > ![[comp-prolif-cannataro2017-attrition.png|Section 4.1.1 excerpt from Cannataro et al. (2017) calculating accelerated epithelial tissue attrition under genetic drift when human intestinal crypt stem-cell niche size is small (6 cells vs. 20 cells).]]
+    >
+    > *"If the true stem cell niche size in humans is closer to the lower estimate of six cells, we calculate a much higher rate of tissue attrition, with the epithelium decreasing over 10% and over 20% in the division and differentiation scenarios, respectively. This is due to the much stronger influence of deleterious mutations drifting to fixation at smaller population sizes."*
 [^alvarado2018]: Alvarado C, Fider NA, Wearing HJ, Komarova NL. Optimizing homeostatic cell renewal in hierarchical tissues. *PLoS Comput Biol*. 2018;14(2):e1005967. [doi:10.1371/journal.pcbi.1005967](https://doi.org/10.1371/journal.pcbi.1005967).
