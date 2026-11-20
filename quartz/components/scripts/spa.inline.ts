@@ -78,6 +78,14 @@ async function _navigate(url: URL, isBack: boolean = false) {
   p = p || new DOMParser()
   const contents = await fetchCanonical(url)
     .then((res) => {
+      if (res.url) {
+        const resolvedUrl = new URL(res.url, window.location.href)
+        if (resolvedUrl.origin !== window.location.origin) {
+          if (!resolvedUrl.hash && url.hash) resolvedUrl.hash = url.hash
+          window.location.assign(resolvedUrl.href)
+          return
+        }
+      }
       const contentType = res.headers.get("content-type")
       if (contentType?.startsWith("text/html")) {
         return res.text()
