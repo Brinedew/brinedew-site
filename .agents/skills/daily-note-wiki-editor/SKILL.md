@@ -51,7 +51,7 @@ Before ANY claim, number, or citation from a daily note enters `content/wiki/`:
      ```powershell
      occurock evidence <citekey> "<passage>" --output-dir content/Attachments --json
      ```
-     Then embed it in a clean reader-facing `> [!info]-` callout (`![[<image.png>|caption]]` + verbatim quote + page/section/DOI, zero pipeline/tool text) **at the end of the article (under `## References`)** so readers can inspect the original paper without breaking reading flow. **Failure mode to avoid: mid-page OCR screenshot inserts**—never drop `> [!info]-` OCR screenshot callouts in the middle of body prose or right under a lead/section heading.
+     Then nest the `> [!info]-` cropped screenshot callout (`![[<image.png>|caption]]` + verbatim quote, zero pipeline/tool text) **directly inside its `[^key]:` footnote definition** (indented 4 spaces under the citation in `## References`). **Two failure modes to avoid:** (1) **mid-page OCR screenshot inserts** in the middle of body prose, and (2) **separating OCR screenshots from their footnote references** as floating callouts above or beside `## References`—the screenshot and the reference must be one unified footnote entry.
 2. **Never fabricate or infer missing bibliographic metadata:** If a daily note mentions `"Koch & Ideker (Nat Aging 2025)"` or `"Milsom et al. (2026 preprint)"` without a verified DOI/PMID and full text, do **not** invent a paper title or add it as a footnote. Either verify the exact paper first, or omit the unverified claim and log it as a deferred lead in `intake_ledger.json`.
 3. **Check for contradictions with the target article:** Read the entire target wiki article before editing so you never introduce a claim that contradicts an earlier section of the same page.
 
