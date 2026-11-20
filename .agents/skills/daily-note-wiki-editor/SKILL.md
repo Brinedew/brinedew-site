@@ -38,7 +38,24 @@ For each substantive block in an unprocessed (or newly appended) daily note, cla
 
 ---
 
-## Step 2: Graph Factoring & Voice Translation
+## Step 2: Primary-Source Verification Gate (Zero LLM-to-Wiki Laundering)
+
+**Daily notes are leads and hypotheses, never primary sources.** Most daily notes contain raw LLM outputs that frequently mischaracterize what a paper argues (for example, claiming López-Otín et al. treat the Hallmarks of Aging as flat co-equal boxes when the 2013 paper explicitly sorts them into Primary, Antagonistic, and Integrative tiers) or cite papers with guessed titles, years, or effect sizes.
+
+Before ANY claim, number, or citation from a daily note enters `content/wiki/`:
+
+1. **Use `occurock` for primary-source verification AND reader-facing cropped screenshots:**
+   - Run `occurock find <query> --json` or `occurock search <query> --json` to locate papers in the local Zotero/PDF library (if a PDF isn't parsed yet, run `occurock parse <source> --json`; check backend status with `occurock health --json`).
+   - Read the actual passage with `occurock read doc:<citekey>/page:<number> --json`.
+   - For pivotal claims, definitions, or experimental numbers, generate a cropped PNG screenshot directly into `content/Attachments/` with:
+     ```powershell
+     occurock evidence <citekey> "<passage>" --output-dir content/Attachments --json
+     ```
+     Then embed it in a clean reader-facing `> [!info]-` callout (`![[<image.png>|caption]]` + verbatim quote + page/section/DOI, zero pipeline/tool text) **at the end of the article (under `## References`)** so readers can inspect the original paper without breaking reading flow. **Failure mode to avoid: mid-page OCR screenshot inserts**—never drop `> [!info]-` OCR screenshot callouts in the middle of body prose or right under a lead/section heading.
+2. **Never fabricate or infer missing bibliographic metadata:** If a daily note mentions `"Koch & Ideker (Nat Aging 2025)"` or `"Milsom et al. (2026 preprint)"` without a verified DOI/PMID and full text, do **not** invent a paper title or add it as a footnote. Either verify the exact paper first, or omit the unverified claim and log it as a deferred lead in `intake_ledger.json`.
+3. **Check for contradictions with the target article:** Read the entire target wiki article before editing so you never introduce a claim that contradicts an earlier section of the same page.
+
+## Step 3: Graph Factoring & Voice Translation
 
 Raw daily notes often carry chat residue (`"You are completely right"`, `"The short answer:"`, `"In your framing..."`), unverified secondary citations, or hardcoded-hex inline SVGs. Before touching any wiki file, translate the material to match `content/wiki/Wiki Assessment.md` and `CLAUDE.md`:
 
