@@ -1,4 +1,94 @@
 {
   "version": 1,
-  "processed_notes": {}
+  "processed_notes": {
+    "2026-11-01": {
+      "file_hash": "a2249c971001cff3",
+      "section_hashes": ["a2249c971001cff3"],
+      "processed_at": "2026-11-20T02:58:02.209454+00:00",
+      "targets_touched": ["wiki/Pluripotency silencing.md"],
+      "notes": "Integrated miR-145 Schmitt-trigger hysteresis vs. kinetic-buffer synthesis into section 1.2 and folded the 3 dangling bottom correction blocks into the main text (lead, 1.2, 1.4); declined creating a standalone circuit-analogs page."
+    },
+    "2026-11-13": {
+      "file_hash": "4d747848588cd741",
+      "section_hashes": [
+        "e3b5ab18f717b4d2",
+        "e3ea9027a5993604",
+        "5251e66af0e9225b",
+        "34d8dc5e1f01d82a",
+        "718fcbcb49b18e8e"
+      ],
+      "processed_at": "2026-11-20T02:58:02.314624+00:00",
+      "targets_touched": ["wiki/antagonistic-pleiotropy-theory.md"],
+      "notes": "Verified Williams (1957) vs. Rose (1982) and conceptual-drift literature were already integrated; added wild bighorn horn-brooming vs. Babyrousa canine run-on distinction to Other traps."
+    },
+    "2026-11-16": {
+      "file_hash": "9c90e4f8b7d9f38c",
+      "section_hashes": [
+        "83c4123de8c65d45",
+        "94e802560bef1d3b",
+        "2ef0a5887d89f830",
+        "b635bb9d2123fc28",
+        "af150a701c88072b",
+        "262c1aa6cd655398",
+        "a0fafe7a8b32e3a5",
+        "833602c246a9d00d",
+        "d52a91f2b50fbfe8",
+        "7b3e84a51a3a9537"
+      ],
+      "processed_at": "2026-11-20T02:58:02.429176+00:00",
+      "targets_touched": [
+        "wiki/Taxonomy of non mechanistic models in biology.md",
+        "wiki/Novak–Tyson model.md",
+        "wiki/Conflict between development and tumor suppression.md"
+      ],
+      "notes": "Upgraded Taxonomy of non-mechanistic models (Start->C) with New Mechanism boundaries (constitutive vs. selected-effects pathology test & lineage explanations using octopus optic-gland semelparity); upgraded Novak-Tyson model (Start->C) with quantitative threshold model & Coudreuse-Nurse single-fusion test; added eumetazoan Cyclin D-CDK4/6-INK4 G1 gate to Conflict between development and tumor suppression."
+    },
+    "2026-11-17": {
+      "file_hash": "de35680f1bb915bc",
+      "section_hashes": [
+        "f624dcbc0e862040",
+        "debef4148d2485fa",
+        "ae663e5f946c9a51",
+        "feed38fa892d0cbb",
+        "f191bd09c3224311"
+      ],
+      "processed_at": "2026-11-20T03:06:14.908511+00:00",
+      "targets_touched": ["wiki/Flash-in-the-pan wet lab methods.md"],
+      "notes": "Expanded Sibling Layer 2 (Interactomics) with why Y2H, co-IP, and TurboID survived as workhorses and where 2025-2026 tools (FlexID, FlAsH-ID, uMap, Lantern, in-cell XL-MS, DIA CF-MS, RF2-PPI/SoPPIs) displace them at their failure modes."
+    },
+    "2026-11-19": {
+      "file_hash": "a6795d7cea7dde85",
+      "section_hashes": [
+        "a5f046a7e3a81f2f",
+        "de1b996e7865095f",
+        "9b97a9647cf15bc2",
+        "66d47bb76cab07a0",
+        "7ba19c7fd459c14a"
+      ],
+      "processed_at": "2026-11-20T03:06:15.013150+00:00",
+      "targets_touched": [
+        "wiki/tumor-suppressor-theory-of-aging.md",
+        "wiki/hallmarks-of-aging.md",
+        "Attachments/cagan-2022-mammalian-mutation-scaling.csv"
+      ],
+      "notes": "Integrated 2021-2026 Hypothesis A vs. B empirical scoreboard (POLE/POLD1 hypermutators, TC-NER/GLTD progeria, Cagan 2022 scaling law with theme-aware Vega-Lite chart, CHIP/liver selfish clones, NOTCH1 esophageal firewall, mitotic vs. post-mitotic synthesis) into tumor-suppressor-theory-of-aging.md and added causal-hierarchy critique to hallmarks-of-aging.md. Replaced hardcoded-hex inline SVGs with theme-aware Vega-Lite."
+    },
+    "2026-11-20": {
+      "file_hash": "90e226a4d9dd5f6d",
+      "section_hashes": [
+        "65f45ba00f3537ad",
+        "89f86bdda3ca3161",
+        "4f382cf32e49be18",
+        "d176ccbca1871736",
+        "455c8c9d8692b476",
+        "b62724f8d61426b6",
+        "b853afe8160d54ab",
+        "a47be8c688cddddd",
+        "17848f93a3c2699a"
+      ],
+      "processed_at": "2026-11-20T03:06:15.112540+00:00",
+      "targets_touched": ["wiki/Post-genomic histological taxonomy.md", "wiki/index.md"],
+      "notes": "Created Post-genomic histological taxonomy.md (class: C) distilling classical vs. post-genomic frameworks (ASCT+B/FTUs, CoRC, spatial neighborhoods) and the domain-general 6-axis physical vector V=(J,P,B,M,K,V) predicting 18 architectural basins plus the 4 collision boundaries."
+    }
+  }
 }
