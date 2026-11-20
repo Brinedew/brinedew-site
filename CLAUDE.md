@@ -20,9 +20,9 @@ The basic flow: write markdown in `content/`, push to `main`, and `.github/workf
 
 ### Users
 
-Primary readers are like the audiences for LessWrong, Gwern, Slate Star Codex, and HPMOR, but younger: mostly people in their late teens to 20s who are internet-native, intellectually ambitious, and comfortable with dense long-form writing.
+Primary readers combine intellectually ambitious non-biologists (similar to audiences for LessWrong, Gwern, and Slate Star Codex: smart programmers, physicists, and rationalist generalists in their late teens to 20s) alongside field and organismal biologists reading across subfields.
 
-They come here to learn something non-obvious about molecular cell biology, aging, cancer, and adjacent ideas through careful reasoning. They are willing to read, click through related notes, and explore rabbit holes, but they should never have to fight the interface.
+They come here to learn non-obvious mechanisms in molecular cell biology, clonal governance, senescence/oncogenesis tradeoffs, and quantitative demography through careful reasoning. Articles must bridge both halves of that audience without talking down or dumbing anything down: never drop formulas without brick-by-brick setup for field biologists, never compress molecular mechanisms into unsetup PhD shorthand for non-biologists, and let readers follow rabbit holes without fighting the interface.
 
 ### Brand Personality
 
@@ -290,6 +290,10 @@ A ` ```vega-lite ` code block in a note becomes an interactive chart on the site
 3. Use QuickAdd (Ctrl+N → Wiki Page) for automated setup
 4. Cross-reference with wikilinks: `[[cellular-senescence]]`
 
+### wiki quality classes and promotion
+
+`content/wiki/Wiki Assessment.md` is the canonical rubric for `class` (`Stub`, `Start`, `C`, `B`, `GA`, `A`, `FA`, `FL`, `List`, `NA`) and `vital_level` (`1`–`5`) tracked in `content/Content Status Base.base`. Criteria up through `B` (including archetype-matched visual/interactive standards, summary-style scope hygiene with earned hatnotes only, level-indexed baseline terms, crisp sequential prose with bibliographic clutter in `[^footnotes]`, and full-text primary sourcing with clean `> [!info]-` cropped passage callouts from OCR-parsed PDFs via `occurock` or publisher full-text HTML when cleaner, such as quotes spanning a PDF page break) may be verified mechanically and promoted by checklist. Keep reader-facing callouts clean (cropped PNG + verbatim quote + page/section/DOI) and never surface pipeline excuses (`"OCR unavailable"`), raw tool locators, meta-scaffolding (`"Editorial synthesis"`, `"Wiki adjudication:"`), or CLI names to readers; track any missing paywalled full texts in the work queue or Court review notes instead. Promotions above `B` (`GA`, `A`, `FA`) MUST run the standardized `wiki-court` workflow (`D:\Coding\Website\.agents\skills\wiki-court\scripts\run_court.py` via `run_workflow` with `Args: {"article": "<Article Name>"}` as the sole required variable—never improvise bespoke per-article Court prompts). The workflow deterministically assembles the graph neighborhood, attachments, and headless Playwright render check before convening three isolated agents (`Advocate`, an Alex-style black-swan-hunting `Devil's Advocate`, and `Judge`) using checked-in immutable templates and baselines (`Glossary`, `Non-technical language in longevity`, `Clonal governance`). Alongside graph factoring, provenance, Bik/Data Colada/Sholto David paper forensics, unsmoothed conflict mapping, integrated lens-backed judgment, level-indexed terms, and brick-by-brick dual-audience setup, Devil's Advocate must actively prosecute unanticipated structural, stylistic, and conceptual failures (pointless defensive hatnotes, CYA semicolon-packed academese, inline `Author (Year)` clutter, and fake `"both-sides + bolted-on adjudication"` endings).
+
 ## excalidraw integration (current setup)
 
 **How drawings work now:**
@@ -375,12 +379,15 @@ Analyze this document for voice and tone consistency. The target audience is Les
 
 ## writing for intelligent readers
 
-This site's audience includes LessWrong veterans, researchers, and people who read technical content for fun. Avoid patronizing tone:
+This site's audience pairs LessWrong-style rationalists and programmers with biologists across specialties. Write without patronizing, omitting substance, or hiding behind exclusionary shorthand:
 
-- **Don't use condescending phrases** ("Think of it as...", "This is essentially...", "How do you...")
-- **Avoid oversimplified explanations** of sophisticated concepts
-- **Use precise technical language** instead of dumbed-down analogies
-- **Build from first principles is fine** - just don't talk down while doing it
+- **Don't use condescending phrases** ("Think of it as...", "This is essentially...", "How do you...") or explain trivial common knowledge.
+- **Keep jargon—earn it first:** Technical jargon is great when it names and closes a conceptual gap you already built; name-dropping unmotivated jargon instead of setting up the concept is bad nonfiction. Introduce the physical mechanism, control problem, or naive-model failure first, then stamp the exact canonical term or formula onto it.
+- **Avoid CYA academese, inline citation clutter, and meta-scaffolding:** Never stack experimental setup, genotypes, controls, and rescue results into one 60-word semicolon-chained cover-your-ass sentence. Unpack complex mechanisms across sequential LessWrong-style sentences, push `Author (Year)` and journal titles into `[^footnotes]` unless attribution is conceptually needed, omit meta-headers (`"Editorial synthesis"`, `"Wiki adjudication:"`), and weave decisive judgment directly into the prose instead of presenting two "neutral" sides followed by a bolted-on referee conclusion.
+- **Avoid both extremes of register skew:**
+  - _Not too math-brained:_ Never drop equations without brick-by-brick construction showing the biological puzzle and why naive formulations fail (a field biologist must be able to follow why each term exists, keeping literature symbols identical across text, math, and plots, with long derivations in collapsible `> [!note]-` callouts).
+  - _Not too biologist-brained:_ Never ship compressed wet-lab journal academese assuming a molecular biology PhD. Never drop molecular stoichiometry or assay nuances for brevity—chew causal steps and experimental controls thoroughly so a sharp programmer or generalist can trace what physically happens before meeting the acronym.
+- **Use level-indexed precision** (see `content/wiki/Non-technical language in longevity.md` and `content/wiki/Glossary.md`) instead of vague multi-level umbrella words like bare _"aging"_ or _"damage"_ in mechanistic claims.
 
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
