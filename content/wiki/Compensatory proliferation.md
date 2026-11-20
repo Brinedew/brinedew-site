@@ -1,10 +1,10 @@
 ---
 title: Compensatory proliferation
 date: 2026-11-15
-draft: false
+draft: true
 tags:
   - content/wiki
-class: B
+class: C
 vital_level: 3
 aliases:
   - Apoptosis-induced proliferation

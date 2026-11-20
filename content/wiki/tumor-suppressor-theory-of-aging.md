@@ -182,20 +182,22 @@ The tumor suppression theory doesn't explain all of aging, but it provides a fra
 
 ## References
 
-> [!info]- Primary source excerpt — Wolf (2021), Abstract, p. 1
-> ![[wolf2021-p1-b6-f699ce333f.png|Abstract of Wolf (2021) stating that oncogenic transformation and clonal expansion—rather than functional impairment—are the relevant consequences of somatic mutation driving aging.]]
->
-> *"The tumor suppression theory of aging introduced here proposes somatic mutation as the proximal cause of aging, but postulates that oncogenic transformation and clonal expansion, not functional impairment, are the relevant consequences of somatic mutation."* — Abstract, p. 1 ([doi:10.1016/j.mad.2021.111583](https://doi.org/10.1016/j.mad.2021.111583)).
-
-> [!info]- Primary source excerpt — Cagan et al. (2022), Abstract, p. 1
-> ![[cagan2022-p1-b8-956fb7b23f.png|Abstract of Cagan et al. (2022) reporting that annual somatic mutation rates across 16 mammalian species scale inversely with lifespan while end-of-life burden varies only ~3-fold despite a ~40,000-fold body-mass range.]]
->
-> *"Notably, the somatic mutation rate per year varied greatly across species and exhibited a strong inverse relationship with species lifespan, with no other life-history trait studied showing a comparable association. Despite widely different life histories among the species we examined – including variation of around 30-fold in lifespan and around 40,000-fold in body mass – the somatic mutation burden at the end of lifespan varied only by a factor of around 3."* — Abstract, p. 1 ([doi:10.1038/s41586-022-04618-z](https://doi.org/10.1038/s41586-022-04618-z)).
-
 [^wolf2021]: Wolf AM (2021). "The tumor suppression theory of aging". *Mechanisms of Ageing and Development*. 200: 111583. [doi:10.1016/j.mad.2021.111583](https://doi.org/10.1016/j.mad.2021.111583)
+
+    > [!info]- Primary source excerpt — Abstract, p. 1
+    > ![[wolf2021-p1-b6-f699ce333f.png|Abstract of Wolf (2021) stating that oncogenic transformation and clonal expansion—rather than functional impairment—are the relevant consequences of somatic mutation driving aging.]]
+    >
+    > *"The tumor suppression theory of aging introduced here proposes somatic mutation as the proximal cause of aging, but postulates that oncogenic transformation and clonal expansion, not functional impairment, are the relevant consequences of somatic mutation."*
+
 [^robinson2021]: Robinson PS, Coorens THH, Palles C, Mitchell E, Abascal F, et al. (2021). "Increased somatic mutation burdens in normal human cells due to defective DNA polymerases". *Nature Genetics*. 53 (10): 1434–1442. [doi:10.1038/s41588-021-00930-y](https://doi.org/10.1038/s41588-021-00930-y)
 [^schumacher2021]: Schumacher B, Pothof J, Vijg J, Hoeijmakers JHJ (2021). "The central role of DNA damage in the ageing process". *Nature*. 592 (7856): 695–703. [doi:10.1038/s41586-021-03307-7](https://doi.org/10.1038/s41586-021-03307-7)
 [^gyenis2023]: Gyenis A, Chang J, Demmers JJA, Bruens ST, Barnhoorn S, et al. (2023). "Genome-wide RNA polymerase stalling shapes the transcriptome during aging". *Nature Genetics*. 55 (2): 268–279. [doi:10.1038/s41588-022-01279-6](https://doi.org/10.1038/s41588-022-01279-6)
 [^cagan2022]: Cagan A, Baez-Ortega A, Brzozowska N, Abascal F, Coorens THH, et al. (2022). "Somatic mutation rates scale with lifespan across mammals". *Nature*. 604 (7906): 517–524. [doi:10.1038/s41586-022-04618-z](https://doi.org/10.1038/s41586-022-04618-z)
+
+    > [!info]- Primary source excerpt — Abstract, p. 1
+    > ![[cagan2022-p1-b8-956fb7b23f.png|Abstract of Cagan et al. (2022) reporting that annual somatic mutation rates across 16 mammalian species scale inversely with lifespan while end-of-life burden varies only ~3-fold despite a ~40,000-fold body-mass range.]]
+    >
+    > *"Notably, the somatic mutation rate per year varied greatly across species and exhibited a strong inverse relationship with species lifespan, with no other life-history trait studied showing a comparable association. Despite widely different life histories among the species we examined – including variation of around 30-fold in lifespan and around 40,000-fold in body mass – the somatic mutation burden at the end of lifespan varied only by a factor of around 3."*
+
 [^abby2023]: Abby E, Dentro SC, Hall MWJ, Fowler JC, Ong SH, et al. (2023). "Notch1 mutations drive clonal expansion in normal esophageal epithelium but impair tumor growth". *Nature Genetics*. 55 (2): 232–245. [doi:10.1038/s41588-022-01280-z](https://doi.org/10.1038/s41588-022-01280-z)
 [^nelson2017]: Nelson P, Masel J (2017). "Intercellular competition and the inevitability of multicellular aging". *PNAS*. 114 (49): 12982–12987. [doi:10.1073/pnas.1618854114](https://doi.org/10.1073/pnas.1618854114)
