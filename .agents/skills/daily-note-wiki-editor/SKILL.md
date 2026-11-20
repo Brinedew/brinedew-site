@@ -90,7 +90,8 @@ Raw daily notes often carry chat residue (`"You are completely right"`, `"The sh
 
 1. **Promotion above `B` (`GA`, `A`, `FA`):**
    - Checklists stop at `B`. If an enriched article is ready for `GA`, `A`, or `FA`, invoke the `wiki-court` skill (`D:\Coding\Website\.agents\skills\wiki-court\SKILL.md`).
-2. **Formatting & build check:**
+2. **Wiki lint & formatting check:**
+   - Run `pnpm run lint:wiki <edited wiki files>` to catch mid-page or detached OCR screenshot callouts (`ocr-callout-not-in-footnote`), leaked Occurock locators (`ocr-pipeline-leak`), raw ` ```svg ` blocks (`raw-svg-codeblock`), and chat residue (`chat-residue`). Fix every finding before marking the daily note processed.
    - Run `pnpm run check:format:changed` (note: `content/wiki/` is ignored by Prettier to preserve Obsidian wikilinks, but any scripts or config files touched must pass Prettier).
 3. **Record in the intake ledger:**
    - Mark the daily note as processed so future sessions don't re-triage unchanged text:
