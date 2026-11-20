@@ -651,6 +651,11 @@ Figure 1 is computed from the model in the note beside it and uses no data. The 
 
 [^kirkwood1977]: Kirkwood TBL (1977). "Evolution of ageing". *Nature*. 270 (5635): 301–304. [doi:10.1038/270301a0](https://doi.org/10.1038/270301a0)
 
+    > [!info]- Primary source excerpt (Kirkwood, 1977 — abstract, p. 301)
+    > ![[thomasb.l.kirkwood1977-p1-b3-fef6725f62.png]]
+    >
+    > *"An evolutionary view of ageing suggests that mortality may be due to an energy-saving strategy of reduced error regulation in somatic cells. This supports Orgel's 'error catastrophe' hypothesis…"*
+
 [^kirkwoodholliday1979]: Kirkwood TBL, Holliday R (1979). "The evolution of ageing and longevity". *Proceedings of the Royal Society B*. 205 (1161): 531–546. [doi:10.1098/rspb.1979.0083](https://doi.org/10.1098/rspb.1979.0083)
 
 [^kirkwoodrose1991]: Kirkwood TBL, Rose MR (1991). "Evolution of senescence: late survival sacrificed for reproduction". *Philosophical Transactions of the Royal Society B*. 332: 15–24. [doi:10.1098/rstb.1991.0028](https://doi.org/10.1098/rstb.1991.0028)

@@ -944,6 +944,11 @@ Figure 1 was computed for this article. Mortality comes from the Social Security
 
 [^williams1957]: Williams GC (1957). "Pleiotropy, natural selection, and the evolution of senescence". *Evolution*. 11 (4): 398–411. [doi:10.1111/j.1558-5646.1957.tb02911.x](https://doi.org/10.1111/j.1558-5646.1957.tb02911.x)
 
+    > [!info]- Primary source excerpt (Williams, 1957 — p. 3)
+    > ![[georgec.williams1957-p3-b3-8f81b23d58.png]]
+    >
+    > *"that have opposite effects on fitness at different ages, or, more accurately, in different somatic environments"*
+
 [^medawar1952]: Medawar PB (1952). *An Unsolved Problem of Biology*. London: H. K. Lewis. Reprinted in Medawar PB (1957), *The Uniqueness of the Individual*. London: Methuen.
 
 [^hamilton1966]: Hamilton WD (1966). "The moulding of senescence by natural selection". *Journal of Theoretical Biology*. 12 (1): 12–45. [doi:10.1016/0022-5193(66)90184-6](https://doi.org/10.1016/0022-5193(66)90184-6)

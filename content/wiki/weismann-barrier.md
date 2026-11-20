@@ -98,6 +98,11 @@ The doctrine was named and first systematically examined by George John Romanes 
 
 [^11]: Grosberg RK, Strathmann RR. "The Evolution of Multicellularity: Minor and Major Transitions." *Annual Review of Ecology, Evolution, and Systematics*. 2007;38:621–654. [doi:10.1146/annurev.ecolsys.36.102403.114735](https://doi.org/10.1146/annurev.ecolsys.36.102403.114735). Plant mutants / defector passage.
 
+    > [!info]- Primary source excerpt (Gao et al., 2021 — page:1)
+    > ![[gao2021-p1-b3-8f08e7161a.png]]
+    >
+    > *"three components are necessary for the evolution of irreversible somatic differentiation: (i) costly cell differentiation, (ii) vegetative cells that significantly improve the organism's performance even if present in small numbers, and (iii) large enough organism size."*
+
     > [!info]- Source excerpt (Grosberg & Strathmann, 2007 — plant mutants)
     > ![[richardk.grosberg2007-p12-b2.png]]
     >

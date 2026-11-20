@@ -100,6 +100,11 @@ The [[tumor-suppressor-theory-of-aging|tumor suppressor theory of aging]] uses t
 
 [^3]: Deininger P. *Genetic Instability in Cancer: Caretaker and Gatekeeper Genes*. Ochsner Journal. 1999;1(4):206-209. [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC3145442/).
 
+    > [!info]- Primary source excerpt (Valerie Harris et al., 2017 — page:5)
+    > ![[valerieharris2017-p5-b6-c5e6b7de77.png]]
+    >
+    > *"Gatekeepers serve to prevent cancer by directly inhibiting the growth of dysplastic cells through arrested mitosis or apoptosis."*
+
     > [!info]- Review excerpt (Deininger, 1999)
     > ![[deininger1999-caretaker-passage.png]]
     >

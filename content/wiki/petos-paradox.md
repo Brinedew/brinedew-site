@@ -1167,6 +1167,11 @@ Figure 3 uses the species-level mutation rates (Supplementary Table 3) and lifes
 
 [^caulin2011]: Caulin AF, Maley CC (2011). "Peto's Paradox: evolution's prescription for cancer prevention". *Trends in Ecology & Evolution*. 26 (4): 175–182. [doi:10.1016/j.tree.2011.01.002](https://doi.org/10.1016/j.tree.2011.01.002)
 
+    > [!info]- Primary source excerpt (Caulin et al., 2011 — page:1)
+    > ![[caulin2011-p1-b7-68051d2bdb.png]]
+    >
+    > *"Animals with 1,000 times more cells than humans do not exhibit an increased cancer risk, suggesting that natural mechanisms can suppress cancer 1,000 times more effectively than is done in human cells."*
+
 [^nunney1999]: Nunney L (1999). "Lineage selection and the evolution of multistage carcinogenesis". *Proceedings of the Royal Society B*. 266 (1418): 493–498. [doi:10.1098/rspb.1999.0664](https://doi.org/10.1098/rspb.1999.0664)
 
 [^nunney2013]: Nunney L (2013). "The real war on cancer: the evolutionary dynamics of cancer suppression". *Evolutionary Applications*. 6 (1): 11–19. [doi:10.1111/eva.12018](https://doi.org/10.1111/eva.12018)
