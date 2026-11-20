@@ -103,6 +103,17 @@ function lintFile(filePath) {
         message: "Unstripped chat residue or meta-scaffolding header found.",
       })
     }
+
+    // 4. Bare lowercase-hyphenated filename wikilinks without a readable |display label
+    const bareSlugRe = /(?<!!)\[\[([a-z0-9]+(?:-[a-z0-9]+)+(?:#[^|\]]+)?)\]\]/g
+    for (const match of line.matchAll(bareSlugRe)) {
+      findings.push({
+        file: relPath,
+        line: lineNum,
+        rule: "bare-slug-wikilink",
+        message: `Wikilink \`[[${match[1]}]]\` exposes a lowercase hyphenated filename to readers; add a readable display title (e.g. \`[[${match[1]}|Article Title]]\`).`,
+      })
+    }
   }
 
   return findings
