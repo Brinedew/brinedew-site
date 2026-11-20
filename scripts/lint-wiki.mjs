@@ -54,25 +54,15 @@ function lintFile(filePath) {
     }
     if (inCodeFence) continue
 
-    // 1. Top-level (not indented inside a footnote) > [!info] callout with an image or primary excerpt
-    if (/^>\s*\[!info\]-?/i.test(line)) {
-      // Look ahead within the same callout block for an embedded image or "Primary source excerpt"
-      let hasImageOrExcerpt = /primary source excerpt/i.test(line)
-      for (let j = i + 1; j < lines.length && /^>/.test(lines[j]); j++) {
-        if (/!\[\[.+?\.(?:png|jpe?g|webp|svg)/i.test(lines[j])) {
-          hasImageOrExcerpt = true
-          break
-        }
-      }
-      if (hasImageOrExcerpt) {
-        findings.push({
-          file: relPath,
-          line: lineNum,
-          rule: "ocr-callout-not-in-footnote",
-          message:
-            "OCR/primary-source screenshot callout is at top level (mid-page or detached from its footnote). Indent it 4 spaces directly inside its `[^key]:` footnote under `## References`.",
-        })
-      }
+    // 1. Top-level (not indented inside a footnote) > [!info] primary-source / OCR excerpt callout
+    if (/^>\s*\[!info\]-?.*(?:excerpt|ocr|primary source|source passage)/i.test(line)) {
+      findings.push({
+        file: relPath,
+        line: lineNum,
+        rule: "ocr-callout-not-in-footnote",
+        message:
+          "OCR/primary-source screenshot callout is at top level (mid-page or detached from its footnote). Indent it 4 spaces directly inside its `[^key]:` footnote under `## References`.",
+      })
     }
 
     // 2. Leaked Occurock locators or OCR pipeline text
