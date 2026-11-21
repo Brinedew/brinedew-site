@@ -230,24 +230,24 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       }
       for (const { width, height, expectedCols } of columnCases) {
         await page.setViewportSize({ width, height })
+        const expectedLayout = expectedCols === 2 ? "image-only-masonry" : "bricks"
         await page.waitForFunction(
-          (expectDesktopMasonry) => {
-            const selector = expectDesktopMasonry
-              ? '.icono-grid[data-layout="image-only-masonry"]'
-              : ".icono-grid"
-            const grids = [...document.querySelectorAll(selector)]
+          (layout) => {
+            const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
             return grids.some(
               (grid) => grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
             )
           },
-          expectedCols === 2,
+          expectedLayout,
           { timeout: 30_000 },
         )
-        const gridMetrics = await page.evaluate((expectDesktopMasonry) => {
-          const selector = expectDesktopMasonry
-            ? '.icono-grid[data-layout="image-only-masonry"]'
-            : ".icono-grid"
-          const grids = [...document.querySelectorAll(selector)]
+        // Wait for the rAF-queued mobile card viewport resizer after shrinking widths.
+        await page.evaluate(
+          () =>
+            new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        )
+        const gridMetrics = await page.evaluate((layout) => {
+          const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
           const grid = grids.find(
             (candidate) =>
               candidate.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
@@ -271,7 +271,7 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
             cards,
             overflowX: document.documentElement.scrollWidth - innerWidth,
           }
-        }, expectedCols === 2)
+        }, expectedLayout)
         const tag = `${signedIn ? "yours" : "everyones"} ${width}x${height}`
         assert.ok(gridMetrics, `${tag}: archive grid with >=2 cards missing`)
         assert.equal(
@@ -295,11 +295,12 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
           gridMetrics.overflowX <= 1,
           `${tag}: horizontal overflow ${gridMetrics.overflowX}px`,
         )
+        if (width === 1194) {
+          await page.screenshot({
+            path: path.join(OUT, `home-archive-1194-${signedIn ? "yours" : "everyones"}.png`),
+          })
+        }
       }
-      await page.setViewportSize({ width: 1194, height: 800 })
-      await page.screenshot({
-        path: path.join(OUT, `home-archive-1194-${signedIn ? "yours" : "everyones"}.png`),
-      })
       await context.close()
     }
   } finally {
