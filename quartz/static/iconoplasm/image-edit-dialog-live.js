@@ -33,6 +33,43 @@ export function resolveImageEditAspectRatio(dims = {}) {
   return ""
 }
 
+export const IMAGE_EDIT_SIDE_BY_SIDE_RATIO_THRESHOLD = 1.15
+
+/**
+ * Decides whether a before/after edit pair can sit in the overlay slider or
+ * diverges too far in aspect ratio (e.g. portrait vs landscape) and belongs
+ * side by side, plus optional dimension tags when the aspect ratios differ.
+ */
+export function resolveImageEditComparisonLayout(dims = {}) {
+  const bw = Number(dims.beforeWidth || 0)
+  const bh = Number(dims.beforeHeight || 0)
+  const aw = Number(dims.afterWidth || 0)
+  const ah = Number(dims.afterHeight || 0)
+  const hasBoth = bw > 0 && bh > 0 && aw > 0 && ah > 0
+  if (!hasBoth) {
+    return {
+      layout: "slider",
+      aspectDivergence: 1,
+      dimensionsDiffer: false,
+      beforeLabel: "Before",
+      afterLabel: "After",
+    }
+  }
+  const beforeRatio = bw / bh
+  const afterRatio = aw / ah
+  const aspectDivergence = Math.max(beforeRatio / afterRatio, afterRatio / beforeRatio)
+  const dimensionsDiffer = aspectDivergence > 1.01
+  const layout =
+    aspectDivergence > IMAGE_EDIT_SIDE_BY_SIDE_RATIO_THRESHOLD ? "side-by-side" : "slider"
+  return {
+    layout,
+    aspectDivergence,
+    dimensionsDiffer,
+    beforeLabel: dimensionsDiffer ? `Before · ${Math.round(bw)}×${Math.round(bh)}` : "Before",
+    afterLabel: dimensionsDiffer ? `After · ${Math.round(aw)}×${Math.round(ah)}` : "After",
+  }
+}
+
 function normalizeEditJobId(itemOrId) {
   if (typeof itemOrId === "string") return itemOrId.trim()
   if (!itemOrId || typeof itemOrId !== "object") return ""
