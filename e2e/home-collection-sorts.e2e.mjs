@@ -172,6 +172,69 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       await page.screenshot({ path: path.join(OUT, `home-collection-${order}.png`) })
       await context.close()
     }
+
+    // B-1184: the image-only archive grid must fit two cards per row at 1194,
+    // 1440, and 1920 px (never collapsing to 1 column on a 1194 px laptop, and
+    // never overflowing to 3 columns on wide desktops), while staying 1 column
+    // on 360/402/440 px phones, for both signed-in ("Yours") and "Everyone's".
+    const columnCases = [
+      { width: 1194, height: 800, expectedCols: 2 },
+      { width: 1440, height: 900, expectedCols: 2 },
+      { width: 1920, height: 1080, expectedCols: 2 },
+      { width: 440, height: 844, expectedCols: 1 },
+      { width: 402, height: 874, expectedCols: 1 },
+      { width: 360, height: 800, expectedCols: 1 },
+    ]
+    for (const signedIn of [true, false]) {
+      const context = await browser.newContext({ viewport: { width: 1194, height: 800 } })
+      await routeProduction(
+        context,
+        origin,
+        signedIn
+          ? createApi([], [])
+          : (pathname) => {
+              if (pathname === "/api/auth/me") return { authenticated: false, user: null }
+              if (pathname === "/api/iconoplasm/discoveries/me") {
+                return { ok: true, authenticated: false, discoveries: [], discovered_count: 0 }
+              }
+              return undefined
+            },
+      )
+      const page = await context.newPage()
+      await page.goto(`${HOST}/`)
+      await page.waitForSelector('.icono-grid[data-layout="image-only-masonry"]', {
+        timeout: 45_000,
+      })
+      for (const { width, height, expectedCols } of columnCases) {
+        await page.setViewportSize({ width, height })
+        const gridMetrics = await page.evaluate(() => {
+          const grid = document.querySelector('.icono-grid[data-layout="image-only-masonry"]')
+          if (!grid) return null
+          const tracks = getComputedStyle(grid)
+            .gridTemplateColumns.split(" ")
+            .map((t) => t.trim())
+            .filter(Boolean)
+          return {
+            cols: tracks.length,
+            tracks,
+            gridWidth: Math.round(grid.getBoundingClientRect().width),
+            overflowX: document.documentElement.scrollWidth - innerWidth,
+          }
+        })
+        const tag = `${signedIn ? "yours" : "everyones"} ${width}x${height}`
+        assert.ok(gridMetrics, `${tag}: image-only masonry grid missing`)
+        assert.equal(
+          gridMetrics.cols,
+          expectedCols,
+          `${tag}: expected ${expectedCols} column(s), got ${gridMetrics.cols} (${JSON.stringify(gridMetrics)})`,
+        )
+        assert.ok(
+          gridMetrics.overflowX <= 1,
+          `${tag}: horizontal overflow ${gridMetrics.overflowX}px`,
+        )
+      }
+      await context.close()
+    }
   } finally {
     writeFileSync(path.join(OUT, "home-collection-sorts.json"), JSON.stringify(report, null, 2))
     server.close()

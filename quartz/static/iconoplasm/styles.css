@@ -580,14 +580,17 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-sizing: border-box;
 }
 
-/* B-1168: tiles shrink to 320px so a 1280px laptop gets two columns, and the
-   grid never holds more than two full tiles. The feed renders in segments of 4,
-   then 12 (8 on phones), each its own grid, so a third column would leave a
-   ragged row at every segment seam. */
+/* B-1168 / B-1184: tiles shrink down to 240px so a 1194px laptop's ~521px
+   column holds two cards (252.5px each), phones <= 440px stay one column, and
+   the 50% lower bound caps the grid at two columns so segment seams (4, then
+   12 cards per grid) never leave a ragged third-column row. */
 .icono-grid[data-layout="image-only-masonry"],
 .icono-guest-continuation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, max(240px, calc(50% - var(--icono-image-tile-gutter)))), 1fr)
+  );
   gap: var(--icono-image-tile-gutter);
   justify-items: center;
   align-items: start;
@@ -1547,9 +1550,14 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
 }
 
 .icono-image-edit-before-after {
+  --icono-image-edit-stage-bg: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
   display: block;
   width: min(var(--icono-image-tile-width), 100%);
   margin-top: 0.75rem;
+}
+
+.icono-image-edit-before-after[data-icono-comparison-layout="side-by-side"] {
+  width: min(calc(2 * var(--icono-image-tile-width) + 0.75rem), 100%);
 }
 
 img-comparison-slider {
@@ -1568,6 +1576,12 @@ img-comparison-slider.rendered [slot="second"] {
   display: block;
 }
 
+.icono-image-edit-comparison-labels[hidden],
+.icono-image-edit-comparison[hidden],
+.icono-image-edit-side-by-side[hidden] {
+  display: none;
+}
+
 .icono-image-edit-comparison-labels {
   display: flex;
   justify-content: space-between;
@@ -1583,7 +1597,7 @@ img-comparison-slider.rendered [slot="second"] {
   aspect-ratio: var(--icono-image-edit-aspect-ratio, 4 / 5);
   border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
   border-radius: var(--icono-radius-sm);
-  background: color-mix(in srgb, var(--dark) 8%, var(--light) 92%);
+  background: var(--icono-image-edit-stage-bg);
   overflow: hidden;
   --divider-color: color-mix(in srgb, var(--light) 70%, white 30%);
   --divider-width: 2px;
@@ -1592,8 +1606,46 @@ img-comparison-slider.rendered [slot="second"] {
   --default-handle-shadow: 0 2px 8px rgba(27, 18, 11, 0.32);
 }
 
+/* B-1271: paint an opaque stage mat under both layers so a slight aspect-ratio
+   difference between Before and After never lets After bleed through Before's
+   letterbox margins. */
 .icono-image-edit-comparison img {
   border: 0;
+  border-radius: 0;
+  background-color: var(--icono-image-edit-stage-bg);
+  object-position: center center;
+}
+
+.icono-image-edit-side-by-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.icono-image-edit-side-card {
+  margin: 0;
+  min-width: 0;
+}
+
+.icono-image-edit-side-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, var(--dark) 18%);
+  border-radius: var(--icono-radius-sm);
+  background: var(--icono-image-edit-stage-bg);
+  overflow: hidden;
+}
+
+.icono-image-edit-side-stage > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 62vh;
+  margin: 0;
+  object-fit: contain;
   border-radius: 0;
 }
 
@@ -1731,7 +1783,8 @@ img-comparison-slider.rendered [slot="second"] {
 
 @media (max-width: 760px) {
   .icono-image-edit-body,
-  .icono-image-edit-before-after {
+  .icono-image-edit-before-after,
+  .icono-image-edit-side-by-side {
     grid-template-columns: 1fr;
   }
 

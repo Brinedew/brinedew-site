@@ -16,6 +16,7 @@ import assert from "node:assert/strict"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
+import sharp from "sharp"
 
 import { HOST, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
@@ -339,6 +340,13 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
             afterUrl: `${HOST}/_e2e/after-880x1200.svg`,
           })
         }
+        if (pathname === "/api/iconoplasm/image-edit/jobs/request-wide-mismatch") {
+          return editJobPayload({
+            jobId: "request-wide-mismatch",
+            beforeUrl: `${HOST}/_e2e/before-384x512.svg`,
+            afterUrl: `${HOST}/_e2e/after-800x400.svg`,
+          })
+        }
         if (pathname === "/api/iconoplasm/image-edit/jobs/request-model-flux") {
           return editJobPayload({
             jobId: "request-model-flux",
@@ -454,7 +462,9 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
         else if (file.endsWith("before-880x1100.svg"))
           body = svgPortrait(880, 1100, "BEFORE", "#f1eadf")
         else if (file.endsWith("after-880x1200.svg"))
-          body = svgPortrait(880, 1200, "AFTER", "#dde8de")
+          body = svgPortrait(880, 1200, "AFTER", "#16c94a")
+        else if (file.endsWith("after-800x400.svg"))
+          body = svgPortrait(800, 400, "AFTER", "#dde8de")
         return route.fulfill({ status: 200, contentType: "image/svg+xml", body })
       })
       return context
@@ -727,6 +737,87 @@ test("B-1228/B-1230/B-1231/B-1232: request vs review modes, slider geometry, str
       )
       const tallMetrics = await measureComparisonGeometry(page)
       assertComparisonAligned(tallMetrics, "desktop 880x1100 vs 880x1200")
+      // B-1271: Before (880x1100) is shorter than After (880x1200); the letterbox
+      // margins on the Before half must paint an opaque stage mat and NEVER let
+      // After's bright green (#16c94a) leak through above or below Before.
+      const sliderPng = await page.locator("[data-icono-image-edit-comparison]").screenshot()
+      const { data: pixels, info } = await sharp(sliderPng)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+      const pixelAt = (x, y) => {
+        const idx = (Math.round(y) * info.width + Math.round(x)) * info.channels
+        return { r: pixels[idx], g: pixels[idx + 1], b: pixels[idx + 2] }
+      }
+      const leftX = Math.floor(info.width * 0.25)
+      const rightX = Math.floor(info.width * 0.75)
+      for (const sampleY of [12, info.height - 13]) {
+        const beforeMargin = pixelAt(leftX, sampleY)
+        const afterMargin = pixelAt(rightX, sampleY)
+        assert.ok(
+          afterMargin.g - afterMargin.r > 60,
+          `expected green After pixels at (${rightX},${sampleY}), got ${JSON.stringify(afterMargin)}`,
+        )
+        assert.ok(
+          beforeMargin.g - beforeMargin.r < 20 && beforeMargin.g - beforeMargin.b < 20,
+          `B-1271 leak: After green bled onto Before margin at (${leftX},${sampleY}): ${JSON.stringify(beforeMargin)}`,
+        )
+      }
+      const tallLabels = await page.evaluate(() => ({
+        before: document.querySelector("[data-icono-image-edit-before-label]")?.textContent?.trim(),
+        after: document.querySelector("[data-icono-image-edit-after-label]")?.textContent?.trim(),
+      }))
+      assert.equal(tallLabels.before, "Before · 880×1100")
+      assert.equal(tallLabels.after, "After · 880×1200")
+
+      // B-1271: large aspect-ratio divergence (384x512 portrait vs 800x400
+      // landscape) switches to a side-by-side view instead of overlapping.
+      await page.goto(`${HOST}/gene/TP53?edit_job=request-wide-mismatch`)
+      await dialog.waitFor({ state: "visible", timeout: 30_000 })
+      await page.waitForFunction(
+        () => {
+          const result = document.querySelector("[data-icono-image-edit-result]")
+          const sideBefore = document.querySelector("[data-icono-image-edit-side-before]")
+          const sideAfter = document.querySelector("[data-icono-image-edit-side-after]")
+          return (
+            result?.getAttribute("data-icono-comparison-layout") === "side-by-side" &&
+            sideBefore?.complete &&
+            sideBefore.naturalWidth === 384 &&
+            sideAfter?.complete &&
+            sideAfter.naturalWidth === 800
+          )
+        },
+        null,
+        { timeout: 20_000 },
+      )
+      const wideState = await page.evaluate(() => {
+        const slider = document.querySelector("[data-icono-image-edit-comparison]")
+        const side = document.querySelector("[data-icono-image-edit-side-by-side]")
+        const sb = document.querySelector("[data-icono-image-edit-side-before]")
+        const sa = document.querySelector("[data-icono-image-edit-side-after]")
+        const sbr = sb.getBoundingClientRect()
+        const sar = sa.getBoundingClientRect()
+        return {
+          sliderVisible: Boolean(slider && slider.checkVisibility()),
+          sideVisible: Boolean(side && side.checkVisibility()),
+          beforeBox: { left: sbr.left, right: sbr.right, width: sbr.width, height: sbr.height },
+          afterBox: { left: sar.left, right: sar.right, width: sar.width, height: sar.height },
+          beforeLabel: document
+            .querySelector("[data-icono-image-edit-side-before-label]")
+            ?.textContent?.trim(),
+          afterLabel: document
+            .querySelector("[data-icono-image-edit-side-after-label]")
+            ?.textContent?.trim(),
+        }
+      })
+      assert.equal(wideState.sliderVisible, false, "slider must hide on large ratio mismatch")
+      assert.equal(wideState.sideVisible, true, "side-by-side must show on large ratio mismatch")
+      assert.ok(
+        wideState.beforeBox.right <= wideState.afterBox.left + 1,
+        `side-by-side cards overlapped: ${JSON.stringify(wideState)}`,
+      )
+      assert.equal(wideState.beforeLabel, "Before · 384×512")
+      assert.equal(wideState.afterLabel, "After · 800×400")
       await context.close()
     }
 

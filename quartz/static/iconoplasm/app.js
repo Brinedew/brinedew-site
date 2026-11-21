@@ -54,8 +54,9 @@ import {
   formatImageEditModelLabel,
   isImageEditJobPendingStatus,
   resolveImageEditAspectRatio,
+  resolveImageEditComparisonLayout,
   resolveImageEditDialogUiState,
-} from "./image-edit-dialog-live.js?v=9167a74cd2a93f13"
+} from "./image-edit-dialog-live.js?v=7d842453dedaa1b8"
 import { openVoteLoginDialog } from "./vote-login-dialog.js?v=1952af0703e96d1d"
 import { installCandidateStrips, installSwipeStrip } from "./candidate-strip.js?v=3b1b7cdfe06eff2e"
 import {
@@ -863,7 +864,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var isPending = emulsionFavorites.isPending(emulsionId)
     var authenticated = !!currentUser
     var label = authenticated
-      ? (isFavorite ? "Remove " : "Add ") + displayCode + " from favorites"
+      ? isFavorite
+        ? "Remove " + displayCode + " from favorites"
+        : "Add " + displayCode + " to favorites"
       : "Log in to favorite " + displayCode
     return (
       '<button type="button" class="icono-emulsion-favorite-button' +
@@ -902,7 +905,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       if (pending) button.setAttribute("aria-busy", "true")
       else button.removeAttribute("aria-busy")
       var label = currentUser
-        ? (favorite ? "Remove " : "Add ") + displayEmulsionCode(emulsionId) + " from favorites"
+        ? favorite
+          ? "Remove " + displayEmulsionCode(emulsionId) + " from favorites"
+          : "Add " + displayEmulsionCode(emulsionId) + " to favorites"
         : "Log in to favorite " + displayEmulsionCode(emulsionId)
       button.setAttribute("aria-label", label)
       var hiddenLabel = button.querySelector(".icono-visually-hidden")
@@ -6803,7 +6808,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       '<div class="icono-request-card-meta"><span class="icono-request-card-label">' +
       esc(label) +
       "</span>" +
-      (item.is_preallocated_without_preview
+      (item.is_preallocated_without_preview &&
+      !emulsionFavorites.has(item.emulsion_family_id || item.emulsion_id)
         ? ""
         : renderEmulsionFavoriteButtonMarkup(
             item.emulsion_family_id || item.emulsion_id,
@@ -7229,12 +7235,16 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         '<section class="icono-image-edit-preview">' +
         '<div class="icono-image-edit-review-summary" data-icono-image-edit-review-summary aria-label="Edit summary" hidden></div>' +
         '<div class="icono-image-edit-artboard" data-icono-image-edit-source-viewer><img data-icono-image-edit-source-img alt="Source portrait" loading="eager"></div>' +
-        '<div class="icono-image-edit-before-after" data-icono-image-edit-result hidden>' +
-        '<div class="icono-image-edit-comparison-labels" aria-hidden="true"><span>Before</span><span>After</span></div>' +
+        '<div class="icono-image-edit-before-after" data-icono-image-edit-result data-icono-comparison-layout="slider" hidden>' +
+        '<div class="icono-image-edit-comparison-labels" data-icono-image-edit-slider-labels aria-hidden="true"><span data-icono-image-edit-before-label>Before</span><span data-icono-image-edit-after-label>After</span></div>' +
         '<img-comparison-slider class="icono-image-edit-comparison" data-icono-image-edit-comparison tabindex="0">' +
         '<img slot="first" data-icono-image-edit-before alt="Before edit">' +
         '<img slot="second" data-icono-image-edit-after alt="After edit">' +
         "</img-comparison-slider>" +
+        '<div class="icono-image-edit-side-by-side" data-icono-image-edit-side-by-side hidden>' +
+        '<figure class="icono-image-edit-side-card"><figcaption class="icono-image-edit-comparison-labels"><span data-icono-image-edit-side-before-label>Before</span></figcaption><div class="icono-image-edit-side-stage"><img data-icono-image-edit-side-before alt="Before edit"></div></figure>' +
+        '<figure class="icono-image-edit-side-card"><figcaption class="icono-image-edit-comparison-labels"><span data-icono-image-edit-side-after-label>After</span></figcaption><div class="icono-image-edit-side-stage"><img data-icono-image-edit-side-after alt="After edit"></div></figure>' +
+        "</div>" +
         "</div>" +
         "</section>" +
         '<section class="icono-image-edit-controls" data-icono-image-edit-controls>' +
@@ -7568,32 +7578,61 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function applyImageEditAspectRatio(dialog, dims) {
-    var ratio = resolveImageEditAspectRatio(dims || {})
+    var safeDims = dims || {}
+    var ratio = resolveImageEditAspectRatio(safeDims)
+    var comparison = resolveImageEditComparisonLayout(safeDims)
+    var result = dialog && dialog.querySelector("[data-icono-image-edit-result]")
+    var slider = dialog && dialog.querySelector("[data-icono-image-edit-comparison]")
+    var sliderLabels = dialog && dialog.querySelector("[data-icono-image-edit-slider-labels]")
+    var sideBySide = dialog && dialog.querySelector("[data-icono-image-edit-side-by-side]")
     var targets = [
       dialog,
       dialog && dialog.querySelector("[data-icono-image-edit-source-viewer]"),
-      dialog && dialog.querySelector("[data-icono-image-edit-result]"),
-      dialog && dialog.querySelector("[data-icono-image-edit-comparison]"),
+      result,
+      slider,
     ]
     targets.forEach(function (target) {
       if (!target || !target.style) return
       if (ratio) target.style.setProperty("--icono-image-edit-aspect-ratio", ratio)
       else target.style.removeProperty("--icono-image-edit-aspect-ratio")
     })
+    var isSideBySide = comparison.layout === "side-by-side"
+    if (result) result.setAttribute("data-icono-comparison-layout", comparison.layout)
+    if (slider) slider.hidden = isSideBySide
+    if (sliderLabels) sliderLabels.hidden = isSideBySide
+    if (sideBySide) sideBySide.hidden = !isSideBySide
+    if (dialog && imageEditDialogState.mode === "review") {
+      dialog.classList.toggle("icono-dialog--wide", isSideBySide)
+      dialog.classList.toggle("icono-dialog--standard", !isSideBySide)
+    }
+    var beforeLabels = dialog
+      ? dialog.querySelectorAll(
+          "[data-icono-image-edit-before-label], [data-icono-image-edit-side-before-label]",
+        )
+      : []
+    for (var bi = 0; bi < beforeLabels.length; bi++) {
+      beforeLabels[bi].textContent = comparison.beforeLabel
+    }
+    var afterLabels = dialog
+      ? dialog.querySelectorAll(
+          "[data-icono-image-edit-after-label], [data-icono-image-edit-side-after-label]",
+        )
+      : []
+    for (var ai = 0; ai < afterLabels.length; ai++) {
+      afterLabels[ai].textContent = comparison.afterLabel
+    }
   }
 
   function clearImageEditComparisonPreview(dialog) {
     if (!dialog) return
-    var before = dialog.querySelector("[data-icono-image-edit-before]")
-    var after = dialog.querySelector("[data-icono-image-edit-after]")
-    if (before) {
-      before.onload = null
-      before.removeAttribute("src")
+    var imgs = dialog.querySelectorAll(
+      "[data-icono-image-edit-before], [data-icono-image-edit-after], [data-icono-image-edit-side-before], [data-icono-image-edit-side-after]",
+    )
+    for (var i = 0; i < imgs.length; i++) {
+      imgs[i].onload = null
+      imgs[i].removeAttribute("src")
     }
-    if (after) {
-      after.onload = null
-      after.removeAttribute("src")
-    }
+    applyImageEditAspectRatio(dialog, {})
   }
 
   function renderImageEditContext(source) {
@@ -7861,6 +7900,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var result = dialog.querySelector("[data-icono-image-edit-result]")
     var before = dialog.querySelector("[data-icono-image-edit-before]")
     var after = dialog.querySelector("[data-icono-image-edit-after]")
+    var sideBefore = dialog.querySelector("[data-icono-image-edit-side-before]")
+    var sideAfter = dialog.querySelector("[data-icono-image-edit-side-after]")
     var safeSource = source || {}
     var syncResultAspectRatio = function () {
       if (before && !safeSource.width && before.naturalWidth > 0) {
@@ -7878,19 +7919,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         sourceHeight: safeSource.height,
       })
     }
+    var beforeUrl =
+      safeSource.image_url || portraitAssetRefUrl(job && job.source_asset, "medium") || ""
+    var afterUrl = portraitAssetRefUrl(job && job.result_asset, "medium")
     if (before) {
       before.onload = syncResultAspectRatio
-      portraitDelivery.bind(
-        before,
-        safeSource.image_url || portraitAssetRefUrl(job && job.source_asset, "medium") || "",
-      )
+      portraitDelivery.bind(before, beforeUrl)
       if (before.complete) syncResultAspectRatio()
     }
     if (after) {
       after.onload = syncResultAspectRatio
-      portraitDelivery.bind(after, portraitAssetRefUrl(job && job.result_asset, "medium"))
+      portraitDelivery.bind(after, afterUrl)
       if (after.complete) syncResultAspectRatio()
     }
+    if (sideBefore) portraitDelivery.bind(sideBefore, beforeUrl)
+    if (sideAfter) portraitDelivery.bind(sideAfter, afterUrl)
     syncResultAspectRatio()
     if (job.status === "failed") {
       imageEditSetStatus(String((job && job.error) || "Image edit failed."), "error")
@@ -9092,7 +9135,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             // absent from that answer; ask again rather than call it gone.
             var changedDuringFetch = favoriteSignature() !== signatureAtStart
             missing.forEach(function (id) {
-              if (!changedDuringFetch && !emulsionFavorites.isPending(id)) {
+              if (!changedDuringFetch && !emulsionFavorites.isPending(id) && !known.has(id)) {
                 favoriteOptionsUnavailable.add(id)
               }
             })
@@ -9307,6 +9350,23 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // Two views, one order. "All styles" is every queueable style by vote
       // strength (h-index, then live, score, blots); "Favorites" is the same
       // order filtered to the user's stars. A typed number searches both.
+      function missingCallableFavoriteOptions(existingOptions) {
+        var present = new Set(
+          (Array.isArray(existingOptions) ? existingOptions : []).map(familyOf).filter(Boolean),
+        )
+        var extras = []
+        var ids = favoriteFamilyIds()
+        for (var i = 0; i < ids.length; i++) {
+          var id = ids[i]
+          if (!id || present.has(id)) continue
+          var fallback = requestOptionForFavoriteFamilyId(id)
+          if (!fallback || !isQueueRequestOption(fallback)) continue
+          present.add(id)
+          extras.push(fallback)
+        }
+        return extras
+      }
+
       function styleGridOptions(renderQuery, loadedOptions) {
         var cleanedQuery = String(renderQuery || "")
           .trim()
@@ -9327,6 +9387,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
             return haystack.indexOf(term) >= 0
           })
         })
+        if (!terms.length && requestView === "favorites") {
+          list = list.concat(missingCallableFavoriteOptions(list))
+        }
         list.sort(function (a, b) {
           var scoreDiff = scoreRequestOption(a, cleanedQuery) - scoreRequestOption(b, cleanedQuery)
           return scoreDiff || compareRequestOptionStrength(a, b)
@@ -9342,9 +9405,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
 
       function paintRequestViews() {
-        var favoriteCount = requestOptions.filter(function (option) {
+        var matchedFavorites = requestOptions.filter(function (option) {
           return isQueueRequestOption(option) && isFavoriteRequestOption(option)
-        }).length
+        })
+        var favoriteCount =
+          matchedFavorites.length + missingCallableFavoriteOptions(matchedFavorites).length
         var views = body.querySelectorAll("[data-icono-request-view]")
         for (var i = 0; i < views.length; i++) {
           var key = views[i].getAttribute("data-icono-request-view")
@@ -9883,7 +9948,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       }
       panel.addEventListener("icono-request-tab-activate", function (event) {
         if (event.detail && event.detail.tab === "api") initializeDirectTab()
-        if (event.detail && event.detail.tab === "free") void renderResultsList()
+        if (event.detail && event.detail.tab === "free") {
+          favoriteOptionsUnavailable.clear()
+          void renderResultsList()
+        }
       })
       var selectedRequestTab = body.querySelector('[data-icono-request-tab][aria-selected="true"]')
       if (
