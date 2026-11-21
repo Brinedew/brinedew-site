@@ -66,6 +66,20 @@
         "rows_written": 0,
         "requests": 1
       }
+    },
+    "iconoplasm/0154_style_cards_exclude_edited.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 60000,
+        "rows_written": 500,
+        "requests": 9
+      },
+      "guards": [
+        {
+          "sql": "SELECT COUNT(*) AS blots FROM icono_style_published_portraits",
+          "max": 30000
+        }
+      ]
     }
   }
 }

@@ -19,6 +19,11 @@ import { normalizeFavoriteEmulsionFamilyId } from "../iconoplasm-emulsion-favori
 //
 // Migration 0145 adds each picture's placeholder, a base64 ThumbHash that the
 // picker decodes into a blurred copy of the portrait while its file loads.
+//
+// Migration 0154 excludes edited (`-e` / `image-edit:`) canonical portraits from
+// `portraits_json` thumbnails so style picker cards only depict unedited
+// canonical portraits (B-1278), while keeping `blot_count` as the full
+// canonical count.
 export const STYLE_CARD_PORTRAIT_LIMIT = 4
 
 export const STYLE_CARDS_SQL = `SELECT c.style_slot, c.blot_count, c.portraits_json
