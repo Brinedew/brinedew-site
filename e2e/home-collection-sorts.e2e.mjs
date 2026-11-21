@@ -228,54 +228,52 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
         await page.waitForSelector('[data-icono-collection-tab="shared"]', { timeout: 30_000 })
         await page.click('[data-icono-collection-tab="shared"]')
       }
-      await page.waitForFunction(
-        () => {
-          const grids = [
-            ...document.querySelectorAll('.icono-grid[data-layout="image-only-masonry"]'),
-          ]
-          return grids.some(
-            (grid) =>
-              grid.querySelectorAll(".icono-card--image-tile:not(.icono-card--skeleton)").length >=
-              2,
-          )
-        },
-        null,
-        { timeout: 45_000 },
-      )
       for (const { width, height, expectedCols } of columnCases) {
         await page.setViewportSize({ width, height })
-        const gridMetrics = await page.evaluate(() => {
-          const grids = [
-            ...document.querySelectorAll('.icono-grid[data-layout="image-only-masonry"]'),
-          ]
+        await page.waitForFunction(
+          (expectDesktopMasonry) => {
+            const selector = expectDesktopMasonry
+              ? '.icono-grid[data-layout="image-only-masonry"]'
+              : ".icono-grid"
+            const grids = [...document.querySelectorAll(selector)]
+            return grids.some(
+              (grid) => grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
+            )
+          },
+          expectedCols === 2,
+          { timeout: 30_000 },
+        )
+        const gridMetrics = await page.evaluate((expectDesktopMasonry) => {
+          const selector = expectDesktopMasonry
+            ? '.icono-grid[data-layout="image-only-masonry"]'
+            : ".icono-grid"
+          const grids = [...document.querySelectorAll(selector)]
           const grid = grids.find(
             (candidate) =>
-              candidate.querySelectorAll(".icono-card--image-tile:not(.icono-card--skeleton)")
-                .length >= 2,
+              candidate.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
           )
           if (!grid) return null
           const tracks = getComputedStyle(grid)
             .gridTemplateColumns.split(" ")
             .map((t) => t.trim())
-            .filter(Boolean)
-          const cards = [
-            ...grid.querySelectorAll(".icono-card--image-tile:not(.icono-card--skeleton)"),
-          ]
+            .filter((t) => t && t !== "none")
+          const cards = [...grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)")]
             .slice(0, 2)
             .map((el) => {
               const r = el.getBoundingClientRect()
               return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }
             })
           return {
-            cols: tracks.length,
+            layout: grid.getAttribute("data-layout") || "",
+            cols: tracks.length || 1,
             tracks,
             gridWidth: Math.round(grid.getBoundingClientRect().width),
             cards,
             overflowX: document.documentElement.scrollWidth - innerWidth,
           }
-        })
+        }, expectedCols === 2)
         const tag = `${signedIn ? "yours" : "everyones"} ${width}x${height}`
-        assert.ok(gridMetrics, `${tag}: image-only masonry grid with >=2 cards missing`)
+        assert.ok(gridMetrics, `${tag}: archive grid with >=2 cards missing`)
         assert.equal(
           gridMetrics.cols,
           expectedCols,
