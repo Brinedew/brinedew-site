@@ -199,13 +199,23 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
           ? (pathname, request) => {
               const base = createApi([], [])(pathname, request)
               if (pathname === "/api/iconoplasm/mobile-card-manifest" && base && base.cards) {
-                base.cards = base.cards.map((card) => ({
-                  ...card,
-                  portrait: {
-                    ...card.portrait,
-                    url: `${HOST}/_e2e/tile-${card.symbol}.svg`,
-                  },
-                }))
+                base.cards = base.cards.map((card) => {
+                  const tileUrl = `${HOST}/_e2e/tile-${card.symbol}.svg`
+                  return {
+                    ...card,
+                    portrait: { ...card.portrait, url: tileUrl },
+                    payload: {
+                      ...card.payload,
+                      portrait: {
+                        status: "published",
+                        medium_url: tileUrl,
+                        hero_url: tileUrl,
+                        width: 768,
+                        height: 1024,
+                      },
+                    },
+                  }
+                })
               }
               return base
             }
