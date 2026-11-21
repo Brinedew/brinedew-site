@@ -444,3 +444,213 @@ test("stored style cards equal their blots through every write that moves a port
     await runtime.dispose()
   }
 })
+
+test("0154 excludes edited canonical portraits from style card thumbnails without falling back to drafts", async () => {
+  const { Miniflare, convertV4MiniflareOptions } = createRequire(
+    require.resolve("wrangler/package.json"),
+  )("miniflare")
+  const runtime = new Miniflare(
+    convertV4MiniflareOptions({
+      modules: true,
+      script: "export default {fetch(){return new Response('local')}}",
+      compatibilityDate: "2026-08-01",
+      d1Databases: ["DB"],
+    }),
+  )
+  try {
+    const db = await runtime.getD1Database("DB")
+    const pre0154 = new DatabaseSync(":memory:")
+    for (const name of readdirSync(MIGRATIONS)
+      .filter((n) => n.endsWith(".sql") && parseInt(n) < 154)
+      .sort())
+      pre0154.exec(readFileSync(new URL(name, MIGRATIONS), "utf8"))
+    const definitions = pre0154
+      .prepare(
+        "SELECT sql, type FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END, rowid",
+      )
+      .all()
+    const structure = definitions.filter((x) => x.type !== "trigger")
+    for (let i = 0; i < structure.length; i += 20)
+      await db.batch(structure.slice(i, i + 20).map((x) => db.prepare(x.sql)))
+    const triggers = definitions.filter((x) => x.type === "trigger")
+    for (let i = 0; i < triggers.length; i += 20)
+      await db.batch(triggers.slice(i, i + 20).map((x) => db.prepare(x.sql)))
+
+    // Style 18: one unedited canonical portrait (G1), one edited via `-e` +
+    // `image-edit:` (G2) with higher votes, one edited via `-e` only (G3).
+    // Style 222: only an edited canonical portrait (G4), plus an unedited
+    // non-canonical draft (G5) in the same style.
+    await db
+      .prepare(
+        `INSERT INTO icono_portrait_assets(gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, emulsion_id, vision_id)
+         VALUES
+           ('G1', ${sha(1)}, 'f', 't', '0-18', 'anima-v1-18'),
+           ('G2', ${sha(2)}, 'f', 't', '0-18-e', 'image-edit:job-2'),
+           ('G3', ${sha(3)}, 'f', 't', '0-18-E', 'anima-v1-18'),
+           ('G4', ${sha(4)}, 'f', 't', '0-222-e', 'image-edit:job-4'),
+           ('G5', ${sha(5)}, 'f', 't', '0-222', 'anima-v1-222'),
+           ('G6', ${sha(6)}, 'f', 't', 'A9-18', 'anima-v2-18')`,
+      )
+      .run()
+    await db
+      .prepare(
+        `INSERT INTO icono_vote_asset_summary(gene_symbol, asset_sha256, candidate_ref, upvotes)
+         VALUES
+           ('G1', ${sha(1)}, 'c1', 1),
+           ('G2', ${sha(2)}, 'c2', 50),
+           ('G3', ${sha(3)}, 'c3', 40),
+           ('G4', ${sha(4)}, 'c4', 99),
+           ('G5', ${sha(5)}, 'c5', 80)`,
+      )
+      .run()
+    await db
+      .prepare(
+        `INSERT INTO icono_publish_state(gene_symbol, current_asset_sha256)
+         VALUES
+           ('G1', ${sha(1)}),
+           ('G2', ${sha(2)}),
+           ('G3', ${sha(3)}),
+           ('G4', ${sha(4)})`,
+      )
+      .run()
+
+    // Before 0154, edited portraits appeared in portraits_json.
+    const before18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.equal(before18.shown.length, 3)
+
+    // Apply 0154 and verify backfill + cost plan bounds.
+    const migration0154 = priceOf(
+      await db.batch(
+        migrationStatements(MIGRATIONS, "0154_style_cards_exclude_edited.sql").map((sql) =>
+          db.prepare(sql),
+        ),
+      ),
+    )
+    const plan = JSON.parse(
+      readFileSync(new URL("../cloudflare/operation-cost-migration-plan.json", import.meta.url)),
+    )
+    const prediction = plan.migrations["iconoplasm/0154_style_cards_exclude_edited.sql"]?.prediction
+    if (prediction) {
+      assert.ok(
+        migration0154.rows_read <= prediction.rows_read,
+        `0154 read ${migration0154.rows_read}`,
+      )
+      assert.ok(
+        migration0154.rows_written <= prediction.rows_written,
+        `0154 wrote ${migration0154.rows_written}`,
+      )
+    }
+
+    const card18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.equal(card18.count, 3, "blot_count still counts edited canonical portraits")
+    assert.deepEqual(
+      card18.shown.map((p) => p.gene_symbol),
+      ["G1"],
+    )
+
+    const card222 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 222").first(),
+    )
+    assert.equal(card222.count, 1)
+    assert.deepEqual(card222.shown, [], "edited-only style shows no thumbnail and no draft")
+
+    // Trigger paths: INSERT unedited canonical, UPDATE to edited, placeholder
+    // update on edited vs unedited, DELETE canonical.
+    await db
+      .prepare(
+        `INSERT INTO icono_publish_state(gene_symbol, current_asset_sha256) VALUES ('G6', ${sha(6)})`,
+      )
+      .run()
+    let updated18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.equal(updated18.count, 4)
+    assert.deepEqual(
+      updated18.shown.map((p) => p.gene_symbol).sort(),
+      ["G1", "G6"],
+    )
+
+    // Inserting a new edited canonical portrait on style 222 leaves thumbnails empty.
+    await db
+      .prepare(
+        `INSERT INTO icono_portrait_assets(gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, emulsion_id, vision_id)
+         VALUES ('G7', ${sha(7)}, 'f', 't', 'A9-222', 'image-edit:job-7')`,
+      )
+      .run()
+    await db
+      .prepare(
+        `INSERT INTO icono_publish_state(gene_symbol, current_asset_sha256) VALUES ('G7', ${sha(7)})`,
+      )
+      .run()
+    const afterInsert222 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 222").first(),
+    )
+    assert.equal(afterInsert222.count, 2)
+    assert.deepEqual(afterInsert222.shown, [])
+
+    // Switching G6 to an edited portrait removes G6 from style 18 thumbnails.
+    await db
+      .prepare(
+        `INSERT INTO icono_portrait_assets(gene_symbol, asset_sha256, r2_key_full, r2_key_thumb, emulsion_id, vision_id)
+         VALUES ('G6', ${sha(60)}, 'f', 't', '0-18-e', 'image-edit:job-60')`,
+      )
+      .run()
+    await db
+      .prepare(
+        `UPDATE icono_publish_state SET current_asset_sha256 = ${sha(60)} WHERE gene_symbol = 'G6'`,
+      )
+      .run()
+    updated18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.equal(updated18.count, 4)
+    assert.deepEqual(
+      updated18.shown.map((p) => p.gene_symbol),
+      ["G1"],
+    )
+
+    // Placeholder updates on unedited vs edited portraits keep exclusion intact.
+    await db
+      .prepare(
+        `UPDATE icono_portrait_assets SET placeholder = 'k0cNHYKZiHeIeHiId3h3h4eH' WHERE gene_symbol = 'G1' AND asset_sha256 = ${sha(1)}`,
+      )
+      .run()
+    await db
+      .prepare(
+        `UPDATE icono_portrait_assets SET placeholder = 'k0cNHYKZiHeIeHiId3h3h4eH' WHERE gene_symbol = 'G2' AND asset_sha256 = ${sha(2)}`,
+      )
+      .run()
+    updated18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.deepEqual(
+      updated18.shown.map((p) => p.gene_symbol),
+      ["G1"],
+    )
+    assert.equal(updated18.shown[0].placeholder, "k0cNHYKZiHeIeHiId3h3h4eH")
+
+    // Deleting G1 leaves style 18 with only edited canonical portraits -> empty thumbnails.
+    await db.prepare("DELETE FROM icono_publish_state WHERE gene_symbol = 'G1'").run()
+    updated18 = styleCardBlots(
+      await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
+    )
+    assert.equal(updated18.count, 3)
+    assert.deepEqual(updated18.shown, [])
+
+    const cards = await attachStylePublishedPortraits(
+      db,
+      [{ emulsion_family_id: "0-18" }, { emulsion_family_id: "0-222" }],
+      (asset, rendition) => `https://portraits.test/${asset}/${rendition}.webp`,
+    )
+    assert.equal(cards[0].canonical_count, 3)
+    assert.deepEqual(cards[0].preview_assets, [])
+    assert.equal(cards[1].canonical_count, 2)
+    assert.deepEqual(cards[1].preview_assets, [])
+  } finally {
+    await runtime.dispose()
+  }
+})
