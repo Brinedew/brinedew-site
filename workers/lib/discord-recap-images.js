@@ -40,6 +40,18 @@ function normalizeImageIdentity(identity) {
   return { day, uniprotId }
 }
 
+export function normalizeRecapUniprotId(value) {
+  return normalizeUniprotId(value)
+}
+
+export function buildDiscordRecapProteinImageKey(uniprotId) {
+  const normalized = normalizeUniprotId(uniprotId)
+  if (!normalized) {
+    throw new Error("Invalid recap image UniProt id")
+  }
+  return `${DISCORD_RECAP_IMAGE_PREFIX}by-protein/${normalized}/${DISCORD_RECAP_RENDER_CONTRACT}.png`
+}
+
 export function buildDiscordRecapImageKey(identity) {
   const { day, uniprotId } = normalizeImageIdentity(identity)
   return `${DISCORD_RECAP_IMAGE_PREFIX}${day}/${uniprotId}/${DISCORD_RECAP_RENDER_CONTRACT}.png`
@@ -129,85 +141,23 @@ export function canReadDiscordRecapImage(env) {
   return Boolean((bunnyStorageZone(env) && bunnyStoragePassword(env)) || bunnyCdnBase(env))
 }
 
-/**
- * Store the recap PNG for a day. Returns { key }.
- */
-export async function putDiscordRecapImage(
-  env,
-  identity,
-  bytes,
-  { contentType = "image/png" } = {},
-) {
-  const normalizedIdentity = normalizeImageIdentity(identity)
-  const key = buildDiscordRecapImageKey(normalizedIdentity)
-  const expectedBytes = asUint8Array(bytes)
-
-  if (env?.STRUCTURES_BUCKET) {
-    await env.STRUCTURES_BUCKET.put(key, expectedBytes, {
-      httpMetadata: {
-        contentType,
-        cacheControl: "public, max-age=31536000, immutable",
-      },
-      customMetadata: {
-        day: normalizedIdentity.day,
-        uniprotId: normalizedIdentity.uniprotId,
-        renderContract: DISCORD_RECAP_RENDER_CONTRACT,
-        uploadedBy: "admin",
-        uploadedAt: new Date().toISOString(),
-      },
-    })
-    const stored = await loadDiscordRecapImageBytes(env, normalizedIdentity)
-    if (!stored || !equalBytes(stored, expectedBytes)) {
-      throw new Error(`Recap image R2 read-back verification failed for ${key}`)
+function candidateKeysForIdentity(identity) {
+  const uniprotId = normalizeUniprotId(identity?.uniprotId)
+  if (!uniprotId) {
+    throw new Error("Invalid recap image UniProt id")
+  }
+  const keys = [buildDiscordRecapProteinImageKey(uniprotId)]
+  const day = String(identity?.day || "").trim()
+  if (day) {
+    if (!isValidIsoDay(day)) {
+      throw new Error("Invalid recap image day")
     }
-    return { key, verifiedBytes: stored.byteLength }
+    keys.push(buildDiscordRecapImageKey({ day, uniprotId }))
   }
-
-  const writeUrl = bunnyWriteUrl(env, key)
-  const password = bunnyStoragePassword(env)
-  if (!writeUrl || !password) {
-    throw new Error(
-      "Recap image storage is not configured for writes (Bunny zone/password missing)",
-    )
-  }
-  const stored = await putBunnyObjectUntilVerified({
-    put: async () => {
-      const response = await fetch(writeUrl, {
-        method: "PUT",
-        headers: {
-          AccessKey: password,
-          "Content-Type": contentType,
-        },
-        body: expectedBytes,
-      })
-      if (response.status !== BUNNY_UPLOAD_SUCCESS_STATUS) {
-        const responseText = await boundedResponseText(response)
-        throw new Error(
-          `Recap image PUT returned ${response.status}, expected ${BUNNY_UPLOAD_SUCCESS_STATUS}, for ${key}: ${responseText || "no body"}`,
-        )
-      }
-      await response.body?.cancel().catch(() => null)
-    },
-    verify: async () => {
-      for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
-        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
-        const readBack = await loadDiscordRecapImageBytes(env, normalizedIdentity)
-        if (readBack && equalBytes(readBack, expectedBytes)) return readBack
-      }
-      return null
-    },
-  })
-  if (stored) return { key, verifiedBytes: stored.byteLength }
-
-  throw new Error(`Recap image PUT was acknowledged but exact-byte read-back failed for ${key}`)
+  return keys
 }
 
-/**
- * Return existence/metadata for a day's recap PNG, or null if missing.
- */
-export async function headDiscordRecapImage(env, identity) {
-  const key = buildDiscordRecapImageKey(identity)
-
+async function headKey(env, key) {
   if (env?.STRUCTURES_BUCKET) {
     const head = await env.STRUCTURES_BUCKET.head(key)
     if (!head) return null
@@ -250,12 +200,7 @@ export async function headDiscordRecapImage(env, identity) {
   }
 }
 
-/**
- * Load a day's recap PNG bytes, or null if missing.
- */
-export async function loadDiscordRecapImageBytes(env, identity) {
-  const key = buildDiscordRecapImageKey(identity)
-
+async function loadKeyBytes(env, key) {
   if (env?.STRUCTURES_BUCKET) {
     const object = await env.STRUCTURES_BUCKET.get(key)
     if (!object) return null
@@ -287,4 +232,102 @@ export async function loadDiscordRecapImageBytes(env, identity) {
   const imageData = await response.arrayBuffer()
   if (!imageData || imageData.byteLength <= 0) return null
   return new Uint8Array(imageData)
+}
+
+/**
+ * Store the recap PNG for a protein under its canonical per-protein key. Returns { key }.
+ */
+export async function putDiscordRecapImage(
+  env,
+  identity,
+  bytes,
+  { contentType = "image/png" } = {},
+) {
+  const normalizedIdentity = normalizeImageIdentity(identity)
+  const key = buildDiscordRecapProteinImageKey(normalizedIdentity.uniprotId)
+  const expectedBytes = asUint8Array(bytes)
+
+  if (env?.STRUCTURES_BUCKET) {
+    await env.STRUCTURES_BUCKET.put(key, expectedBytes, {
+      httpMetadata: {
+        contentType,
+        cacheControl: "public, max-age=31536000, immutable",
+      },
+      customMetadata: {
+        day: normalizedIdentity.day,
+        uniprotId: normalizedIdentity.uniprotId,
+        renderContract: DISCORD_RECAP_RENDER_CONTRACT,
+        uploadedBy: "admin",
+        uploadedAt: new Date().toISOString(),
+      },
+    })
+    const stored = await loadKeyBytes(env, key)
+    if (!stored || !equalBytes(stored, expectedBytes)) {
+      throw new Error(`Recap image R2 read-back verification failed for ${key}`)
+    }
+    return { key, verifiedBytes: stored.byteLength }
+  }
+
+  const writeUrl = bunnyWriteUrl(env, key)
+  const password = bunnyStoragePassword(env)
+  if (!writeUrl || !password) {
+    throw new Error(
+      "Recap image storage is not configured for writes (Bunny zone/password missing)",
+    )
+  }
+  const stored = await putBunnyObjectUntilVerified({
+    put: async () => {
+      const response = await fetch(writeUrl, {
+        method: "PUT",
+        headers: {
+          AccessKey: password,
+          "Content-Type": contentType,
+        },
+        body: expectedBytes,
+      })
+      if (response.status !== BUNNY_UPLOAD_SUCCESS_STATUS) {
+        const responseText = await boundedResponseText(response)
+        throw new Error(
+          `Recap image PUT returned ${response.status}, expected ${BUNNY_UPLOAD_SUCCESS_STATUS}, for ${key}: ${responseText || "no body"}`,
+        )
+      }
+      await response.body?.cancel().catch(() => null)
+    },
+    verify: async () => {
+      for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+        const readBack = await loadKeyBytes(env, key)
+        if (readBack && equalBytes(readBack, expectedBytes)) return readBack
+      }
+      return null
+    },
+  })
+  if (stored) return { key, verifiedBytes: stored.byteLength }
+
+  throw new Error(`Recap image PUT was acknowledged but exact-byte read-back failed for ${key}`)
+}
+
+/**
+ * Return existence/metadata for a recap PNG (canonical by-protein key first, then legacy day/uniprot), or null if missing.
+ */
+export async function headDiscordRecapImage(env, identity) {
+  for (const key of candidateKeysForIdentity(identity)) {
+    const head = await headKey(env, key)
+    if (head) return head
+  }
+  return null
+}
+
+/**
+ * Load recap PNG bytes (canonical by-protein key first, then legacy day/uniprot), or null if missing.
+ */
+export async function loadDiscordRecapImageBytes(env, identity, { legacyDayOnly = false } = {}) {
+  const keys = legacyDayOnly
+    ? [buildDiscordRecapImageKey(identity)]
+    : candidateKeysForIdentity(identity)
+  for (const key of keys) {
+    const bytes = await loadKeyBytes(env, key)
+    if (bytes) return { key, bytes }
+  }
+  return null
 }

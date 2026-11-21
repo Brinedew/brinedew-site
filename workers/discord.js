@@ -13,11 +13,7 @@ import { getDailyGuessAggregates, getWinnersCount } from "./lib/guess-aggregates
 import { discordSwitchIsOn } from "./discord-integration-switches.js"
 import { fetchProteinByUniprot } from "./lib/protein-store.js"
 import { buildStructureMetaFromStoredSource } from "./lib/structure-utils.js"
-import {
-  buildDiscordRecapImageKey,
-  isValidIsoDay,
-  loadDiscordRecapImageBytes,
-} from "./lib/discord-recap-images.js"
+import { isValidIsoDay, loadDiscordRecapImageBytes } from "./lib/discord-recap-images.js"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
 const DISCORD_SUMMARY_POSTED_PREFIX = "discord_summary_posted:"
@@ -257,18 +253,20 @@ function addUtcDays(day, offsetDays) {
 async function loadCachedRecapImage(env, day, uniprotId) {
   // Backed by R2 if STRUCTURES_BUCKET is ever rebound, otherwise the live
   // Bunny CDN object storage. See workers/lib/discord-recap-images.js.
-  // When pre-warm falls back to candidateIds[1..3] (planned for day+1..3),
-  // look up the pre-rendered PNG for that exact UniProt under those adjacent
-  // days before treating the recap image as absent (B-1264).
+  // Checks canonical per-protein key first, then legacy day/uniprot keys for
+  // day..day+3 in case a pre-2026-11-21 legacy render was shifted by fallback.
   for (let offset = 0; offset <= 3; offset += 1) {
     const candidateDay = offset === 0 ? day : addUtcDays(day, offset)
-    const identity = { day: candidateDay, uniprotId }
-    const bytes = await loadDiscordRecapImageBytes(env, identity)
-    if (bytes) {
+    const loaded = await loadDiscordRecapImageBytes(
+      env,
+      { day: candidateDay, uniprotId },
+      { legacyDayOnly: offset > 0 },
+    )
+    if (loaded?.bytes) {
       return {
-        key: buildDiscordRecapImageKey(identity),
+        key: loaded.key,
         uploadedAt: null,
-        bytes,
+        bytes: loaded.bytes,
       }
     }
   }

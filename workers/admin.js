@@ -6,7 +6,7 @@
 import { readSession } from "./lib/sealed-session.js"
 import { sanitizeProteinSummary } from "./lib/structure-utils.js"
 import {
-  buildDiscordRecapImageKey,
+  buildDiscordRecapProteinImageKey,
   buildDiscordRecapImageDownloadFilename,
   DISCORD_RECAP_RENDER_CONTRACT,
   isValidIsoDay,
@@ -1671,16 +1671,19 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
   }
 
   const identity = { day, uniprotId }
-  const key = buildDiscordRecapImageKey(identity)
+  const defaultKey = buildDiscordRecapProteinImageKey(uniprotId)
   if (url.searchParams.get("download") === "1") {
-    const bytes = await loadDiscordRecapImageBytes(env, identity)
-    if (!bytes) {
-      return Response.json({ day, uniprot_id: uniprotId, key, exists: false }, { status: 404 })
+    const loaded = await loadDiscordRecapImageBytes(env, identity)
+    if (!loaded?.bytes) {
+      return Response.json(
+        { day, uniprot_id: uniprotId, key: defaultKey, exists: false },
+        { status: 404 },
+      )
     }
-    return new Response(bytes, {
+    return new Response(loaded.bytes, {
       headers: {
         "Content-Type": "image/png",
-        "Content-Length": String(bytes.byteLength),
+        "Content-Length": String(loaded.bytes.byteLength),
         "Content-Disposition": `inline; filename="${buildDiscordRecapImageDownloadFilename(identity)}"`,
         "Cache-Control": "private, no-store",
       },
@@ -1691,7 +1694,7 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
     return Response.json({
       day,
       uniprot_id: uniprotId,
-      key,
+      key: defaultKey,
       exists: false,
     })
   }
@@ -1699,7 +1702,7 @@ export async function handleAdminDiscordRecapImageStatus(request, env) {
   return Response.json({
     day,
     uniprot_id: uniprotId,
-    key,
+    key: head.key,
     exists: true,
     size: head.size || null,
     uploadedAt: head.uploadedAt || null,
@@ -1755,8 +1758,8 @@ export async function handleAdminDiscordRecapImageStatuses(request, env) {
         const [day, rawUniprotId] = value.split("~")
         const uniprotId = rawUniprotId.toUpperCase()
         const identity = { day, uniprotId }
-        const key = buildDiscordRecapImageKey(identity)
         const head = await headDiscordRecapImage(env, identity)
+        const key = head?.key || buildDiscordRecapProteinImageKey(uniprotId)
         statuses[day] = head
           ? {
               day,

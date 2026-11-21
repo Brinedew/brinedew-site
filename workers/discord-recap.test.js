@@ -56,6 +56,8 @@ const BUNNY = {
   ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
 }
 const imageKey = (day, uniprot) => `discord-recap-images/v2/${day}/${uniprot}/molstar-recap-v3.png`
+const proteinImageKey = (uniprot) =>
+  `discord-recap-images/v2/by-protein/${uniprot}/molstar-recap-v3.png`
 
 // The target of every recap, and the other proteins its players guessed.
 const TARGET = { uniprot: "Q00001", gene: "TP53", full_name: "Cellular tumor antigen p53" }
@@ -536,23 +538,34 @@ async function withInstantDelays(run) {
 }
 const upload = (body) => asAdmin("/api/admin/discord-recap-image", { method: "POST", body })
 
-test("G1: an upload is stored under its exact day, target and renderer, and read back whole", async () => {
+test("G1: an upload is stored under its canonical per-protein key and read back whole, with legacy day/uniprot fallback", async () => {
   newWorld()
   const stored = await upload({ day: "2026-08-02", uniprot_id: "p08134", image_base64: PNG_BASE64 })
   assert.equal(stored.status, 200)
   assert.equal(stored.payload.uniprot_id, "P08134")
   assert.equal(stored.payload.render_contract, "molstar-recap-v3")
   assert.equal(stored.payload.verified_bytes, PNG.length)
-  assert.equal(stored.payload.key, imageKey("2026-08-02", "P08134"))
-  assert.deepEqual([...world.storage.get(imageKey("2026-08-02", "P08134"))], [...PNG])
+  assert.equal(stored.payload.key, proteinImageKey("P08134"))
+  assert.deepEqual([...world.storage.get(proteinImageKey("P08134"))], [...PNG])
 
-  // The status of an image names its exact target: the same day for another protein is empty.
+  // Status resolves the canonical per-protein key for any day playing P08134,
+  // and another protein remains missing.
   const present = await asAdmin("/api/admin/discord-recap-image?day=2026-08-02&uniprot=P08134")
   assert.equal(present.payload.exists, true)
   assert.equal(present.payload.size, PNG.length)
+  assert.equal(present.payload.key, proteinImageKey("P08134"))
+  const movedDay = await asAdmin("/api/admin/discord-recap-image?day=2026-08-09&uniprot=P08134")
+  assert.equal(movedDay.payload.exists, true)
+  assert.equal(movedDay.payload.key, proteinImageKey("P08134"))
   const other = await asAdmin("/api/admin/discord-recap-image?day=2026-08-02&uniprot=P01112")
   assert.equal(other.payload.exists, false)
-  assert.equal(other.payload.key, imageKey("2026-08-02", "P01112"))
+  assert.equal(other.payload.key, proteinImageKey("P01112"))
+
+  // Legacy day/uniprot objects from before the by-protein layout still resolve.
+  world.storage.set(imageKey("2026-08-03", "Q99999"), PNG)
+  const legacy = await asAdmin("/api/admin/discord-recap-image?day=2026-08-03&uniprot=Q99999")
+  assert.equal(legacy.payload.exists, true)
+  assert.equal(legacy.payload.key, imageKey("2026-08-03", "Q99999"))
 
   const image = await asAdmin(
     "/api/admin/discord-recap-image?day=2026-08-02&uniprot=P08134&download=1",
@@ -649,7 +662,7 @@ test("B-1264: recap reuses same-UniProt image from an adjacent planned day when 
   const nextDay = "2026-11-22"
   recordPuzzle(day)
   // Another protein's PNG stored for today must never be attached to TARGET's recap,
-  // while TARGET's pre-rendered PNG under day+1 (from candidateIds fallback) is reused.
+  // while TARGET's pre-rendered PNG under day+1 (from legacy layout) is reused.
   storeImage(day, OTHER.uniprot)
   storeImage(nextDay, TARGET.uniprot)
   await recordPlayers(day, [guess(TARGET)])
@@ -661,4 +674,25 @@ test("B-1264: recap reuses same-UniProt image from an adjacent planned day when 
   assert.equal(world.discord.length, 1)
   assert.equal(world.discord[0].multipart, true)
   assert.deepEqual([...world.discord[0].image], [...PNG])
+})
+
+test("B-1264: recap uploaded for day A is reused automatically when the same protein runs on day B", async () => {
+  newWorld()
+  const uploaded = await upload({
+    day: "2026-08-02",
+    uniprot_id: TARGET.uniprot,
+    image_base64: PNG_BASE64,
+  })
+  assert.equal(uploaded.status, 200)
+
+  const laterDay = "2026-11-25"
+  recordPuzzle(laterDay)
+  await recordPlayers(laterDay, [guess(TARGET)])
+
+  const res = await postRecap(laterDay)
+  assert.equal(res.status, 200)
+  assert.equal(res.payload.image_source, "cached_object_storage")
+  assert.equal(res.payload.screenshot_bytes, PNG.length)
+  assert.equal(world.discord.length, 1)
+  assert.equal(world.discord[0].multipart, true)
 })

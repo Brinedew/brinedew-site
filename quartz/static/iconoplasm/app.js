@@ -6764,6 +6764,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var shown = (Array.isArray(item.preview_assets) ? item.preview_assets : [])
       .filter(requestOptionPreviewUrl)
       .slice(0, 4)
+    var imageCount = Number(item.canonical_count || 0) || 0
     var art = shown.length
       ? shown
           .map(function (asset) {
@@ -6771,7 +6772,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
           })
           .join("")
       : '<span class="icono-request-card-empty">' +
-        (item.is_preallocated_without_preview ? "First portrait" : "No portraits yet") +
+        (item.is_preallocated_without_preview
+          ? "First portrait"
+          : imageCount > 0
+            ? "No unedited previews"
+            : "No portraits yet") +
         "</span>"
     // The count is of blots: the genes whose current portrait
     // the style drew now, across all its codes, not every image ever drawn in
@@ -6779,7 +6784,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     // trigger-kept table as the pictures (migration 0130); the rollups'
     // live_count is per vision or per factory code and goes stale, so it only
     // orders the list.
-    var imageCount = Number(item.canonical_count || 0) || 0
     return (
       '<div class="icono-request-card" role="listitem" data-icono-request-card="' +
       esc(label) +

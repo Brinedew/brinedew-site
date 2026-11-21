@@ -286,32 +286,32 @@ const GOLDEN = {
     "2026-10-02": [
       "Q09066",
       3902,
-      ["Q09066", "Q02692", "Q01946"],
-      "7c81777dcd2d8905c592ee4627ab37bbeeb3319211259b1ca69d791e409840e0",
+      ["Q09066", "Q09687", "Q01951"],
+      "412ae42b12448e58100f0826713a1a71a249876215ae948d44b32da57c3c256f",
     ],
     "2026-10-03": [
       "Q02692",
       3902,
-      ["Q02692", "Q01946", "Q02018"],
-      "17cb737d29926505caab37d42aad9ce4d3ee08335316448c5591a9871d4f75a6",
+      ["Q02692", "Q01951", "Q02287"],
+      "be76c9ebbdbf6331ae284b147be235e18962efc1abd8e74e45837923ab386d19",
     ],
     "2026-12-25": [
       "Q00288",
       3902,
-      ["Q00288", "Q09164", "Q02483"],
-      "21333de5bccce070d8d958e2c25a18d9824d2fc1bfe7a3f4be3270a388eb642b",
+      ["Q00288", "Q02857", "Q02708"],
+      "3bd20c8ea873a39768ee2a73bbb2e9123c0ced38196d5b51fdd1acfdda002b6e",
     ],
     "2027-03-01": [
       "Q04349",
       3902,
-      ["Q04349", "Q05134", "Q05343"],
-      "dff3d786714ffebe2648d8360cb1cd1235781c88aaa547c7095bd6576c51263f",
+      ["Q04349", "Q03794", "Q02609"],
+      "0ee89643a1fe38a0f516cc7cf8178624bfdc73b56eef56a71b89e365031f050d",
     ],
     "2028-02-29": [
       "Q07360",
       3902,
-      ["Q07360", "Q06922", "Q09927"],
-      "d9f65d3a124068808cbe3c9a5419a340dff0cd2f25b58c8543e8cc457bc46902",
+      ["Q07360", "Q01800", "Q04517"],
+      "798511e3727c6e82faaec3f4299b87bb3ebe4ac7913604786ee47d963d3bb95a",
     ],
   },
 }
@@ -338,6 +338,13 @@ test("F4: stored or freshly built, the pool gives the answers the unchanged pipe
     assert.deepEqual(
       bulk.map((entry) => entry.uniprot),
       dates.map((date) => GOLDEN.dates[date][0]),
+    )
+    const todayPlan = await store.planDailyTarget(meteredDb(db), GOLDEN.salt, "2026-10-02")
+    const tomorrowPlan = await store.planDailyTarget(meteredDb(db), GOLDEN.salt, "2026-10-03")
+    assert.notEqual(
+      todayPlan.candidateIds[1],
+      tomorrowPlan.candidateIds[0],
+      `${pass}: fallback must not steal tomorrow's primary target`,
     )
     assert.equal(await store.getDailySelectionPoolFingerprint(meteredDb(db)), GOLDEN.fingerprint)
   }
