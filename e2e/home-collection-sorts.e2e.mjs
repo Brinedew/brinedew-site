@@ -21,7 +21,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
-import { HOST, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
+import { HOST, HttpStatus, OUT, launchChrome, routeProduction, startSite } from "./harness.mjs"
 
 // Real genes with very different popularity and weight, plus one symbol the
 // catalog does not know.
@@ -189,9 +189,6 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       '<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024"><rect width="768" height="1024" fill="#d8cbb8"/></svg>'
     for (const signedIn of [true, false]) {
       const context = await browser.newContext({ viewport: { width: 1194, height: 800 } })
-      await context.route(`${HOST}/_e2e/tile-*.svg`, (route) =>
-        route.fulfill({ status: 200, contentType: "image/svg+xml", body: tileSvg }),
-      )
       await routeProduction(
         context,
         origin,
@@ -219,16 +216,14 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
               }
               return base
             }
-          : (pathname) => {
-              if (pathname === "/api/auth/me") return { authenticated: false, user: null }
-              if (pathname === "/api/iconoplasm/discoveries/me") {
-                return { ok: true, authenticated: false, discoveries: [], discovered_count: 0 }
-              }
-              return undefined
-            },
+          : () => new HttpStatus(404),
+        { session: signedIn },
+      )
+      await context.route(`${HOST}/_e2e/tile-*.svg`, (route) =>
+        route.fulfill({ status: 200, contentType: "image/svg+xml", body: tileSvg }),
       )
       const page = await context.newPage()
-      await page.goto(`${HOST}/`)
+      await page.goto(signedIn ? `${HOST}/?order=popularity` : `${HOST}/`)
       if (!signedIn) {
         await page.waitForSelector('[data-icono-collection-tab="shared"]', { timeout: 30_000 })
         await page.click('[data-icono-collection-tab="shared"]')
