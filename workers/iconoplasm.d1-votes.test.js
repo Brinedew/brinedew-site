@@ -2161,6 +2161,24 @@ test("31: emulsion favorites are per account, idempotent, refused to guests, and
   }
   const mine = await routeRequest(db, "GET", favoritesPath)
   assert.deepEqual(mine.payload.favorite_emulsion_ids, ["0-19"])
+  // B-1279: a starred style whose portrait exists in icono_portrait_assets but
+  // has not reached the deferred vision/factory option rollups must still show
+  // up in GET /api/iconoplasm/requests/options?scope=favorites (and pick up any
+  // published blots stored in icono_style_cards).
+  const favoriteOptions = await routeRequest(
+    db,
+    "GET",
+    "/api/iconoplasm/requests/options?scope=favorites",
+  )
+  assert.equal(favoriteOptions.status, 200, JSON.stringify(favoriteOptions.payload))
+  assert.equal(favoriteOptions.payload.request_options.length, 1)
+  assert.equal(favoriteOptions.payload.request_options[0].emulsion_family_id, "0-19")
+  assert.equal(favoriteOptions.payload.request_options[0].vision_id, "anima-v1-19")
+  assert.equal(favoriteOptions.payload.request_options[0].is_favorite, true)
+  assert.equal(
+    favoriteOptions.payload.request_options[0].is_preallocated_without_preview,
+    undefined,
+  )
   const theirs = await routeRequest(db, "GET", favoritesPath, { user: { user_id: "reader-2" } })
   assert.deepEqual(theirs.payload.favorite_emulsion_ids, [])
 

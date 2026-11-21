@@ -8979,14 +8979,39 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
   const factoryFavoriteFamilies = new Set(
     favoriteFactoryOptions.map((option) => option.emulsion_family_id),
   )
+  const mergedOptions = [
+    ...favoriteFactoryOptions,
+    ...groupedVisionOptions.filter(
+      (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
+    ),
+  ]
+  const coveredFavoriteFamilies = new Set(
+    mergedOptions
+      .map((option) =>
+        normalizeFavoriteEmulsionFamilyId(option?.emulsion_family_id || option?.emulsion_id || ""),
+      )
+      .filter(Boolean),
+  )
+  // B-1279: a starred style can exist in icono_portrait_assets before the
+  // deferred rollup rebuild (B-1057) runs, or without a rollup row at all.
+  // Never drop a player's starred callable slot from Favorites; the caller
+  // still decorates it with any published blots from icono_style_cards.
+  const fallbackFavoriteOptions = []
+  for (const rawId of Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : []) {
+    const familyId = normalizeFavoriteEmulsionFamilyId(rawId)
+    if (!familyId || coveredFavoriteFamilies.has(familyId)) continue
+    const factorySlot = /^0-([1-9][0-9]*)$/.exec(familyId)
+    if (!factorySlot) continue
+    const fallback = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${factorySlot[1]}`)
+    if (!fallback) continue
+    delete fallback.is_preallocated_without_preview
+    fallback.secondary_label = ""
+    coveredFavoriteFamilies.add(familyId)
+    fallbackFavoriteOptions.push(fallback)
+  }
   return {
     options: annotateFavoriteGenerationRequestOptions(
-      [
-        ...favoriteFactoryOptions,
-        ...groupedVisionOptions.filter(
-          (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
-        ),
-      ],
+      [...mergedOptions, ...fallbackFavoriteOptions],
       favoriteEmulsionIds,
     ),
     nextCursor: firstPage.nextCursor,

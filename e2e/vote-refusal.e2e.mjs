@@ -48,11 +48,10 @@ import {
 
 const PAUSED = "Voting is paused until 00:00 UTC to protect the site's daily database allowance."
 const MARKUP_SENTENCE = "<b>Voting</b> is paused until 00:00 UTC."
-// Short on purpose: the real value is the seconds to 00:00 UTC, the box treats it the same.
-// It must outlast what runs inside the pause (a screenshot, animations, three taps with
-// up to 3 s each). At 6 s a slow CI runner reached the reset before the third tap; main
-// went red from 2026-10-06 10:22 UTC with no change to the box.
-const RESET_SECONDS = 15
+// B-1089: driven by Playwright's fake clock (`page.clock.install()` + `fastForward`),
+// so the pause lasts a full fake hour during the hover/screenshot/tap assertions
+// (never racing a slow CI runner) and expires deterministically at step 10.
+const RESET_SECONDS = 3600
 const NOTICE = "[data-icono-candidate-delete-notice]"
 const BOX = "[data-icono-gene-vote-box]"
 const UP = `${BOX} [data-icono-vote-up]`
@@ -153,6 +152,7 @@ async function openGenePage(browser, origin, { width, height }, requests, mode, 
     ])
   }
   const page = await context.newPage()
+  await page.clock.install()
   await page.goto(`${HOST}/gene/TP53`)
   const up = page.locator(UP).filter({ visible: true }).first()
   await up.waitFor({ timeout: 45_000 })
@@ -285,10 +285,11 @@ test("a refused vote shows the server's sentence, then the box stops asking unti
 
         // 10. The pause ends at the reset and the next tap lands.
         mode.open = true
+        await page.clock.fastForward((RESET_SECONDS + 1) * 1000)
         await page.waitForFunction(
           (selector) => !document.querySelector(selector).hasAttribute("aria-disabled"),
           UP,
-          { timeout: (RESET_SECONDS + 5) * 1000 },
+          { timeout: 5_000 },
         )
         // The button fades back over 160 ms; measure once it has.
         await page.waitForTimeout(300)
@@ -345,7 +346,7 @@ test("a 429 with no number stays paused until the page is reloaded, and the sent
     assert.equal(first.paused, true)
 
     // 11. Past the seconds that would have unlocked it, the box is still paused and sends nothing.
-    await page.waitForTimeout((RESET_SECONDS + 2) * 1000)
+    await page.clock.fastForward((RESET_SECONDS + 60) * 1000)
     assert.equal((await page.evaluate(measure)).paused, true, "no number, no guess")
     await up.click({ force: true })
     await page.waitForTimeout(300)

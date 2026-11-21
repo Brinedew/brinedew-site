@@ -1271,6 +1271,54 @@ test("a style starred after the picker loaded appears in Favorites", async (t) =
       `Favorites did not show style ${starId}: ${shown.cards.join(", ")}`,
     )
     await page.screenshot({ path: path.join(OUT, "style-picker-star-after-load.png") })
+
+    // B-1279: a starred callable style that the server's rollup has not indexed
+    // yet (absent from both CDN and scope=favorites) must still appear in
+    // Favorites after a full page reload, with a working star button to unstar it.
+    const unindexedId = "0-48488"
+    favoriteIds.push(unindexedId)
+    const reloaded = await browser.newContext({ viewport: { width, height } })
+    await reloaded.addInitScript(() => localStorage.setItem("iconoplasm.new-candidate-tab", "free"))
+    await routeProduction(reloaded, origin, (pathname, request) => {
+      if (pathname === "/api/iconoplasm/requests/options") {
+        if (new URL(request.url()).searchParams.get("scope") === "favorites") {
+          return {
+            request_options: favoriteIds.filter((id) => id !== unindexedId).map(favoriteOption),
+            next_cursor: "",
+          }
+        }
+        return { request_options: OPTIONS, next_cursor: FIRST_CURSOR }
+      }
+      return api(pathname, request)
+    })
+    await routePicker(reloaded, true)
+    await routePortraits(reloaded)
+    const freshPage = await reloaded.newPage()
+    await freshPage.goto(`${HOST}/gene/TP53`)
+    await freshPage.waitForSelector("[data-icono-request-dialog-open]", { timeout: 30_000 })
+    await openPicker(freshPage)
+    await freshPage.waitForSelector("[data-icono-request-card='48488']", { timeout: 15_000 })
+    const afterReload = await freshPage.evaluate(() => ({
+      favorites: document
+        .querySelector("[data-icono-request-view='favorites']")
+        ?.textContent.trim(),
+      hasUnstarButton: Boolean(
+        document.querySelector(
+          "[data-icono-request-card='48488'] [data-icono-emulsion-favorite='0-48488'][aria-pressed='true']",
+        ),
+      ),
+    }))
+    assert.equal(
+      afterReload.favorites,
+      "Favorites 24",
+      "Favorites count missed an unindexed starred style after reload",
+    )
+    assert.equal(
+      afterReload.hasUnstarButton,
+      true,
+      "unindexed starred style in Favorites had no active star button",
+    )
+    await reloaded.close()
     await context.close()
   } finally {
     server.close()
