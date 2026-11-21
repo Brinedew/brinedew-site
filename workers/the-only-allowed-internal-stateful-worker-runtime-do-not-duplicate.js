@@ -4608,14 +4608,16 @@ function buildStoredStructureCandidates(protein) {
 // Whether a structure's upstream answers with usable bytes, for the daily-target
 // availability check: tomorrow's puzzle is committed only if its exact structure
 // loads (the 2026-07-17 IMMP2L target had a well-formed SWISS-MODEL URL that
-// returned 404). One bounded ranged GET, five seconds at most.
+// returned 404). RCSB ModelServer (`models.rcsb.org`) ignores `Range` and can
+// take ~5-6s on multi-model NMR BCIF entries (e.g., 2RPC, 2M1W; B-1264), so
+// allow 15 seconds before treating a valid structure as unreachable.
 async function isStructureMetaAvailable(meta) {
   if (!meta?.r2Key || !meta.upstreamUrl) {
     return false
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5000)
+  const timeout = setTimeout(() => controller.abort(), 15000)
   try {
     const upstreamResp = await fetchStructureUpstream(meta.upstreamUrl, {
       method: "GET",

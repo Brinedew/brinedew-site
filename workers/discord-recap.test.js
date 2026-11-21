@@ -642,3 +642,23 @@ test("G3: the yearly status check never has more than five storage requests in f
   assert.equal(statuses.payload.days["2026-09-01"].exists, true)
   assert.equal(statuses.payload.days["2026-09-02"].exists, false)
 })
+
+test("B-1264: recap reuses same-UniProt image from an adjacent planned day when fallback shifted the target", async () => {
+  newWorld()
+  const day = "2026-11-21"
+  const nextDay = "2026-11-22"
+  recordPuzzle(day)
+  // Another protein's PNG stored for today must never be attached to TARGET's recap,
+  // while TARGET's pre-rendered PNG under day+1 (from candidateIds fallback) is reused.
+  storeImage(day, OTHER.uniprot)
+  storeImage(nextDay, TARGET.uniprot)
+  await recordPlayers(day, [guess(TARGET)])
+
+  const res = await postRecap(day)
+  assert.equal(res.status, 200)
+  assert.equal(res.payload.image_source, "cached_object_storage")
+  assert.equal(res.payload.screenshot_bytes, PNG.length)
+  assert.equal(world.discord.length, 1)
+  assert.equal(world.discord[0].multipart, true)
+  assert.deepEqual([...world.discord[0].image], [...PNG])
+})

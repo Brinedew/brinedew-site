@@ -248,17 +248,31 @@ async function buildDailySummaryData(env, day, options = {}) {
   }
 }
 
+function addUtcDays(day, offsetDays) {
+  const date = new Date(`${day}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + offsetDays)
+  return date.toISOString().slice(0, 10)
+}
+
 async function loadCachedRecapImage(env, day, uniprotId) {
   // Backed by R2 if STRUCTURES_BUCKET is ever rebound, otherwise the live
   // Bunny CDN object storage. See workers/lib/discord-recap-images.js.
-  const identity = { day, uniprotId }
-  const bytes = await loadDiscordRecapImageBytes(env, identity)
-  if (!bytes) return null
-  return {
-    key: buildDiscordRecapImageKey(identity),
-    uploadedAt: null,
-    bytes,
+  // When pre-warm falls back to candidateIds[1..3] (planned for day+1..3),
+  // look up the pre-rendered PNG for that exact UniProt under those adjacent
+  // days before treating the recap image as absent (B-1264).
+  for (let offset = 0; offset <= 3; offset += 1) {
+    const candidateDay = offset === 0 ? day : addUtcDays(day, offset)
+    const identity = { day: candidateDay, uniprotId }
+    const bytes = await loadDiscordRecapImageBytes(env, identity)
+    if (bytes) {
+      return {
+        key: buildDiscordRecapImageKey(identity),
+        uploadedAt: null,
+        bytes,
+      }
+    }
   }
+  return null
 }
 
 function decodeBase64Png(value) {
