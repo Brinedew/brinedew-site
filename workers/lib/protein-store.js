@@ -991,11 +991,17 @@ async function buildFamilyBalancedCandidateIdsFromFamilies(families, salt, date)
   const familyCount = families.length
   const familyPosition = ((dayOrdinal % familyCount) + familyCount) % familyCount
   const familyCycle = Math.floor(dayOrdinal / familyCount)
-  const candidateIds = []
+  const candidateIds = [
+    selectFamilyMember(families, familyOrder[familyPosition], familyCycle, memberSeed),
+  ]
 
-  for (let familyOffset = 0; familyOffset < families.length; familyOffset += 1) {
-    const familyIndex = familyOrder[(familyPosition + familyOffset) % familyCount]
-    candidateIds.push(selectFamilyMember(families, familyIndex, familyCycle, memberSeed))
+  // Walk fallback candidates from the opposite half of the shuffle bag so an
+  // unavailable primary target never collides with the next few days' picks.
+  const fallbackStart = (familyPosition + Math.floor(familyCount / 2)) % familyCount
+  for (let step = 0; step < familyCount; step += 1) {
+    const pos = (fallbackStart + step) % familyCount
+    if (pos === familyPosition) continue
+    candidateIds.push(selectFamilyMember(families, familyOrder[pos], familyCycle, memberSeed))
   }
 
   return candidateIds
