@@ -1,7 +1,21 @@
 import esbuild from "esbuild"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+
+async function writeFileAtomicIfChanged(targetPath, data, encoding) {
+  const nextBytes = Buffer.isBuffer(data) ? data : Buffer.from(String(data), encoding || "utf8")
+  try {
+    const existing = await readFile(targetPath)
+    if (existing.equals(nextBytes)) return
+  } catch {
+    // Missing target: write it below.
+  }
+  await mkdir(path.dirname(targetPath), { recursive: true })
+  const tmpPath = `${targetPath}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`
+  await writeFile(tmpPath, nextBytes)
+  await rename(tmpPath, targetPath)
+}
 import {
   assertIconoplasmPublisherAuthority,
   renderIconoplasmCatalogContractRuntime,
@@ -231,8 +245,7 @@ async function syncTarget({ source, prefix = "", outputs, replace }) {
     : `/* GENERATED FILE. Edit ${path.relative(repoRoot, source).replaceAll("\\", "/")} and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\n`
 
   for (const output of outputsToWrite) {
-    await mkdir(path.dirname(output), { recursive: true })
-    await writeFile(output, banner + prefix + content, "utf8")
+    await writeFileAtomicIfChanged(output, banner + prefix + content, "utf8")
   }
 }
 
@@ -244,8 +257,11 @@ const extensionFontRuntimePath = path.join(
   "generated",
   "iconoplasm-font-runtime.js",
 )
-await mkdir(path.dirname(extensionFontRuntimePath), { recursive: true })
-await writeFile(extensionFontRuntimePath, renderIconoplasmExtensionFontRuntime(), "utf8")
+await writeFileAtomicIfChanged(
+  extensionFontRuntimePath,
+  renderIconoplasmExtensionFontRuntime(),
+  "utf8",
+)
 
 async function syncBinaryTarget({ source, outputs }) {
   const outputsToWrite = selectedOutputs(outputs)
@@ -253,8 +269,7 @@ async function syncBinaryTarget({ source, outputs }) {
   const content = await readFile(source)
 
   for (const output of outputsToWrite) {
-    await mkdir(path.dirname(output), { recursive: true })
-    await writeFile(output, content)
+    await writeFileAtomicIfChanged(output, content)
   }
 }
 
@@ -284,8 +299,7 @@ async function bundleTarget({ source, outputs, format = "esm", globalName, minif
     : banner + outputFile.text
 
   for (const output of outputsToWrite) {
-    await mkdir(path.dirname(output), { recursive: true })
-    await writeFile(output, generated, "utf8")
+    await writeFileAtomicIfChanged(output, generated, "utf8")
   }
 }
 
@@ -297,8 +311,7 @@ const catalogContractRuntimePath = path.join(
   "generated",
   "catalog-contract.js",
 )
-await mkdir(path.dirname(catalogContractRuntimePath), { recursive: true })
-await writeFile(
+await writeFileAtomicIfChanged(
   catalogContractRuntimePath,
   renderIconoplasmCatalogContractRuntime(publisherRelease),
   "utf8",
@@ -315,8 +328,7 @@ if (!extensionOnly) {
     "generated",
     "publication-alias-bootstrap.js",
   )
-  await mkdir(path.dirname(publicationAliasBootstrapPath), { recursive: true })
-  await writeFile(
+  await writeFileAtomicIfChanged(
     publicationAliasBootstrapPath,
     `/* GENERATED FILE. Edit workers/iconoplasm-publication-aliases.js and rerun node scripts/sync-iconoplasm-shared.mjs. */\n\nexport const ICONOPLASM_PUBLICATION_ALIAS_BOOTSTRAP = ${JSON.stringify(
       {
