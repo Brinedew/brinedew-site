@@ -569,10 +569,7 @@ test("0154 excludes edited canonical portraits from style card thumbnails withou
       await db.prepare("SELECT * FROM icono_style_cards WHERE style_slot = 18").first(),
     )
     assert.equal(updated18.count, 4)
-    assert.deepEqual(
-      updated18.shown.map((p) => p.gene_symbol).sort(),
-      ["G1", "G6"],
-    )
+    assert.deepEqual(updated18.shown.map((p) => p.gene_symbol).sort(), ["G1", "G6"])
 
     // Inserting a new edited canonical portrait on style 222 leaves thumbnails empty.
     await db
