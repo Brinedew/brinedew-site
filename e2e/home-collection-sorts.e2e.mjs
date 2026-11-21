@@ -219,6 +219,10 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       )
       const page = await context.newPage()
       await page.goto(`${HOST}/`)
+      if (!signedIn) {
+        await page.waitForSelector('[data-icono-collection-tab="shared"]', { timeout: 30_000 })
+        await page.click('[data-icono-collection-tab="shared"]')
+      }
       await page.waitForFunction(
         () => {
           const grids = [
