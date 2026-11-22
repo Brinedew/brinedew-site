@@ -365,7 +365,7 @@ function PageList({ fileData, allFiles, pages, limit, sort }) {
 }
 
 // src/styles/tagPage.scss
-var tagPage_default = ".archive-index-shell {\n  --archive-rule: color-mix(in srgb, var(--dark) 18%, transparent);\n  --archive-muted: color-mix(in srgb, var(--dark) 66%, var(--light));\n}\n\n.archive-index {\n  box-sizing: border-box;\n  width: min(100%, 64rem);\n  margin: 0 auto;\n  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(0rem, 2vw, 1rem) 2rem;\n}\n\n.archive-index__masthead {\n  padding-bottom: clamp(2rem, 5vw, 4rem);\n  border-bottom: 1px solid var(--archive-rule);\n}\n\n.archive-index__masthead h1 {\n  max-width: 11ch;\n  margin: 0;\n  font-size: clamp(3.4rem, 9vw, 7.4rem);\n  font-weight: 500;\n  line-height: 0.88;\n  letter-spacing: -0.035em;\n  text-wrap: balance;\n}\n\n.archive-index__dek {\n  max-width: 37rem;\n  margin: clamp(1.5rem, 3vw, 2.25rem) 0 0;\n  color: var(--secondary);\n  font-size: clamp(1.12rem, 1.8vw, 1.38rem);\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__section {\n  padding: clamp(2.25rem, 5vw, 4rem) 0 0;\n}\n\n.archive-index__section + .archive-index__section {\n  margin-top: clamp(2.5rem, 7vw, 5.5rem);\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__section-heading {\n  display: grid;\n  grid-template-columns: minmax(12rem, 0.8fr) minmax(16rem, 1.2fr);\n  gap: clamp(1rem, 4vw, 4rem);\n  align-items: end;\n  margin-bottom: clamp(1.25rem, 3vw, 2rem);\n}\n\n.archive-index__section-heading h2 {\n  margin: 0;\n  font-size: clamp(1.8rem, 3vw, 2.5rem);\n  font-weight: 500;\n  line-height: 1;\n  text-wrap: balance;\n}\n\n.archive-index__section-heading > p {\n  max-width: 34rem;\n  margin: 0;\n  color: var(--archive-muted);\n  font-size: 0.98rem;\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__list {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  column-gap: clamp(1.5rem, 5vw, 4rem);\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.archive-index__entry {\n  min-width: 0;\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__link {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 1rem;\n  align-items: baseline;\n  min-height: 3.75rem;\n  padding: 0.78rem 0 0.82rem;\n  color: var(--dark);\n  text-decoration-color: color-mix(in srgb, var(--dark) 40%, transparent);\n  text-decoration-thickness: 1px;\n  text-underline-offset: 0.16em;\n}\n\n.archive-index__link:hover,\n.archive-index__link:focus-visible {\n  color: var(--tertiary);\n}\n\n.archive-index__title {\n  min-width: 0;\n  font-size: 1.08rem;\n  font-weight: 500;\n  line-height: 1.18;\n  text-wrap: pretty;\n}\n\n.archive-index__date {\n  color: var(--archive-muted);\n  font-size: 0.76rem;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}\n\n.archive-index__section--drafts .archive-index__title {\n  color: var(--secondary);\n  font-weight: 400;\n}\n\n.archive-index__section--drafts .archive-index__link:hover .archive-index__title,\n.archive-index__section--drafts .archive-index__link:focus-visible .archive-index__title {\n  color: var(--tertiary);\n}\n\n.archive-index__empty {\n  margin: 0;\n  padding: 1rem 0;\n  border-top: 1px solid var(--archive-rule);\n  color: var(--archive-muted);\n}\n\n.tag-page-listing,\n.tag-index {\n  padding-top: 2rem;\n}\n\n.tag-page-listing > header {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 2rem;\n  border-bottom: 1px solid var(--archive-rule, var(--lightgray));\n}\n\n.tag-page-list,\n.tag-index ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.tag-page-list li {\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.tag-page-list a {\n  display: flex;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.75rem 0;\n}\n\n@media (max-width: 800px) {\n  .archive-index {\n    padding-top: 1.25rem;\n  }\n  .archive-index__section-heading,\n  .archive-index__list {\n    grid-template-columns: minmax(0, 1fr);\n  }\n  .archive-index__section-heading {\n    align-items: start;\n  }\n  .archive-index__section-heading > p {\n    padding-left: 2rem;\n  }\n  .archive-index__masthead h1 {\n    font-size: clamp(3.2rem, 20vw, 5rem);\n  }\n}\n@media (max-width: 480px) {\n  .archive-index__link {\n    grid-template-columns: minmax(0, 1fr);\n    gap: 0.35rem;\n  }\n}";
+var tagPage_default = '.archive-index-shell {\n  --archive-rule: color-mix(in srgb, var(--dark) 18%, transparent);\n  --archive-muted: color-mix(in srgb, var(--dark) 66%, var(--light));\n}\n\n.archive-index {\n  box-sizing: border-box;\n  width: min(100%, 64rem);\n  margin: 0 auto;\n  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(0rem, 2vw, 1rem) 2rem;\n}\n\n.archive-index__masthead {\n  padding-bottom: clamp(2rem, 5vw, 4rem);\n  border-bottom: 1px solid var(--archive-rule);\n}\n\n.archive-index__masthead h1 {\n  max-width: 11ch;\n  margin: 0;\n  font-size: clamp(3.4rem, 9vw, 7.4rem);\n  font-weight: 500;\n  line-height: 0.88;\n  letter-spacing: -0.035em;\n  text-wrap: balance;\n}\n\n.archive-index__dek {\n  max-width: 37rem;\n  margin: clamp(1.5rem, 3vw, 2.25rem) 0 0;\n  color: var(--secondary);\n  font-size: clamp(1.12rem, 1.8vw, 1.38rem);\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__section {\n  padding: clamp(2.25rem, 5vw, 4rem) 0 0;\n}\n\n.archive-index__section + .archive-index__section {\n  margin-top: clamp(2.5rem, 7vw, 5.5rem);\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__section-heading {\n  display: grid;\n  grid-template-columns: minmax(12rem, 0.8fr) minmax(16rem, 1.2fr);\n  gap: clamp(1rem, 4vw, 4rem);\n  align-items: end;\n  margin-bottom: clamp(1.25rem, 3vw, 2rem);\n}\n\n.archive-index__section-heading h2 {\n  margin: 0;\n  font-size: clamp(1.8rem, 3vw, 2.5rem);\n  font-weight: 500;\n  line-height: 1;\n  text-wrap: balance;\n}\n\n.archive-index__section-heading > p {\n  max-width: 34rem;\n  margin: 0;\n  color: var(--archive-muted);\n  font-size: 0.98rem;\n  line-height: 1.35;\n  text-wrap: pretty;\n}\n\n.archive-index__list {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  column-gap: clamp(1.5rem, 5vw, 4rem);\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.archive-index__entry {\n  min-width: 0;\n  border-top: 1px solid var(--archive-rule);\n}\n\n.archive-index__link {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;\n  gap: 1rem;\n  align-items: baseline;\n  min-height: 3.75rem;\n  padding: 0.78rem 0 0.82rem;\n  color: var(--dark);\n  text-decoration-color: color-mix(in srgb, var(--dark) 40%, transparent);\n  text-decoration-thickness: 1px;\n  text-underline-offset: 0.16em;\n}\n\n.archive-index__link:hover,\n.archive-index__link:focus-visible {\n  color: var(--tertiary);\n}\n\n.archive-index__title {\n  min-width: 0;\n  font-size: 1.08rem;\n  font-weight: 500;\n  line-height: 1.18;\n  text-wrap: pretty;\n}\n\n.archive-index__date {\n  color: var(--archive-muted);\n  font-size: 0.76rem;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}\n\n.archive-index__section--drafts .archive-index__title {\n  color: var(--secondary);\n  font-weight: 400;\n}\n\n.archive-index__section--drafts .archive-index__link:hover .archive-index__title,\n.archive-index__section--drafts .archive-index__link:focus-visible .archive-index__title {\n  color: var(--tertiary);\n}\n\n.archive-index__empty {\n  margin: 0;\n  padding: 1rem 0;\n  border-top: 1px solid var(--archive-rule);\n  color: var(--archive-muted);\n}\n\n.tag-page-listing,\n.tag-index {\n  padding-top: 2rem;\n}\n\n.tag-page-listing > header {\n  display: flex;\n  align-items: baseline;\n  justify-content: space-between;\n  gap: 2rem;\n  border-bottom: 1px solid var(--archive-rule, var(--lightgray));\n}\n\n.tag-page-list,\n.tag-index ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n\n.tag-page-list li {\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.tag-page-list a {\n  display: flex;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.75rem 0;\n}\n\n@media (max-width: 800px) {\n  .archive-index {\n    padding-top: 1.25rem;\n  }\n  .archive-index__section-heading,\n  .archive-index__list {\n    grid-template-columns: minmax(0, 1fr);\n  }\n  .archive-index__section-heading {\n    align-items: start;\n  }\n  .archive-index__section-heading > p {\n    padding-left: 2rem;\n  }\n  .archive-index__masthead h1 {\n    font-size: clamp(3.2rem, 20vw, 5rem);\n  }\n}\n@media (max-width: 480px) {\n  .archive-index__link {\n    grid-template-columns: minmax(0, 1fr);\n    gap: 0.35rem;\n  }\n}\n.wiki-category-page {\n  margin-top: 0.5rem;\n}\n\n.wiki-category-page__header h1 {\n  margin-bottom: 1rem;\n  padding-bottom: 0.4rem;\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.wiki-category-page__section {\n  margin: 1.5rem 0 2rem;\n}\n\n.wiki-category-page__section h2 {\n  font-size: 1.3rem;\n  margin: 0 0 0.35rem;\n  padding-bottom: 0.25rem;\n  border-bottom: 1px solid var(--lightgray);\n}\n\n.wiki-category-page__summary {\n  margin: 0 0 0.9rem;\n  color: var(--gray);\n  font-size: 0.92rem;\n}\n\n.wiki-category-page__subcats {\n  columns: 2 14rem;\n  column-gap: 2rem;\n  padding-left: 1.25rem;\n  margin: 0;\n}\n\n.wiki-category-page__subcats li {\n  break-inside: avoid;\n  margin-bottom: 0.25rem;\n}\n\n.wiki-category-page__count {\n  color: var(--gray);\n  font-size: 0.88em;\n}\n\n.wiki-category-page__columns {\n  columns: 3 13rem;\n  column-gap: 2rem;\n}\n\n.wiki-category-page__group {\n  break-inside: avoid;\n  margin-bottom: 1rem;\n}\n\n.wiki-category-page__group h3 {\n  margin: 0 0 0.25rem;\n  font-size: 1.05rem;\n  border-bottom: 1px solid var(--lightgray);\n  padding-bottom: 0.1rem;\n}\n\n.wiki-category-page__group ul {\n  margin: 0;\n  padding-left: 1.15rem;\n}\n\n.wiki-category-page__group li {\n  margin-bottom: 0.2rem;\n  line-height: 1.35;\n}\n\n.wiki-catlinks {\n  margin-top: 2rem;\n  padding: 0.55rem 0.85rem;\n  border: 1px solid var(--lightgray);\n  border-radius: 4px;\n  background-color: color-mix(in srgb, var(--lightgray) 22%, transparent);\n  font-size: 0.9rem;\n  line-height: 1.5;\n}\n\n.wiki-catlinks__label {\n  font-weight: 600;\n}\n\n.wiki-catlinks__list {\n  display: inline;\n  list-style: none;\n  margin: 0;\n  padding: 0;\n}\n\n.wiki-catlinks__list li {\n  display: inline;\n}\n\n.wiki-catlinks__list li + li::before {\n  content: " | ";\n  color: var(--gray);\n  padding: 0 0.2rem;\n}';
 
 // src/components/ArchiveIndex.tsx
 var archiveCopy = {
@@ -475,6 +475,23 @@ var editorialArchiveTags = /* @__PURE__ */ new Set(["content/post", "content/wik
 function isListed(file) {
   return file.unlisted !== true;
 }
+function humanizeCategory(tag, displayNames) {
+  if (displayNames?.[tag]) return displayNames[tag];
+  if (tag === "category") return "Categories";
+  const leaf = tag.includes("/") ? tag.slice(tag.lastIndexOf("/") + 1) : tag;
+  const spaced = leaf.replace(/-/g, " ");
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : tag;
+}
+function getSortKey(file) {
+  const fm = file.frontmatter;
+  if (typeof fm?.sort_key === "string" && fm.sort_key.trim()) return fm.sort_key.trim();
+  if (typeof fm?.title === "string" && fm.title.trim()) return fm.title.trim();
+  return String(file.slug ?? "");
+}
+function getInitialBucket(sortKey) {
+  const first = sortKey.trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(first) ? first : "#";
+}
 var TagContent_default = ((options) => {
   const TagContent = (props) => {
     const { fileData, allFiles, cfg } = props;
@@ -508,6 +525,101 @@ var TagContent_default = ((options) => {
       return /* @__PURE__ */ u2("main", { class: "tag-index", children: [
         /* @__PURE__ */ u2("h1", { children: fileData.frontmatter?.title ?? "Tags" }),
         /* @__PURE__ */ u2("ul", { children: tags.map((item) => /* @__PURE__ */ u2("li", { children: /* @__PURE__ */ u2("a", { class: "internal tag-link", href: `./${item}`, children: item }) })) })
+      ] });
+    }
+    if (tag === "category" || tag.startsWith("category/")) {
+      const listedFiles = allFiles.filter(isListed);
+      const prefix = `${tag}/`;
+      const allCategoryTags = new Set(
+        listedFiles.flatMap((file) => file.frontmatter?.tags ?? []).flatMap(getAllSegmentPrefixes).filter((t2) => t2.startsWith("category/"))
+      );
+      const subcategories = [...allCategoryTags].filter((t2) => t2.startsWith(prefix) && !t2.slice(prefix.length).includes("/")).sort(
+        (a2, b2) => humanizeCategory(a2, options?.displayNames).localeCompare(
+          humanizeCategory(b2, options?.displayNames)
+        )
+      ).map((sub) => ({
+        tag: sub,
+        label: humanizeCategory(sub, options?.displayNames),
+        count: pagesFor(sub).length,
+        href: resolveRelative(slug2, `tags/${sub}`)
+      }));
+      const directPages = tag === "category" ? [] : listedFiles.filter((file) => (file.frontmatter?.tags ?? []).includes(tag)).sort((a2, b2) => getSortKey(a2).localeCompare(getSortKey(b2)));
+      const pagesToShow = directPages.length > 0 || subcategories.length > 0 ? directPages : pagesFor(tag).sort((a2, b2) => getSortKey(a2).localeCompare(getSortKey(b2)));
+      const groups = /* @__PURE__ */ new Map();
+      for (const page of pagesToShow) {
+        const bucket = getInitialBucket(getSortKey(page));
+        const list = groups.get(bucket) ?? [];
+        list.push(page);
+        groups.set(bucket, list);
+      }
+      const sortedBuckets = [...groups.entries()].sort((a2, b2) => a2[0].localeCompare(b2[0]));
+      const parentTag = tag === "category" ? null : tag.includes("/") ? tag.slice(0, tag.lastIndexOf("/")) : null;
+      const heading = tag === "category" ? "Wiki categories" : `Category: ${humanizeCategory(tag, options?.displayNames)}`;
+      return /* @__PURE__ */ u2("main", { class: "wiki-category-page popover-hint", children: [
+        /* @__PURE__ */ u2("header", { class: "wiki-category-page__header", children: /* @__PURE__ */ u2("h1", { children: heading }) }),
+        subcategories.length > 0 && /* @__PURE__ */ u2("section", { class: "wiki-category-page__section", children: [
+          /* @__PURE__ */ u2("h2", { children: "Subcategories" }),
+          /* @__PURE__ */ u2("p", { class: "wiki-category-page__summary", children: [
+            "This category has ",
+            subcategories.length,
+            " ",
+            subcategories.length === 1 ? "subcategory" : "subcategories",
+            "."
+          ] }),
+          /* @__PURE__ */ u2("ul", { class: "wiki-category-page__subcats", children: subcategories.map((sub) => /* @__PURE__ */ u2("li", { children: [
+            /* @__PURE__ */ u2("a", { class: "internal", href: sub.href, children: sub.label }),
+            " ",
+            /* @__PURE__ */ u2("span", { class: "wiki-category-page__count", children: [
+              "(",
+              sub.count,
+              ")"
+            ] })
+          ] })) })
+        ] }),
+        pagesToShow.length > 0 && /* @__PURE__ */ u2("section", { class: "wiki-category-page__section", children: [
+          /* @__PURE__ */ u2("h2", { children: [
+            'Pages in category "',
+            humanizeCategory(tag, options?.displayNames),
+            '"'
+          ] }),
+          /* @__PURE__ */ u2("p", { class: "wiki-category-page__summary", children: [
+            "The following ",
+            pagesToShow.length,
+            " ",
+            pagesToShow.length === 1 ? "page is" : "pages are",
+            " in this category."
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "wiki-category-page__columns", children: sortedBuckets.map(([letter, bucketPages]) => /* @__PURE__ */ u2("div", { class: "wiki-category-page__group", children: [
+            /* @__PURE__ */ u2("h3", { children: letter }),
+            /* @__PURE__ */ u2("ul", { children: bucketPages.map((page) => /* @__PURE__ */ u2("li", { children: /* @__PURE__ */ u2(
+              "a",
+              {
+                class: "internal",
+                href: resolveRelative(slug2, page.slug),
+                children: page.frontmatter?.title ?? page.slug
+              }
+            ) })) })
+          ] })) })
+        ] }),
+        parentTag && /* @__PURE__ */ u2("nav", { class: "wiki-catlinks", "aria-label": "Categories", children: [
+          /* @__PURE__ */ u2(
+            "a",
+            {
+              class: "internal wiki-catlinks__label",
+              href: resolveRelative(slug2, "tags/category"),
+              children: "Categories"
+            }
+          ),
+          /* @__PURE__ */ u2("span", { class: "wiki-catlinks__colon", children: ": " }),
+          /* @__PURE__ */ u2("ul", { class: "wiki-catlinks__list", children: /* @__PURE__ */ u2("li", { children: /* @__PURE__ */ u2(
+            "a",
+            {
+              class: "internal",
+              href: resolveRelative(slug2, `tags/${parentTag}`),
+              children: humanizeCategory(parentTag, options?.displayNames)
+            }
+          ) }) })
+        ] })
       ] });
     }
     const pages = pagesFor(tag);

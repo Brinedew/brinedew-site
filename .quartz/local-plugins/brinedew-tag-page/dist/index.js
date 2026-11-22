@@ -3,7 +3,7 @@ import {
   TagContent_default,
   getAllSegmentPrefixes,
   joinSegments
-} from "./chunk-Y6SJMLER.js";
+} from "./chunk-CHHRQMAL.js";
 
 // src/pageType.ts
 var defaultDisplayNames = {
@@ -13,12 +13,14 @@ var defaultDisplayNames = {
   "content/meta": "Meta",
   meta: "Meta",
   draft: "Drafts",
+  category: "Categories",
   index: "Tags"
 };
 function humanizeTag(tag, displayNames) {
   if (displayNames[tag]) return displayNames[tag];
   const leaf = tag.includes("/") ? tag.slice(tag.lastIndexOf("/") + 1) : tag;
-  return leaf ? leaf.charAt(0).toUpperCase() + leaf.slice(1) : tag;
+  const spaced = leaf.replace(/-/g, " ");
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : tag;
 }
 var TagPage = (options) => ({
   name: "TagPage",

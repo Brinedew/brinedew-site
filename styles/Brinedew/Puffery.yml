@@ -1,0 +1,9 @@
+extends: existence
+message: "Avoid editorial puffery ('%s'). State the specific evidence or comparison directly."
+level: warning
+ignorecase: true
+tokens:
+  - '\bthe (?:sharpest|cleanest|clearest|starkest|purest|most (?:striking|dramatic|vivid|compelling)) (?:[a-z-]+ )?(?:example|illustration|case|demonstration|proof)\b'
+  - '\b(?:a )?(?:sharp|clean|vivid|blunt|textbook) (?:[a-z-]+ )?(?:example|illustration|study|case|demonstration|trade-off|picture|intuition pump)\b'
+  - '\b(?:landmark|seminal|groundbreaking|pivotal|watershed|monumental) (?:[a-z-]+ )?(?:study|studies|paper|papers|work|discovery|experiment|finding)\b'
+  - '\b(?:quintessential|arguably)\b'

@@ -1,0 +1,20 @@
+extends: existence
+message: "Avoid evocative cliché or metaphor ('%s'). Use plain, literal descriptive wording."
+level: warning
+ignorecase: true
+tokens:
+  - '\bin lockstep\b'
+  - '\bdouble-edged sword\b'
+  - '\bsilver bullet\b'
+  - '\btwo sides of the same coin\b'
+  - '\bdelicate dance\b'
+  - '\bwalk(?:ing|s)? a tightrope\b'
+  - '\btug-of-war\b'
+  - '\b(?:linchpin|cornerstone|tapestry|symphony|crucible|game-changer|paradigm shift|tour de force|smoking gun|trojan horse)\b'
+  - '\bachilles''? heel\b'
+  - '\bpandora''?s box\b'
+  - '\bcanary in the coal mine\b'
+  - '\b(?:hair-trigger|shorter fuse|cut the tether|core math)\b'
+  - '\bbreak(?:ing|s)? (?:that|the) leash\b'
+  - '\bstrikes (?:around|at|in|after|before|by)\b'
+  - '\bblind to\b'

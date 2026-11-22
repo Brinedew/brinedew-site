@@ -10,13 +10,15 @@ const defaultDisplayNames: Record<string, string> = {
   "content/meta": "Meta",
   meta: "Meta",
   draft: "Drafts",
+  category: "Categories",
   index: "Tags",
 }
 
 function humanizeTag(tag: string, displayNames: Record<string, string>) {
   if (displayNames[tag]) return displayNames[tag]
   const leaf = tag.includes("/") ? tag.slice(tag.lastIndexOf("/") + 1) : tag
-  return leaf ? leaf.charAt(0).toUpperCase() + leaf.slice(1) : tag
+  const spaced = leaf.replace(/-/g, " ")
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : tag
 }
 
 export const TagPage: QuartzPageTypePlugin<TagPageOptions> = (options) => ({

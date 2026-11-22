@@ -1,0 +1,8 @@
+extends: existence
+message: "Prefer plain English over academese ('%s')."
+level: suggestion
+ignorecase: true
+tokens:
+  - '\b(?:utiliz(?:e|es|ed|ing|ation)|facilitat(?:e|es|ed|ing)|elucidat(?:e|es|ed|ing)|delineat(?:e|es|ed|ing)|underscor(?:e|es|ed|ing)|multifaceted|aforementioned|heretofore|hitherto|wherein|whereby|thereof|insofar as|inasmuch as|moreover|furthermore)\b'
+  - '\b(?:it is worth noting that|it should be noted that|in the context of|with respect to|with regard to|manifesting as)\b'
+  - "^(?:Crucially|Importantly|Notably|Interestingly),"

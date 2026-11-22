@@ -1,0 +1,5 @@
+extends: existence
+message: "Avoid paired em-dashes as a parenthetical. Use a separate sentence, commas, or parentheses instead."
+level: suggestion
+raw:
+  - '—[^—\.\?!\n]{3,140}—'

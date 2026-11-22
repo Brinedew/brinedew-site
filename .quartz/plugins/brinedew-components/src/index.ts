@@ -3,6 +3,7 @@ export { default as IconoplasmPageSwitcher } from "./components/IconoplasmPageSw
 export { default as TagSections } from "./components/TagSections"
 export { default as ProteinInfobox } from "./components/ProteinInfobox"
 export { default as ContactForm } from "./components/ContactForm"
+export { default as WikiCategoryFooter } from "./components/WikiCategoryFooter"
 export { PublicationDate } from "./plugins/publicationDate"
 export { ImageCaptions } from "./plugins/imageCaptions"
 export { PinterestEmbeds } from "./plugins/pinterestEmbeds"

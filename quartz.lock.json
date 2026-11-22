@@ -363,6 +363,15 @@
       "resolved": "https://github.com/quartz-community/unlisted-pages.git",
       "commit": "f512d8672862c5891e63d755ba04b66277e6d760",
       "installedAt": "2026-06-03T13:32:36.647Z"
+    },
+    "wiki-category-footer": {
+      "source": {
+        "name": "wiki-category-footer",
+        "repo": "./.quartz/local-plugins/wiki-category-footer"
+      },
+      "resolved": "./.quartz/local-plugins/wiki-category-footer",
+      "commit": "local",
+      "installedAt": "2026-11-22T07:33:14.710Z"
     }
   }
 }

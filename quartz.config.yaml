@@ -344,6 +344,14 @@ plugins:
       position: afterBody
       priority: 10
   - source:
+      name: wiki-category-footer
+      repo: ./.quartz/local-plugins/wiki-category-footer
+    enabled: true
+    order: 24
+    layout:
+      position: afterBody
+      priority: 25
+  - source:
       name: iconoplasm-page-switcher
       repo: ./.quartz/local-plugins/iconoplasm-page-switcher
     enabled: true
