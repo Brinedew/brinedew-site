@@ -1,4 +1,4 @@
-import { readIconoplasmSettings } from "../site-preferences.js?v=2624be2e2b452a30"
+import { readIconoplasmSettings } from "../site-preferences.js?v=822dd28d46b3a52d"
 import {
   HOME_COLLECTION_ORDERS,
   normalizeDiscoveryEntries,
@@ -39,7 +39,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=6de8c983a0307439"
+} from "../shared/sidebar-shell.js?v=fde7f9f203abe6fd"
 import "./vendor/img-comparison-slider.js?v=bcbd959b739597fb"
 import {
   closeDialog,
@@ -190,7 +190,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var geneRequestSummaryCache = Object.create(null)
   var imageEditProvidersCache = Object.create(null)
   var imageEditProvidersPromise = Object.create(null)
-  var homeMasonryInstances = new Map()
   var activeGeneRenderId = 0
   var activeGeneOriginSyncSignatures = new Set()
   var lastGenePageDiscoveryVisitKey = ""
@@ -200,7 +199,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var currentUser = null
   var currentUserIsIconoAdmin = false
   var caretakerPanelPromise = null
-  var masonryLibsPromise = null
   var hasResolvedAuthState = false
   var websiteGuestDiscoveries = createWebsiteGuestDiscoveryStore({
     storage: (function () {
@@ -1658,30 +1656,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     })
   }
 
-  function ensureMasonryLibs() {
-    if (window.Masonry && window.imagesLoaded) return Promise.resolve()
-    if (masonryLibsPromise) return masonryLibsPromise
-    var masonryUrl = new URL("./vendor/masonry.pkgd.min.js?v=367d6afdfc741fb4", import.meta.url)
-      .href
-    var imagesLoadedUrl = new URL(
-      "./vendor/imagesloaded.pkgd.min.js?v=86dacb15f649eafe",
-      import.meta.url,
-    ).href
-    masonryLibsPromise = loadScriptOnce(masonryUrl, function () {
-      return !!window.Masonry
-    })
-      .then(function () {
-        return loadScriptOnce(imagesLoadedUrl, function () {
-          return !!window.imagesLoaded
-        })
-      })
-      .catch(function (error) {
-        masonryLibsPromise = null
-        throw error
-      })
-    return masonryLibsPromise
-  }
-
   function rememberRetainedPortraitImage(url, img) {
     var resolvedUrl = String(url || "").trim()
     if (!resolvedUrl || !img) return
@@ -2571,105 +2545,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     }
   }
 
-  function scheduleHomeMasonry() {
-    // no-op; layout is handled by Masonry instance
-  }
-
-  function destroyHomeMasonry(container) {
-    if (container) {
-      var mounted = homeMasonryInstances.get(container)
-      if (mounted && mounted.instance) mounted.instance.destroy()
-      homeMasonryInstances.delete(container)
-      return
-    }
-    homeMasonryInstances.forEach(function (mounted) {
-      if (mounted && mounted.instance) mounted.instance.destroy()
-    })
-    homeMasonryInstances.clear()
-  }
-
-  function applyHomeMasonryNow(container, newElements) {
-    if (!container) return Promise.resolve()
-    var Masonry = window.Masonry
-    if (!Masonry) {
-      console.warn("[Iconoplasm] Masonry library not loaded")
-      return Promise.resolve()
-    }
-    var mountedMasonry = homeMasonryInstances.get(container)
-    if (mountedMasonry && mountedMasonry.instance) {
-      // Masonry already running — append new items if provided, then relayout
-      var instance = mountedMasonry.instance
-      if (newElements && newElements.length) {
-        instance.appended(newElements)
-      }
-      if (window.imagesLoaded) {
-        window.imagesLoaded(container, function () {
-          instance.layout()
-        })
-      }
-      return waitForMasonryLayout(instance)
-    }
-    destroyHomeMasonry(container)
-    // Insert sizer elements if not already present
-    if (!container.querySelector(".icono-grid-sizer")) {
-      var sizer = document.createElement("div")
-      sizer.className = "icono-grid-sizer"
-      container.insertBefore(sizer, container.firstChild)
-    }
-    if (!container.querySelector(".icono-gutter-sizer")) {
-      var gutter = document.createElement("div")
-      gutter.className = "icono-gutter-sizer"
-      container.insertBefore(gutter, container.children[1] || null)
-    }
-    var msnry = new Masonry(container, {
-      itemSelector: ".icono-card",
-      columnWidth: ".icono-grid-sizer",
-      gutter: ".icono-gutter-sizer",
-      percentPosition: true,
-      transitionDuration: 0,
-      initLayout: false,
-    })
-    homeMasonryInstances.set(container, {
-      container: container,
-      instance: msnry,
-    })
-    if (window.imagesLoaded) {
-      window.imagesLoaded(container, function () {
-        msnry.layout()
-      })
-    }
-    return waitForMasonryLayout(msnry)
-  }
-
-  function waitForMasonryLayout(instance) {
-    if (!instance || typeof instance.layout !== "function") return Promise.resolve()
-    return new Promise(function (resolve) {
-      var settled = false
-      var fallbackTimer = 0
-      var finish = function () {
-        if (settled) return
-        settled = true
-        if (fallbackTimer) window.clearTimeout(fallbackTimer)
-        resolve()
-      }
-      if (typeof instance.once === "function") instance.once("layoutComplete", finish)
-      fallbackTimer = window.setTimeout(finish, 100)
-      instance.layout()
-    })
-  }
-
-  function applyHomeMasonry(container, newElements) {
-    if (!container) return Promise.resolve()
-    return ensureMasonryLibs()
-      .then(function () {
-        if (!container.isConnected) return
-        return applyHomeMasonryNow(container, newElements)
-      })
-      .catch(function (error) {
-        console.error("[Iconoplasm] failed to load Masonry:", error)
-      })
-  }
-
   function consumeBootstrapGallery(order, limit, offset) {
     var bootstrap = window.__iconoplasmBootstrap
     if (!bootstrap || bootstrap.homeGalleryUsed) return null
@@ -2737,18 +2612,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
         return Object.assign({ encounter_count: 1 }, entry)
       }),
     )
-  }
-
-  function fallbackDiscoveredGene(entry) {
-    var symbol = normalizedSymbol(entry && entry.gene_symbol)
-    var fullName = String((entry && entry.full_name) || "").trim()
-    return {
-      symbol: symbol,
-      full_name: fullName || symbol || "Unknown gene",
-      color: "#857565",
-      portrait: { status: "pending" },
-      portrait_candidates: [],
-    }
   }
 
   function assertCompleteMobileCardVM(card) {
@@ -3140,21 +3003,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function buildMasonrySkeletonCardMarkup(index) {
-    var aspectRatio = index % 3 === 0 ? "4 / 5" : index % 3 === 1 ? "1 / 1" : "3 / 4"
-    return (
-      '<article class="icono-card icono-card--masonry icono-card--skeleton" aria-hidden="true" style="--icono-skeleton-aspect:' +
-      aspectRatio +
-      ';">' +
-      '<div class="icono-card-media icono-card-skeleton-media"></div>' +
-      '<div class="icono-card-info icono-card-skeleton-body">' +
-      '<span class="icono-card-skeleton-line icono-card-skeleton-line--short"></span>' +
-      '<span class="icono-card-skeleton-line icono-card-skeleton-line--medium"></span>' +
-      "</div>" +
-      "</article>"
-    )
-  }
-
   function buildReverseCardFaceMarkup() {
     return IconoCardShared.renderCardReverseFaceHtml()
   }
@@ -3176,16 +3024,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function buildHomeSkeletonGridMarkup(layout, cardVariant) {
     var resolvedLayout = effectiveHomeGridLayout(layout, cardVariant)
     var html = ""
-    if (resolvedLayout === "masonry") {
-      html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
-    }
     for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
       html +=
         resolvedLayout === "image-only-masonry"
           ? buildImageOnlySkeletonCardMarkup(i)
-          : resolvedLayout === "masonry"
-            ? buildMasonrySkeletonCardMarkup(i)
-            : buildBrickSkeletonCardMarkup()
+          : buildBrickSkeletonCardMarkup()
     }
     return html
   }
@@ -3290,14 +3133,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var missingTooltipOriginWarnings = Object.create(null)
 
   function resolveHomeLayout() {
-    // Mobile has one supported review surface: the swipeable lit-archival dossier.
-    // A synced desktop masonry setting must not route phones around the wiring that
-    // makes MISFIT/FIT swiping possible.
-    if (isMobileLabelReviewEnabled()) return HOME_LAYOUT_DEFAULT
-    var settings = readIconoplasmSettings()
-    return (
-      String((settings && settings.homeLayout) || HOME_LAYOUT_DEFAULT).trim() || HOME_LAYOUT_DEFAULT
-    )
+    return HOME_LAYOUT_DEFAULT
   }
 
   function normalizeRenderableCardVariant(cardVariant) {
@@ -3309,7 +3145,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (isMobileLabelReviewEnabled()) {
       // Mobile has one supported physical review surface: the lit-archival dossier.
       // Desktop preferences like "image-only" are intentionally ignored here so a
-      // synced desktop masonry setting cannot downgrade the mobile card contract.
+      // synced desktop setting cannot downgrade the mobile card contract.
       return "lit-archival"
     }
     return normalizeRenderableCardVariant(
@@ -3317,19 +3153,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     )
   }
 
-  function effectiveHomeGridLayout(layout, cardVariant) {
+  function effectiveHomeGridLayout(_layout, cardVariant) {
     if (isMobileLabelReviewEnabled()) return HOME_LAYOUT_DEFAULT
     var resolvedCardVariant = cardVariant || resolveCardVariant()
     if (isImageOnlyCardVariant(resolvedCardVariant)) return "image-only-masonry"
-    return layout === "masonry" ? "masonry" : HOME_LAYOUT_DEFAULT
-  }
-
-  function shouldUseHomeMasonry(layout, cardVariant) {
-    return effectiveHomeGridLayout(layout, cardVariant) === "masonry"
-  }
-
-  function shouldUseImmediateDiscoveryFallback(layout, cardVariant) {
-    return layout === "masonry" && !isImageOnlyCardVariant(cardVariant)
+    return HOME_LAYOUT_DEFAULT
   }
 
   function isArchivalCardVariant(cardVariant) {
@@ -3487,7 +3315,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var root = document.getElementById(ROOT_ID)
     if (!root) return
     if (opts.forceFresh) invalidateGeneDetail(route.symbol)
-    destroyHomeMasonry()
     renderGene(root, route.symbol, opts)
     refreshPortraitLightbox()
   }
@@ -10840,15 +10667,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
       await ensureLocalCollection(request.signal)
       var entries = galleryState.sortedDiscoveries.slice(offset, offset + limit)
-      var localItems
-      var localFailures = []
-      if (shouldUseImmediateDiscoveryFallback(homeLayout, cardVariant)) {
-        localItems = entries.map(fallbackDiscoveredGene).filter(Boolean)
-      } else {
-        var result = await loadMobileCardPageVM(entries, { signal: request.signal })
-        localItems = Array.isArray(result && result.cards) ? result.cards.filter(Boolean) : []
-        localFailures = Array.isArray(result && result.failures) ? result.failures : []
-      }
+      var result = await loadMobileCardPageVM(entries, { signal: request.signal })
+      var localItems = Array.isArray(result && result.cards) ? result.cards.filter(Boolean) : []
+      var localFailures = Array.isArray(result && result.failures) ? result.failures : []
       await ensurePortraitDelivery(localItems)
       prewarmMobileCardPageVM(
         galleryState.sortedDiscoveries.slice(offset + limit, offset + limit * 2),
@@ -10877,26 +10698,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       var inner = segment.element.querySelector(".icono-feed-segment-grid")
       if (segment.failures.length) appendMobileDataFailureTiles(inner, segment.failures)
       galleryState.items = itemsFromCards(cards)
-      if (shouldUseHomeMasonry(homeLayout, cardVariant)) {
-        var layoutReady = applyHomeMasonry(inner, cards)
-        void layoutReady
-          .then(function () {
-            return hydrateBrickCards(cards)
-          })
-          .then(function () {
-            if (inner.isConnected) return applyHomeMasonry(inner)
-          })
-          .catch(function (error) {
-            console.error("[Iconoplasm] mounted feed hydration failed:", error)
-          })
-        return layoutReady
-      } else {
-        warmBrickCardImages(segment.items)
-        wireBrickVoteBoxes(cards)
-        wireMobileLabelCards(cards)
-        refreshPortraitLightbox()
-        return hydrateBrickCards(cards)
-      }
+      warmBrickCardImages(segment.items)
+      wireBrickVoteBoxes(cards)
+      wireMobileLabelCards(cards)
+      refreshPortraitLightbox()
+      return hydrateBrickCards(cards)
     }
 
     function itemsFromCards(cards) {
@@ -10944,10 +10750,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       requestPage: requestFeedPage,
       renderSegment: renderFeedSegment,
       onSegmentMounted: wireMountedSegment,
-      onSegmentUnmount: function (_segment, element) {
-        var inner = element.querySelector(".icono-feed-segment-grid")
-        if (inner) destroyHomeMasonry(inner)
-      },
       onPage: function (_payload, segment) {
         syncCrawlableNextLink(_payload, segment)
         // A find on the strip redraws the gallery under it (countGuestFinds);
@@ -11085,7 +10887,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     document.addEventListener("visibilitychange", rereadGuestFinds)
 
     function resetCollection(pushHistory) {
-      destroyHomeMasonry()
       clearHomeAuxiliaryCards()
       galleryState.ready = useClassicGallery
       galleryState.discoveryEntries = []
@@ -11116,7 +10917,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       activeSearchRequest += 1
       clearTimeout(searchTimer)
       feedController.dispose()
-      destroyHomeMasonry()
       var nextLink = document.head.querySelector("link[data-icono-feed-next]")
       if (nextLink) nextLink.remove()
       document.removeEventListener("click", handleSearchOutsideClick)
@@ -11300,74 +11100,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     container.innerHTML = html
   }
 
-  function buildMasonryGridMarkup(genes, startIndex) {
-    if (!genes.length) {
-      return ""
-    }
-    var html = ""
-    for (var i = 0; i < genes.length; i++) {
-      var g = genes[i]
-      var cardIndex = startIndex + i
-      var dims = portraitDimensions(g)
-      var tc = textColorFor(g.color)
-      var portraitUrl = publishedPortraitUrl(g, "medium")
-      var mediaClass = portraitUrl
-        ? "icono-card-media"
-        : "icono-card-media icono-card-media--fallback"
-      html +=
-        '<a class="icono-card icono-card--masonry" href="/gene/' +
-        esc(encodeURIComponent(g.symbol)) +
-        '" target="_blank" rel="noopener noreferrer" data-icono-index="' +
-        cardIndex +
-        '" data-icono-symbol="' +
-        esc(g.symbol) +
-        '" style="--width:' +
-        dims.width +
-        ";--height:" +
-        dims.height +
-        ";--icono-card-accent:" +
-        esc(g.color || "#888") +
-        ';">' +
-        '<div class="' +
-        mediaClass +
-        '" style="background:' +
-        esc(g.color) +
-        ";color:" +
-        tc +
-        '">' +
-        (portraitUrl
-          ? // Source: C:\Users\Admin\.codex\skills\optimize\SKILL.md (Loading Performance) +
-            // C:\Users\Admin\.codex\skills\frontend-design\SKILL.md (Motion / keep exits and
-            // reveals lightweight). The first visible home cards stay eager so the public gallery
-            // feels present immediately, then later cards fall back to lazy loading.
-            '<img src="' +
-            esc(portraitUrl) +
-            '" alt="' +
-            esc(g.symbol) +
-            ' portrait" loading="' +
-            (cardIndex < 12 ? "eager" : "lazy") +
-            '" decoding="async" width="' +
-            dims.width +
-            '" height="' +
-            dims.height +
-            '" fetchpriority="' +
-            (cardIndex < 8 ? "high" : "low") +
-            '">'
-          : '<span class="icono-card-fallback-symbol">' + esc(g.symbol) + "</span>") +
-        '<span class="icono-card-badge">' +
-        esc(g.symbol) +
-        "</span>" +
-        "</div>" +
-        '<div class="icono-card-info">' +
-        '<div class="icono-card-name">' +
-        esc(g.full_name) +
-        "</div>" +
-        "</div>" +
-        "</a>"
-    }
-    return html
-  }
-
   function buildImageOnlyTileCardMarkup(g, cardIndex) {
     var dims = portraitDimensions(g)
     var key = normalizedSymbol(g.symbol)
@@ -11424,27 +11156,21 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     return html
   }
 
-  function renderGrid(container, genes, layout, cardVariant) {
-    var resolvedLayout = layout || resolveHomeLayout()
+  function renderGrid(container, genes, _layout, cardVariant) {
     var resolvedCardVariant = cardVariant || resolveCardVariant()
     rememberGeneCardArtifacts(genes)
     container.innerHTML = isImageOnlyCardVariant(resolvedCardVariant)
       ? buildImageOnlyTileGridMarkup(genes, 0)
-      : resolvedLayout === "masonry"
-        ? buildMasonryGridMarkup(genes, 0)
-        : buildBrickGridMarkup(genes, 0, resolvedCardVariant)
+      : buildBrickGridMarkup(genes, 0, resolvedCardVariant)
     syncImageOnlyLoadState(container)
   }
 
-  function appendGrid(container, genes, startIndex, layout, cardVariant) {
-    var resolvedLayout = layout || resolveHomeLayout()
+  function appendGrid(container, genes, startIndex, _layout, cardVariant) {
     var resolvedCardVariant = cardVariant || resolveCardVariant()
     rememberGeneCardArtifacts(genes)
     var html = isImageOnlyCardVariant(resolvedCardVariant)
       ? buildImageOnlyTileGridMarkup(genes, startIndex)
-      : resolvedLayout === "masonry"
-        ? buildMasonryGridMarkup(genes, startIndex)
-        : buildBrickGridMarkup(genes, startIndex, resolvedCardVariant)
+      : buildBrickGridMarkup(genes, startIndex, resolvedCardVariant)
     if (!html) return []
     var wrapper = document.createElement("div")
     wrapper.innerHTML = html
@@ -13953,7 +13679,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   var diagramStudioRenders = 0
   function loadDiagramStudio() {
     if (!diagramStudioPromise) {
-      diagramStudioPromise = import("./diagram-studio.js?v=b6f7041dccaa17c0").then(
+      diagramStudioPromise = import("./diagram-studio.js?v=8ae43bd5840f5c68").then(
         function (module) {
           diagramStudio = module
           return module
@@ -13984,7 +13710,6 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     diagramStudioRenders += 1
     if (diagramStudio) diagramStudio.unmountDiagramStudio()
     clearActiveHomeRenderState()
-    destroyHomeMasonry()
     lastRenderedPath = window.location.pathname + window.location.search
     // Update page title
     if (route.page === "home") {

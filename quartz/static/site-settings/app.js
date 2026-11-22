@@ -4,14 +4,14 @@ import {
   readIconoplasmSettings,
   resetIconoplasmSettings,
   writeIconoplasmSettings,
-} from "../site-preferences.js?v=2624be2e2b452a30"
+} from "../site-preferences.js?v=822dd28d46b3a52d"
 import {
   buildSharedUserPanelMarkup,
   fetchAuthenticatedUser,
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=6de8c983a0307439"
+} from "../shared/sidebar-shell.js?v=fde7f9f203abe6fd"
 ;(function () {
   "use strict"
 
@@ -19,10 +19,6 @@ import {
   var SECTION_LINKS = [
     { id: "iconoplasm", label: "Iconoplasm" },
     { id: "browser", label: "Browser" },
-  ]
-  var HOME_LAYOUT_OPTIONS = [
-    { value: "bricks", label: "Bricks" },
-    { value: "masonry", label: "Masonry" },
   ]
   var CARD_VARIANT_OPTIONS = [
     { value: "simple", label: "Simple" },
@@ -500,14 +496,6 @@ import {
       "<h2>Iconoplasm</h2>" +
       "</div>" +
       '<div class="site-settings-row">' +
-      '<div class="site-settings-copy"><h3>Home layout</h3></div>' +
-      '<div class="site-settings-control">' +
-      '<select class="site-settings-select" id="site-settings-iconoplasm-layout">' +
-      selectOptionsMarkup(snapshot.iconoplasm.homeLayout, HOME_LAYOUT_OPTIONS) +
-      "</select>" +
-      "</div>" +
-      "</div>" +
-      '<div class="site-settings-row">' +
       '<div class="site-settings-copy"><h3>Card style</h3></div>' +
       '<div class="site-settings-control">' +
       '<select class="site-settings-select" id="site-settings-iconoplasm-card-variant">' +
@@ -548,7 +536,6 @@ import {
     mountSidebar()
     wireSectionTracking(root)
 
-    var layoutEl = document.getElementById("site-settings-iconoplasm-layout")
     var cardVariantEl = document.getElementById("site-settings-iconoplasm-card-variant")
     var showAllGenesEl = document.getElementById("site-settings-show-all-genes")
     var imageApiProviderEl = document.getElementById("site-settings-image-api-provider")
@@ -588,7 +575,7 @@ import {
     function currentDraft() {
       return {
         iconoplasm: buildIconoplasmSettings({
-          homeLayout: layoutEl && layoutEl.value,
+          homeLayout: "bricks",
           cardVariant: cardVariantEl && cardVariantEl.value,
           showAllGenes: showAllGenesEl ? showAllGenesEl.checked : snapshot.iconoplasm.showAllGenes,
         }),
@@ -650,7 +637,6 @@ import {
       })
     }
 
-    bindDirtyTracking(layoutEl)
     bindDirtyTracking(cardVariantEl)
     bindDirtyTracking(showAllGenesEl)
 
