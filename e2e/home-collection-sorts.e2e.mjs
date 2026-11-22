@@ -173,21 +173,19 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       await context.close()
     }
 
-    // B-1184: the image-only archive grid must fit two cards per row at 1194,
-    // 1440, and 1920 px (never collapsing to 1 column on a 1194 px laptop, and
-    // never overflowing to 3 columns on wide desktops), while staying 1 column
-    // on 360/402/440 px phones, for both signed-in ("Yours") and "Everyone's".
-    const viewportGroups = [
-      [
-        { width: 1194, height: 800, expectedCols: 2 },
-        { width: 1440, height: 900, expectedCols: 2 },
-        { width: 1920, height: 1080, expectedCols: 2 },
-      ],
-      [
-        { width: 440, height: 844, expectedCols: 1 },
-        { width: 402, height: 874, expectedCols: 1 },
-        { width: 360, height: 800, expectedCols: 1 },
-      ],
+    // B-1184 / B-1282: the image-only archive grid must fit two cards per row at
+    // 1194, 1440, and 1920 px (never collapsing to 1 column on a 1194 px laptop,
+    // and never overflowing to 3 columns on wide desktops), while staying 1 column
+    // on 360/402/440 px phones with pure-CSS container-query scaling (zero rAF wait,
+    // zero horizontal overflow) and preserving the active tab across the 720 px
+    // desktop-to-phone breakpoint for both signed-in ("Yours") and "Everyone's".
+    const columnCases = [
+      { width: 1194, height: 800, expectedCols: 2 },
+      { width: 1440, height: 900, expectedCols: 2 },
+      { width: 1920, height: 1080, expectedCols: 2 },
+      { width: 440, height: 844, expectedCols: 1 },
+      { width: 402, height: 874, expectedCols: 1 },
+      { width: 360, height: 800, expectedCols: 1 },
     ]
     const tileSvg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024"><rect width="768" height="1024" fill="#d8cbb8"/></svg>'
@@ -210,144 +208,153 @@ test("a signed-in shelf sorts in the browser from the published catalog", async 
       }
     }
     for (const signedIn of [true, false]) {
-      for (const columnCases of viewportGroups) {
-        const context = await browser.newContext({
-          viewport: { width: columnCases[0].width, height: columnCases[0].height },
-        })
-        await routeProduction(
-          context,
-          origin,
-          (pathname, request) => {
-            if (pathname === "/api/auth/me" && !signedIn) return new HttpStatus(404)
-            if (pathname === "/api/iconoplasm/account-gallery-window") {
-              const url = new URL(request.url())
-              const cards = SHELF.slice(0, 4).map((s) => vmWithPortrait(s.toUpperCase()))
-              return {
-                ok: true,
-                schema: "iconoplasm.accountGalleryWindow.v2",
-                authenticated: signedIn,
-                user: signedIn ? { id: "u1", username: "e2e" } : null,
-                order: url.searchParams.get("order") || "newest",
-                scope: url.searchParams.get("scope") || (signedIn ? "yours" : "shared"),
-                discovered_count: cards.length,
-                vm_version: "e2e",
-                items: cards.map((c, index) => ({
-                  symbol: c.symbol,
-                  discovery: {
-                    gene_symbol: c.symbol,
-                    first_discovered_at: `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00Z`,
-                    last_encountered_at: `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00Z`,
-                    encounter_count: 1,
-                  },
-                })),
-                cards,
-                missing: [],
-                has_previous: false,
-                previous_cursor: null,
-                has_more: false,
-                next_cursor: null,
-              }
-            }
-            if (!signedIn) return undefined
-            const base = createApi([], [])(pathname, request)
-            if (pathname === "/api/iconoplasm/mobile-card-manifest" && base && base.cards) {
-              base.cards = base.cards.map((card) => vmWithPortrait(card.symbol))
-            }
-            return base
-          },
-          { session: signedIn },
-        )
-        await context.route(`${HOST}/_e2e/tile-*.svg`, (route) =>
-          route.fulfill({ status: 200, contentType: "image/svg+xml", body: tileSvg }),
-        )
-        const page = await context.newPage()
-        await page.goto(`${HOST}/`)
-        if (!signedIn) {
-          await page.waitForSelector('[data-icono-collection-tab="shared"]', { timeout: 30_000 })
-          await page.click('[data-icono-collection-tab="shared"]')
-        }
-        for (const { width, height, expectedCols } of columnCases) {
-          await page.setViewportSize({ width, height })
-          const expectedLayout = expectedCols === 2 ? "image-only-masonry" : "bricks"
-          await page.waitForFunction(
-            (layout) => {
-              const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
-              return grids.some(
-                (grid) =>
-                  grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
-              )
-            },
-            expectedLayout,
-            { timeout: 30_000 },
-          )
-          // Wait for the rAF-queued mobile card viewport resizer after shrinking widths.
-          await page.evaluate(
-            () =>
-              new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-          )
-          const gridMetrics = await page.evaluate((layout) => {
-            const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
-            const grid = grids.find(
-              (candidate) =>
-                candidate.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
-            )
-            if (!grid) return null
-            const tracks = getComputedStyle(grid)
-              .gridTemplateColumns.split(" ")
-              .map((t) => t.trim())
-              .filter((t) => t && t !== "none")
-            const cards = [...grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)")]
-              .slice(0, 2)
-              .map((el) => {
-                const r = el.getBoundingClientRect()
-                return {
-                  left: r.left,
-                  right: r.right,
-                  top: r.top,
-                  bottom: r.bottom,
-                  width: r.width,
-                }
-              })
+      const context = await browser.newContext({
+        viewport: { width: columnCases[0].width, height: columnCases[0].height },
+      })
+      await routeProduction(
+        context,
+        origin,
+        (pathname, request) => {
+          if (pathname === "/api/auth/me" && !signedIn) return new HttpStatus(404)
+          if (pathname === "/api/iconoplasm/account-gallery-window") {
+            const url = new URL(request.url())
+            const cards = SHELF.slice(0, 4).map((s) => vmWithPortrait(s.toUpperCase()))
             return {
-              layout: grid.getAttribute("data-layout") || "",
-              cols: tracks.length || 1,
-              tracks,
-              gridWidth: Math.round(grid.getBoundingClientRect().width),
+              ok: true,
+              schema: "iconoplasm.accountGalleryWindow.v2",
+              authenticated: signedIn,
+              user: signedIn ? { id: "u1", username: "e2e" } : null,
+              order: url.searchParams.get("order") || "newest",
+              scope: url.searchParams.get("scope") || (signedIn ? "yours" : "shared"),
+              discovered_count: cards.length,
+              vm_version: "e2e",
+              items: cards.map((c, index) => ({
+                symbol: c.symbol,
+                discovery: {
+                  gene_symbol: c.symbol,
+                  first_discovered_at: `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00Z`,
+                  last_encountered_at: `2026-09-${String(10 + index).padStart(2, "0")}T00:00:00Z`,
+                  encounter_count: 1,
+                },
+              })),
               cards,
-              overflowX: document.documentElement.scrollWidth - innerWidth,
+              missing: [],
+              has_previous: false,
+              previous_cursor: null,
+              has_more: false,
+              next_cursor: null,
             }
-          }, expectedLayout)
-          const tag = `${signedIn ? "yours" : "everyones"} ${width}x${height}`
-          assert.ok(gridMetrics, `${tag}: archive grid with >=2 cards missing`)
-          assert.equal(
-            gridMetrics.cols,
-            expectedCols,
-            `${tag}: expected ${expectedCols} column(s), got ${gridMetrics.cols} (${JSON.stringify(gridMetrics)})`,
-          )
-          if (expectedCols === 2) {
-            assert.ok(
-              Math.abs(gridMetrics.cards[0].top - gridMetrics.cards[1].top) <= 2 &&
-                gridMetrics.cards[0].right < gridMetrics.cards[1].left,
-              `${tag}: first two cards are not side-by-side (${JSON.stringify(gridMetrics.cards)})`,
-            )
-          } else {
-            assert.ok(
-              gridMetrics.cards[1].top >= gridMetrics.cards[0].bottom - 1,
-              `${tag}: first two cards did not stack into one column (${JSON.stringify(gridMetrics.cards)})`,
-            )
           }
-          assert.ok(
-            gridMetrics.overflowX <= 1,
-            `${tag}: horizontal overflow ${gridMetrics.overflowX}px`,
-          )
-          if (width === 1194) {
-            await page.screenshot({
-              path: path.join(OUT, `home-archive-1194-${signedIn ? "yours" : "everyones"}.png`),
-            })
+          if (!signedIn) return undefined
+          const base = createApi([], [])(pathname, request)
+          if (pathname === "/api/iconoplasm/mobile-card-manifest" && base && base.cards) {
+            base.cards = base.cards.map((card) => vmWithPortrait(card.symbol))
           }
-        }
-        await context.close()
+          return base
+        },
+        { session: signedIn },
+      )
+      await context.route(`${HOST}/_e2e/tile-*.svg`, (route) =>
+        route.fulfill({ status: 200, contentType: "image/svg+xml", body: tileSvg }),
+      )
+      const page = await context.newPage()
+      await page.goto(`${HOST}/`)
+      if (!signedIn) {
+        await page.waitForSelector('[data-icono-collection-tab="shared"]', { timeout: 30_000 })
+        await page.click('[data-icono-collection-tab="shared"]')
       }
+      for (const { width, height, expectedCols } of columnCases) {
+        await page.setViewportSize({ width, height })
+        const expectedLayout = expectedCols === 2 ? "image-only-masonry" : "bricks"
+        await page.waitForFunction(
+          (layout) => {
+            const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
+            return grids.some(
+              (grid) => grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
+            )
+          },
+          expectedLayout,
+          { timeout: 30_000 },
+        )
+        const gridMetrics = await page.evaluate((layout) => {
+          const grids = [...document.querySelectorAll(`.icono-grid[data-layout="${layout}"]`)]
+          const grid = grids.find(
+            (candidate) =>
+              candidate.querySelectorAll(".icono-card:not(.icono-card--skeleton)").length >= 2,
+          )
+          if (!grid) return null
+          const tracks = getComputedStyle(grid)
+            .gridTemplateColumns.split(" ")
+            .map((t) => t.trim())
+            .filter((t) => t && t !== "none")
+          const cardEls = [...grid.querySelectorAll(".icono-card:not(.icono-card--skeleton)")]
+          const cards = cardEls.slice(0, 2).map((el) => {
+            const r = el.getBoundingClientRect()
+            return {
+              left: r.left,
+              right: r.right,
+              top: r.top,
+              bottom: r.bottom,
+              width: r.width,
+            }
+          })
+          return {
+            layout: grid.getAttribute("data-layout") || "",
+            cols: tracks.length || 1,
+            tracks,
+            gridWidth: Math.round(grid.getBoundingClientRect().width),
+            cards,
+            inlineFitScale:
+              cardEls[0]?.style.getPropertyValue("--icono-label-mobile-fit-scale") || "",
+            sharedTabSelected:
+              document
+                .querySelector('[data-icono-collection-tab="shared"]')
+                ?.getAttribute("aria-selected") || "",
+            overflowX: document.documentElement.scrollWidth - innerWidth,
+          }
+        }, expectedLayout)
+        const tag = `${signedIn ? "yours" : "everyones"} ${width}x${height}`
+        assert.ok(gridMetrics, `${tag}: archive grid with >=2 cards missing`)
+        if (!signedIn) {
+          assert.equal(
+            gridMetrics.sharedTabSelected,
+            "true",
+            `${tag}: Global discoveries tab lost selection across resize`,
+          )
+        }
+        assert.equal(
+          gridMetrics.cols,
+          expectedCols,
+          `${tag}: expected ${expectedCols} column(s), got ${gridMetrics.cols} (${JSON.stringify(gridMetrics)})`,
+        )
+        if (expectedCols === 2) {
+          assert.ok(
+            Math.abs(gridMetrics.cards[0].top - gridMetrics.cards[1].top) <= 2 &&
+              gridMetrics.cards[0].right < gridMetrics.cards[1].left,
+            `${tag}: first two cards are not side-by-side (${JSON.stringify(gridMetrics.cards)})`,
+          )
+        } else {
+          assert.equal(
+            gridMetrics.inlineFitScale,
+            "",
+            `${tag}: mobile fit scale should come from CSS container queries, not inline JS`,
+          )
+          assert.ok(
+            gridMetrics.cards[1].top >= gridMetrics.cards[0].bottom - 1,
+            `${tag}: first two cards did not stack into one column (${JSON.stringify(gridMetrics.cards)})`,
+          )
+        }
+        assert.ok(
+          gridMetrics.overflowX <= 1,
+          `${tag}: horizontal overflow ${gridMetrics.overflowX}px`,
+        )
+        if (width === 1194) {
+          await page.screenshot({
+            path: path.join(OUT, `home-archive-1194-${signedIn ? "yours" : "everyones"}.png`),
+          })
+        }
+      }
+      await context.close()
     }
   } finally {
     writeFileSync(path.join(OUT, "home-collection-sorts.json"), JSON.stringify(report, null, 2))

@@ -2621,13 +2621,11 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       gutter.className = "icono-gutter-sizer"
       container.insertBefore(gutter, container.children[1] || null)
     }
-    var imageOnlyMasonry = container.getAttribute("data-layout") === "image-only-masonry"
     var msnry = new Masonry(container, {
       itemSelector: ".icono-card",
       columnWidth: ".icono-grid-sizer",
       gutter: ".icono-gutter-sizer",
-      percentPosition: !imageOnlyMasonry,
-      fitWidth: imageOnlyMasonry,
+      percentPosition: true,
       transitionDuration: 0,
       initLayout: false,
     })
@@ -3178,7 +3176,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   function buildHomeSkeletonGridMarkup(layout, cardVariant) {
     var resolvedLayout = effectiveHomeGridLayout(layout, cardVariant)
     var html = ""
-    if (resolvedLayout === "masonry" || resolvedLayout === "image-only-masonry") {
+    if (resolvedLayout === "masonry") {
       html += '<div class="icono-grid-sizer"></div><div class="icono-gutter-sizer"></div>'
     }
     for (var i = 0; i < HOME_SKELETON_CARD_COUNT; i++) {
@@ -3335,7 +3333,7 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
   }
 
   function isArchivalCardVariant(cardVariant) {
-    return cardVariant === "lit-archival" || cardVariant === "neo-drab"
+    return cardVariant === "lit-archival"
   }
 
   function isImageOnlyCardVariant(cardVariant) {
@@ -3348,14 +3346,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
 
   function litLayoutVariantForCard(cardVariant) {
     if (isImageOnlyCardVariant(cardVariant)) return "image-only"
-    if (cardVariant === "neo-drab") return "neo-drab"
     return "lit-archival"
   }
 
   function archivalVariantClass(cardVariant) {
-    if (cardVariant === "neo-drab") {
-      return " icono-card--variant-lab-label icono-card--variant-lit-archival icono-card--variant-neo-drab"
-    }
     if (cardVariant === "lit-archival") {
       return " icono-card--variant-lab-label icono-card--variant-lit-archival"
     }
@@ -5435,62 +5429,25 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     card.style.removeProperty("--icono-label-mobile-swipe-rotate")
     card.style.removeProperty("--icono-label-mobile-dossier-top")
     card.style.removeProperty("--icono-label-mobile-viewport-height")
-    card.style.removeProperty("--icono-label-mobile-fit-scale")
-    card.style.removeProperty("--icono-label-mobile-target-size")
   }
 
   function syncMobileLabelViewportGeometry(card) {
     if (!card || typeof window === "undefined" || !isMobileLabelReviewEnabled()) return
-    var cardParent = card.parentElement
-    var computedCard =
-      typeof window.getComputedStyle === "function" ? window.getComputedStyle(card) : null
-    var rootFontSize =
-      typeof document !== "undefined" && document.documentElement
-        ? parseFloat(window.getComputedStyle(document.documentElement).fontSize || "16")
-        : 16
-    var physicalWidthToken = computedCard
-      ? String(computedCard.getPropertyValue("--icono-label-mobile-physical-width") || "").trim()
-      : ""
-    var physicalWidth = 0
-    if (/rem$/.test(physicalWidthToken)) {
-      physicalWidth = parseFloat(physicalWidthToken) * rootFontSize
-    } else if (/px$/.test(physicalWidthToken)) {
-      physicalWidth = parseFloat(physicalWidthToken)
+    // B-1282: horizontal fit scale and 44px tap targets are owned by pure CSS
+    // container queries (`100cqi / --icono-label-mobile-physical-width`) on both
+    // `.icono-gene-lead` and `.icono-grid[data-layout="bricks"]`. Read the
+    // untransformed layout ratio here so dossier heights stay exact without
+    // stamping stale inline scale overrides on resize.
+    var activeFitScale = 1
+    var physicalObject = card.querySelector(".icono-mobile-card-physical-object")
+    if (typeof window.getComputedStyle === "function" && physicalObject) {
+      var cardLayoutWidth = parseFloat(window.getComputedStyle(card).width || "0")
+      var physicalLayoutWidth = parseFloat(window.getComputedStyle(physicalObject).width || "0")
+      if (cardLayoutWidth > 0 && physicalLayoutWidth > 0) {
+        activeFitScale = cardLayoutWidth / physicalLayoutWidth
+      }
     }
-    if (!(physicalWidth > 0)) physicalWidth = card.scrollWidth || card.offsetWidth || 0
-    var viewportWidth =
-      document.documentElement && document.documentElement.clientWidth
-        ? document.documentElement.clientWidth
-        : window.innerWidth
-    var parentRect =
-      cardParent && typeof cardParent.getBoundingClientRect === "function"
-        ? cardParent.getBoundingClientRect()
-        : null
-    var visibleParentLeft = parentRect ? Math.max(0, parentRect.left) : 0
-    var visibleParentRight = parentRect ? Math.min(viewportWidth, parentRect.right) : viewportWidth
-    var visibleParentWidth = Math.max(1, visibleParentRight - visibleParentLeft)
-    var availableWidth =
-      Math.min(
-        card.offsetWidth ? card.offsetWidth : Number.POSITIVE_INFINITY,
-        cardParent && cardParent.clientWidth ? cardParent.clientWidth : Number.POSITIVE_INFINITY,
-        visibleParentWidth,
-      ) || window.innerWidth
-    if (physicalWidth > 0 && availableWidth > 0) {
-      var fitScale = Math.min(1.9, availableWidth / physicalWidth)
-      fitScale = Math.max(0.78, fitScale)
-      card.style.setProperty("--icono-label-mobile-fit-scale", fitScale.toFixed(4))
-    }
-    var activeFitScale =
-      typeof fitScale === "number" && fitScale > 0
-        ? fitScale
-        : computedCard && computedCard.getPropertyValue("--icono-label-mobile-fit-scale")
-          ? parseFloat(computedCard.getPropertyValue("--icono-label-mobile-fit-scale"))
-          : 1
     if (!(activeFitScale > 0)) activeFitScale = 1
-    card.style.setProperty(
-      "--icono-label-mobile-target-size",
-      Math.ceil(44 / activeFitScale) + "px",
-    )
     var toPhysicalCardPx = function (value) {
       return value / activeFitScale
     }
@@ -13107,7 +13064,9 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
       // Card markup chooses between desktop and mobile review modes during render.
       // If the viewport crosses the breakpoint after first paint, we need a real rerender,
       // not just CSS, or desktop-built cards stay stuck without mobile review affordances.
-      syncHomeHistoryState(true)
+      // B-1282: mark the snapshot restorable so the rerender keeps the active tab
+      // (e.g. Global discoveries), sort order, and scroll position instead of wiping them.
+      syncHomeHistoryState(true, { restoreOnGeneBack: true })
       render()
       return
     }
@@ -13160,7 +13119,8 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     var page = Number(home.page || 1)
     var offset = Number(home.offset || 0)
     var scrollY = Number(home.scrollY || 0)
-    if (!(offset > 0 || page > 1 || scrollY > 0 || home.anchorGene)) return null
+    if (!(offset > 0 || page > 1 || scrollY > 0 || home.anchorGene || home.scope === "shared"))
+      return null
     return {
       order: order,
       scope: home.scope === "shared" ? "shared" : "personal",
