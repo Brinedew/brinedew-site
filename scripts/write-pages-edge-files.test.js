@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 
 import test from "node:test"
 
-import { pagesHeadersFile, pagesRedirectsFile } from "./write-pages-edge-files.mjs"
+import { pagesHeadersFile, pagesRedirectsFile, pagesRobotsFile } from "./write-pages-edge-files.mjs"
 
 // B-834: brinedew.bio and geneguessr.brinedew.bio documents and assets are
 // served by Pages directly. These files replace what the edge Worker did on
@@ -35,4 +35,11 @@ test("no redirect is issued for the GeneGuessr game document path", () => {
   // A redirect for the GeneGuessr document path would loop with the zone
   // rewrite that maps geneguessr.brinedew.bio/ onto it.
   assert.doesNotMatch(pagesRedirectsFile(), /^\/apps\/geneguessr/m)
+})
+
+test("robots.txt allows root, disallows /api/, blocks SEO scrapers, and points to sitemap", () => {
+  const robots = pagesRobotsFile()
+  assert.match(robots, /^User-agent: \*\nAllow: \/\nDisallow: \/api\//m)
+  assert.match(robots, /^User-agent: AhrefsBot\nDisallow: \//m)
+  assert.match(robots, /^Sitemap: https:\/\/brinedew\.bio\/sitemap\.xml$/m)
 })
