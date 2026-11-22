@@ -8045,6 +8045,17 @@ function generationRequestPublicEmulsionLabel(rawFamilyId) {
   return neutralSlot ? neutralSlot[1] : familyId
 }
 
+function uniqueGenerationRequestPreviews(previews) {
+  const seenAssets = new Set()
+  return (Array.isArray(previews) ? previews : []).filter((preview) => {
+    const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
+    const identity = assetSha || JSON.stringify(preview)
+    if (seenAssets.has(identity)) return false
+    seenAssets.add(identity)
+    return true
+  })
+}
+
 function generationRequestFamilyCanonicalMember(members, familyId) {
   const exactBase = (Array.isArray(members) ? members : []).find(
     (member) =>
@@ -8105,7 +8116,8 @@ export function groupGenerationRequestVisionOptions(options) {
     // Edited `-e` members are searchable aliases for the base family, not
     // additional picker content. When the base exists, it alone supplies the
     // counts, strength, and immutable request reference; attachStylePublishedPortraits
-    // populates canonical_count and preview_assets from icono_style_cards.
+    // then populates canonical_count and preview_assets from icono_style_cards.
+    const canonicalPreviews = uniqueGenerationRequestPreviews(canonical?.preview_assets)
     grouped.push({
       ...canonical,
       label: primaryLabel,
@@ -8125,7 +8137,7 @@ export function groupGenerationRequestVisionOptions(options) {
         .map((value) => String(value || "").trim())
         .filter(Boolean)
         .join(" "),
-      preview_assets: [],
+      preview_assets: canonicalPreviews,
     })
   }
   return grouped
