@@ -23,11 +23,7 @@ var sharedBridgePending = Object.create(null)
 var sharedIconoplasmSettingsSyncStarted = false
 var queuedSharedIconoplasmSettingsRefresh = null
 
-function normalizeHomeLayout(layout) {
-  var value = String(layout || "")
-    .trim()
-    .toLowerCase()
-  if (value === "masonry") return "masonry"
+function normalizeHomeLayout() {
   return ICONOPLASM_DEFAULT_SETTINGS.homeLayout
 }
 

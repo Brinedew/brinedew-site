@@ -1,4 +1,4 @@
-import { applyThemePreference, readEffectiveTheme } from "../site-preferences.js?v=2624be2e2b452a30"
+import { applyThemePreference, readEffectiveTheme } from "../site-preferences.js?v=822dd28d46b3a52d"
 import {
   COMPARTMENT_SHAPES,
   ICONOPLASM_DIAGRAM_LIMITS,

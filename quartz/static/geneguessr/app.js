@@ -5,7 +5,7 @@ import {
   hasSharedSessionPresenceHint,
   mountSidebarStack,
   wireSharedUserPanel,
-} from "../shared/sidebar-shell.js?v=6de8c983a0307439"
+} from "../shared/sidebar-shell.js?v=fde7f9f203abe6fd"
 import {
   ANONYMOUS_PDB_HEADER,
   StructureTooLargeError,
