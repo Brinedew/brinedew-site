@@ -75,8 +75,16 @@ configuration:
   pageTitleSuffix: ""
   enableSPA: true
   enablePopovers: true
+  prefetch: hover
   locale: en-US
   baseUrl: brinedew.bio
+  links:
+    markdownLinkResolution: shortest
+  drafts: false
+  fonts: false
+  contentIndex:
+    enableSiteMap: true
+    enableRSS: true
   includePatterns:
     - wiki/*.md
     - posts/**/*.md
@@ -169,11 +177,6 @@ plugins:
     layout:
       position: right
       priority: 30
-  - source: github:quartz-community/crawl-links
-    enabled: true
-    options:
-      markdownLinkResolution: shortest
-    order: 60
   - source: github:quartz-community/description
     enabled: true
     order: 70
@@ -196,10 +199,6 @@ plugins:
   - source: github:quartz-community/roam
     enabled: false
     order: 92
-  - source: github:quartz-community/fonts
-    enabled: false
-  - source: github:quartz-community/remove-draft
-    enabled: false
   - source: github:quartz-community/explicit-publish
     enabled: false
   - source: github:quartz-community/unlisted-pages
@@ -221,11 +220,6 @@ plugins:
       display: all
   - source: github:quartz-community/alias-redirects
     enabled: true
-  - source: github:quartz-community/content-index
-    enabled: true
-    options:
-      enableSiteMap: true
-      enableRSS: true
   - source: github:quartz-community/favicon
     enabled: true
   - source: github:quartz-community/og-image
