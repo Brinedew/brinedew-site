@@ -42,7 +42,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:architecture-fences": "node ./scripts/run-tests.mjs ./scripts/architecture-fences.test.js",
     "profile": "0x -D prof ./quartz/bootstrap-cli.mjs build --concurrency=1",
-    "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install --enabled-only"
+    "install-plugins": "node ./quartz/bootstrap-cli.mjs plugin install"
   },
   "engines": {
     "npm": ">=10.9.2",

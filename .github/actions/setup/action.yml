@@ -28,4 +28,4 @@ runs:
 
     - name: Install Quartz plugins
       shell: bash
-      run: node ./quartz/bootstrap-cli.mjs plugin install --enabled-only
+      run: node ./quartz/bootstrap-cli.mjs plugin install
