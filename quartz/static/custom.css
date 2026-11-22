@@ -1821,9 +1821,10 @@
     }
   }
 
-  /* Iconoplasm + GeneGuessr: hide folder-page listing (app pages are not folder pages) */
+  /* Iconoplasm + GeneGuessr + Settings: hide folder-page listing (app/settings pages are not folder pages) */
   body[data-slug^="apps/iconoplasm"] .page-listing,
-  body[data-slug^="apps/geneguessr"] .page-listing {
+  body[data-slug^="apps/geneguessr"] .page-listing,
+  body[data-slug^="settings"] .page-listing {
     display: none;
   }
 

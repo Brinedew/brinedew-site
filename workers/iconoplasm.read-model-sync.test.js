@@ -304,16 +304,15 @@ test("batched vision sync atomically refreshes the request-picker projection", a
   assert.equal(pickerRow[2], "0-18")
   assert.equal(pickerRow[9], 2)
   assert.equal(pickerRow[10], 2)
-  assert.deepEqual(JSON.parse(pickerRow[13]), [
-    {
-      vision_id: "anima-v1-18",
-      gene_symbol: "CD4",
-      asset_sha256: "66".repeat(32),
-      is_current: true,
-      preview_rank: 1,
-    },
-  ])
+  assert.deepEqual(JSON.parse(pickerRow[13]), [])
   assert.equal(pickerRow[14], 3)
+  assert.equal(
+    env.gatewayDb.calls.some((call) =>
+      call.sql.includes("icono_generation_request_factory_option_"),
+    ),
+    false,
+    "B-1283: vision sync must not read or write the retired factory option rollup tables",
+  )
 })
 
 test("admin sync reads transactional counts without rebuilding catalogue history", async () => {

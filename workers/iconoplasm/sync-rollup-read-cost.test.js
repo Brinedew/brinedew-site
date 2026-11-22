@@ -102,8 +102,6 @@ test(
         "icono_vote_asset_summary",
         "icono_admin_vision_rollup",
         "icono_generation_request_vision_option_rollup",
-        "icono_generation_request_factory_option_sources",
-        "icono_generation_request_factory_option_rollup",
       ]
       const snapshot = async () =>
         Promise.all(
@@ -135,9 +133,16 @@ test(
         JSON.stringify({ phase: "101 assets, complete two-phase repeat", cost: repeated }),
       )
 
-      // Real source changes still reach every dependent rollup.
-      await db.prepare("UPDATE icono_image_votes SET vote_value=-1 WHERE gene_symbol='TP53'").run()
-      await rebuild()
+      // Real source changes still reach every dependent rollup. Measure worst-case
+      // writes when every indexed column of both vision rollups changes.
+      await db.batch([
+        db.prepare(
+          "UPDATE icono_portrait_assets SET emulsion_id='D9-2', artist_tag='@a2' WHERE gene_symbol='TP53'",
+        ),
+        db.prepare("UPDATE icono_image_votes SET vote_value=-1 WHERE gene_symbol='TP53'"),
+      ])
+      const updated = await rebuild()
+      t.diagnostic(JSON.stringify({ phase: "update_all_indexed_cols", cost: updated }))
       assert.equal(
         (
           await db
@@ -150,21 +155,22 @@ test(
         (
           await db
             .prepare(
-              "SELECT score FROM icono_generation_request_factory_option_rollup WHERE public_emulsion_code='A1-1'",
+              "SELECT score FROM icono_generation_request_vision_option_rollup WHERE vision_id='anima-v1-1'",
             )
             .first()
         ).score,
         -1,
       )
 
-      // Clearing the last source must remove all scoped projections, including
-      // factory source membership. Keep unrelated source data intact.
+      // Clearing the last source must remove all scoped projections. Keep
+      // unrelated source data intact.
       await db.batch([
         db.prepare("DELETE FROM icono_portrait_assets WHERE gene_symbol='TP53'"),
         db.prepare("DELETE FROM icono_publish_state WHERE gene_symbol='TP53'"),
         db.prepare("DELETE FROM icono_gene_catalog WHERE gene_symbol='TP53'"),
       ])
-      await rebuild()
+      const deleted = await rebuild()
+      t.diagnostic(JSON.stringify({ phase: "delete_last_source", cost: deleted }))
       assert.deepEqual(
         await snapshot(),
         tables.map(() => []),

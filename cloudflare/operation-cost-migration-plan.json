@@ -80,6 +80,20 @@
           "max": 30000
         }
       ]
+    },
+    "iconoplasm/0155_mark_missing_vision_rollups_dirty.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 150000,
+        "rows_written": 1200,
+        "requests": 1
+      },
+      "guards": [
+        {
+          "sql": "SELECT COUNT(*) AS assets FROM icono_portrait_assets",
+          "max": 120000
+        }
+      ]
     }
   }
 }
