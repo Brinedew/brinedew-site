@@ -5,6 +5,12 @@ import { ONLINE_MIGRATION_DATABASES } from "./apply-online-d1-migrations.mjs"
 import { readIconoplasmReleaseState } from "./read-iconoplasm-release-state.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
+// B-1286 rewrote brinedew-site into an orphan history when content/ moved to
+// brinedew-content; map the last pre-rewrite production revision to the new
+// orphan root so the first post-rewrite deploy can verify lineage cleanly.
+const REWRITTEN_LINEAGE_BRIDGES = Object.freeze({
+  d50bd1585cd51c6c8b4471d1942a6e9c098477fd: "5a25cd2ad7adac1d6b035dc6a6252048bc1f9ecf",
+})
 // Wrangler route/config edits and the account policy owners ship with the
 // tested code; the release reconciles them. A data migration ships only when
 // it is already applied or reviewed online, which apply-online-d1-migrations.mjs
@@ -134,17 +140,22 @@ async function main() {
   if (headSha !== process.env.GITHUB_SHA) throw new Error("CODE_RELEASE_HEAD_UNKNOWN")
   const state = await readIconoplasmReleaseState()
   const installed = state.cache_version
-  const ancestor = SHA.test(installed || "")
-    ? spawnSync("git", ["merge-base", "--is-ancestor", installed, headSha], {
+  const effectiveInstalled = REWRITTEN_LINEAGE_BRIDGES[installed] || installed
+  const ancestor = SHA.test(effectiveInstalled || "")
+    ? spawnSync("git", ["merge-base", "--is-ancestor", effectiveInstalled, headSha], {
         stdio: "ignore",
       }).status === 0
     : false
   // Deleted files are left out: removing a migration file changes no data, and
   // PR C (B-1065) deletes the retired authoring database's whole directory.
   const changedPaths = ancestor
-    ? execFileSync("git", ["diff", "--name-only", "--diff-filter=d", `${installed}..${headSha}`], {
-        encoding: "utf8",
-      })
+    ? execFileSync(
+        "git",
+        ["diff", "--name-only", "--diff-filter=d", `${effectiveInstalled}..${headSha}`],
+        {
+          encoding: "utf8",
+        },
+      )
         .split(/\r?\n/)
         .filter(Boolean)
     : []
