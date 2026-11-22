@@ -2147,6 +2147,103 @@ test("30c: the picker's first page is a CDN object, written only when it changed
   )
 })
 
+// 30d. B-1283: All styles, Favorites, and exact slot/factory search read one
+//      authoritative rollup (icono_generation_request_vision_option_rollup) and
+//      never touch icono_generation_request_factory_option_rollup — so counts
+//      cannot disagree or double-count across tabs.
+test("30d: All styles, Favorites, and slot/factory search agree on counts from one rollup", async () => {
+  const db = new SqliteD1()
+  // Seed a style with both legacy `0-255` and factory `D9-255` portraits.
+  const assets = [
+    ["TP53", sha("1"), "0-255", true],
+    ["BRCA1", sha("2"), "0-255", false],
+    ["EGFR", sha("3"), "D9-255", true],
+    ["KRAS", sha("4"), "C9-255", false],
+  ]
+  for (const [symbol, assetSha, emulsionId, live] of assets) {
+    db.exec(
+      `INSERT INTO icono_portrait_assets (gene_symbol, asset_sha256, r2_key_full, r2_key_medium, r2_key_thumb, status, vision_id, emulsion_id)
+       VALUES (?, ?, 'f', 'm', 't', 'approved', 'anima-v1-255', ?)`,
+      symbol,
+      assetSha,
+      emulsionId,
+    )
+    if (live) seedPublished(db, symbol, assetSha)
+  }
+  db.exec(
+    `INSERT INTO icono_generation_request_vision_option_rollup (
+       vision_id, emulsion_id, emulsion_family_id, artist_tag, artist_name, workflow_id,
+       workflow_label, prompt_version, variant_slot, image_count, live_count, score,
+       vote_h_index, preview_assets_json, builder_version
+     ) VALUES ('anima-v1-255', '0-255', '0-255', '', '', 'D', 'Anima', '9', '255', 4, 2, 3, 1, '[]', 3)`,
+  )
+  // Deliberately plant a stale/partial legacy factory_option_rollup row to prove
+  // nothing reads it any more.
+  db.exec(
+    `INSERT INTO icono_generation_request_factory_option_rollup (
+       public_emulsion_code, emulsion_slot, image_count, live_count, score, vote_h_index, preview_assets_json
+     ) VALUES ('D9-255', 255, 2, 1, 1, 0, '[]')`,
+  )
+  const star = await routeRequest(db, "PUT", "/api/iconoplasm/emulsion-favorites/0-255")
+  assert.equal(star.status, 200)
+
+  db.log = []
+  const allStyles = await routeRequest(db, "GET", "/api/iconoplasm/requests/options")
+  const favorites = await routeRequest(
+    db,
+    "GET",
+    "/api/iconoplasm/requests/options?scope=favorites",
+  )
+  const byNumber = await routeRequest(db, "GET", "/api/iconoplasm/requests/options?query=255")
+  const byFamily = await routeRequest(db, "GET", "/api/iconoplasm/requests/options?query=0-255")
+  const byFactory = await routeRequest(db, "GET", "/api/iconoplasm/requests/options?query=D9-255")
+
+  assert.equal(
+    db.log.some((entry) => entry.sql.includes("icono_generation_request_factory_option_rollup")),
+    false,
+    "picker routes must not read icono_generation_request_factory_option_rollup",
+  )
+
+  const summarize = (resp) => {
+    assert.equal(resp.status, 200, JSON.stringify(resp.payload))
+    const opt = resp.payload.request_options.find((row) => row.emulsion_family_id === "0-255")
+    assert.ok(opt, `missing 0-255 in ${JSON.stringify(resp.payload)}`)
+    return {
+      vision_id: opt.vision_id,
+      emulsion_id: opt.emulsion_id,
+      emulsion_family_id: opt.emulsion_family_id,
+      image_count: opt.image_count,
+      live_count: opt.live_count,
+      score: opt.score,
+      vote_h_index: opt.vote_h_index,
+      canonical_count: opt.canonical_count,
+      is_favorite: opt.is_favorite,
+      preview_genes: opt.preview_assets.map((p) => p.gene_symbol).sort(),
+    }
+  }
+  const expected = {
+    vision_id: "anima-v1-255",
+    emulsion_id: "0-255",
+    emulsion_family_id: "0-255",
+    image_count: 4,
+    live_count: 2,
+    score: 3,
+    vote_h_index: 1,
+    canonical_count: 2,
+    is_favorite: true,
+    preview_genes: ["EGFR", "TP53"],
+  }
+  for (const [label, resp] of [
+    ["All styles", allStyles],
+    ["Favorites", favorites],
+    ["query=255", byNumber],
+    ["query=0-255", byFamily],
+    ["query=D9-255", byFactory],
+  ]) {
+    assert.deepEqual(summarize(resp), expected, `${label} diverged from single style rollup`)
+  }
+})
+
 // 31. Favorites are one account's own list: idempotent, refused to guests, and only for a
 //     style that exists. An asset that has left the picker's rollup is still favoriteable.
 test("31: emulsion favorites are per account, idempotent, refused to guests, and need a real emulsion", async () => {

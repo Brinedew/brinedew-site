@@ -102,10 +102,16 @@ export async function attachStylePublishedPortraits(db, options, portraitUrl) {
   }
   return list.map((option) => {
     const entry = blots.get(styleSlotOfOption(option))
-    return {
+    const portraits = entry ? entry.portraits : []
+    const next = {
       ...option,
       canonical_count: entry ? entry.count : 0,
-      preview_assets: entry ? entry.portraits : [],
+      preview_assets: portraits,
     }
+    if (portraits.length && next.is_preallocated_without_preview) {
+      next.secondary_label = ""
+      delete next.is_preallocated_without_preview
+    }
+    return next
   })
 }

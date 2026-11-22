@@ -110,7 +110,6 @@ import {
 } from "./iconoplasm-generation-lease.js"
 import { authorizeIconoplasmAuthorityGenerationBearer } from "./iconoplasm-authority-service-auth.js"
 import { createIconoplasmGenerationExecutorHandler } from "./iconoplasm-generation-executor-routes.js"
-import { assertVisionEmulsionCodeBound } from "./iconoplasm/vision-emulsion-code-bound.js"
 import { claimValidatedGenerationRequests } from "./iconoplasm-generation-claim.js"
 import { noteRequestRoute } from "./lib/the-only-request-record.js"
 import { readPublicGeneText } from "./lib/iconoplasm-gene-text.js"
@@ -2636,7 +2635,7 @@ async function prepareGenerationRequest(
     resolvedVisionId = `${comfyEditPrefix}${matchingOption.model}`
   } else if (mode === "specific") {
     let optionRow = await env.ICONOPLASM_DB.prepare(
-      `SELECT vision_id, emulsion_id, preview_assets_json
+      `SELECT vision_id, emulsion_id
        FROM icono_generation_request_vision_option_rollup
        WHERE vision_id = ?
          AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
@@ -2648,7 +2647,7 @@ async function prepareGenerationRequest(
     const baseEmulsionId = generationRequestEmulsionFamilyId(emulsionId)
     if (baseEmulsionId && baseEmulsionId.toUpperCase() !== emulsionId.toUpperCase()) {
       const baseOptionRow = await env.ICONOPLASM_DB.prepare(
-        `SELECT vision_id, emulsion_id, preview_assets_json
+        `SELECT vision_id, emulsion_id
          FROM icono_generation_request_vision_option_rollup
          WHERE emulsion_id = ?
            AND builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
@@ -7738,19 +7737,6 @@ function normalizeGenerationRequestPreviewAssetRow(row) {
   }
 }
 
-function serializeGenerationRequestPreviewAssetsJson(previewRows) {
-  const normalized = (Array.isArray(previewRows) ? previewRows : [])
-    .map(normalizeGenerationRequestPreviewAssetRow)
-    .filter(Boolean)
-    .sort((left, right) => {
-      return (
-        Number(left.preview_rank || 0) - Number(right.preview_rank || 0) ||
-        compareNullableTextAsc(left.asset_sha256, right.asset_sha256)
-      )
-    })
-  return JSON.stringify(normalized)
-}
-
 function computeGenerationRequestVoteHIndex(upvoteCounts) {
   const counts = (Array.isArray(upvoteCounts) ? upvoteCounts : [])
     .map((value) => Math.max(0, Number(value || 0) || 0))
@@ -7774,94 +7760,6 @@ function parseGenerationRequestPreviewAssetsJson(raw) {
   } catch {
     return []
   }
-}
-
-// A style card shows at most four 3:4 previews (B-883), so the options list
-// ships medium URLs only and nothing else image-shaped. It used to ship every
-// rollup preview with both renditions: 318 KB per dialog open, 257 KB of it
-// unrendered, on a route the free plan's 10 ms CPU cap already kills now and
-// then (B-884). Five, not four: the picker never shows one gene twice on a
-// screen (B-896), so a card needs a spare when another card already shows one
-// of its genes. Five is also every rollup's stored depth.
-const GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT = 5
-
-function materializeGenerationRequestPreviewAssetsForPublic(url, env, rawPreviewRows) {
-  const base = portraitBase(url, env)
-  return parseGenerationRequestPreviewAssetsJson(rawPreviewRows)
-    .slice(0, GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT)
-    .map((row) => ({
-      gene_symbol: row.gene_symbol,
-      asset_sha256: row.asset_sha256,
-      is_current: Boolean(row.is_current),
-      medium_url: adminPortraitUrl(base, row.asset_sha256 || "", "medium"),
-    }))
-}
-
-async function fetchGenerationRequestVisionPreviewRowsForRollup(
-  env,
-  { visionIds = [], perVisionLimit = 6 } = {},
-) {
-  if (!env.ICONOPLASM_DB) return []
-  const cleanedVisionIds = Array.from(
-    new Set(
-      (Array.isArray(visionIds) ? visionIds : [])
-        .map((value) => validAdminRollupVisionId(value))
-        .filter(Boolean),
-    ),
-  )
-  if (!cleanedVisionIds.length) return []
-  const cleanedLimit = normalizeAdminVisionAssetLimit(perVisionLimit, 6, 12)
-  const response = await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id
-       FROM json_each(?)
-     ),
-     ranked_previews AS (
-       SELECT
-         pa.vision_id,
-         pa.gene_symbol AS gene_symbol,
-         pa.asset_sha256 AS asset_sha256,
-         CASE
-           WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
-           ELSE 0
-         END AS is_current,
-         ROW_NUMBER() OVER (
-           PARTITION BY pa.vision_id
-           ORDER BY
-             CASE
-               WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1
-               ELSE 0
-             END DESC,
-             COALESCE(vs.upvotes, 0) DESC,
-             COALESCE(vs.score, 0) DESC,
-             COALESCE(pa.created_at, '') DESC,
-             pa.asset_sha256 ASC
-         ) AS preview_rank
-       FROM icono_portrait_assets pa
-       JOIN incoming i
-         ON i.vision_id = pa.vision_id
-       LEFT JOIN icono_publish_state ps
-         ON ps.gene_symbol = pa.gene_symbol
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-       WHERE COALESCE(pa.asset_sha256, '') <> ''
-     )
-     SELECT
-       vision_id,
-       gene_symbol,
-       asset_sha256,
-       is_current,
-       preview_rank
-     FROM ranked_previews
-     WHERE preview_rank <= ?
-     ORDER BY vision_id ASC, preview_rank ASC`,
-  )
-    .bind(JSON.stringify(cleanedVisionIds), cleanedLimit)
-    .all()
-  return (Array.isArray(response?.results) ? response.results : [])
-    .map(normalizeGenerationRequestPreviewAssetRow)
-    .filter(Boolean)
 }
 
 async function fetchGenerationRequestVisionVoteHIndexMap(env, { visionIds = [] } = {}) {
@@ -7912,6 +7810,12 @@ async function fetchGenerationRequestVisionVoteHIndexMap(env, { visionIds = [] }
   return hIndexMap
 }
 
+// B-1283: icono_generation_request_vision_option_rollup is the single request-
+// option rollup for All styles, Favorites, and slot search alike. Previews and
+// canonical blot counts always come from icono_style_cards via
+// attachStylePublishedPortraits, so this rebuild no longer scans portraits a
+// second time for thrown-away preview_assets_json nor maintains the duplicate
+// factory_option_rollup tables.
 async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds = []) {
   if (!env.ICONOPLASM_DB) return 0
   const cleanedVisionIds = Array.from(
@@ -7960,23 +7864,9 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
   const summaryRows = Array.isArray(summaryResp?.results) ? summaryResp.results : []
   if (!summaryRows.length) return 0
 
-  const [previewRows, voteHIndexMap] = await Promise.all([
-    fetchGenerationRequestVisionPreviewRowsForRollup(env, {
-      visionIds: cleanedVisionIds,
-      perVisionLimit: 5,
-    }),
-    fetchGenerationRequestVisionVoteHIndexMap(env, {
-      visionIds: cleanedVisionIds,
-    }),
-  ])
-  const previewMap = new Map()
-  for (const previewRow of previewRows) {
-    const visionId = sanitizeVoteVisionId(previewRow?.vision_id || "")
-    if (!visionId) continue
-    const existing = previewMap.get(visionId) || []
-    existing.push(previewRow)
-    previewMap.set(visionId, existing)
-  }
+  const voteHIndexMap = await fetchGenerationRequestVisionVoteHIndexMap(env, {
+    visionIds: cleanedVisionIds,
+  })
 
   const rows = []
   for (const row of summaryRows) {
@@ -7997,7 +7887,7 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
       Math.max(0, Number(row?.live_count || 0) || 0),
       Number(row?.score || 0) || 0,
       Math.max(0, Number(voteHIndexMap.get(visionId) || 0) || 0),
-      serializeGenerationRequestPreviewAssetsJson(previewMap.get(visionId) || []),
+      "[]",
       GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION,
     ])
   }
@@ -8049,209 +7939,11 @@ async function rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds =
         OR icono_generation_request_vision_option_rollup.live_count IS NOT excluded.live_count
         OR icono_generation_request_vision_option_rollup.score IS NOT excluded.score
         OR icono_generation_request_vision_option_rollup.vote_h_index IS NOT excluded.vote_h_index
-        OR icono_generation_request_vision_option_rollup.preview_assets_json IS NOT excluded.preview_assets_json
         OR icono_generation_request_vision_option_rollup.builder_version IS NOT excluded.builder_version`,
     )
       .bind(JSON.stringify(rows))
       .run()
   return rows.length
-}
-
-// The codes a vision rebuild touches: the pairs the registry holds for the
-// vision and the codes its assets carry now, read once. A vision carrying more
-// codes than MAX_EMULSION_CODES_PER_VISION is refused here, before the caller
-// writes anything (B-946); the codes returned are the factory recipe codes whose
-// option rollups the rebuild rewrites.
-async function readVisionEmulsionCodes(env, visionIdsJson) {
-  const response = await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id FROM json_each(?)
-     )
-     SELECT sources.public_emulsion_code AS public_emulsion_code,
-            sources.vision_id AS vision_id, 0 AS from_assets
-     FROM icono_generation_request_factory_option_sources sources
-     JOIN incoming ON incoming.vision_id = sources.vision_id
-     UNION
-     SELECT upper(trim(pa.emulsion_id)) AS public_emulsion_code,
-            pa.vision_id AS vision_id, 1 AS from_assets
-     FROM icono_portrait_assets pa
-     JOIN incoming ON incoming.vision_id = pa.vision_id
-     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
-  )
-    .bind(visionIdsJson)
-    .all()
-  const rows = Array.isArray(response?.results) ? response.results : []
-  assertVisionEmulsionCodeBound(rows)
-  return Array.from(
-    new Set(
-      rows
-        .map(
-          (row) => iconoplasmFactoryRecipeFromPublicEmulsionId(row?.public_emulsion_code)?.publicId,
-        )
-        .filter(Boolean),
-    ),
-  )
-}
-
-export async function rebuildGenerationRequestFactoryOptionRollupsBatch(
-  env,
-  visionIds = [],
-  { affectedCodes: knownAffectedCodes = null } = {},
-) {
-  if (!env.ICONOPLASM_DB) return 0
-  const cleanedVisionIds = Array.from(
-    new Set(
-      (Array.isArray(visionIds) ? visionIds : [])
-        .map((value) => validAdminRollupVisionId(value))
-        .filter(Boolean),
-    ),
-  )
-  if (!cleanedVisionIds.length) return 0
-
-  const visionIdsJson = JSON.stringify(cleanedVisionIds)
-  const affectedCodes = knownAffectedCodes ?? (await readVisionEmulsionCodes(env, visionIdsJson))
-
-  await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id FROM json_each(?)
-     )
-     DELETE FROM icono_generation_request_factory_option_sources
-     WHERE vision_id IN (SELECT vision_id FROM incoming)
-       AND (public_emulsion_code, vision_id) NOT IN (
-         SELECT upper(trim(pa.emulsion_id)), pa.vision_id
-         FROM icono_portrait_assets pa
-         JOIN incoming ON incoming.vision_id = pa.vision_id
-         WHERE COALESCE(trim(pa.emulsion_id), '') <> ''
-       )`,
-  )
-    .bind(visionIdsJson)
-    .run()
-  await env.ICONOPLASM_DB.prepare(
-    `WITH incoming AS (
-       SELECT value AS vision_id FROM json_each(?)
-     )
-     INSERT OR IGNORE INTO icono_generation_request_factory_option_sources (
-       public_emulsion_code,
-       vision_id
-     )
-     SELECT DISTINCT upper(trim(pa.emulsion_id)), pa.vision_id
-     FROM icono_portrait_assets pa
-     JOIN incoming ON incoming.vision_id = pa.vision_id
-     WHERE COALESCE(trim(pa.emulsion_id), '') <> ''`,
-  )
-    .bind(visionIdsJson)
-    .run()
-  if (!affectedCodes.length) return 0
-
-  const affectedCodesJson = JSON.stringify(affectedCodes)
-  // ARCHITECTURE FENCE [IPD-005]: the NOCASE source join below requires the
-  // matching factory_emulsion_nocase index (0081). A BINARY index is not a
-  // substitute: the production mismatch spent >13M reads per factory update.
-  // Rank the joined source once, then aggregate totals, previews and h-index
-  // together. Separate aggregates repeated the source joins three times.
-  await env.ICONOPLASM_DB.prepare(
-    `DELETE FROM icono_generation_request_factory_option_rollup
-     WHERE public_emulsion_code IN (SELECT value FROM json_each(?))
-       AND NOT EXISTS (
-         SELECT 1 FROM icono_portrait_assets pa
-         WHERE pa.emulsion_id COLLATE NOCASE = icono_generation_request_factory_option_rollup.public_emulsion_code
-           AND COALESCE(pa.asset_sha256, '') <> ''
-       )`,
-  )
-    .bind(affectedCodesJson)
-    .run()
-  await env.ICONOPLASM_DB.prepare(
-    `INSERT INTO icono_generation_request_factory_option_rollup (
-       public_emulsion_code,
-       emulsion_slot,
-       image_count,
-       live_count,
-       score,
-       vote_h_index,
-       preview_assets_json,
-       updated_at
-     )
-     WITH incoming AS (
-       SELECT value AS public_emulsion_code FROM json_each(?)
-     ),
-     source_assets AS (
-       SELECT
-         upper(trim(pa.emulsion_id)) AS public_emulsion_code,
-         CAST(substr(pa.emulsion_id, instr(pa.emulsion_id, '-') + 1) AS INTEGER) AS emulsion_slot,
-         upper(pa.gene_symbol) AS gene_symbol,
-         lower(pa.asset_sha256) AS asset_sha256,
-         CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END AS is_current,
-         COALESCE(vs.upvotes, 0) AS upvotes,
-         COALESCE(vs.score, 0) AS score,
-         COALESCE(pa.created_at, '') AS created_at,
-         ROW_NUMBER() OVER (
-           PARTITION BY upper(trim(pa.emulsion_id)), upper(pa.gene_symbol)
-           ORDER BY
-             CASE WHEN COALESCE(ps.current_asset_sha256, '') = pa.asset_sha256 THEN 1 ELSE 0 END DESC,
-             COALESCE(vs.upvotes, 0) DESC,
-             COALESCE(vs.score, 0) DESC,
-             COALESCE(pa.created_at, '') DESC,
-             lower(pa.asset_sha256) ASC
-         ) AS gene_rank
-       FROM icono_portrait_assets pa
-       JOIN incoming
-         ON pa.emulsion_id = incoming.public_emulsion_code COLLATE NOCASE
-       LEFT JOIN icono_publish_state ps ON ps.gene_symbol = pa.gene_symbol
-       LEFT JOIN icono_vote_asset_summary vs
-         ON vs.gene_symbol = pa.gene_symbol
-        AND vs.asset_sha256 = pa.asset_sha256
-       WHERE COALESCE(pa.asset_sha256, '') <> ''
-     ),
-     ranked_assets AS (
-       SELECT
-         *,
-         ROW_NUMBER() OVER (
-           PARTITION BY public_emulsion_code
-           ORDER BY gene_rank ASC, is_current DESC, upvotes DESC, score DESC, created_at DESC, asset_sha256 ASC
-         ) AS preview_rank,
-         ROW_NUMBER() OVER (
-           PARTITION BY public_emulsion_code
-           ORDER BY upvotes DESC, asset_sha256 ASC
-         ) AS approval_rank
-       FROM source_assets
-     )
-     SELECT
-       public_emulsion_code,
-       MAX(emulsion_slot),
-       COUNT(*),
-       SUM(is_current),
-       SUM(score),
-       MAX(CASE WHEN upvotes >= approval_rank THEN approval_rank ELSE 0 END),
-       json_group_array(json_object(
-         'gene_symbol', gene_symbol,
-         'asset_sha256', asset_sha256,
-         'is_current', is_current,
-         'preview_rank', preview_rank
-       )) FILTER (WHERE preview_rank <= 5),
-       CURRENT_TIMESTAMP
-     FROM (
-       SELECT * FROM ranked_assets
-       ORDER BY public_emulsion_code ASC, preview_rank ASC
-     )
-     GROUP BY public_emulsion_code
-     ON CONFLICT(public_emulsion_code) DO UPDATE SET
-       emulsion_slot = excluded.emulsion_slot,
-       image_count = excluded.image_count,
-       live_count = excluded.live_count,
-       score = excluded.score,
-       vote_h_index = excluded.vote_h_index,
-       preview_assets_json = excluded.preview_assets_json,
-       updated_at = CURRENT_TIMESTAMP
-     WHERE icono_generation_request_factory_option_rollup.emulsion_slot IS NOT excluded.emulsion_slot
-        OR icono_generation_request_factory_option_rollup.image_count IS NOT excluded.image_count
-        OR icono_generation_request_factory_option_rollup.live_count IS NOT excluded.live_count
-        OR icono_generation_request_factory_option_rollup.score IS NOT excluded.score
-        OR icono_generation_request_factory_option_rollup.vote_h_index IS NOT excluded.vote_h_index
-        OR icono_generation_request_factory_option_rollup.preview_assets_json IS NOT excluded.preview_assets_json`,
-  )
-    .bind(affectedCodesJson)
-    .run()
-  return affectedCodes.length
 }
 
 function normalizeGenerationRequestOptionSearchQuery(raw) {
@@ -8423,7 +8115,8 @@ export function groupGenerationRequestVisionOptions(options) {
       ""
     // Edited `-e` members are searchable aliases for the base family, not
     // additional picker content. When the base exists, it alone supplies the
-    // thumbnails, counts, strength, and immutable request reference.
+    // counts, strength, and immutable request reference; attachStylePublishedPortraits
+    // then populates canonical_count and preview_assets from icono_style_cards.
     const canonicalPreviews = uniqueGenerationRequestPreviews(canonical?.preview_assets)
     grouped.push({
       ...canonical,
@@ -8450,7 +8143,7 @@ export function groupGenerationRequestVisionOptions(options) {
   return grouped
 }
 
-function mapGenerationRequestVisionOptionRows(env, url, rows) {
+function mapGenerationRequestVisionOptionRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row) => {
       const labels = generationRequestVisionOptionLabels(row)
@@ -8466,11 +8159,7 @@ function mapGenerationRequestVisionOptionRows(env, url, rows) {
         live_count: Number(row?.live_count || 0),
         score: Number(row?.score || 0),
         vote_h_index: Math.max(0, Number(row?.vote_h_index || 0) || 0),
-        preview_assets: materializeGenerationRequestPreviewAssetsForPublic(
-          url,
-          env,
-          row?.preview_assets_json || "[]",
-        ),
+        preview_assets: [],
       }
     })
     .filter(Boolean)
@@ -8514,8 +8203,7 @@ export async function listFavoriteGenerationRequestVisionRows(env, favoriteEmuls
        rollup.image_count,
        rollup.live_count,
        rollup.score,
-       rollup.vote_h_index,
-       rollup.preview_assets_json
+       rollup.vote_h_index
      FROM json_each(?) favorite
      CROSS JOIN icono_generation_request_vision_option_rollup rollup
      WHERE rollup.builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
@@ -8544,138 +8232,18 @@ function generationRequestFactorySearchIntent(raw) {
   return { slot }
 }
 
-function mapGenerationRequestFactoryOptionRows(env, url, rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .map((row) => {
-      const recipe = iconoplasmFactoryRecipeFromPublicEmulsionId(row?.public_emulsion_code || "")
-      if (!recipe) return null
-      return {
-        vision_id: recipe.publicId,
-        label: recipe.publicId,
-        primary_label: recipe.publicId,
-        secondary_label: "",
-        search_text: `${recipe.publicId} ${recipe.slot}`,
-        emulsion_id: recipe.publicId,
-        emulsion_family_id: `0-${recipe.slot}`,
-        image_count: Math.max(0, Number(row?.image_count || 0) || 0),
-        live_count: Math.max(0, Number(row?.live_count || 0) || 0),
-        score: Number(row?.score || 0) || 0,
-        vote_h_index: Math.max(0, Number(row?.vote_h_index || 0) || 0),
-        preview_assets: materializeGenerationRequestPreviewAssetsForPublic(
-          url,
-          env,
-          row?.preview_assets_json || "[]",
-        ),
-      }
-    })
-    .filter(Boolean)
-}
-
-// One factory style is several recipe codes (A9-21103, C9-21103, ...), each
-// with its own ranked previews. The style's previews are every code's
-// canonical portraits before any code's candidates, one per gene (B-896:
-// 21103 showed an ACVR2B candidate from its first code while its second code
-// held two more canonical portraits).
-export function collapseGenerationRequestFactorySlotOptions(slot, sources) {
-  const option = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
-  if (!option) return null
-  const merged = (Array.isArray(sources) ? sources : []).flatMap((source) =>
-    Array.isArray(source?.preview_assets) ? source.preview_assets : [],
-  )
-  const previewAssets = []
-  const seenGenes = new Set()
-  for (const preview of [
-    ...merged.filter((preview) => preview?.is_current),
-    ...merged.filter((preview) => !preview?.is_current),
-  ]) {
-    const assetSha = normalizeSha256(preview?.asset_sha256 || "") || ""
-    const gene = normalizeSymbol(preview?.gene_symbol || "") || assetSha
-    if (!assetSha || seenGenes.has(gene)) continue
-    seenGenes.add(gene)
-    previewAssets.push(preview)
-    if (previewAssets.length >= GENERATION_REQUEST_PUBLIC_PREVIEW_LIMIT) break
-  }
-  const collapsed = {
-    ...option,
-    image_count: (Array.isArray(sources) ? sources : []).reduce(
-      (sum, source) => sum + Math.max(0, Number(source?.image_count) || 0),
-      0,
-    ),
-    live_count: (Array.isArray(sources) ? sources : []).reduce(
-      (sum, source) => sum + Math.max(0, Number(source?.live_count) || 0),
-      0,
-    ),
-    score: (Array.isArray(sources) ? sources : []).reduce(
-      (best, source) => Math.max(best, Number(source?.score) || 0),
-      0,
-    ),
-    vote_h_index: (Array.isArray(sources) ? sources : []).reduce(
-      (best, source) => Math.max(best, Number(source?.vote_h_index) || 0),
-      0,
-    ),
-    preview_assets: previewAssets,
-  }
-  if (previewAssets.length) {
-    collapsed.secondary_label = ""
-    delete collapsed.is_preallocated_without_preview
-  }
-  return collapsed
-}
-
-async function listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds) {
-  if (!env.ICONOPLASM_DB) return []
-  const favoriteIds = Array.from(
-    new Set(
-      (Array.isArray(favoriteEmulsionIds) ? favoriteEmulsionIds : [])
-        .map(normalizeFavoriteEmulsionFamilyId)
-        .filter((value) => /^0-[1-9][0-9]*$/.test(value)),
-    ),
-  )
-  if (!favoriteIds.length) return []
-  const response = await env.ICONOPLASM_DB.prepare(
-    `SELECT rollup.public_emulsion_code, rollup.emulsion_slot, rollup.image_count,
-            rollup.live_count, rollup.score, rollup.vote_h_index, rollup.preview_assets_json
-     FROM icono_generation_request_factory_option_rollup rollup
-     JOIN json_each(?) favorite
-       ON rollup.emulsion_slot = CAST(substr(favorite.value, 3) AS INTEGER)
-     WHERE favorite.value GLOB '0-[1-9][0-9]*'
-     ORDER BY favorite.key ASC, rollup.live_count DESC, rollup.image_count DESC,
-              rollup.score DESC, rollup.public_emulsion_code ASC`,
-  )
-    .bind(JSON.stringify(favoriteIds))
-    .all()
-  const sources = mapGenerationRequestFactoryOptionRows(env, url, response?.results || [])
-  return favoriteIds
-    .map((favoriteId) => {
-      const slot = Number.parseInt(favoriteId.slice(2), 10)
-      return collapseGenerationRequestFactorySlotOptions(
-        slot,
-        sources.filter((source) => source.emulsion_family_id === favoriteId),
-      )
-    })
-    .filter((option) => option && option.image_count > 0)
-}
-
-async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
+// B-1283: exact slot / factory code searches (e.g. "255", "0-255", "D9-255")
+// read the single vision rollup row for `0-<slot>`, falling back to the
+// preallocated slot stub when no rollup row exists yet. attachStylePublishedPortraits
+// then supplies canonical_count and thumbnails from icono_style_cards.
+async function listGenerationRequestAnimaSlotOptions(env, searchIntent) {
   const slot = Math.max(0, Number(searchIntent?.slot || 0) || 0)
   if (!env.ICONOPLASM_DB || !slot) return []
 
-  const exactResponse = await env.ICONOPLASM_DB.prepare(
-    `SELECT public_emulsion_code, emulsion_slot, image_count, live_count,
-            score, vote_h_index, preview_assets_json
-     FROM icono_generation_request_factory_option_rollup
-     WHERE emulsion_slot = ?
-     ORDER BY live_count DESC, image_count DESC, score DESC, public_emulsion_code ASC
-     LIMIT 120`,
-  )
-    .bind(slot)
-    .all()
-  const exactOptions = mapGenerationRequestFactoryOptionRows(env, url, exactResponse?.results || [])
-
-  const legacyResponse = await env.ICONOPLASM_DB.prepare(
+  const response = await env.ICONOPLASM_DB.prepare(
     `SELECT vision_id, emulsion_id, artist_tag, artist_name, workflow_id,
             workflow_label, prompt_version, variant_slot, image_count,
-            live_count, score, vote_h_index, preview_assets_json
+            live_count, score, vote_h_index
      FROM icono_generation_request_vision_option_rollup
      WHERE builder_version = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
        AND emulsion_id = ?
@@ -8684,25 +8252,30 @@ async function listGenerationRequestFactorySlotOptions(env, url, searchIntent) {
   )
     .bind(`0-${slot}`)
     .all()
-  const legacyOptions = groupGenerationRequestVisionOptions(
-    mapGenerationRequestVisionOptionRows(env, url, legacyResponse?.results || []),
-  ).map((option) => ({
-    ...option,
-    label: `0-${slot}`,
-    primary_label: `0-${slot}`,
-    secondary_label: "",
-    search_text: `0-${slot} ${slot} ${option.search_text || ""}`.trim(),
-    is_unqualified_legacy: true,
-  }))
-
-  const sources = [...legacyOptions, ...exactOptions]
-  const collapsed = collapseGenerationRequestFactorySlotOptions(slot, sources)
-  return collapsed ? [collapsed] : []
+  const grouped = groupGenerationRequestVisionOptions(
+    mapGenerationRequestVisionOptionRows(response?.results || []),
+  )
+  if (grouped.length) {
+    const primary = grouped[0]
+    return [
+      {
+        ...primary,
+        label: String(slot),
+        primary_label: String(slot),
+        secondary_label: "",
+        emulsion_id: `0-${slot}`,
+        emulsion_family_id: `0-${slot}`,
+        search_text: `0-${slot} ${slot} ${primary.search_text || ""}`.trim(),
+      },
+    ]
+  }
+  const fallback = iconoplasmPreallocatedAnimaEmulsionOption(`anima-v1-${slot}`)
+  return fallback ? [fallback] : []
 }
 
 const GENERATION_REQUEST_STRENGTH_COLUMNS = `vision_id, emulsion_id, artist_tag, artist_name,
        workflow_id, workflow_label, prompt_version, variant_slot, image_count, live_count,
-       score, vote_h_index, preview_assets_json`
+       score, vote_h_index`
 const GENERATION_REQUEST_FIRST_PAGE = 120
 // The rows a style search reads from each prefix range, at most.
 const GENERATION_REQUEST_SEARCH_RANGE_ROWS = 240
@@ -8791,8 +8364,8 @@ async function listGenerationRequestVisionOptions(env, url, favoriteEmulsionIds 
   return (await listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)).options
 }
 
-function generationRequestFirstPageOptions(env, url, rows) {
-  return groupGenerationRequestVisionOptions(mapGenerationRequestVisionOptionRows(env, url, rows))
+function generationRequestFirstPageOptions(rows) {
+  return groupGenerationRequestVisionOptions(mapGenerationRequestVisionOptionRows(rows))
 }
 
 // B-896: the picker's first page is the same for every player, so it lives on
@@ -8814,7 +8387,7 @@ export async function publishRequestPickerObject(env) {
   const object = {
     request_options: await attachStylePublishedPortraits(
       env.ICONOPLASM_DB,
-      generationRequestFirstPageOptions(env, url, firstPage.rows),
+      generationRequestFirstPageOptions(firstPage.rows),
       (sha, rendition) => adminPortraitUrl(portraitBase(url, env), sha, rendition),
     ),
     next_cursor: firstPage.nextCursor,
@@ -8840,8 +8413,7 @@ export async function publishRequestPickerObject(env) {
 }
 
 // Every picker page leaves through here, so every style card carries its
-// blot count and its published portraits (migration 0130), whichever rollup
-// supplied the card.
+// blot count and its published portraits (migration 0130).
 export async function listGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds = []) {
   const page = await readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsionIds)
   return {
@@ -8862,11 +8434,7 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
   if (searchQuery) {
     const factorySearchIntent = generationRequestFactorySearchIntent(searchQuery)
     if (factorySearchIntent) {
-      const imageOptions = await listGenerationRequestFactorySlotOptions(
-        env,
-        url,
-        factorySearchIntent,
-      )
+      const imageOptions = await listGenerationRequestAnimaSlotOptions(env, factorySearchIntent)
       return {
         options: annotateFavoriteGenerationRequestOptions(imageOptions, favoriteEmulsionIds),
         nextCursor: "",
@@ -8893,7 +8461,7 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
       if (!lower || !upper) return []
       const response = await env.ICONOPLASM_DB.prepare(
         `SELECT vision_id, emulsion_id, workflow_id, workflow_label, prompt_version,
-                variant_slot, image_count, live_count, score, vote_h_index, preview_assets_json
+                variant_slot, image_count, live_count, score, vote_h_index
          FROM icono_generation_request_vision_option_rollup
          WHERE ${column} >= ? AND ${column} < ?
            AND ${versionTerm} = ${GENERATION_REQUEST_VISION_OPTION_ROLLUP_VERSION}
@@ -8935,7 +8503,7 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
         .slice(0, 120),
     }
     const groupedDatabaseOptions = groupGenerationRequestVisionOptions(
-      mapGenerationRequestVisionOptionRows(env, url, resp?.results || []),
+      mapGenerationRequestVisionOptionRows(resp?.results || []),
     )
     return {
       options: annotateFavoriteGenerationRequestOptions(
@@ -8952,9 +8520,7 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
     const page = await readGenerationRequestStrengthPage(env, cursor, GENERATION_REQUEST_NEXT_PAGE)
     return {
       options: annotateFavoriteGenerationRequestOptions(
-        groupGenerationRequestVisionOptions(
-          mapGenerationRequestVisionOptionRows(env, url, page.rows),
-        ),
+        groupGenerationRequestVisionOptions(mapGenerationRequestVisionOptionRows(page.rows)),
         favoriteEmulsionIds,
       ),
       nextCursor: page.nextCursor,
@@ -8962,29 +8528,18 @@ async function readGenerationRequestVisionOptionsPage(env, url, favoriteEmulsion
   }
   // `scope=favorites`: the player's own styles only. The picker reads the first
   // page from the CDN (picker/v1/styles.json) and asks this only for favourites
-  // the page lacks (B-896). Each favourite costs its vision rollup rows, its
-  // factory rollup rows (about six) and one stored card (0144), about 15 rows;
-  // before 0144 the card alone cost two rows per blot (B-1154).
+  // the page lacks (B-896). Each favourite costs its vision rollup row(s) and
+  // one stored card (0144), with no duplicate factory rollup read (B-1283).
   const favoritesOnly = url?.searchParams?.get("scope") === "favorites"
-  const [favoriteRows, favoriteFactoryOptions, firstPage] = await Promise.all([
+  const [favoriteRows, firstPage] = await Promise.all([
     listFavoriteGenerationRequestVisionRows(env, favoriteEmulsionIds),
-    listFavoriteGenerationRequestFactoryOptions(env, url, favoriteEmulsionIds),
     favoritesOnly
       ? { rows: [], nextCursor: "" }
       : readGenerationRequestStrengthPage(env, null, GENERATION_REQUEST_FIRST_PAGE),
   ])
-  const groupedVisionOptions = groupGenerationRequestVisionOptions(
-    mapGenerationRequestVisionOptionRows(env, url, [...favoriteRows, ...firstPage.rows]),
+  const mergedOptions = groupGenerationRequestVisionOptions(
+    mapGenerationRequestVisionOptionRows([...favoriteRows, ...firstPage.rows]),
   )
-  const factoryFavoriteFamilies = new Set(
-    favoriteFactoryOptions.map((option) => option.emulsion_family_id),
-  )
-  const mergedOptions = [
-    ...favoriteFactoryOptions,
-    ...groupedVisionOptions.filter(
-      (option) => !factoryFavoriteFamilies.has(option.emulsion_family_id),
-    ),
-  ]
   const coveredFavoriteFamilies = new Set(
     mergedOptions
       .map((option) =>
@@ -13859,9 +13414,6 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
   )
   if (!visionIds.length) return 0
   const visionIdsJson = JSON.stringify(visionIds)
-  // The vision's codes are read first, once: a vision above the code bound is
-  // refused before this rebuild writes a row (B-946).
-  const affectedCodes = await readVisionEmulsionCodes(env, visionIdsJson)
 
   const deleteStatement = env.ICONOPLASM_DB.prepare(
     `WITH incoming AS (
@@ -13996,13 +13548,10 @@ export async function rebuildVisionRollupsBatch(env, rawVisionIds) {
 
   // This batched function is the production mutation path used by the
   // request-picker job (for the visions sync finalization marks), ingest,
-  // reconcile and admin mutations. The old per-vision
-  // implementation refreshed the request picker, but this path historically
-  // stopped after icono_admin_vision_rollup. Keep the dependent read model in
+  // reconcile and admin mutations. Keep the dependent request-option rollup in
   // the same awaited mutation boundary so a completed job means both
   // projections are current, including deletion of vanished visions.
   await rebuildGenerationRequestVisionOptionRollupsBatch(env, visionIds)
-  await rebuildGenerationRequestFactoryOptionRollupsBatch(env, visionIds, { affectedCodes })
 
   return visionIds.length
 }
@@ -14051,9 +13600,9 @@ export async function markVisionRollupsDirty(env, rawVisionIds, now = new Date()
   return visionIds.length
 }
 
-// B-1099: measured ~2,000 rows read per style on the SOX11 trace (rebuild
-// covers admin vision, vision-option, factory-option rollups and previews).
-const VISION_ROLLUP_ESTIMATED_ROWS_READ = 2000
+// B-1283: rebuild covers admin vision and vision-option rollups + vote h-index
+// (factory-option rollup and thrown-away preview scans are retired).
+const VISION_ROLLUP_ESTIMATED_ROWS_READ = 1000
 
 export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIRTY_BATCH } = {}) {
   if (!env?.ICONOPLASM_DB) return { ok: false, reason: "missing_db" }
@@ -14066,9 +13615,9 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
     .all()
   const marks = (picked?.results || []).filter((row) => row?.vision_id)
   if (!marks.length) return { ok: true, visions: 0, refused: [] }
-  let visionIds = marks.map((row) => row.vision_id)
+  const visionIds = marks.map((row) => row.vision_id)
   // Publication work, let in by its whole price before it writes (B-1085): the
-  // measured worst case per vision written, and an unmeasured estimate of reads.
+  // measured worst case per vision written, and a conservative estimate of reads.
   const admission = await admitBatchWork(db, {
     usage: await accountD1Usage(env).catch(() => null),
     criticality: "sheddable_plus",
@@ -14086,60 +13635,20 @@ export async function rebuildDirtyVisionRollups(env, { limit = VISION_ROLLUP_DIR
       deferred: visionIds.length,
       admission: admission.body,
     }
-  const refused = []
-  const rebuiltIds = []
-  // Bounded by construction: each failed attempt sets one vision aside, so a run
-  // of `limit` visions makes at most limit + 1 attempts of a few D1 calls each,
-  // far under Cloudflare's 1,000 calls an invocation. Chesterton's fence
-  // (B-1067): a statement budget of our own here stopped after about 30
-  // refusals and stranded every good vision queued behind them.
-  while (visionIds.length) {
-    try {
-      await rebuildVisionRollupsBatch(env, visionIds)
-      rebuiltIds.push(...visionIds)
-      visionIds = []
-    } catch (error) {
-      // B-946: a vision above its emulsion-code bound is refused before
-      // anything is written. Set it aside and rebuild the rest of the batch.
-      if (
-        error?.code !== "VISION_EMULSION_CODE_BOUND_EXCEEDED" ||
-        !visionIds.includes(error.visionId)
-      )
-        throw error
-      refused.push({ vision_id: error.visionId, error: error.message })
-      visionIds = visionIds.filter((visionId) => visionId !== error.visionId)
-    }
-  }
+  await rebuildVisionRollupsBatch(env, visionIds)
   // Marks go only after their rebuild, and only as they were read: a gene
   // finalized meanwhile gave its vision a newer time, so that mark stays and
   // the next run rebuilds it. A run that fails leaves every mark in place.
-  if (rebuiltIds.length) {
-    const rebuilt = new Set(rebuiltIds)
-    await db
-      .prepare(
-        `DELETE FROM icono_vision_rollup_dirty
-         WHERE (vision_id, marked_at) IN (
-           SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)
-         )`,
-      )
-      .bind(
-        JSON.stringify(
-          marks
-            .filter((row) => rebuilt.has(row.vision_id))
-            .map((row) => [row.vision_id, row.marked_at]),
-        ),
-      )
-      .run()
-  }
-  // A refused vision stays marked but moves behind the others, so it cannot
-  // hold the head of every later batch while its extra codes remain.
-  if (refused.length)
-    await markVisionRollupsDirty(
-      env,
-      refused.map((row) => row.vision_id),
+  await db
+    .prepare(
+      `DELETE FROM icono_vision_rollup_dirty
+       WHERE (vision_id, marked_at) IN (
+         SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)
+       )`,
     )
-  for (const row of refused) console.warn("[Iconoplasm] vision rollup refused", row)
-  return { ok: true, visions: rebuiltIds.length, refused, remaining: visionIds.length }
+    .bind(JSON.stringify(marks.map((row) => [row.vision_id, row.marked_at])))
+    .run()
+  return { ok: true, visions: visionIds.length, refused: [], remaining: 0 }
 }
 
 async function syncTouchedVisionReadModels(
