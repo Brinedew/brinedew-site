@@ -139,6 +139,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - name: Checkout private content
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Brinedew/brinedew-content
+          path: content
+          ssh-key: ${{ secrets.CONTENT_REPO_DEPLOY_KEY }}
+          fetch-depth: 0
+
       - name: Protect previously published extension downloads
         run: node scripts/verify-iconoplasm-release-history.mjs
 
@@ -178,6 +186,14 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Checkout private content
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Brinedew/brinedew-content
+          path: content
+          ssh-key: ${{ secrets.CONTENT_REPO_DEPLOY_KEY }}
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup
 
@@ -242,6 +258,14 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+
+      - name: Checkout private content
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Brinedew/brinedew-content
+          path: content
+          ssh-key: ${{ secrets.CONTENT_REPO_DEPLOY_KEY }}
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup
 

@@ -138,6 +138,11 @@ iconoplasm-extension/.wxt-*/
 .quartz/local-plugins/**/node_modules/
 
 
+# Private Obsidian vault and Quartz content live in Brinedew/brinedew-content
+# (checked out by CI/deploy via CONTENT_REPO_DEPLOY_KEY). Kept out of this
+# public repo so drafts stay private and Obsidian Git never sees ../ files.
+/content/
+
 # Agent scratch checkouts (Claude Code worktree isolation). Never project source;
 # the pre-push Prettier check would otherwise format their dist files.
 .claude/worktrees/
