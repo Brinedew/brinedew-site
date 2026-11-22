@@ -12,13 +12,6 @@
     "preact": "^10.28.2"
   },
   "quartz": {
-    "category": "transformer",
-    "components": {
-      "EssayNormalizer": {
-        "displayName": "Essay Normalizer",
-        "defaultPosition": "beforeBody",
-        "defaultPriority": 1
-      }
-    }
+    "category": "transformer"
   }
 }

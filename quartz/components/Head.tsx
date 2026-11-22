@@ -338,6 +338,11 @@ export default (() => {
     const ogImageDefaultExtension = getFileExtension(ogImageDefaultPath)?.slice(1) ?? "png"
     const ogImageMimeType = ogImageDefaultExtension === "jpg" ? "jpeg" : ogImageDefaultExtension
 
+    const coreStylesheet = css[0]?.content
+    const coreScript = js.find(
+      (r) => r.loadTime === "beforeDOMReady" && r.contentType === "external",
+    )
+
     return (
       <head>
         <title>{title}</title>
@@ -346,6 +351,10 @@ export default (() => {
             document rewritten by the gene-page boot (or a slow CSS load) never
             flashes white. The theme attribute is set by the inline theme script. */}
         <style>{`html{background:${cfg.theme.colors.lightMode.light}}html[saved-theme=dark]{background:${cfg.theme.colors.darkMode.light}}`}</style>
+        {coreStylesheet && <link rel="preload" href={coreStylesheet} as="style" />}
+        {coreScript && coreScript.contentType === "external" && (
+          <link rel="preload" href={coreScript.src} as="script" />
+        )}
         {cfg.theme.cdnCaching && cfg.theme.fontOrigin === "googleFonts" && (
           <>
             <link rel="preconnect" href="https://fonts.googleapis.com" />

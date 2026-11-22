@@ -8,13 +8,6 @@
     "./components": "./dist/index.js"
   },
   "quartz": {
-    "category": "transformer",
-    "components": {
-      "PinterestEmbeds": {
-        "displayName": "Pinterest Embeds",
-        "defaultPosition": "afterBody",
-        "defaultPriority": 20
-      }
-    }
+    "category": "transformer"
   }
 }

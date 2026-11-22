@@ -11,7 +11,6 @@ const isElement = (target: EventTarget | null): target is Element =>
 const isLocalUrl = (href: string) => {
   try {
     const url = new URL(href)
-    if (url.protocol !== "http:" && url.protocol !== "https:") return false
     if (window.location.origin === url.origin) {
       return true
     }
@@ -27,19 +26,12 @@ const isSamePage = (url: URL): boolean => {
 
 const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined => {
   if (!isElement(target)) return
+  if (target.attributes.getNamedItem("target")?.value === "_blank") return
   const a = target.closest("a")
   if (!a) return
-  if (a.hasAttribute("download")) return
-  // Clicks usually land on an image or text node inside the link. The navigation contract
-  // belongs to the enclosing anchor, so its target must be checked instead of event.target.
-  if (a.target === "_blank") return
   if ("routerIgnore" in a.dataset) return
   const { href } = a
   if (!isLocalUrl(href)) return
-  // API endpoints are never pages. Fetching one as a page follows its redirect
-  // (sign-in goes to discord.com), which the site's connect-src blocks, so the
-  // browser should navigate to it directly.
-  if (new URL(href).pathname.startsWith("/api/")) return
   return { url: new URL(href), scroll: "routerNoscroll" in a.dataset ? false : undefined }
 }
 
@@ -76,26 +68,39 @@ async function _navigate(url: URL, isBack: boolean = false) {
   isNavigating = true
   startLoading()
   p = p || new DOMParser()
-  const contents = await fetchCanonical(url)
-    .then((res) => {
-      if (res.url) {
-        const resolvedUrl = new URL(res.url, window.location.href)
-        if (resolvedUrl.origin !== window.location.origin) {
-          if (!resolvedUrl.hash && url.hash) resolvedUrl.hash = url.hash
-          window.location.assign(resolvedUrl.href)
-          return
-        }
-      }
-      const contentType = res.headers.get("content-type")
-      if (contentType?.startsWith("text/html")) {
-        return res.text()
-      } else {
-        window.location.assign(url)
-      }
-    })
-    .catch(() => {
-      window.location.assign(url)
-    })
+  // Where the page really came from: a redirect (e.g. `folder` → `folder/`, or an alias page's
+  // canonical link) changes the base its relative links resolve against, and the address bar
+  // should show it too. fetch() drops the #hash, so keep the requested one.
+  let finalUrl = url
+  // A page fetched ahead (prefetch.inline.ts) is shown at once; one still loading is awaited.
+  const prefetched = await window.quartzPrefetch?.load(url)
+  if (prefetched && prefetched.text === undefined) {
+    // not a page (e.g. a file served without an extension): let the browser open it
+    window.location.assign(url)
+    return
+  }
+  if (prefetched) {
+    finalUrl = new URL(prefetched.url)
+    finalUrl.hash = url.hash
+  }
+  const contents = prefetched
+    ? prefetched.text
+    : await fetchCanonical(url)
+        .then((res) => {
+          if (res.url) {
+            finalUrl = new URL(res.url)
+            finalUrl.hash = url.hash
+          }
+          const contentType = res.headers.get("content-type")
+          if (contentType?.startsWith("text/html")) {
+            return res.text()
+          } else {
+            window.location.assign(url)
+          }
+        })
+        .catch(() => {
+          window.location.assign(url)
+        })
 
   if (!contents) return
 
@@ -108,7 +113,7 @@ async function _navigate(url: URL, isBack: boolean = false) {
   cleanupFns.clear()
 
   const html = p.parseFromString(contents, "text/html")
-  normalizeRelativeURLs(html, url)
+  normalizeRelativeURLs(html, finalUrl)
 
   let title = html.querySelector("title")?.textContent
   if (title) {
@@ -145,7 +150,7 @@ async function _navigate(url: URL, isBack: boolean = false) {
   // delay setting the url until now
   // at this point everything is loaded so changing the url should resolve to the correct addresses
   if (!isBack) {
-    history.pushState({}, "", url)
+    history.pushState({}, "", finalUrl)
   }
 
   notifyNav(getFullSlug(window))
@@ -171,9 +176,6 @@ window.spaNavigate = navigate
 function createRouter() {
   if (typeof window !== "undefined") {
     window.addEventListener("click", async (event) => {
-      // A feature-specific router may have already claimed this click at the document level.
-      // Respect the DOM cancellation contract instead of starting a second navigation.
-      if (event.defaultPrevented) return
       const { url } = getOpts(event) ?? {}
       // dont hijack behaviour, just let browser act normally
       if (!url || event.ctrlKey || event.metaKey) return
@@ -190,9 +192,6 @@ function createRouter() {
     })
 
     window.addEventListener("popstate", (event) => {
-      // Feature routers mark the history entries they fully own. Running the Quartz fetch/morph
-      // pipeline as well would create two route owners and can erase feature restoration state.
-      if (event.state?.quartzRouterIgnore === true) return
       const { url } = getOpts(event) ?? {}
       if (window.location.hash && window.location.pathname === url?.pathname) return
       navigate(new URL(window.location.toString()), true)

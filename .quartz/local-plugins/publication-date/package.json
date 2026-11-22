@@ -12,13 +12,6 @@
     "preact": "^10.28.2"
   },
   "quartz": {
-    "category": "transformer",
-    "components": {
-      "PublicationDate": {
-        "displayName": "Publication Date",
-        "defaultPosition": "beforeBody",
-        "defaultPriority": 20
-      }
-    }
+    "category": "transformer"
   }
 }

@@ -9,13 +9,6 @@
     "./components": "./dist/index.js"
   },
   "quartz": {
-    "category": "transformer",
-    "components": {
-      "SmartypantsImageAttributes": {
-        "displayName": "SmartyPants Image Attributes",
-        "defaultPosition": "beforeBody",
-        "defaultPriority": 1
-      }
-    }
+    "category": "transformer"
   }
 }

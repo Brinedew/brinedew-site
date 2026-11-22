@@ -8,13 +8,6 @@
     "./components": "./dist/index.js"
   },
   "quartz": {
-    "category": "transformer",
-    "components": {
-      "ImageCaptions": {
-        "displayName": "Image Captions",
-        "defaultPosition": "afterBody",
-        "defaultPriority": 20
-      }
-    }
+    "category": "transformer"
   }
 }

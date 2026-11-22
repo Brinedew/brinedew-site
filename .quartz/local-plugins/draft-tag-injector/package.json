@@ -12,13 +12,6 @@
     "preact": "^10.28.2"
   },
   "quartz": {
-    "category": "component",
-    "components": {
-      "DraftTagInjector": {
-        "displayName": "Draft Tag Injector",
-        "defaultPosition": "beforeBody",
-        "defaultPriority": 1
-      }
-    }
+    "category": "transformer"
   }
 }
