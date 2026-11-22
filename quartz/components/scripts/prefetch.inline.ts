@@ -61,6 +61,7 @@ function targetOf(a: HTMLAnchorElement): URL | undefined {
     return
   }
   if (url.origin !== window.location.origin || !/^https?:$/.test(url.protocol)) return
+  if (url.pathname.startsWith("/api/")) return
   if (url.pathname === window.location.pathname && url.search === window.location.search) return
   // pages have no extension (or .html); a link to an image, PDF or file is not worth the bytes
   const last = url.pathname.split("/").pop() ?? ""
@@ -72,6 +73,10 @@ async function load(url: URL, priority: "low" | "high"): Promise<PrefetchedPage 
   try {
     const res = await fetchCanonical(url, { priority } as RequestInit)
     if (!res.ok) return undefined
+    if (res.url && new URL(res.url, window.location.href).origin !== window.location.origin) {
+      await res.body?.cancel()
+      return undefined
+    }
     const contentType = res.headers.get("content-type") ?? ""
     if (!contentType.startsWith("text/html")) {
       await res.body?.cancel()
