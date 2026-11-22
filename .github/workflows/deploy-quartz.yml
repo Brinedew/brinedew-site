@@ -43,6 +43,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - name: Checkout private content
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Brinedew/brinedew-content
+          path: content
+          ssh-key: ${{ secrets.CONTENT_REPO_DEPLOY_KEY }}
+          fetch-depth: 0
+
       - name: Reject stale production source before admission
         env:
           GITHUB_TOKEN: ${{ github.token }}

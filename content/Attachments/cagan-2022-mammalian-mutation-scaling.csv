@@ -1,5 +1,0 @@
-species,lifespan_yr,rate_per_yr,mass_kg,elb_est,group
-Mouse,3.7,796,0.025,2945,Short-lived
-Giraffe,24.0,99,800.0,2376,Mass-contrast
-Naked mole-rat,25.0,93,0.035,2325,Mass-contrast
-Human,83.7,47.1,70.0,3942,Long-lived
