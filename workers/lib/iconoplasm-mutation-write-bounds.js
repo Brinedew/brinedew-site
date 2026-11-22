@@ -3,26 +3,14 @@
 // a price is measured rather than estimated. Every number is the worst case on
 // the complete migrated schema; change one only together with a new measurement.
 
-// A vision carries at most this many distinct emulsion codes, enforced where the
-// rebuild reads them (workers/iconoplasm/vision-emulsion-code-bound.js) before it
-// writes anything. Production, read-only, 2026-10-03: 1,860 visions, 2,245
-// vision-code pairs; 1,605 visions carry one code, 234 carry two, the most any
-// carries is 17 (four visions: the legacy code and one per pipeline letter A to
-// P). 24 leaves seven codes of room and still covers one code per factory
-// pipeline plus the legacy code if the catalog grows; a vision above it is
-// refused with a named error, and the bound is raised only together with a new
-// measurement of VISION_ROLLUP_ROWS.
-export const MAX_EMULSION_CODES_PER_VISION = 24
-
-// One vision rebuild (the vision row and its option rollups, and the registered
-// pair and option rollup of every code it carries or just stopped carrying),
-// measured at MAX_EMULSION_CODES_PER_VISION codes in the worst of three runs: a
-// first build writes about six rows per code, and replacing every code writes
-// about eight (the stale pair and rollup go, the new pair and rollup come).
-// A typical vision (one or two codes) writes about 17 rows, so the price is
-// several times what a run writes: it can't know a vision's code count without
-// scanning its assets.
-export const VISION_ROLLUP_ROWS = 194
+// One vision rebuild (icono_admin_vision_rollup +
+// icono_generation_request_vision_option_rollup, with its secondary indexes).
+// Measured in Miniflare on the complete migrated schema (B-1283,
+// workers/iconoplasm/sync-rollup-read-cost.test.js) after retiring the
+// duplicate factory-option rollup and its emulsion-code bound: insert writes 9
+// rows, updating every indexed column writes 6, repeat writes 0. 12 leaves
+// headroom over the worst case (down from 194 before B-1283).
+export const VISION_ROLLUP_ROWS = 12
 
 // B-1057: a gene object build marks the visions a gene touched instead of
 // rebuilding each one, and the request-picker job rebuilds every marked vision
@@ -30,14 +18,13 @@ export const VISION_ROLLUP_ROWS = 194
 // primary-key index entry.
 export const VISION_ROLLUP_DIRTY_MARK_ROWS = 2
 
-// One run of the request-picker job's vision rebuild: every vision's rebuild,
-// its claim (the mark removed) and at worst its re-mark, when a vision above its
-// emulsion-code bound is set aside or the run stops early. It is the run's
-// rows-written price (B-1067, batch-admission.js).
+// One run of the request-picker job's vision rebuild: every vision's rebuild
+// plus removing its dirty mark. It is the run's rows-written price (B-1067,
+// batch-admission.js).
 export function visionRollupBatchWriteUnits(visionCount) {
   const visions = Number.isSafeInteger(visionCount) && visionCount > 0 ? visionCount : 0
   if (!visions) throw new RangeError("A vision rollup batch rebuilds at least one vision")
-  return visions * (VISION_ROLLUP_ROWS + 2 * VISION_ROLLUP_DIRTY_MARK_ROWS)
+  return visions * (VISION_ROLLUP_ROWS + VISION_ROLLUP_DIRTY_MARK_ROWS)
 }
 
 // A claim reads up to scanLimit open requests, quarantines every one whose exact
