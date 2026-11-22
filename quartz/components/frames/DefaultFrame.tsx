@@ -44,16 +44,16 @@ export const DefaultFrame: PageFrame = {
           </div>
           {(() => {
             const isDraftPage =
-              componentData.fileData.frontmatter?.draft === true ||
-              componentData.fileData.frontmatter?.draft === "true"
+              componentData.fileData?.frontmatter?.draft === true ||
+              componentData.fileData?.frontmatter?.draft === "true"
             if (!isDraftPage) return null
             return <span class="draft-indicator popover-hint">Unpublished draft</span>
           })()}
           <Content {...componentData} />
           {(() => {
             const isDraftPage =
-              componentData.fileData.frontmatter?.draft === true ||
-              componentData.fileData.frontmatter?.draft === "true"
+              componentData.fileData?.frontmatter?.draft === true ||
+              componentData.fileData?.frontmatter?.draft === "true"
             if (!isDraftPage) return null
             return (
               <article class="icono-card icono-guest-login-card" id="draft-cta">

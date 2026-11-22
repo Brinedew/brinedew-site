@@ -69,6 +69,7 @@ quartz/cli/tui/dist/
 # with a host-specific absolute target (e.g. D:/...) -- it will fail on
 # every other host with ENOENT in regeneratePluginIndex. See B-567
 # postmortem in the brinedew Linear workspace.
+.quartz/plugins/index.ts
 .quartz/plugins/homepage-crawl-frontier
 .quartz/plugins/wiki-category-footer
 .quartz/plugins/iconoplasm-page-switcher

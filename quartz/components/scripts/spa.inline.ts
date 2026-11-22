@@ -11,6 +11,7 @@ const isElement = (target: EventTarget | null): target is Element =>
 const isLocalUrl = (href: string) => {
   try {
     const url = new URL(href)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false
     if (window.location.origin === url.origin) {
       return true
     }
@@ -26,12 +27,14 @@ const isSamePage = (url: URL): boolean => {
 
 const getOpts = ({ target }: Event): { url: URL; scroll?: boolean } | undefined => {
   if (!isElement(target)) return
-  if (target.attributes.getNamedItem("target")?.value === "_blank") return
   const a = target.closest("a")
   if (!a) return
+  if (a.hasAttribute("download")) return
+  if (a.target === "_blank") return
   if ("routerIgnore" in a.dataset) return
   const { href } = a
   if (!isLocalUrl(href)) return
+  if (new URL(href).pathname.startsWith("/api/")) return
   return { url: new URL(href), scroll: "routerNoscroll" in a.dataset ? false : undefined }
 }
 
@@ -73,7 +76,7 @@ async function _navigate(url: URL, isBack: boolean = false) {
   // should show it too. fetch() drops the #hash, so keep the requested one.
   let finalUrl = url
   // A page fetched ahead (prefetch.inline.ts) is shown at once; one still loading is awaited.
-  const prefetched = await window.quartzPrefetch?.load(url)
+  const prefetched = window.quartzPrefetch ? await window.quartzPrefetch.load(url) : undefined
   if (prefetched && prefetched.text === undefined) {
     // not a page (e.g. a file served without an extension): let the browser open it
     window.location.assign(url)
@@ -88,7 +91,13 @@ async function _navigate(url: URL, isBack: boolean = false) {
     : await fetchCanonical(url)
         .then((res) => {
           if (res.url) {
-            finalUrl = new URL(res.url)
+            const resolvedUrl = new URL(res.url, window.location.href)
+            if (resolvedUrl.origin !== window.location.origin) {
+              if (!resolvedUrl.hash && url.hash) resolvedUrl.hash = url.hash
+              window.location.assign(resolvedUrl.href)
+              return
+            }
+            finalUrl = resolvedUrl
             finalUrl.hash = url.hash
           }
           const contentType = res.headers.get("content-type")
