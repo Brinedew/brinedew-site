@@ -604,11 +604,6 @@ body[data-slug^="apps/iconoplasm"] #iconoplasm-root {
   box-sizing: border-box;
 }
 
-.icono-grid[data-layout="image-only-masonry"] .icono-grid-sizer,
-.icono-grid[data-layout="image-only-masonry"] .icono-gutter-sizer {
-  display: none;
-}
-
 .icono-grid[data-layout="image-only-masonry"] .icono-card--image-tile {
   margin-bottom: 0;
 }
@@ -5732,11 +5727,6 @@ html[data-theme="dark"] .icono-card--brick {
   .icono-guest-continuation-grid {
     grid-template-columns: minmax(0, var(--icono-image-tile-width));
     gap: 0;
-  }
-
-  .icono-grid[data-layout="image-only-masonry"] .icono-grid-sizer,
-  .icono-grid[data-layout="image-only-masonry"] .icono-gutter-sizer {
-    display: none;
   }
 
   .icono-home-auth-card {
