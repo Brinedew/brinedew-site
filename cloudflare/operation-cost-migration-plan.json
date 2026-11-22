@@ -94,6 +94,14 @@
           "max": 120000
         }
       ]
+    },
+    "iconoplasm/0156_drop_factory_option_rollup.sql": {
+      "online": true,
+      "prediction": {
+        "rows_read": 0,
+        "rows_written": 0,
+        "requests": 2
+      }
     }
   }
 }

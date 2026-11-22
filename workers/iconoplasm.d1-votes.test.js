@@ -2177,12 +2177,17 @@ test("30d: All styles, Favorites, and slot/factory search agree on counts from o
        vote_h_index, preview_assets_json, builder_version
      ) VALUES ('anima-v1-255', '0-255', '0-255', '', '', 'D', 'Anima', '9', '255', 4, 2, 3, 1, '[]', 3)`,
   )
-  // Deliberately plant a stale/partial legacy factory_option_rollup row to prove
-  // nothing reads it any more.
-  db.exec(
-    `INSERT INTO icono_generation_request_factory_option_rollup (
-       public_emulsion_code, emulsion_slot, image_count, live_count, score, vote_h_index, preview_assets_json
-     ) VALUES ('D9-255', 255, 2, 1, 1, 0, '[]')`,
+  // B-1283 / 0156: neither retired factory-rollup table survives the migrations.
+  assert.deepEqual(
+    db.rows(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table'
+         AND name IN (
+           'icono_generation_request_factory_option_rollup',
+           'icono_generation_request_factory_option_sources'
+         )`,
+    ),
+    [],
   )
   const star = await routeRequest(db, "PUT", "/api/iconoplasm/emulsion-favorites/0-255")
   assert.equal(star.status, 200)
