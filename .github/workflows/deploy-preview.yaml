@@ -44,7 +44,7 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         if: ${{ steps.cf-config.outputs.enabled == 'true' }}
-        uses: AdrianGonz97/refined-cf-pages-action@45ea15c1c69a7bce8ffbb79ba114daa2b52f0cff # v1.3.0
+        uses: AdrianGonz97/refined-cf-pages-action@cbfcac3174e3abfbc38ee14fac05a82000c1f6e9 # v1.3.1
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
