@@ -178,3 +178,67 @@ test("a 401 still posts the login prompt and no refusal", async () => {
   assert.equal(rig.ofType(AUTH).length, 1)
   assert.equal(rig.ofType(FAILED).length, 0)
 })
+
+test("simple card frame shows unavailable status instead of skeleton when fetchFailed is true", async () => {
+  const { document } = parseHTML(
+    '<!doctype html><html><head></head><body><div id="iconoplasm-root">' +
+      '<div id="lit-archival-card-slot"></div></div></body></html>',
+  )
+  document.createRange = () => ({
+    selectNodeContents() {},
+    createContextualFragment(markup) {
+      const template = document.createElement("template")
+      template.innerHTML = markup
+      return template.content
+    },
+  })
+  const listeners = new Map()
+  const parent = { postMessage() {} }
+  const sandbox = {
+    console,
+    AbortController,
+    Element: document.defaultView.Element,
+    Image: class {
+      addEventListener() {}
+    },
+    document,
+    parent,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame: () => 0,
+    addEventListener: (type, callback) => listeners.set(type, callback),
+  }
+  sandbox.window = sandbox
+  sandbox.globalThis = sandbox
+  vm.runInNewContext(
+    await readFile(new URL("./generated/shared-card-runtime.js", import.meta.url), "utf8"),
+    sandbox,
+  )
+  vm.runInNewContext(
+    await readFile(new URL("./lit-archival-frame.js", import.meta.url), "utf8"),
+    sandbox,
+  )
+  listeners.get("message")({
+    source: parent,
+    data: {
+      type: "ICONOPLASM_LIT_ARCHIVAL_RENDER",
+      requestId: "2",
+      cardVariant: "simple",
+      symbol: "FASN",
+      loading: false,
+      fetchFailed: true,
+      pageUrl: "https://iconoplasm.brinedew.bio/gene/FASN",
+      gene: { symbol: "FASN", full_name: "fatty acid synthase" },
+    },
+  })
+  const slot = document.getElementById("lit-archival-card-slot")
+  assert.equal(
+    slot.querySelector(".iconoplasm-tooltip-portrait-status")?.textContent,
+    "Card unavailable",
+  )
+  assert.equal(
+    slot.querySelector(".iconoplasm-tooltip-meta-status")?.textContent,
+    "Could not load card details. Hover again to retry.",
+  )
+  assert.equal(slot.querySelector(".iconoplasm-tooltip-meta-skeleton-row"), null)
+})

@@ -51,9 +51,9 @@ const portraitByteCache = globalThis.IconoplasmImmutableResponseCache.createImmu
 })
 const CDN = "https://iconoplasmportraits.b-cdn.net"
 const STABLE_GENE_CDN_PREFIX = "https://iconoplasmportraits.b-cdn.net/genes/v3/"
+const STABLE_GENE_ORIGIN_PREFIX = `${HOST}/api/public/v1/stable-genes/`
 const STABLE_GENE_SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const STABLE_GENE_TTL_MS = 5 * 60 * 1000
-const STABLE_GENE_ERROR_TTL_MS = 30 * 1000
 const STABLE_GENE_MAX_ENTRIES = 512
 const STABLE_GENE_FETCH_TIMEOUT_MS = 6 * 1000
 const STABLE_GENE_MAX_BYTES = 512 * 1024
@@ -205,10 +205,10 @@ function rememberStableGene(symbol, entry) {
   return entry
 }
 
-async function readStableGene(symbol) {
+async function readStableGeneFromUrl(url, symbol) {
   try {
     const response = await fetchWithTimeout(
-      `${STABLE_GENE_CDN_PREFIX}${symbol}.json`,
+      url,
       // No cookies and no client-version header: every reader must share one
       // CDN cache entry per gene, or the free CDN stops being free. The object
       // is rewritten in place, so revalidate instead of trusting the HTTP
@@ -220,20 +220,28 @@ async function readStableGene(symbol) {
     if (!response.ok) return { status: "error", gene: null, error: `HTTP ${response.status}` }
     const text = await response.text()
     if (new TextEncoder().encode(text).byteLength > STABLE_GENE_MAX_BYTES) {
-      return { status: "missing", gene: null }
+      return { status: "error", gene: null, error: "Stable gene body exceeds limit" }
     }
     let value
     try {
       value = JSON.parse(text)
     } catch {
-      return { status: "missing", gene: null }
+      return { status: "error", gene: null, error: "Invalid stable gene JSON" }
     }
     return validStableGene(value, symbol)
       ? { status: "found", gene: value }
-      : { status: "missing", gene: null }
+      : { status: "error", gene: null, error: "Invalid stable gene schema" }
   } catch (error) {
     return { status: "error", gene: null, error: String(error?.message || error) }
   }
+}
+
+async function readStableGene(symbol) {
+  const cdnResult = await readStableGeneFromUrl(`${STABLE_GENE_CDN_PREFIX}${symbol}.json`, symbol)
+  if (cdnResult.status === "found" || cdnResult.status === "missing") return cdnResult
+  // Healthy reads stay on the CDN with zero Worker cost; only a failed or
+  // corrupted CDN read falls back to the canonical-origin route.
+  return readStableGeneFromUrl(`${STABLE_GENE_ORIGIN_PREFIX}${symbol}.json`, symbol)
 }
 
 async function fetchStableGene(rawSymbol) {
@@ -246,13 +254,15 @@ async function fetchStableGene(rawSymbol) {
   if (cached) stableGeneCache.delete(symbol)
   if (stableGenePending.has(symbol)) return stableGenePending.get(symbol)
   const pending = readStableGene(symbol)
-    .then((result) =>
-      rememberStableGene(symbol, {
-        ...result,
-        expiresAt:
-          Date.now() + (result.status === "error" ? STABLE_GENE_ERROR_TTL_MS : STABLE_GENE_TTL_MS),
-      }),
-    )
+    .then((result) => {
+      if (result.status === "found" || result.status === "missing") {
+        return rememberStableGene(symbol, {
+          ...result,
+          expiresAt: Date.now() + STABLE_GENE_TTL_MS,
+        })
+      }
+      return result
+    })
     .finally(() => {
       if (stableGenePending.get(symbol) === pending) stableGenePending.delete(symbol)
     })
@@ -368,7 +378,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: "invalid_symbol" })
         return
       }
-      sendResponse({ ok: true, status: entry.status, gene: entry.gene || null })
+      sendResponse({
+        ok: true,
+        status: entry.status,
+        gene: entry.gene || null,
+        error: entry.error || null,
+      })
     })
     return true
   }

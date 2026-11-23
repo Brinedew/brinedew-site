@@ -373,6 +373,14 @@
   min-height: 151px;
 }
 
+.iconoplasm-tooltip-meta-status {
+  padding: 10px var(--icono-card-cell-pad-x);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--iconoplasm-tooltip-muted);
+}
+
 .iconoplasm-auth-toast {
   position: fixed;
   right: 16px;

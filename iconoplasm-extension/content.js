@@ -357,7 +357,7 @@
     return row
   }
 
-  function renderTooltipMetaContent(metaEl, detail, loading) {
+  function renderTooltipMetaContent(metaEl, detail, loading, options = {}) {
     if (!metaEl) return
     metaEl.replaceChildren()
     metaEl.classList.toggle("iconoplasm-tooltip-meta--loading", Boolean(loading))
@@ -389,7 +389,16 @@
       }
       return
     }
-    if (!loading) return
+    if (!loading) {
+      if (options && options.fetchFailed) {
+        const status = document.createElement("div")
+        status.className = "iconoplasm-tooltip-meta-status"
+        status.setAttribute("role", "status")
+        status.textContent = "Could not load card details. Hover again to retry."
+        metaEl.appendChild(status)
+      }
+      return
+    }
     for (let index = 0; index < 4; index += 1) {
       const row = document.createElement("div")
       row.className = "iconoplasm-tooltip-meta-skeleton-row"
@@ -415,7 +424,7 @@
     }
   }
 
-  function renderSimpleTooltipBody(body, summaryGene, geneDetail, loading) {
+  function renderSimpleTooltipBody(body, summaryGene, geneDetail, loading, options = {}) {
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
@@ -453,7 +462,7 @@
 
     const meta = document.createElement("div")
     meta.className = "iconoplasm-tooltip-meta"
-    renderTooltipMetaContent(meta, detail, loading)
+    renderTooltipMetaContent(meta, detail, loading, options)
 
     body.append(header, meta)
   }
@@ -1804,7 +1813,11 @@
       if (usesTooltipFrameRenderer()) ensureLitArchivalFrame()
       else parkLitArchivalFrame()
       if (activeSymbol) {
-        renderTooltipBody(activeGeneSummary, geneDetailCache.get(activeSymbol) || null, true)
+        renderTooltipBody(
+          activeGeneSummary,
+          geneDetailCache.get(activeSymbol) || null,
+          !geneDetailCache.has(activeSymbol),
+        )
       }
     }
     if (
@@ -1983,11 +1996,12 @@
     flushLitArchivalPrewarmSources()
   }
 
-  function mountLitArchivalTooltipFrame(body, summaryGene, geneDetail) {
+  function mountLitArchivalTooltipFrame(body, summaryGene, geneDetail, options = {}) {
     const iframe = ensureLitArchivalFrame()
     if (!iframe) return
     const summary = summaryGene && typeof summaryGene === "object" ? summaryGene : {}
     const detail = geneDetail && typeof geneDetail === "object" ? geneDetail : null
+    const fetchFailed = Boolean(options && options.fetchFailed)
     const symbol = String((detail && detail.symbol) || summary.symbol || activeSymbol || "")
       .trim()
       .toUpperCase()
@@ -2005,7 +2019,8 @@
       symbol,
       pageUrl: symbol ? buildGenePageUrl(symbol) : "",
       navigationArmedAt: tooltipNavigationArmedAt,
-      loading: !detail,
+      loading: fetchFailed ? false : !detail,
+      fetchFailed,
       gene: archivalTooltipGeneModel(summaryGene, detail),
       portraitSrc: portraitState.frameSrc,
       portraitDimensions: buildTooltipFramePortraitDimensions(summaryGene, geneDetail),
@@ -2036,7 +2051,7 @@
       .catch(() => null)
   }
 
-  function renderTooltipBody(summaryGene, geneDetail, loading) {
+  function renderTooltipBody(summaryGene, geneDetail, loading, options = {}) {
     if (!tooltip) return
     const body = tooltip.querySelector(".iconoplasm-tooltip-body")
     if (!body) return
@@ -2049,13 +2064,13 @@
         ).toUpperCase() + " hover card",
       )
       if (!iframe) return
-      mountLitArchivalTooltipFrame(body, summaryGene, geneDetail)
+      mountLitArchivalTooltipFrame(body, summaryGene, geneDetail, options)
       return
     }
     parkLitArchivalFrame()
     const surfaces = ensureTooltipSurfaces()
     if (!surfaces) return
-    renderSimpleTooltipBody(surfaces.simpleSurface, summaryGene, geneDetail, loading)
+    renderSimpleTooltipBody(surfaces.simpleSurface, summaryGene, geneDetail, loading, options)
   }
 
   function wireRenderedTooltipVoteBox(geneDetail) {
@@ -2196,7 +2211,13 @@
           renderTooltipBody(activeGeneSummary, geneDetail, false)
           wireRenderedTooltipVoteBox(geneDetail)
         } else {
-          renderTooltipBody(activeGeneSummary, null, false)
+          // A clean 404 is cached as null (`has(symbol)` is true); a transient
+          // fetch error leaves `has(symbol)` false so the next hover retries.
+          const fetchFailed = !geneDetailCache.has(hoverSymbol)
+          if (fetchFailed && portraitRefs?.portraitStatus) {
+            portraitRefs.portraitStatus.textContent = "Card unavailable"
+          }
+          renderTooltipBody(activeGeneSummary, null, false, { fetchFailed })
         }
       })
     }

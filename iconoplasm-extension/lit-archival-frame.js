@@ -187,9 +187,11 @@
       shared &&
       typeof shared.renderTooltipMetaRowsHtml === "function"
         ? shared.renderTooltipMetaRowsHtml(rows)
-        : shared && typeof shared.renderTooltipMetaSkeletonHtml === "function"
-          ? shared.renderTooltipMetaSkeletonHtml()
-          : ""
+        : payload.fetchFailed
+          ? '<div class="iconoplasm-tooltip-meta-status" role="status">Could not load card details. Hover again to retry.</div>'
+          : shared && typeof shared.renderTooltipMetaSkeletonHtml === "function"
+            ? shared.renderTooltipMetaSkeletonHtml()
+            : ""
     return (
       '<div class="iconoplasm-tooltip-header">' +
       '<div class="icono-brick-header-row icono-shared-card-header-row">' +
@@ -306,7 +308,9 @@
           "</button>"
         : '<img class="iconoplasm-tooltip-portrait-img" alt="">') +
       '<div class="iconoplasm-tooltip-portrait-fallback">' +
-      '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
+      '<div class="iconoplasm-tooltip-portrait-status">' +
+      esc(payload && payload.fetchFailed ? "Card unavailable" : "Portrait pending") +
+      "</div>" +
       '<div class="iconoplasm-tooltip-portrait-symbol">' +
       esc(symbol) +
       "</div>" +

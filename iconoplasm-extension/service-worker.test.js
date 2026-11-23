@@ -266,6 +266,7 @@ test("failed portrait bytes never poison reuse or suppress a later successful re
 //    origin, without a client-version header that would fragment the cache.
 
 const STABLE_CDN = "https://iconoplasmportraits.b-cdn.net/genes/v3/"
+const STABLE_ORIGIN = "https://iconoplasm.brinedew.bio/api/public/v1/stable-genes/"
 
 function stableObject(symbol) {
   return {
@@ -323,6 +324,136 @@ test("the hover card reads one stable object per gene from the CDN and caches it
     assert.equal(calls.length, 1, "a second tab reuses the cached object within the TTL")
     const entry = hooks.stableGeneCache.get("TP53")
     assert.ok(entry.expiresAt - Date.now() > 290_000 && entry.expiresAt - Date.now() <= 300_000)
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("stable gene falls back to canonical origin on CDN 502/network error and caches the recovery", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  const calls = []
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    calls.push({ url, init })
+    if (url === `${STABLE_CDN}FASN.json`) {
+      return new Response("bad gateway", { status: 502 })
+    }
+    if (url === `${STABLE_ORIGIN}FASN.json`) {
+      return Response.json(stableObject("FASN"))
+    }
+    throw new Error(`Unexpected URL: ${url}`)
+  }
+  try {
+    const first = await sendStableGene("FASN", 1303)
+    assert.equal(first.ok, true)
+    assert.equal(first.status, "found")
+    assert.equal(first.gene.symbol, "FASN")
+    assert.equal(first.error, null)
+    assert.deepEqual(
+      calls.map((c) => c.url),
+      [`${STABLE_CDN}FASN.json`, `${STABLE_ORIGIN}FASN.json`],
+    )
+    for (const call of calls) {
+      assert.equal(call.init.credentials, "omit")
+      assert.equal(call.init.cache, "no-cache")
+      assert.equal(
+        new Headers(call.init.headers || {}).has("X-Iconoplasm-Extension-Version"),
+        false,
+      )
+    }
+    const second = await sendStableGene("FASN", 1304)
+    assert.equal(second.status, "found")
+    assert.equal(calls.length, 2, "recovered object stays cached within TTL")
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("corrupt or truncated 200 JSON from CDN falls back to origin instead of poisoning cache as missing", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  const calls = []
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    calls.push(url)
+    if (url === `${STABLE_CDN}BRCA1.json`) {
+      return new Response('{"symbol":"BRCA1"', { status: 200 })
+    }
+    if (url === `${STABLE_ORIGIN}BRCA1.json`) {
+      return Response.json(stableObject("BRCA1"))
+    }
+    throw new Error(`Unexpected URL: ${url}`)
+  }
+  try {
+    const result = await sendStableGene("BRCA1", 1305)
+    assert.equal(result.ok, true)
+    assert.equal(result.status, "found")
+    assert.equal(result.gene.symbol, "BRCA1")
+    assert.deepEqual(calls, [`${STABLE_CDN}BRCA1.json`, `${STABLE_ORIGIN}BRCA1.json`])
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("clean CDN 404 returns missing and caches without waking the origin Worker", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  const calls = []
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    calls.push(url)
+    if (url === `${STABLE_CDN}NOTREAL.json`) {
+      return new Response(null, { status: 404 })
+    }
+    throw new Error(`Origin must not be woken for clean 404: ${url}`)
+  }
+  try {
+    const first = await sendStableGene("NOTREAL", 1306)
+    const second = await sendStableGene("NOTREAL", 1307)
+    assert.equal(first.status, "missing")
+    assert.equal(first.gene, null)
+    assert.equal(second.status, "missing")
+    assert.deepEqual(calls, [`${STABLE_CDN}NOTREAL.json`])
+  } finally {
+    globalThis.fetch = originalFetch
+    hooks.stableGeneCache.clear()
+  }
+})
+
+test("transient failure on both CDN and origin is never cached so next hover retries immediately", async () => {
+  const originalFetch = globalThis.fetch
+  hooks.stableGeneCache.clear()
+  let online = false
+  const calls = []
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    calls.push(url)
+    if (!online) throw new Error("offline")
+    if (url === `${STABLE_CDN}FASN.json`) return Response.json(stableObject("FASN"))
+    throw new Error(`Unexpected URL: ${url}`)
+  }
+  try {
+    const failed = await sendStableGene("FASN", 1308)
+    assert.equal(failed.ok, true)
+    assert.equal(failed.status, "error")
+    assert.equal(failed.gene, null)
+    assert.equal(failed.error, "offline")
+    assert.equal(hooks.stableGeneCache.has("FASN"), false)
+    assert.deepEqual(calls, [`${STABLE_CDN}FASN.json`, `${STABLE_ORIGIN}FASN.json`])
+
+    online = true
+    const recovered = await sendStableGene("FASN", 1309)
+    assert.equal(recovered.status, "found")
+    assert.equal(recovered.gene.symbol, "FASN")
+    assert.deepEqual(calls, [
+      `${STABLE_CDN}FASN.json`,
+      `${STABLE_ORIGIN}FASN.json`,
+      `${STABLE_CDN}FASN.json`,
+    ])
   } finally {
     globalThis.fetch = originalFetch
     hooks.stableGeneCache.clear()
