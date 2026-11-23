@@ -73,7 +73,7 @@
     "ansi-truncate": "^1.4.0",
     "async-mutex": "^0.5.0",
     "chokidar": "^5.0.0",
-    "driver.js": "1.8.0",
+    "driver.js": "1.14.0",
     "drizzle-orm": "^0.45.4",
     "esbuild-sass-plugin": "^3.7.0",
     "github-slugger": "^2.0.0",
@@ -132,15 +132,15 @@
     "@types/ws": "^8.18.2",
     "@types/yargs": "^17.0.35",
     "esbuild": "^0.28.2",
-    "fake-indexeddb": "6.2.4",
-    "jszip": "3.10.1",
-    "pdfjs-dist": "6.2.108",
-    "playwright-core": "1.63.0",
+    "fake-indexeddb": "6.2.8",
+    "jszip": "3.10.2",
+    "pdfjs-dist": "6.5.438",
+    "playwright-core": "1.65.1",
     "prettier": "^3.10.1",
     "publish-browser-extension": "5.1.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "wrangler": "4.147.0",
-    "wxt": "0.21.4"
+    "wrangler": "4.165.0",
+    "wxt": "0.21.5"
   }
 }

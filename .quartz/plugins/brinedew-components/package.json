@@ -15,8 +15,8 @@
     "preact": "^10.29.8"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "sass": "^1.99.0",
+    "@types/node": "^24.19.2",
+    "sass": "^1.108.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   },
