@@ -583,11 +583,6 @@ export function renderCaretakerManifestationPanel(dossier, escapeHtml, options =
       '<p class="icono-caretaker-callout" data-tone="warn">This caretaker role is suspended. History remains readable and your local draft is preserved, but saving and canonical changes are paused.</p>'
   }
 
-  if (editable && dossier.head?.factory_updated_since_choice === true) {
-    body +=
-      '<p class="icono-caretaker-callout" data-tone="warn">The Original manifestation was updated after your version (for example, a clan aesthetic or family feature changed). Your version is still active for portraits and readers; check History → Original if you want to adopt or fold in the update.</p>'
-  }
-
   body +=
     '<div class="icono-caretaker-tabs" role="tablist" aria-label="Caretaker sections">' +
     '<button type="button" role="tab" aria-selected="true" aria-controls="icono-caretaker-tab-manifestation" id="icono-caretaker-tab-button-manifestation" data-icono-caretaker-tab="manifestation">Manifestation</button>' +
