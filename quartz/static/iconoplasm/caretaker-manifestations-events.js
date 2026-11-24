@@ -1,5 +1,5 @@
-import { revisionById } from "./caretaker-manifestations-model.js?v=de638e47ba183354"
-import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=4d68b4ca5075c217"
+import { revisionById } from "./caretaker-manifestations-model.js?v=33b4aba39043ff4f"
+import { historyPreviewMarkup } from "./caretaker-manifestations-view.js?v=5710764ce1d2d4be"
 
 export function createCaretakerManifestationEventWiring({
   clearDraft,

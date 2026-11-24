@@ -4,7 +4,7 @@ import {
   codePointLength,
   manifestationWordDiff,
   ownManifestation,
-} from "./caretaker-manifestations-model.js?v=de638e47ba183354"
+} from "./caretaker-manifestations-model.js?v=33b4aba39043ff4f"
 import { dialogMarkup } from "./dialog.js?v=a5c98f9ed0ae3eb6"
 import { IMAGE_ORIGIN } from "./portrait-delivery.js?v=df8daed0d00d6780"
 
