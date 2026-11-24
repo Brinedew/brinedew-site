@@ -95,8 +95,7 @@ export function withdrawCaretakerTextStatements(db, { symbol, lineId, assignment
             SET chosen_caretaker_version_id = (
               SELECT version_id FROM icono_caretaker_text_versions
                WHERE gene_symbol = ? AND withdrawn_at IS NULL AND tags IS NOT NULL
-               ORDER BY created_at DESC, version_id DESC LIMIT 1),
-                updated_at = CURRENT_TIMESTAMP
+               ORDER BY created_at DESC, version_id DESC LIMIT 1)
           WHERE gene_symbol = ? AND chosen_caretaker_version_id IN (
             SELECT version_id FROM icono_caretaker_text_versions
              WHERE gene_symbol = ? AND ${column} = ?)`,
@@ -107,6 +106,15 @@ export function withdrawCaretakerTextStatements(db, { symbol, lineId, assignment
 
 async function tagsSha256(tags, fieldsJson) {
   return sha256Hex(new TextEncoder().encode(`${tags}\n${fieldsJson ?? ""}`))
+}
+
+function parseTimestampMs(raw) {
+  const value = String(raw || "").trim()
+  if (!value) return Number.NaN
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+    return Date.parse(`${value.replace(" ", "T")}Z`)
+  }
+  return Date.parse(value)
 }
 
 async function revisionView(row, viewerAccountId) {
@@ -336,6 +344,18 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
     })
   }
   const terms = assignment.status === "pending_acceptance" ? caretakerTerms() : null
+  const chosenCaretakerRow =
+    current?.origin === "caretaker"
+      ? [...shown, ...pinnedRows].find((row) => row.version_id === canonicalId) || null
+      : null
+  const factoryUpdatedMs = parseTimestampMs(factory?.updated_at)
+  const chosenCreatedMs = parseTimestampMs(chosenCaretakerRow?.created_at)
+  const factoryUpdatedSinceChoice = Boolean(
+    current?.origin === "caretaker" &&
+      Number.isFinite(factoryUpdatedMs) &&
+      Number.isFinite(chosenCreatedMs) &&
+      factoryUpdatedMs > chosenCreatedMs,
+  )
   return {
     schema_version: 1,
     enabled: true,
@@ -376,6 +396,9 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
       canonical_selection_id: "",
       canonical_revision_id: canonicalId,
       gene_revision: 0,
+      origin: current?.origin || null,
+      factory_updated_since_choice: factoryUpdatedSinceChoice,
+      factory_updated_at: factory?.updated_at || null,
       // B-1106: the switch acts on the text the gene uses now, the original
       // one included, not only on the caretaker's own writing.
       manifestation_id: current ? current.line_id || FACTORY_LINE_ID : null,
@@ -592,7 +615,7 @@ export async function saveCaretakerText(env, { geneLocator, accountId, body, wit
     statements.push(
       db
         .prepare(
-          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?, updated_at = CURRENT_TIMESTAMP
+          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?
                     WHERE gene_symbol = ?`,
         )
         .bind(versionId, gene.canonical_symbol),
@@ -665,7 +688,7 @@ async function overwriteWorkingCopy(
     statements.push(
       db
         .prepare(
-          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?, updated_at = CURRENT_TIMESTAMP
+          `UPDATE icono_gene_texts SET chosen_caretaker_version_id = ?
             WHERE gene_symbol = ? AND changes() > 0`,
         )
         .bind(versionId, gene.canonical_symbol),

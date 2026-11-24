@@ -131,6 +131,15 @@ test("a new text keeps the readers-see flag and a caretaker's choice", async (t)
   assert.equal(first.status, 200)
   assert.equal(first.body.registered, true)
   assert.equal(first.body.gene_id, await catalogueGeneId("WEE1"))
+  h.db.raw
+    .prepare(
+      `INSERT INTO icono_caretaker_assignments
+         (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+          relinquish_policy, invited_by_account_id, started_at, created_at)
+       VALUES ('assign_wee1', 'WEE1', 'acct_wee1', 'active', '2026-10-11T08:00:00.000Z',
+               'retain', 'acct_wee1', '2026-10-11T08:00:00.000Z', '2026-10-11T08:00:00.000Z')`,
+    )
+    .run()
   h.db.raw.exec(
     "UPDATE icono_gene_texts SET readers_see = 1, chosen_caretaker_version_id = 'revision_ct' WHERE gene_symbol = 'WEE1'",
   )
@@ -138,6 +147,8 @@ test("a new text keeps the readers-see flag and a caretaker's choice", async (t)
   const second = await h.save("WEE1", { text: "A stricter gatekeeper at G2." })
   assert.equal(second.body.version, 2)
   assert.equal(second.body.changed, true)
+  assert.equal(second.body.caretaker_override_preserved, true)
+  assert.equal(second.body.cleared_inactive_caretaker_override, false)
   assert.notEqual(second.body.text_id, first.body.text_id)
   assert.equal(second.body.registered, undefined)
   const [saved] = h.rows("SELECT * FROM icono_gene_texts")
@@ -151,6 +162,45 @@ test("a new text keeps the readers-see flag and a caretaker's choice", async (t)
   assert.equal(saved.chosen_caretaker_version_id, "revision_ct")
   assert.equal(saved.tags, null)
   assert.equal(saved.fields_json, null)
+})
+
+test("a changed factory text clears an ended or absent caretaker's override, while an unchanged retry keeps it", async (t) => {
+  const h = harness(t)
+  const first = await h.save("CDK1", { text: "Original CDK1.", tags: "kinase", fields: FIELDS })
+  assert.equal(first.status, 200)
+  h.db.raw
+    .prepare(
+      `INSERT INTO icono_caretaker_assignments
+         (caretaker_assignment_id, gene_symbol, account_id, status, terms_accepted_at,
+          relinquish_policy, invited_by_account_id, started_at, ended_at, end_reason, created_at)
+       VALUES ('assign_cdk1', 'CDK1', 'acct_cdk1', 'ended', '2026-10-10T08:00:00.000Z',
+               'retain', 'acct_cdk1', '2026-10-10T08:00:00.000Z', '2026-10-11T08:00:00.000Z',
+               'left', '2026-10-10T08:00:00.000Z')`,
+    )
+    .run()
+  h.db.raw.exec(
+    "UPDATE icono_gene_texts SET chosen_caretaker_version_id = 'ver_retained_cdk1' WHERE gene_symbol = 'CDK1'",
+  )
+
+  const unchanged = await h.save("CDK1", { text: "Original CDK1.", tags: "kinase", fields: FIELDS })
+  assert.equal(unchanged.status, 200)
+  assert.equal(unchanged.body.changed, false)
+  assert.equal(
+    h.rows("SELECT chosen_caretaker_version_id FROM icono_gene_texts WHERE gene_symbol = 'CDK1'")[0]
+      .chosen_caretaker_version_id,
+    "ver_retained_cdk1",
+  )
+
+  const updated = await h.save("CDK1", { text: "Updated CDK1 with new feature.", tags: "kinase", fields: FIELDS })
+  assert.equal(updated.status, 200)
+  assert.equal(updated.body.changed, true)
+  assert.equal(updated.body.caretaker_override_preserved, false)
+  assert.equal(updated.body.cleared_inactive_caretaker_override, true)
+  assert.equal(
+    h.rows("SELECT chosen_caretaker_version_id FROM icono_gene_texts WHERE gene_symbol = 'CDK1'")[0]
+      .chosen_caretaker_version_id,
+    null,
+  )
 })
 
 test("texts and Tags the old path refused are refused, and nothing is written", async (t) => {

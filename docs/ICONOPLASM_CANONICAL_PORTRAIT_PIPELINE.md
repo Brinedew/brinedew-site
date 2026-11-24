@@ -242,6 +242,14 @@ The existing current asset is not protected from an equally voted newer asset. I
 
 Stale, rejected and auto-pick-ineligible candidates never win. Keep `electGeneAuthorityWinner` and the admin read-model leader SQL in the same order. If they drift, the admin view names one leader while the election publishes another.
 
+## Manifestation priority (workstation vs caretaker)
+
+When workstation prose (`icono_gene_texts`) and caretaker prose (`icono_caretaker_text_versions`) compete on a gene, authority follows caretaker activity:
+
+1. **Active caretaker wins:** While a gene has an `active` assignment in `icono_caretaker_assignments` and a non-withdrawn `chosen_caretaker_version_id`, that caretaker version outranks workstation factory regenerations on both the Website (`readGeneText`) and the Workstation (`caretaker_texts` layered over `manifestations`). Portraits always bind strictly to whichever text won.
+2. **Upstream updates notify without overwriting:** When a changed factory text lands while an active caretaker's choice stays canonical (`icono_gene_texts.updated_at > chosen_version.created_at`), `readCaretakerTexts` sets `head.factory_updated_since_choice = true` and the Caretaker Panel warns the caretaker to check *History → Original*.
+3. **Departed caretaker yield on upstream change:** Retained versions after a caretaker leaves (`B-860`) remain live as long as the factory text is unchanged, but a **changed** workstation factory write (`writeFactoryGeneText` when no `active` caretaker exists) clears `chosen_caretaker_version_id = NULL` so updated world rules (clan aesthetic, family fantastical features) and fresh portraits take over cleanly.
+
 ## Portrait publication vs moderation state
 
 Two orthogonal state machines live across `icono_publish_state` and

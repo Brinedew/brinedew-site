@@ -71,7 +71,7 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
   const textSha256 = await sha256Hex(input.prose.bytes)
   const current = await db
     .prepare(
-      `SELECT gene_id, text_id, version, text_sha256, tags, fields_json
+      `SELECT gene_id, text_id, version, text_sha256, tags, fields_json, chosen_caretaker_version_id
          FROM icono_gene_texts WHERE gene_symbol = ?`,
     )
     .bind(symbol)
@@ -92,6 +92,17 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
       changed: false,
     }
   }
+  let clearInactiveOverride = false
+  if (current?.chosen_caretaker_version_id) {
+    const activeCaretaker = await db
+      .prepare(
+        `SELECT 1 AS ok FROM icono_caretaker_assignments
+          WHERE gene_symbol = ? AND status = 'active' LIMIT 1`,
+      )
+      .bind(symbol)
+      .first()
+    clearInactiveOverride = !activeCaretaker
+  }
   // B-1156: the prose goes to Bunny first, so a row never names a text that
   // isn't stored. The row keeps its hash, its length and the Tags.
   if (current?.text_sha256 !== textSha256) {
@@ -105,6 +116,7 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
   const version = Number(current?.version || 0) + 1
   // The version check makes two racing saves of one gene end with one winner,
   // not a lost update numbered like the winner.
+  const clearOverrideSql = clearInactiveOverride ? "chosen_caretaker_version_id = NULL,\n         " : ""
   const result = await db
     .prepare(
       `INSERT INTO icono_gene_texts
@@ -115,7 +127,7 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
          text_id = excluded.text_id, version = excluded.version,
          text_sha256 = excluded.text_sha256, text_characters = excluded.text_characters,
          tags = excluded.tags,
-         fields_json = excluded.fields_json, updated_at = CURRENT_TIMESTAMP
+         ${clearOverrideSql}fields_json = excluded.fields_json, updated_at = CURRENT_TIMESTAMP
        WHERE icono_gene_texts.version = ?`,
     )
     .bind(
@@ -146,6 +158,12 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
     version,
     text_sha256: textSha256,
     changed: true,
+    caretaker_override_preserved: Boolean(
+      current?.chosen_caretaker_version_id && !clearInactiveOverride,
+    ),
+    cleared_inactive_caretaker_override: Boolean(
+      current?.chosen_caretaker_version_id && clearInactiveOverride,
+    ),
     ...(current ? {} : { registered: true }),
   }
 }

@@ -584,3 +584,58 @@ test("14: a save inside the autosave cooldown is refused without losing the text
   assert.equal(later.status, 200)
   assert.equal(h.versions()[0].text, "Version two.", "the same working copy took the later save")
 })
+
+test("15: factory updates preserve active caretaker choice, signal the update, and do not stamp factory updated_at on caretaker saves", async (t) => {
+  const h = await harness(t)
+  const firstSave = await h.save("Caretaker MFNG.", { tags: "caretaker_one" })
+  assert.equal(firstSave.status, 200)
+  h.db.raw
+    .prepare(
+      `UPDATE icono_caretaker_text_versions
+          SET created_at = '2026-10-10T08:00:00.000Z'
+        WHERE version_id = ?`,
+    )
+    .run(firstSave.body.manifestation_revision_id)
+
+  const factoryUpdate = await writeFactoryGeneText(h.env, {
+    symbol: "MFNG",
+    text: "Updated factory MFNG with fantastical feature.",
+    tags: "factory_new",
+    fields: { mood: ["bright"] },
+  })
+  assert.equal(factoryUpdate.changed, true)
+  assert.equal(factoryUpdate.caretaker_override_preserved, true)
+
+  const afterFactory = await h.call("GET", "")
+  assert.equal(afterFactory.status, 200)
+  assert.equal(afterFactory.body.head.canonical_revision_id, firstSave.body.manifestation_revision_id)
+  assert.equal(afterFactory.body.head.origin, "caretaker")
+  assert.equal(afterFactory.body.head.factory_updated_since_choice, true)
+  assert.equal(await h.chosen(), "Caretaker MFNG.")
+
+  const factoryRowBefore = h.db.raw
+    .prepare("SELECT updated_at FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
+    .get()
+  h.db.raw
+    .prepare("UPDATE icono_gene_texts SET updated_at = '2026-10-11 08:00:00' WHERE gene_symbol = 'MFNG'")
+    .run()
+  const stableFactoryUpdatedAt = "2026-10-11 08:00:00"
+  assert.ok(factoryRowBefore.updated_at)
+
+  h.nextDay()
+  const secondSave = await h.save("Caretaker revised MFNG.", { tags: "caretaker_two" })
+  assert.equal(secondSave.status, 200)
+  assert.notEqual(secondSave.body.manifestation_revision_id, firstSave.body.manifestation_revision_id)
+
+  const afterCaretakerSave = await h.call("GET", "")
+  assert.equal(afterCaretakerSave.status, 200)
+  assert.equal(
+    afterCaretakerSave.body.head.canonical_revision_id,
+    secondSave.body.manifestation_revision_id,
+  )
+  assert.equal(afterCaretakerSave.body.head.factory_updated_since_choice, false)
+  const factoryRowAfter = h.db.raw
+    .prepare("SELECT updated_at FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
+    .get()
+  assert.equal(factoryRowAfter.updated_at, stableFactoryUpdatedAt)
+})

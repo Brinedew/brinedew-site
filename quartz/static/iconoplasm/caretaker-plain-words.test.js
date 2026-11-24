@@ -81,3 +81,13 @@ test("history speaks plainly about how tags were made", () => {
   assert.equal(/recipe \d/.test(html), false)
   assert.equal(html.includes("How the tags were made"), true)
 })
+
+test("renders upstream original-update callout only when factory_updated_since_choice is true", () => {
+  const withoutFlag = renderCaretakerManifestationPanel(dossier(), escapeHtml)
+  assert.equal(withoutFlag.includes("The Original manifestation was updated after your version"), false)
+
+  const d = dossier()
+  d.head.factory_updated_since_choice = true
+  const withFlag = renderCaretakerManifestationPanel(d, escapeHtml)
+  assert.equal(withFlag.includes("The Original manifestation was updated after your version"), true)
+})
