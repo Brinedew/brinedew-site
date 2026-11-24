@@ -242,6 +242,24 @@ The existing current asset is not protected from an equally voted newer asset. I
 
 Stale, rejected and auto-pick-ineligible candidates never win. Keep `electGeneAuthorityWinner` and the admin read-model leader SQL in the same order. If they drift, the admin view names one leader while the election publishes another.
 
+## Portrait publication vs moderation state
+
+Two orthogonal state machines live across `icono_publish_state` and
+`icono_portrait_assets`. Read models and admin views must derive "published"
+exclusively from the pin, never from moderation `status`:
+
+1. **Publication pin (`icono_publish_state.current_asset_sha256`):**
+   - Pinned (`asset_sha256 == current_asset_sha256`, exposed as `is_published` / `is_live` / `is_current`): currently live for readers.
+   - Unpinned: candidate portrait in the pool (not the currently shown gene portrait).
+2. **Moderation status (`icono_portrait_assets.status`):**
+   - `'draft'`: unreviewed candidate inserted by factory registration (`workers/iconoplasm/app.js`). Does **not** mean "unpublished" — vote auto-promotion can publish an unreviewed `'draft'` winner.
+   - `'approved'`: admin-approved candidate.
+   - `'rejected'`: moderated out (`autopick_eligible` excluded; never wins election).
+3. **Orthogonal fact flags on `icono_portrait_assets`:**
+   - `is_stale`: prompt/manifestation text changed after this portrait was generated.
+   - `is_legacy`: superseded/retired asset.
+   - `autopick_eligible`: eligible for automatic canonical election.
+
 ## Publication diagnosis and safe repair
 
 Use this when one gene's D1 winner and its published stable object disagree

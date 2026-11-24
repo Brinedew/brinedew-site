@@ -9432,7 +9432,13 @@
               '"><strong>' +
               esc(selectedAsset.gene_symbol || "Unknown gene") +
               "</strong></button> · " +
-              esc(selectedAsset.status || "draft") +
+              esc(
+                (selectedAsset.is_current ? "published" : "candidate") +
+                  " · " +
+                  (!selectedAsset.status || selectedAsset.status === "draft"
+                    ? "unreviewed"
+                    : selectedAsset.status),
+              ) +
               "</div>",
             '<div class="small">score ' +
               esc(String(selectedAsset.score || 0)) +

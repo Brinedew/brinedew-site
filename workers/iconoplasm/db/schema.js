@@ -24,7 +24,10 @@ export const portraitAssets = sqliteTable(
     width: integer("width"),
     height: integer("height"),
     bytes: integer("bytes"),
-    status: text("status").notNull().default("draft"),
+    // Moderation state machine (`draft` = unreviewed candidate, `approved`, `rejected`).
+  // Orthogonal to publication: live published status comes solely from
+  // `icono_publish_state.current_asset_sha256` (a `draft` asset may still be published).
+  status: text("status").notNull().default("draft"),
     autopickEligible: integer("autopick_eligible").notNull().default(1),
     isStale: integer("is_stale").notNull().default(0),
     isLegacy: integer("is_legacy").notNull().default(0),
