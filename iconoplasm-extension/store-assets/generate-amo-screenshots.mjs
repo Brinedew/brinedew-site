@@ -54,7 +54,7 @@ const pal = {
  *
  *  Source dimensions (the committed source screenshots):
  *    screenshot-1-hovercard.png  575 x 802  (UCSC genome browser + RHO)
- *    screenshot-2-hovercard.png  628 x 907  (Wikipedia homeobox + HOXB1)
+ *    screenshot-2-hovercard.png  628 x 907  (Wikipedia CD table + CD4)
  *    screenshot-6-archive.png    750 x 1057 (archive lab-label card)
  *
  *  Only 3 slides -- showcase the selling points (hovercards, portraits,
@@ -217,7 +217,19 @@ body{
  *  Main
  * ------------------------------------------------------------------ */
 async function main() {
-  const browser = await chromium.launch({ headless: true })
+  let browser
+  for (const opts of [
+    { channel: "chrome", headless: true, chromiumSandbox: true },
+    { channel: "msedge", headless: true, chromiumSandbox: true },
+  ]) {
+    try {
+      browser = await chromium.launch(opts)
+      break
+    } catch {
+      // Try next installed browser channel.
+    }
+  }
+  if (!browser) throw new Error("Could not launch Chrome or Edge")
   const ctx = await browser.newContext({
     viewport: { width: W, height: H },
     deviceScaleFactor: 1,
