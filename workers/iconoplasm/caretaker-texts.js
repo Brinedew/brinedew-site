@@ -352,9 +352,9 @@ export async function readCaretakerTextDossier(env, { geneLocator, accountId, cu
   const chosenCreatedMs = parseTimestampMs(chosenCaretakerRow?.created_at)
   const factoryUpdatedSinceChoice = Boolean(
     current?.origin === "caretaker" &&
-      Number.isFinite(factoryUpdatedMs) &&
-      Number.isFinite(chosenCreatedMs) &&
-      factoryUpdatedMs > chosenCreatedMs,
+    Number.isFinite(factoryUpdatedMs) &&
+    Number.isFinite(chosenCreatedMs) &&
+    factoryUpdatedMs > chosenCreatedMs,
   )
   return {
     schema_version: 1,

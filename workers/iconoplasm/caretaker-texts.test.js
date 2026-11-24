@@ -608,7 +608,10 @@ test("15: factory updates preserve active caretaker choice, signal the update, a
 
   const afterFactory = await h.call("GET", "")
   assert.equal(afterFactory.status, 200)
-  assert.equal(afterFactory.body.head.canonical_revision_id, firstSave.body.manifestation_revision_id)
+  assert.equal(
+    afterFactory.body.head.canonical_revision_id,
+    firstSave.body.manifestation_revision_id,
+  )
   assert.equal(afterFactory.body.head.origin, "caretaker")
   assert.equal(afterFactory.body.head.factory_updated_since_choice, true)
   assert.equal(await h.chosen(), "Caretaker MFNG.")
@@ -617,7 +620,9 @@ test("15: factory updates preserve active caretaker choice, signal the update, a
     .prepare("SELECT updated_at FROM icono_gene_texts WHERE gene_symbol = 'MFNG'")
     .get()
   h.db.raw
-    .prepare("UPDATE icono_gene_texts SET updated_at = '2026-10-11 08:00:00' WHERE gene_symbol = 'MFNG'")
+    .prepare(
+      "UPDATE icono_gene_texts SET updated_at = '2026-10-11 08:00:00' WHERE gene_symbol = 'MFNG'",
+    )
     .run()
   const stableFactoryUpdatedAt = "2026-10-11 08:00:00"
   assert.ok(factoryRowBefore.updated_at)
@@ -625,7 +630,10 @@ test("15: factory updates preserve active caretaker choice, signal the update, a
   h.nextDay()
   const secondSave = await h.save("Caretaker revised MFNG.", { tags: "caretaker_two" })
   assert.equal(secondSave.status, 200)
-  assert.notEqual(secondSave.body.manifestation_revision_id, firstSave.body.manifestation_revision_id)
+  assert.notEqual(
+    secondSave.body.manifestation_revision_id,
+    firstSave.body.manifestation_revision_id,
+  )
 
   const afterCaretakerSave = await h.call("GET", "")
   assert.equal(afterCaretakerSave.status, 200)

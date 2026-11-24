@@ -116,7 +116,9 @@ export async function writeFactoryGeneText(env, { symbol: rawSymbol, text, tags,
   const version = Number(current?.version || 0) + 1
   // The version check makes two racing saves of one gene end with one winner,
   // not a lost update numbered like the winner.
-  const clearOverrideSql = clearInactiveOverride ? "chosen_caretaker_version_id = NULL,\n         " : ""
+  const clearOverrideSql = clearInactiveOverride
+    ? "chosen_caretaker_version_id = NULL,\n         "
+    : ""
   const result = await db
     .prepare(
       `INSERT INTO icono_gene_texts

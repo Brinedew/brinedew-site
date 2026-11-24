@@ -191,7 +191,11 @@ test("a changed factory text clears an ended or absent caretaker's override, whi
     "ver_retained_cdk1",
   )
 
-  const updated = await h.save("CDK1", { text: "Updated CDK1 with new feature.", tags: "kinase", fields: FIELDS })
+  const updated = await h.save("CDK1", {
+    text: "Updated CDK1 with new feature.",
+    tags: "kinase",
+    fields: FIELDS,
+  })
   assert.equal(updated.status, 200)
   assert.equal(updated.body.changed, true)
   assert.equal(updated.body.caretaker_override_preserved, false)
