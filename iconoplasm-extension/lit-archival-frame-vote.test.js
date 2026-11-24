@@ -179,7 +179,7 @@ test("a 401 still posts the login prompt and no refusal", async () => {
   assert.equal(rig.ofType(FAILED).length, 0)
 })
 
-test("simple card frame shows unavailable status instead of skeleton when fetchFailed is true", async () => {
+async function setupCardFrame() {
   const { document } = parseHTML(
     '<!doctype html><html><head></head><body><div id="iconoplasm-root">' +
       '<div id="lit-archival-card-slot"></div></div></body></html>',
@@ -218,20 +218,25 @@ test("simple card frame shows unavailable status instead of skeleton when fetchF
     await readFile(new URL("./lit-archival-frame.js", import.meta.url), "utf8"),
     sandbox,
   )
-  listeners.get("message")({
-    source: parent,
-    data: {
-      type: "ICONOPLASM_LIT_ARCHIVAL_RENDER",
-      requestId: "2",
-      cardVariant: "simple",
-      symbol: "FASN",
-      loading: false,
-      fetchFailed: true,
-      pageUrl: "https://iconoplasm.brinedew.bio/gene/FASN",
-      gene: { symbol: "FASN", full_name: "fatty acid synthase" },
-    },
+  const render = (data) =>
+    listeners.get("message")({
+      source: parent,
+      data: { type: "ICONOPLASM_LIT_ARCHIVAL_RENDER", ...data },
+    })
+  return { slot: document.getElementById("lit-archival-card-slot"), render }
+}
+
+test("simple card frame shows unavailable status instead of skeleton when fetchFailed is true", async () => {
+  const { slot, render } = await setupCardFrame()
+  render({
+    requestId: "2",
+    cardVariant: "simple",
+    symbol: "FASN",
+    loading: false,
+    fetchFailed: true,
+    pageUrl: "https://iconoplasm.brinedew.bio/gene/FASN",
+    gene: { symbol: "FASN", full_name: "fatty acid synthase" },
   })
-  const slot = document.getElementById("lit-archival-card-slot")
   assert.equal(
     slot.querySelector(".iconoplasm-tooltip-portrait-status")?.textContent,
     "Card unavailable",
@@ -240,5 +245,55 @@ test("simple card frame shows unavailable status instead of skeleton when fetchF
     slot.querySelector(".iconoplasm-tooltip-meta-status")?.textContent,
     "Could not load card details. Hover again to retry.",
   )
-  assert.equal(slot.querySelector(".iconoplasm-tooltip-meta-skeleton-row"), null)
+  assert.equal(slot.querySelector(".iconoplasm-tooltip-meta-skeleton-row") === null, true)
+})
+
+test("image-only and lit-archival frames show clear status copy instead of blank fallback cards", async () => {
+  const { slot, render } = await setupCardFrame()
+
+  render({
+    requestId: "3",
+    cardVariant: "image-only",
+    symbol: "TP53",
+    loading: true,
+    fetchFailed: false,
+    pageUrl: "https://iconoplasm.brinedew.bio/gene/TP53",
+    gene: { symbol: "TP53", full_name: "tumor protein p53" },
+  })
+  assert.equal(
+    slot.querySelector(".icono-image-only-fallback-status")?.textContent,
+    "Loading portrait…",
+  )
+
+  render({
+    requestId: "4",
+    cardVariant: "image-only",
+    symbol: "TP53",
+    loading: false,
+    fetchFailed: true,
+    pageUrl: "https://iconoplasm.brinedew.bio/gene/TP53",
+    gene: { symbol: "TP53", full_name: "tumor protein p53" },
+  })
+  assert.equal(
+    slot.querySelector(".icono-image-only-fallback-status")?.textContent,
+    "Card unavailable — hover again to retry",
+  )
+
+  render({
+    requestId: "5",
+    cardVariant: "lit-archival",
+    symbol: "TP53",
+    loading: false,
+    fetchFailed: true,
+    pageUrl: "https://iconoplasm.brinedew.bio/gene/TP53",
+    gene: { symbol: "TP53", full_name: "tumor protein p53" },
+  })
+  assert.equal(
+    slot.querySelector(".iconoplasm-tooltip-portrait-status")?.textContent,
+    "Card unavailable",
+  )
+  assert.equal(
+    slot.querySelector(".iconoplasm-tooltip-meta-status")?.textContent,
+    "Could not load card details. Hover again to retry.",
+  )
 })

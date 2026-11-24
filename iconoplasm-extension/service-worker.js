@@ -55,7 +55,7 @@ const STABLE_GENE_ORIGIN_PREFIX = `${HOST}/api/public/v1/stable-genes/`
 const STABLE_GENE_SYMBOL = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
 const STABLE_GENE_TTL_MS = 5 * 60 * 1000
 const STABLE_GENE_MAX_ENTRIES = 512
-const STABLE_GENE_FETCH_TIMEOUT_MS = 6 * 1000
+const STABLE_GENE_FETCH_TIMEOUT_MS = 10 * 1000
 const STABLE_GENE_MAX_BYTES = 512 * 1024
 // symbol -> { status: "found" | "missing" | "error", gene, expiresAt }
 const stableGeneCache = new Map()

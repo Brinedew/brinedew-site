@@ -222,7 +222,7 @@
 
   function archivalBodyHtml(payload) {
     if (!shared) return ""
-    return shared.renderLabLabelCardHtml(payload.gene || {}, {
+    const html = shared.renderLabLabelCardHtml(payload.gene || {}, {
       mode: "brick",
       layoutVariant: isImageOnlyVariant(payload) ? "image-only" : "lit-archival",
       mobileReview: false,
@@ -231,6 +231,20 @@
       titleHref: String((payload && payload.pageUrl) || "").trim(),
       voteHtml: isImageOnlyVariant(payload) ? "" : voteMarkup(payload),
     })
+    if (isImageOnlyVariant(payload)) return html
+    if (payload && payload.fetchFailed) {
+      return (
+        html +
+        '<div class="icono-archival-status-note iconoplasm-tooltip-meta-status" role="status">Could not load card details. Hover again to retry.</div>'
+      )
+    }
+    if (payload && payload.loading) {
+      return (
+        html +
+        '<div class="icono-archival-status-note iconoplasm-tooltip-meta-status" role="status">Loading card details…</div>'
+      )
+    }
+    return html
   }
 
   function imageOnlyBodyHtml(payload) {
@@ -253,6 +267,12 @@
       : "icono-image-only-photo"
     const portraitAlt = symbol ? symbol + " portrait" : "Gene portrait"
     const dims = portraitDimensions(payload)
+    const fallbackStatus =
+      payload && payload.fetchFailed
+        ? "Card unavailable — hover again to retry"
+        : payload && payload.loading
+          ? "Loading portrait…"
+          : "Portrait pending"
     const mediaHtml = portraitSrc
       ? '<img class="' +
         photoClass +
@@ -265,7 +285,11 @@
         '" height="' +
         String(dims.height) +
         '">'
-      : '<div class="icono-image-only-fallback" aria-hidden="true"></div>'
+      : '<div class="icono-image-only-fallback" role="status">' +
+        '<span class="icono-image-only-fallback-status">' +
+        esc(fallbackStatus) +
+        "</span>" +
+        "</div>"
     const overlayHtml =
       '<div class="icono-image-only-overlay">' +
       '<div class="icono-image-only-caption-row">' +
@@ -325,35 +349,52 @@
     const symbol = currentSymbol()
     const portraitSrc = String((payload && payload.portraitSrc) || "").trim()
     const dims = portraitDimensions(payload)
+    const emptyPortraitStatus =
+      payload && payload.fetchFailed
+        ? "Card unavailable"
+        : payload && payload.loading
+          ? "Loading portrait…"
+          : "Portrait pending"
     const mediaHtml =
-      shared && typeof shared.renderLabLabelPortraitMediaHtml === "function"
-        ? shared.renderLabLabelPortraitMediaHtml(symbol, portraitSrc, "", dims, {
-            // Fence: extension tooltips open the gene page instead of a local lightbox, but the
-            // portrait rail still needs the exact shared media markup so layout stays in lockstep
-            // with the website card.
-            buttonAttrs: "data-icono-nav",
-            fetchPriority: "high",
-          })
-        : portraitSrc
-          ? '<button type="button" class="iconoplasm-tooltip-portrait-media icono-brick-media-link" data-icono-nav aria-label="Open gene page for ' +
-            esc(symbol) +
-            '">' +
-            '<img class="iconoplasm-tooltip-portrait-img" src="' +
-            esc(portraitSrc) +
-            '" alt="' +
-            esc(symbol) +
-            ' portrait" loading="eager" decoding="async" fetchpriority="high" width="' +
-            dims.width +
-            '" height="' +
-            dims.height +
-            '">' +
-            "</button>"
-          : '<div class="iconoplasm-tooltip-portrait-fallback">' +
-            '<div class="iconoplasm-tooltip-portrait-status">Portrait pending</div>' +
-            '<div class="iconoplasm-tooltip-portrait-symbol">' +
-            esc(symbol) +
-            "</div>" +
-            "</div>"
+      !portraitSrc && payload && (payload.fetchFailed || payload.loading)
+        ? '<div class="iconoplasm-tooltip-portrait-fallback">' +
+          '<div class="iconoplasm-tooltip-portrait-status">' +
+          esc(emptyPortraitStatus) +
+          "</div>" +
+          '<div class="iconoplasm-tooltip-portrait-symbol">' +
+          esc(symbol) +
+          "</div>" +
+          "</div>"
+        : shared && typeof shared.renderLabLabelPortraitMediaHtml === "function"
+          ? shared.renderLabLabelPortraitMediaHtml(symbol, portraitSrc, "", dims, {
+              // Fence: extension tooltips open the gene page instead of a local lightbox, but the
+              // portrait rail still needs the exact shared media markup so layout stays in lockstep
+              // with the website card.
+              buttonAttrs: "data-icono-nav",
+              fetchPriority: "high",
+            })
+          : portraitSrc
+            ? '<button type="button" class="iconoplasm-tooltip-portrait-media icono-brick-media-link" data-icono-nav aria-label="Open gene page for ' +
+              esc(symbol) +
+              '">' +
+              '<img class="iconoplasm-tooltip-portrait-img" src="' +
+              esc(portraitSrc) +
+              '" alt="' +
+              esc(symbol) +
+              ' portrait" loading="eager" decoding="async" fetchpriority="high" width="' +
+              dims.width +
+              '" height="' +
+              dims.height +
+              '">' +
+              "</button>"
+            : '<div class="iconoplasm-tooltip-portrait-fallback">' +
+              '<div class="iconoplasm-tooltip-portrait-status">' +
+              esc(emptyPortraitStatus) +
+              "</div>" +
+              '<div class="iconoplasm-tooltip-portrait-symbol">' +
+              esc(symbol) +
+              "</div>" +
+              "</div>"
     return (
       '<div class="iconoplasm-tooltip-portrait' +
       (portraitSrc
