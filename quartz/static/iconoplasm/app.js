@@ -3581,11 +3581,10 @@ var initialSharedSettingsPromise = Promise.resolve(readIconoplasmSettings())
     if (platform === "ios") {
       title = "Iconoplasm is not available for iPhone or iPad"
       note =
-        "There is no Safari install path today, manual or automatic. Use desktop Firefox or Edge."
+        "There is no Safari extension. Use Chrome, Firefox, or Edge on desktop — or Firefox on Android."
       steps = [
-        "Open this page on desktop Firefox or Edge.",
-        "Install from the browser add-on store there.",
-        "Safari support would require a separate App Store package later.",
+        "Open this page on desktop Chrome, Firefox, or Edge.",
+        "Install from the browser's extension store there.",
       ]
     }
     return {

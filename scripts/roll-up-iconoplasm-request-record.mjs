@@ -18,6 +18,10 @@
 // plain slug is counted as "(other)" instead of being published.
 import process from "node:process"
 
+import {
+  PUBLIC_BUNNY_PULL_ZONE_BASE,
+  putBunnyObjectVerified,
+} from "../workers/lib/bunny-storage-consistency.js"
 import { fetchCloudflareJson } from "./lib/cloudflare-json.mjs"
 
 const SCRIPT_NAME = "geneguessr-api" // the internal stateful Worker that writes the record
@@ -255,16 +259,14 @@ async function rollUpDay(date, now) {
 }
 
 async function put(name, rollup) {
-  const response = await fetch(`${STORAGE}/${PREFIX}/${name}.json`, {
-    method: "PUT",
-    headers: {
-      AccessKey: need("ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD"),
-      "Content-Type": "application/json",
-    },
+  const key = `${PREFIX}/${name}.json`
+  await putBunnyObjectVerified({
+    storageUrl: `${STORAGE}/${key}`,
+    publicUrl: `${PUBLIC_BUNNY_PULL_ZONE_BASE}/${key}`,
+    accessKey: need("ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD"),
     body: `${JSON.stringify(rollup)}\n`,
+    contentType: "application/json",
   })
-  if (!response.ok)
-    throw new Error(`Bunny Storage PUT ${PREFIX}/${name}.json failed (${response.status})`)
 }
 
 async function main() {

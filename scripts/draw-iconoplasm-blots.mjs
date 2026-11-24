@@ -22,7 +22,6 @@
 // Runs in GitHub Actions (.github/workflows/draw-iconoplasm-blots.yml) after
 // every catalogue publication. Needs ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD
 // except with --out, which reads the catalogue from the CDN instead.
-import { createHash } from "node:crypto"
 import { createServer } from "node:http"
 import { mkdirSync, readFileSync, statSync, writeFileSync, appendFileSync } from "node:fs"
 import path from "node:path"
@@ -30,6 +29,10 @@ import process from "node:process"
 import { fileURLToPath } from "node:url"
 import { chromium } from "playwright-core"
 
+import {
+  PUBLIC_BUNNY_PULL_ZONE_BASE,
+  putBunnyObjectVerified,
+} from "../workers/lib/bunny-storage-consistency.js"
 import {
   ICONOPLASM_BLOT_HEIGHT,
   ICONOPLASM_BLOT_WIDTH,
@@ -260,19 +263,12 @@ async function paintBlot(page, geneObject) {
 }
 
 async function uploadBlot(key, objectKey, bytes) {
-  const checksum = createHash("sha256").update(bytes).digest("hex").toUpperCase()
-  await withRetries(`upload ${objectKey}`, async () => {
-    const response = await fetch(`${STORAGE}/${objectKey}`, {
-      method: "PUT",
-      headers: {
-        AccessKey: key,
-        "Content-Type": "image/webp",
-        // Bunny refuses the write when the bytes it received don't hash to this.
-        Checksum: checksum,
-      },
-      body: bytes,
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  await putBunnyObjectVerified({
+    storageUrl: `${STORAGE}/${objectKey}`,
+    publicUrl: `${PUBLIC_BUNNY_PULL_ZONE_BASE}/${objectKey}`,
+    accessKey: key,
+    body: bytes,
+    contentType: "image/webp",
   })
 }
 

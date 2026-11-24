@@ -263,8 +263,37 @@ export async function headPortraitStorageObject(env, key, { maxAttempts = 4 } = 
 }
 
 async function verifyPortraitStorageObjectAfterPut(env, key) {
-  for (const delayMs of BUNNY_READ_AFTER_WRITE_DELAYS_MS) {
+  const publicUrl = externalPortraitPublicUrl(env, key)
+  const delays =
+    Number(env?.ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS) === 0
+      ? [0, 0]
+      : BUNNY_READ_AFTER_WRITE_DELAYS_MS
+  for (const delayMs of delays) {
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    if (publicUrl) {
+      try {
+        const response = await fetchPortraitStorage(
+          env,
+          publicUrl,
+          { method: "HEAD", headers: { Accept: "*/*" } },
+          { operation: "HEAD", key, maxAttempts: 1 },
+        )
+        await response.body?.cancel().catch(() => null)
+        if (response.ok) {
+          return {
+            ok: true,
+            body: null,
+            source: "public_cdn",
+            contentType: response.headers.get("content-type") || "application/octet-stream",
+            etag: response.headers.get("etag") || key,
+            size: Number(response.headers.get("content-length") || 0) || null,
+          }
+        }
+      } catch (error) {
+        if (isWorkerSubrequestLimitError(error)) throw error
+      }
+      continue
+    }
     const object = await headPortraitStorageObject(env, key)
     if (object) return object
   }

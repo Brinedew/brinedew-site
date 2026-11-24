@@ -441,3 +441,52 @@ test("public catalog dump proxies to the stateful worker when portraits live in 
     globalThis.fetch = originalFetch
   }
 })
+
+test("B-1306: verifyAfterPut polls the public pull zone (not storage.bunnycdn.com) and re-PUTs on 404", async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  let putCount = 0
+  let publicHeadCount = 0
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const method = init?.method || "GET"
+    calls.push({ url, method })
+    if (method === "PUT") {
+      putCount += 1
+      return new Response(null, { status: 201 })
+    }
+    if (method === "HEAD" && url.startsWith(CDN_BASE)) {
+      publicHeadCount += 1
+      // Simulate B-1305: first PUT's 201 leaves public pull zone 404 across both polls;
+      // second PUT makes it serve 200.
+      return new Response(null, { status: publicHeadCount <= 2 ? 404 : 200 })
+    }
+    throw new Error(`Unexpected ${method} ${url}`)
+  }
+
+  try {
+    const result = await putPortraitStorageObject(
+      {
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_HOST: "storage.bunnycdn.com",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_ZONE: "iconoplasm-portraits",
+        ICONOPLASM_EXTERNAL_PORTRAIT_STORAGE_PASSWORD: "storage-access-key",
+        ICONOPLASM_EXTERNAL_PORTRAIT_CDN_BASE_URL: CDN_BASE,
+        ICONOPLASM_PORTRAIT_STORAGE_RETRY_BASE_MS: 0,
+      },
+      PORTRAIT_KEY,
+      Uint8Array.from([1, 2, 3, 4]),
+      { contentType: "image/webp", verifyAfterPut: true },
+    )
+    assert.equal(putCount, 2)
+    assert.equal(result.source, "public_cdn")
+    assert.deepEqual(calls, [
+      { url: `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`, method: "PUT" },
+      { url: `${CDN_BASE}/${PORTRAIT_KEY}`, method: "HEAD" },
+      { url: `${CDN_BASE}/${PORTRAIT_KEY}`, method: "HEAD" },
+      { url: `https://storage.bunnycdn.com/iconoplasm-portraits/${PORTRAIT_KEY}`, method: "PUT" },
+      { url: `${CDN_BASE}/${PORTRAIT_KEY}`, method: "HEAD" },
+    ])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
