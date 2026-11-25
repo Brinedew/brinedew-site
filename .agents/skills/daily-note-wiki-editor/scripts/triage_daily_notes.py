@@ -188,7 +188,8 @@ def analyze_daily_note(path: Path, wiki_entries: list[dict], ledger: dict) -> di
     elif not recorded:
         status = "unprocessed"
     elif recorded.get("file_hash") == file_hash:
-        status = "processed"
+        remaining = sum(1 for s in sections if s["hash"] not in recorded_section_hashes)
+        status = "processed" if remaining == 0 else "partially_processed"
     else:
         status = "modified_since_processed"
 
@@ -309,6 +310,36 @@ def cmd_inspect(args: argparse.Namespace, repo_root: Path, ledger_path: Path) ->
     return 0
 
 
+def resolve_section_selection(sections: list[dict], raw_selection: str) -> list[str]:
+    """Resolve comma-separated 1-based indices or section hashes to section hashes.
+
+    An empty selection means every section, which keeps the historical
+    `mark` behaviour for a note whose whole content was integrated.
+    """
+    if not raw_selection.strip():
+        return [s["hash"] for s in sections]
+    by_index = {str(i): s["hash"] for i, s in enumerate(sections, start=1)}
+    by_hash = {s["hash"]: s["hash"] for s in sections}
+    selected: list[str] = []
+    invalid: list[str] = []
+    for token in raw_selection.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        resolved = by_index.get(token) or by_hash.get(token)
+        if not resolved:
+            invalid.append(token)
+        elif resolved not in selected:
+            selected.append(resolved)
+    if invalid:
+        raise ValueError(
+            "Unknown section selector(s): "
+            + ", ".join(invalid)
+            + ". Use the [n] index from `inspect` or a full section hash."
+        )
+    return selected
+
+
 def cmd_mark(args: argparse.Namespace, repo_root: Path, ledger_path: Path) -> int:
     content_dir = repo_root / "content"
     note_path = content_dir / f"{args.date}.md"
@@ -321,16 +352,36 @@ def cmd_mark(args: argparse.Namespace, repo_root: Path, ledger_path: Path) -> in
     sections = split_sections(raw)
     targets = [t.strip() for t in (args.targets or "").split(",") if t.strip()]
 
+    try:
+        selected_hashes = resolve_section_selection(sections, args.sections or "")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
     ledger = load_ledger(ledger_path)
+    existing = ledger.get("processed_notes", {}).get(args.date)
+    notes = args.notes or ""
+    if existing and existing.get("notes") and notes:
+        notes = existing["notes"] + "\n" + notes
+
+    recorded_hashes = set(existing.get("section_hashes", [])) if existing else set()
+    recorded_hashes.update(selected_hashes)
+    current_order = [s["hash"] for s in sections]
+    recorded_ordered = [h for h in current_order if h in recorded_hashes]
+
     ledger.setdefault("processed_notes", {})[args.date] = {
         "file_hash": file_hash,
-        "section_hashes": [s["hash"] for s in sections],
+        "section_hashes": recorded_ordered,
         "processed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "targets_touched": targets,
-        "notes": args.notes or "",
+        "notes": notes,
     }
     save_ledger(ledger_path, ledger)
-    print(f"Marked {args.date} (hash={file_hash}, {len(sections)} sections) as processed.")
+    remaining = len(current_order) - len(recorded_ordered)
+    print(
+        f"Marked {args.date} (hash={file_hash}, "
+        f"{len(recorded_ordered)}/{len(sections)} sections; {remaining} left unprocessed)."
+    )
     return 0
 
 
@@ -350,6 +401,14 @@ def main() -> int:
 
     p_mark = sub.add_parser("mark", help="Mark a daily note as processed in the intake ledger")
     p_mark.add_argument("--date", required=True, help="Daily note date (YYYY-MM-DD)")
+    p_mark.add_argument(
+        "--sections",
+        default="",
+        help=(
+            "Comma-separated 1-based section indices from `inspect` (or full section hashes) "
+            "to mark. Omit to mark every section. Unlisted sections stay unprocessed."
+        ),
+    )
     p_mark.add_argument("--targets", default="", help="Comma-separated wiki paths updated/created")
     p_mark.add_argument("--notes", default="", help="Editorial summary of what was integrated or skipped")
 

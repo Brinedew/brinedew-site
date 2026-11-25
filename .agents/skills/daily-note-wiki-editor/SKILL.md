@@ -98,4 +98,5 @@ Raw daily notes often carry chat residue (`"You are completely right"`, `"The sh
    ```powershell
    python .agents/skills/daily-note-wiki-editor/scripts/triage_daily_notes.py mark --date YYYY-MM-DD --targets "wiki/Page1.md,wiki/Page2.md" --notes "Brief summary of what was integrated or skipped"
    ```
+   - When a note holds several unrelated blocks, mark only the sections you processed. Add `--sections` with the `[n]` indices shown by `inspect` (or full section hashes), for example `--sections "2,3,4,5"`. Unlisted sections stay unprocessed and the note shows as `PARTIALLY_PROCESSED` in `scan` until they are handled. Omit `--sections` only when the whole note was integrated.
    - If the owner later appends new sections to that same daily note, `scan` will detect the hash change and flag only the new/modified sections.
