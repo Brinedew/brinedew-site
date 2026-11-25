@@ -34,7 +34,7 @@ For each substantive block in an unprocessed (or newly appended) daily note, cla
 1. **Enrich existing wiki page(s):** A claim, mechanism, experiment, table, or critique belongs inside an existing article's canonical slice.
 2. **Spawn a new wiki page:** The block covers a distinct mechanism, model, experiment, or taxonomy with no existing canonical home in `content/wiki/` and enough substance to clear at least `Start` or `C` class (`>= 150` words of domain content, clear scope).
 3. **Glossary / Index / Cross-link only:** Defines a term or alias belonging in `content/wiki/Glossary.md` without warranting a standalone page.
-4. **Skip (ephemeral scratch):** Purely conversational filler or superseded first drafts within the same note (e.g., when a later section in the same daily note corrects an earlier sleight-of-hand, only integrate the corrected formulation).
+4. **Defer:** A block that cannot be verified or placed yet. Leave it unprocessed by marking only the sections you did integrate with `--sections`. No block is ephemeral: do not call any block scratch or close it as skipped. If a block was closed by mistake, reopen it with `unmark`.
 
 ---
 
@@ -98,5 +98,6 @@ Raw daily notes often carry chat residue (`"You are completely right"`, `"The sh
    ```powershell
    python .agents/skills/daily-note-wiki-editor/scripts/triage_daily_notes.py mark --date YYYY-MM-DD --targets "wiki/Page1.md,wiki/Page2.md" --notes "Brief summary of what was integrated or skipped"
    ```
-   - When a note holds several unrelated blocks, mark only the sections you processed. Add `--sections` with the `[n]` indices shown by `inspect` (or full section hashes), for example `--sections "2,3,4,5"`. Unlisted sections stay unprocessed and the note shows as `PARTIALLY_PROCESSED` in `scan` until they are handled. Omit `--sections` only when the whole note was integrated.
+   - When a note holds several unrelated blocks, mark only the sections you processed. Add `--sections` with the `[n]` indices shown by `inspect` (or full section hashes), for example `--sections "2,3,4,5"`. Unlisted sections stay unprocessed and the note shows as `PARTIALLY_PROCESSED` in `scan` until they are handled. Omit `--sections` only when every block was integrated.
+   - If a section was marked and needs to be triaged, reopen it with `unmark --date YYYY-MM-DD --sections "n"` and a `--notes` reason. Nothing in a daily note is ephemeral, so `unmark` is the way to undo a premature close.
    - If the owner later appends new sections to that same daily note, `scan` will detect the hash change and flag only the new/modified sections.

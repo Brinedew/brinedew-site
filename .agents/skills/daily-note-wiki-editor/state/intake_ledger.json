@@ -131,6 +131,7 @@
     "2026-11-22": {
       "file_hash": "7f92a84d17f143d8",
       "section_hashes": [
+        "8749df67a26cf2af",
         "4ea0f123d68e81b9",
         "6bb40820da97b148",
         "ff324455a9cc824e",
@@ -144,16 +145,16 @@
         "b94b387e0a6c115c",
         "06070efb65040b94",
         "be313136f4a806b9",
-        "64ede7d88134a8f1"
+        "64ede7d88134a8f1",
+        "240b1c530d50d100",
+        "4bffcd700d8906fa",
+        "794238d778de23d0",
+        "26db42af364f48be",
+        "6348dc49cee28d1d"
       ],
-      "processed_at": "2026-11-25T08:05:43.897449+00:00",
-      "targets_touched": [
-        "wiki/Predictive plasticity.md",
-        "wiki/index.md",
-        "wiki/Glossary.md",
-        "wiki/Reverse causality in biology.md"
-      ],
-      "notes": "Integrated the filament division of labor block (sections 2-5) into a new C-class page. Verified 7 full-text sources: Sapra & Medalia 2021, Gittes et al 1993, Goldman et al 2008, Castaneda et al 2021, Sharkova et al 2022, Patel-Hett et al 2008, Xu et al 1996. Remaining unprocessed: the pension-tweet lead, the Shinsekai Yori transcription lead, the reverse-causality block and the predictive-plasticity examples. Deferred leads from the filament block: the reinforced-concrete analogy, RBC spectrin shape, oocyte spindle actin, ESCRT-III abscission, plant myosin XI streaming, septins curvature sensing, and the 1.07x/1.02x cross-species claims were not verified.\nIntegrated the causal-argument block (sections 6-11) into a new C-class page. Verified 5 full-text sources: Vakorin et al 2013, Stepp & Turvey 2010, Voss 2000, Israel et al 2016, Waddington 1961. Kept the four explicit regimes: evolutionary vs ontogenetic time, repeating cycles, anticipated synchronization, measurement order. Rejected as unverified: the Signor-Lipps first-appearance claim, the 20-minute/90-minute oscillator numbers (kept only as illustration of phase ambiguity), the aphid/umbrella examples, and all of sections 12-20 (predictive plasticity dossier and the four 2D-time patterns). Those remain unprocessed.\nIntegrated the predictive-plasticity dossier (sections 12-15) into a new C-class page. Verified 6 full-text sources: Tagkopoulos et al 2008, Mitchell et al 2009, Ballare et al 1990, Saigusa et al 2008, Naik et al 2017, Agrawal et al 1999. Covered the causal shape, microbial cue sequences, plant and single-cell anticipation, and tissue/transgenerational memory. Left as uncovered leads: yeast GAL pre-induction, Vibrio and Candida priming, Arabidopsis starch arithmetic, circadian leukocyte homing, Bicyclus eyespots, and locust swarming. Sections 16-20 (the four 2D-time patterns) remain unprocessed."
+      "processed_at": "2026-11-25T08:23:02.306205+00:00",
+      "targets_touched": ["wiki/Pension financing models.md", "wiki/index.md", "wiki/Glossary.md"],
+      "notes": "Integrated the filament division of labor block (sections 2-5) into a new C-class page. Verified 7 full-text sources: Sapra & Medalia 2021, Gittes et al 1993, Goldman et al 2008, Castaneda et al 2021, Sharkova et al 2022, Patel-Hett et al 2008, Xu et al 1996. Remaining unprocessed: the pension-tweet lead, the Shinsekai Yori transcription lead, the reverse-causality block and the predictive-plasticity examples. Deferred leads from the filament block: the reinforced-concrete analogy, RBC spectrin shape, oocyte spindle actin, ESCRT-III abscission, plant myosin XI streaming, septins curvature sensing, and the 1.07x/1.02x cross-species claims were not verified.\nIntegrated the causal-argument block (sections 6-11) into a new C-class page. Verified 5 full-text sources: Vakorin et al 2013, Stepp & Turvey 2010, Voss 2000, Israel et al 2016, Waddington 1961. Kept the four explicit regimes: evolutionary vs ontogenetic time, repeating cycles, anticipated synchronization, measurement order. Rejected as unverified: the Signor-Lipps first-appearance claim, the 20-minute/90-minute oscillator numbers (kept only as illustration of phase ambiguity), the aphid/umbrella examples, and all of sections 12-20 (predictive plasticity dossier and the four 2D-time patterns). Those remain unprocessed.\nIntegrated the predictive-plasticity dossier (sections 12-15) into a new C-class page. Verified 6 full-text sources: Tagkopoulos et al 2008, Mitchell et al 2009, Ballare et al 1990, Saigusa et al 2008, Naik et al 2017, Agrawal et al 1999. Covered the causal shape, microbial cue sequences, plant and single-cell anticipation, and tissue/transgenerational memory. Left as uncovered leads: yeast GAL pre-induction, Vibrio and Candida priming, Arabidopsis starch arithmetic, circadian leukocyte homing, Bicyclus eyespots, and locust swarming. Sections 16-20 (the four 2D-time patterns) remain unprocessed.\nIntegrated the 2D-time patterns (sections 16-20) into a new C-class page covering four verified patterns: bottom-up assembly of sex-determination cascades (Wilkins 1995), marsupial forelimb heterochrony (Keyte & Smith 2010) and bicoid origin (Stauber et al 1999), genetic accommodation in Manduca (Suzuki & Nijhout 2006), and pleiotropic Shh in cavefish (Yamamoto et al 2004, 2009). Imprinting is covered by pointer to the existing wiki page. Left as leads: Eleutherodactylus direct development, tailless ascidians, island tiger snakes, spadefoot toads, and the Haig 1993 citation. This completes the note.\nSkipped as ephemeral scratch: the pension-models tweet and its image are not wiki material.\nReopened: no daily-note block is ephemeral; the pension-models claim must be triaged and integrated or explicitly deferred, not closed as scratch.\nIntegrated the pension-model claim into a C-class page after verifying OECD spending and asset figures, the 2026 Global Pension Index, and Sweden's notional-account reform. Promoted only the verifiable financing comparisons; the '8 young per old' figure and the claim that one model bankrupts a country were left unpromoted."
     }
   }
 }

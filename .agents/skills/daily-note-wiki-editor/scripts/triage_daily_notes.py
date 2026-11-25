@@ -385,6 +385,39 @@ def cmd_mark(args: argparse.Namespace, repo_root: Path, ledger_path: Path) -> in
     return 0
 
 
+def cmd_unmark(args: argparse.Namespace, repo_root: Path, ledger_path: Path) -> int:
+    """Reopen sections so a previously skipped block can be triaged later."""
+    note_path = repo_root / "content" / f"{args.date}.md"
+    if not note_path.exists():
+        print(f"Daily note not found: {note_path}", file=sys.stderr)
+        return 1
+
+    raw = note_path.read_text(encoding="utf-8", errors="replace")
+    sections = split_sections(raw)
+    try:
+        reopen_hashes = set(resolve_section_selection(sections, args.sections or ""))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    ledger = load_ledger(ledger_path)
+    processed_notes = ledger.setdefault("processed_notes", {})
+    entry = processed_notes.get(args.date)
+    if not entry:
+        print(f"No processed entry for {args.date}.", file=sys.stderr)
+        return 1
+
+    before = set(entry.get("section_hashes", []))
+    entry["section_hashes"] = [h for h in before if h not in reopen_hashes]
+    reopened = len(before & reopen_hashes)
+    if args.notes:
+        entry["notes"] = (entry.get("notes", "") + "\n" + args.notes).strip()
+    save_ledger(ledger_path, ledger)
+    remaining = len(entry["section_hashes"])
+    print(f"Reopened {reopened} section(s) in {args.date}; {remaining} left processed.")
+    return 0
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -412,6 +445,15 @@ def main() -> int:
     p_mark.add_argument("--targets", default="", help="Comma-separated wiki paths updated/created")
     p_mark.add_argument("--notes", default="", help="Editorial summary of what was integrated or skipped")
 
+    p_unmark = sub.add_parser("unmark", help="Reopen processed sections for triage")
+    p_unmark.add_argument("--date", required=True, help="Daily note date (YYYY-MM-DD)")
+    p_unmark.add_argument(
+        "--sections",
+        required=True,
+        help="Comma-separated 1-based indices from `inspect` (or full section hashes) to reopen",
+    )
+    p_unmark.add_argument("--notes", default="", help="Reason the section was reopened")
+
     args = parser.parse_args()
     repo_root = locate_repo_root()
     ledger_path = (
@@ -429,6 +471,8 @@ def main() -> int:
         return cmd_inspect(args, repo_root, ledger_path)
     if args.cmd == "mark":
         return cmd_mark(args, repo_root, ledger_path)
+    if args.cmd == "unmark":
+        return cmd_unmark(args, repo_root, ledger_path)
     return 1
 
 
