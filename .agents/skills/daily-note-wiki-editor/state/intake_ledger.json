@@ -3,13 +3,9 @@
   "processed_notes": {
     "2026-11-01": {
       "file_hash": "a2249c971001cff3",
-      "section_hashes": [
-        "a2249c971001cff3"
-      ],
+      "section_hashes": ["a2249c971001cff3"],
       "processed_at": "2026-11-20T02:58:02.209454+00:00",
-      "targets_touched": [
-        "wiki/Pluripotency silencing.md"
-      ],
+      "targets_touched": ["wiki/Pluripotency silencing.md"],
       "notes": "Integrated miR-145 Schmitt-trigger hysteresis vs. kinetic-buffer synthesis into section 1.2 and folded the 3 dangling bottom correction blocks into the main text (lead, 1.2, 1.4); declined creating a standalone circuit-analogs page."
     },
     "2026-11-13": {
@@ -22,9 +18,7 @@
         "718fcbcb49b18e8e"
       ],
       "processed_at": "2026-11-20T02:58:02.314624+00:00",
-      "targets_touched": [
-        "wiki/antagonistic-pleiotropy-theory.md"
-      ],
+      "targets_touched": ["wiki/antagonistic-pleiotropy-theory.md"],
       "notes": "Verified Williams (1957) vs. Rose (1982) and conceptual-drift literature were already integrated; added wild bighorn horn-brooming vs. Babyrousa canine run-on distinction to Other traps."
     },
     "2026-11-16": {
@@ -59,9 +53,7 @@
         "f191bd09c3224311"
       ],
       "processed_at": "2026-11-20T03:06:14.908511+00:00",
-      "targets_touched": [
-        "wiki/Flash-in-the-pan wet lab methods.md"
-      ],
+      "targets_touched": ["wiki/Flash-in-the-pan wet lab methods.md"],
       "notes": "Expanded Sibling Layer 2 (Interactomics) with why Y2H, co-IP, and TurboID survived as workhorses and where 2025-2026 tools (FlexID, FlAsH-ID, uMap, Lantern, in-cell XL-MS, DIA CF-MS, RF2-PPI/SoPPIs) displace them at their failure modes."
     },
     "2026-11-19": {
@@ -95,10 +87,7 @@
         "17848f93a3c2699a"
       ],
       "processed_at": "2026-11-20T03:06:15.112540+00:00",
-      "targets_touched": [
-        "wiki/Post-genomic histological taxonomy.md",
-        "wiki/index.md"
-      ],
+      "targets_touched": ["wiki/Post-genomic histological taxonomy.md", "wiki/index.md"],
       "notes": "Created Post-genomic histological taxonomy.md (class: C) distilling classical vs. post-genomic frameworks (ASCT+B/FTUs, CoRC, spatial neighborhoods) and the domain-general 6-axis physical vector V=(J,P,B,M,K,V) predicting 18 architectural basins plus the 4 collision boundaries."
     },
     "2026-11-24": {
@@ -119,6 +108,25 @@
         "wiki/Conflict between development and tumor suppression.md"
       ],
       "notes": "Created C-class Proliferation-differentiation coupling.md from the proliferation-differentiation coupling block. Verified 8 primary/review sources against full text; captured 4 cropped evidence callouts (Gebhardt 2006, Ying 2018, Cai 2020, Tong 2017). Corrected the note's SH3RF1 direction: SH3RF1 promotes renewal and AKT phosphorylation suppresses it. Dropped unverified claims (PTEN/mTOR->TP53/CDKN2A in HSCs, ASCL1->E2F1/FOXM1, CDK4/E2F1->NEUROG3/PPARG, MYC->CDH2/FBXW7/NSUN2, TP63->GRHL3/PRDM1/NOTCH1/MIR203) as deferred leads pending primary sources. Added the new page to index and Glossary and reciprocal links from myc and Conflict between development and tumor suppression. lint:wiki clean on the new page."
+    },
+    "2026-11-25": {
+      "file_hash": "30bc9ccc944260ed",
+      "section_hashes": [
+        "b5b4f3724fc94c35",
+        "99879ec8d1b4ae6f",
+        "4ad3516d5ffe37ca",
+        "af7ab962bdc41beb",
+        "be558396d867dc91",
+        "4ace50959aff48d6"
+      ],
+      "processed_at": "2026-11-25T07:29:50.366168+00:00",
+      "targets_touched": [
+        "wiki/Longevity winter.md",
+        "wiki/index.md",
+        "wiki/Glossary.md",
+        "wiki/Empirical constraints on longevity models.md"
+      ],
+      "notes": "Created C-class Longevity winter.md. Verified 8 sources against full text: Schmauck-Medina 2026 review (UCL author-accepted manuscript), Harrison & Archer 1987, Weindruch 1986, Ross 1961, Dong 2016, Colchero 2021, Di Francesco 2024, Ayyadevara 2008. The note presented a paraphrase as a verbatim quote; replaced it with the actual AAM passage. Dropped as deferred leads: exact ITP/anti-IL-11/OSK/trametinib table numbers, the aging-clock and CRISPR verdicts, Kriukov 2024, 929-mouse count (primary says 960), cross-species PI3K ratios, and the claim that the review calls the 1742-day record an outlier. Cropped OCR callouts deferred: Image Lab GPU batch running with 1048 jobs pending; C class does not require them. Added index, Glossary and reciprocal link from Empirical constraints on longevity models."
     }
   }
 }
