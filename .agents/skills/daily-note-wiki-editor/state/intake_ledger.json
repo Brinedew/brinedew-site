@@ -74,7 +74,7 @@
       "notes": "Integrated 2021-2026 Hypothesis A vs. B empirical scoreboard (POLE/POLD1 hypermutators, TC-NER/GLTD progeria, Cagan 2022 scaling law with theme-aware Vega-Lite chart, CHIP/liver selfish clones, NOTCH1 esophageal firewall, mitotic vs. post-mitotic synthesis) into tumor-suppressor-theory-of-aging.md and added causal-hierarchy critique to hallmarks-of-aging.md. Replaced hardcoded-hex inline SVGs with theme-aware Vega-Lite."
     },
     "2026-11-20": {
-      "file_hash": "90e226a4d9dd5f6d",
+      "file_hash": "bef4ad20861fbe81",
       "section_hashes": [
         "65f45ba00f3537ad",
         "89f86bdda3ca3161",
@@ -84,11 +84,21 @@
         "b62724f8d61426b6",
         "b853afe8160d54ab",
         "a47be8c688cddddd",
-        "17848f93a3c2699a"
+        "230b0b506d9adf93",
+        "32fdb7589156d454",
+        "d86b2380fdd75b43",
+        "5335cf7b86377a32",
+        "13e5e8a46317b8b1",
+        "47dbeaec36efde3e",
+        "50fd8f1462e1f973"
       ],
-      "processed_at": "2026-11-20T03:06:15.112540+00:00",
-      "targets_touched": ["wiki/Post-genomic histological taxonomy.md", "wiki/index.md"],
-      "notes": "Created Post-genomic histological taxonomy.md (class: C) distilling classical vs. post-genomic frameworks (ASCT+B/FTUs, CoRC, spatial neighborhoods) and the domain-general 6-axis physical vector V=(J,P,B,M,K,V) predicting 18 architectural basins plus the 4 collision boundaries."
+      "processed_at": "2026-11-25T09:06:24.818620+00:00",
+      "targets_touched": [
+        "wiki/Leveling mechanisms and collective output.md",
+        "wiki/index.md",
+        "wiki/Glossary.md"
+      ],
+      "notes": "Created Post-genomic histological taxonomy.md (class: C) distilling classical vs. post-genomic frameworks (ASCT+B/FTUs, CoRC, spatial neighborhoods) and the domain-general 6-axis physical vector V=(J,P,B,M,K,V) predicting 18 architectural basins plus the 4 collision boundaries.\nIntegrated sections 13-19 into a C-class page on leveling and collective output. Verified 6 sources: Boehm 1993 reverse dominance hierarchy, Drugov & Ryvkin 2025 (the discouragement effect is not robust, contradicting the note's premise), Dogan 2019 on sabotage, Heckathorn 1989 on second-order free riders, Gelfand et al 2011 on cultural tightness, and Trevino et al 2021 replication challenging the tightness measure. Left unpromoted: the tall-poppy counter-literature specifics, anti-capture constitutional engineering claims, the toy stag hunt numbers, and the five-mechanism list. Sections 9-12 and 20-22 remain unprocessed."
     },
     "2026-11-24": {
       "file_hash": "ec3085dae2a7e393",
