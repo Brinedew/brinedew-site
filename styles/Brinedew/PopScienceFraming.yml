@@ -1,7 +1,8 @@
 extends: existence
-message: "Avoid pop-science framing or tech metaphors ('%s'). State the biological mechanism directly."
+message: "Avoid pop-science framing or tech metaphors ('%s'). State the biological or institutional mechanism directly."
 level: warning
 ignorecase: true
 tokens:
   - '\b(?:reveal|reveals|revealed|uncover|uncovers|uncovered|expose|exposes|exposed|deliver|delivers|offer|offers|present|presents|yield|yields) (?:a|an|another) (?:[a-z-]+ )?(?:surprise|twist|paradox|irony|puzzle|mystery|catch|clue)\b'
-  - '\b(?:built-in|developmental|cellular|genetic|molecular) (?:[a-z-]+ )?(?:wiring|blueprint|firmware|software)\b'
+  - '\b(?:built-in|developmental|cellular|genetic|molecular|circuit-level) (?:[a-z-]+ )?(?:wiring|blueprint|firmware|software|firewall|latch)\b'
+  - '\b(?:wiring|hardwir(?:e|es|ed|ing)|rewir(?:e|es|ed|ing)|circuit-level|firewall|firmware|blueprint|operating system)\b'

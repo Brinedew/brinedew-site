@@ -1,0 +1,10 @@
+extends: existence
+message: "Avoid LLM rhetorical formulas or excess vocabulary ('%s'). State the fact or mechanism plainly."
+level: warning
+ignorecase: true
+tokens:
+  - '\brefers to the (?:observation|claim|idea|concept|phenomenon|fact) that\b'
+  - '\bis the (?:claim|inference trap|idea) that\b'
+  - '\b(?:is|are|was|were) not (?:a |an )?(?:peripheral|mere|simple|minor|trivial|secondary|side|abstract|static|passive|universal|fixed) [a-z-]+(?: [a-z-]+)?\b'
+  - '\bdoes not merely\b'
+  - '\b(?:delv(?:e|es|ed|ing)|pivotal|tapestry|interplay|realm|testament|paramount|meticulous(?:ly)?|seamless(?:ly)?|streamlin(?:e|es|ed|ing)|leverag(?:e|es|ed|ing)|bolster(?:s|ed|ing)?|foster(?:s|ed|ing)?|garner(?:s|ed|ing)?|showcas(?:e|es|ed|ing)|holistic|synerg(?:y|istic)|transformative|unequivocal(?:ly)?|unambiguous(?:ly)?|intricate|nuanced|comprehensive)\b'

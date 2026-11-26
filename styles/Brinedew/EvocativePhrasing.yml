@@ -5,6 +5,7 @@ ignorecase: true
 tokens:
   - '\bin lockstep\b'
   - '\bdouble-edged sword\b'
+  - '\bcuts? both ways\b'
   - '\bsilver bullet\b'
   - '\btwo sides of the same coin\b'
   - '\bdelicate dance\b'

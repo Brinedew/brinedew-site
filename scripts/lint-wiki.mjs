@@ -45,7 +45,12 @@ const CHAT_RESIDUE_RE =
   /^\s*(?:You are completely right|The short answer:|Sanity-check verdict:|In your framing\b)|^#{1,4}\s+(?:Editorial synthesis|Wiki adjudication)\b/i
 
 const PRE_BUNKING_RE =
-  /(?:^#{1,4}\s+Beyond\b|\b(?:(?:directly )?refutes any (?:strong|naive|simple)|contrary to (?:popular|naive|common) (?:belief|views?|readings?|wisdom)|far from being (?:an? )?(?:passive|static|mere|simple)|(?:framing|treating|viewing) .{1,60} (?:solely|merely|simply|only) as .{1,60} is (?:incomplete|misleading|wrong|insufficient)|(?:is|are) not (?:merely|simply|just|automatic|absolute|static|passive|a literal|an? (?:automatic|passive|simple|mere|static))\b|rather than (?:absolute|static|passive|automatic|merely|simply|just|solely|assuming\b|a [a-z-]+ quirk|a restart of\b|an? (?:absolute|literal|simple|passive|static)\b))\b)/i
+  /(?:^#{1,4}\s+Beyond\b|\b(?:(?:directly )?refutes any (?:strong|naive|simple)|contrary to (?:popular|naive|common) (?:belief|views?|readings?|wisdom)|far from being (?:an? )?(?:passive|static|mere|simple)|(?:framing|treating|viewing) .{1,60} (?:solely|merely|simply|only) as .{1,60} is (?:incomplete|misleading|wrong|insufficient)|does not merely\b|(?:is|are|was|were) not (?:merely|simply|just|automatic|absolute|static|passive|a literal|an? (?:automatic|passive|simple|mere|static|peripheral|minor|trivial|secondary|side))\b|rather than (?:absolute|static|passive|automatic|merely|simply|just|solely|assuming\b|a [a-z-]+ quirk|a restart of\b|an? (?:absolute|literal|simple|passive|static)\b))\b)/i
+
+const META_DEF_LEAD_RE =
+  /\b(?:refers\s+to\s+the\s+(?:observation|claim|idea|concept|phenomenon|fact)\s+that|is\s+the\s+(?:claim|observation|inference\s+trap|idea)\s+that|describes\s+how\b|asks\s+when\b)/i
+
+const STYLE_ENGINE_PATH = path.join(REPO_ROOT, "scripts", "lib", "_wiki-style-engine.py")
 
 const HTML_AVAILABLE_SOURCE_RE =
   /(?:doi[:/]?\s*|doi\.org\/)(?:10\.1371\/|10\.7554\/|10\.1038\/(?:ncomms|s41467|s41598)|10\.1098\/rsos|10\.3389\/|10\.1186\/|10\.3390\/|10\.1101\/)|pmc\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov\/pmc|journals\.plos\.org|elifesciences\.org|frontiersin\.org|biomedcentral\.com/i
@@ -518,6 +523,37 @@ function lintFile(filePath) {
     }
   }
 
+  // Lead meta-definition check
+  if (seenH1 && !["LIST", "FL", "NA"].includes(articleClass)) {
+    let inFm = false
+    let pastH1 = false
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i]
+      if (i === 0 && l.trim() === "---") {
+        inFm = true
+        continue
+      }
+      if (inFm) {
+        if (l.trim() === "---") inFm = false
+        continue
+      }
+      if (!pastH1) {
+        if (/^#\s+/.test(l)) pastH1 = true
+        continue
+      }
+      if (/^##\s+/.test(l)) break
+      if (l.trim() && !/^\*/.test(l.trim()) && META_DEF_LEAD_RE.test(l)) {
+        findings.push({
+          file: relPath,
+          line: i + 1,
+          rule: "stylometry-meta-definition",
+          message: `Bloated meta-definition opener in lead ("${l.match(META_DEF_LEAD_RE)[0]}"). Define the phenomenon directly.`,
+        })
+        break
+      }
+    }
+  }
+
   return findings
 }
 
@@ -535,7 +571,32 @@ function collectTargets(args) {
 const targets = collectTargets(process.argv.slice(2))
 const allFindings = targets.flatMap(lintFile)
 
-// Run Vale prose linter (warnings/suggestions are reported; errors fail)
+// Phase 2: Internal spaCy stylometry, Biber syntax, and crash-blossom engine
+const styleRun = spawnSync("python", [STYLE_ENGINE_PATH, ...targets], {
+  cwd: REPO_ROOT,
+  env: { ...process.env, BRINEDEW_LINT_WIKI_INTERNAL: "1" },
+  encoding: "utf8",
+  maxBuffer: 20 * 1024 * 1024,
+})
+if (styleRun.error?.code === "ENOENT") {
+  console.error("lint-wiki: `python` binary not found on PATH; cannot run spaCy stylometry engine.")
+  process.exit(1)
+}
+if (styleRun.status !== 0) {
+  console.error(styleRun.stderr || "lint-wiki: internal spaCy stylometry engine failed.")
+  process.exit(1)
+}
+try {
+  const parsed = JSON.parse(styleRun.stdout || "{}")
+  if (Array.isArray(parsed.findings)) {
+    allFindings.push(...parsed.findings)
+  }
+} catch (err) {
+  console.error(`lint-wiki: failed to parse stylometry engine output: ${err.message}`)
+  process.exit(1)
+}
+
+// Phase 3: Vale prose linter (warnings/suggestions are reported; errors fail)
 const valeTargets = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["content/wiki"]
 const valeRun = spawnSync("vale", valeTargets, {
   cwd: REPO_ROOT,

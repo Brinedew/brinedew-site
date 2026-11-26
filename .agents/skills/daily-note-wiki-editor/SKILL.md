@@ -61,6 +61,11 @@ Raw daily notes often carry chat residue (`"You are completely right"`, `"The sh
 
 - **Single canonical home (`WP:SUMMARY`):** Place detailed mechanisms, equations, or comparison tables on **one** canonical page. Cross-link or transclude (`![[Page#Heading]]`) from neighbor pages; add `*Main article: [[target]]*` or `*Further information: [[target]]*` hatnotes only when the target page actually holds a deeper treatment.
 - **Strip chat residue & meta-scaffolding:** Remove all second-person Q&A framing, `"The short answer:"` headers, and bolted-on `"Wiki adjudication:"` / `"Editorial synthesis"` banners. State the biological or mathematical tension and its resolution directly inside the narrative.
+- **Anti-patterns to reject on sight (the "anxious fact-checker" LLM voice, 2026-11-25 audit):**
+  - _Metronomic staccato kickers ("Not X. It is Y."):_ Never end every paragraph with a clipped negative disclaimer (_"Calling one case generative and another crab mentality labels the cases. It does not test them."_, _"The data support a smaller claim."_, _"It does not settle whether..."_). Use varied sentence rhythm with causal subordination (_because_, _while_, _yet_) and let the mechanism or data carry the point.
+  - _Shadow-boxing invisible daily-note strawmen:_ Never argue against a loose claim from the raw daily note that a wiki reader never saw (e.g., lecturing a reader of `Pension financing models` that _"asset ratios say nothing about the biology of aging"_, or repeating _"the future condition is not a proximate cause"_ five times across `Predictive plasticity`). State a conceptual distinction once, cleanly, where it belongs.
+  - _Cookie-cutter `## Boundary` / `## Where the claim stops` footers & leaked pipeline text:_ Do not stamp every article with a scolding disclaimer section at the bottom, and **never** leak editorial intake status into reader prose (_"Four examples from the source note are not covered here… they stay as leads"_, _"X, Y, and Z are not treated here"_). Weave real scope limits into the section where they arise; track deferred leads only in `intake_ledger.json`.
+  - _"X and colleagues found that…" book-report chains:_ Lead paragraphs with the physical mechanism, experimental perturbation, or conceptual puzzle—not a parade of researcher names. Keep `Author (Year)` in `[^footnotes]` unless the author's name carries conceptual priority (e.g., Waddington, Wilkins, Peto, Godfrey-Smith).
 - **Dual-audience sequential prose:**
   - _For field biologists:_ Motivate equations and formal vectors brick-by-brick from why simpler descriptions fail.
   - _For quantitative non-biologists (LessWrong/programmer generalists):_ Unpack molecular cascades and wet-lab assays step-by-step so acronyms close a conceptual gap already built. Avoid 60-word semicolon-chained cover-your-ass sentences.
@@ -90,8 +95,8 @@ Raw daily notes often carry chat residue (`"You are completely right"`, `"The sh
 
 1. **Promotion above `B` (`GA`, `A`, `FA`):**
    - Checklists stop at `B`. If an enriched article is ready for `GA`, `A`, or `FA`, invoke the `wiki-court` skill (`D:\Coding\Website\.agents\skills\wiki-court\SKILL.md`).
-2. **Wiki lint & formatting check:**
-   - Run `pnpm run lint:wiki <edited wiki files>` to catch mid-page or detached OCR screenshot callouts (`ocr-callout-not-in-footnote`), leaked Occurock locators (`ocr-pipeline-leak`), raw ` ```svg ` blocks (`raw-svg-codeblock`), and chat residue (`chat-residue`). Fix every finding before marking the daily note processed.
+2. **Wiki lint, stylometry & formatting check:**
+   - Run `pnpm run lint:wiki <edited wiki files>` (the single unified wiki linter: structural/evidence checks, Vale lexical rules, Wikipedia-FA-calibrated stylometry, spaCy Biber/dependency syntax, and crash-blossom ambiguity detection). Fix every finding before marking the daily note processed.
    - Run `pnpm run check:format:changed` (note: `content/wiki/` is ignored by Prettier to preserve Obsidian wikilinks, but any scripts or config files touched must pass Prettier).
 3. **Record in the intake ledger:**
    - Mark the daily note as processed so future sessions don't re-triage unchanged text:

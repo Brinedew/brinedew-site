@@ -33,7 +33,6 @@
     "check:stamps": "node ./scripts/restamp-iconoplasm-modules.mjs --check && node ./scripts/restamp-iconoplasm-modules.mjs --check quartz/static/geneguessr",
     "check:format:changed": "node ./scripts/run-prettier.mjs --check --changed",
     "lint:wiki": "node ./scripts/lint-wiki.mjs",
-    "lint:wiki:style": "python ./scripts/lint-wiki-style.py",
     "benchmark:iconoplasm-extension": "node ./scripts/benchmark-iconoplasm-extension.mjs",
     "verify:iconoplasm-publication-aliases": "node ./scripts/verify-iconoplasm-publication-aliases.mjs",
     "validate:iconoplasm-topology": "node ./scripts/validate-iconoplasm-deployment-topology.mjs",

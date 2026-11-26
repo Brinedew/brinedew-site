@@ -1,40 +1,29 @@
 #!/usr/bin/env python3
 """
-spaCy-based stylometric linter for Brinedew wiki articles (content/wiki/*.md).
+Internal spaCy stylometry and crash-blossom engine invoked exclusively by
+`scripts/lint-wiki.mjs` (`pnpm run lint:wiki`).
 
-Calibrated by unsupervised comparative stylometry against Brinedew's human-written
-blog posts (content/posts/*.md: avg_sent_len=20.1, noun_verb_ratio=2.23,
-prep_per_1k=83.7, pass_per_1k=6.0).
-
-Uses spaCy POS tagging and dependency parsing (not 1975 word-list regexes) to
-detect structural academese at both article and sentence level:
-  1. biber-sent-length: Article mean sentence length > 28 words.
-  2. biber-prep-density: Article preposition density > 120 per 1,000 tokens.
-  3. biber-passive-density: Article passive-clause density > 15 per 1,000 tokens.
-  4. dep-prep-chain: Nested prepositional chain of depth >= 4 in one sentence.
-  5. dep-passive-chain: >= 2 passive-voice clauses in one sentence.
-  6. pos-adj-pileup: >= 3 consecutive adjectives (ADJ ADJ ADJ) or >= 6-token
-     unbroken ADJ/NOUN nominal stack.
-  7. pos-author-led: Literature-review sentence opening with named author(s) +
-     reporting verb (PROPN ... VERB) instead of leading with the mechanism.
-
-Usage:
-  python ./scripts/lint-wiki-style.py                          # audit all wiki files
-  python ./scripts/lint-wiki-style.py content/wiki/foo.md ...  # audit specific file(s)
+Do not invoke directly; use `pnpm run lint:wiki [files...]`.
 """
 
 from __future__ import annotations
 
-import glob
 import json
 import os
 import re
 import sys
 from pathlib import Path
 
+if os.environ.get("BRINEDEW_LINT_WIKI_INTERNAL") != "1":
+    sys.stderr.write(
+        "This is an internal module of the wiki linter. Do not invoke it directly.\n"
+        "Use the single canonical command instead: pnpm run lint:wiki [files...]\n"
+    )
+    raise SystemExit(2)
+
 import spacy
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 WIKI_DIR = REPO_ROOT / "content" / "wiki"
 SKIP_FILES = {"Wiki Assessment.md", "index.md", "Glossary.md"}
 NV_CACHE_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "lint-wiki-style-brown-nv.json"
@@ -95,6 +84,7 @@ def _token_nv_priors(tok) -> tuple[float, float, int, int]:
     tot = bn + bv
     return (bn / tot if tot else 0.0), (bv / tot if tot else 0.0), n_syn, v_syn
 
+
 REPORTING_VERBS = {
     "show",
     "demonstrate",
@@ -116,11 +106,100 @@ REPORTING_VERBS = {
     "frame",
 }
 
-
 LEAD_ACADEMESE_RE = re.compile(
     r"\b(?:comprises?|constitutes?|encompasses?|represents? an?|characterizes?|serves? as|operates? as|functions? as|enforce[sd]? .{1,30} homeostasis|canonical)\b",
     re.I,
 )
+
+TRAILING_PARTICIPLE_RE = re.compile(r",\s+([a-z]{4,}ing)\b")
+TRAILING_PARTICIPLE_STOP = {
+    "including", "excluding", "during", "following", "regarding", "concerning",
+    "according", "depending", "considering", "assuming", "starting", "ending",
+    "using", "being", "having", "nothing", "something", "everything", "anything",
+    "aging", "ageing", "signaling", "signalling", "funding", "spending", "feeding",
+    "remodeling", "crosslinking", "bundling", "sequencing", "profiling", "staining",
+    "labeling", "cloning", "breeding", "foraging", "kneeling", "winding", "timing",
+    "coupling", "wiring", "rewiring", "leveling", "sanctioning", "policing", "shedding",
+    "crowding", "competing", "dividing", "renewing", "warming", "shading", "wounding",
+    "streaming", "reading", "writing", "meaning", "building", "ceiling", "setting",
+    "finding", "offspring", "string", "ring", "king", "wing", "thing", "bring", "spring",
+}
+
+CONTRASTIVE_NEG_RE = re.compile(
+    r"\b(?:(?:is|are|was|were|does|do|did)\s+not\s+(?:merely|simply|just|only|an?\s+(?:mere|simple|peripheral|single|universal|fixed|passive|static))\b"
+    r"|not\s+(?:merely|simply|just|only)\b[^.?!]{1,100}\b(?:but|rather|instead)\b"
+    r"|rather\s+than\b"
+    r"|instead\s+of\b"
+    r"|(?:does|do|did)\s+not\s+(?:prove|settle|show|imply|mean|guarantee|explain|remove|eliminate|change|alter|require)\b)",
+    re.I,
+)
+
+NEGATION_WORDS = {"not", "no", "never", "neither", "nor", "nothing", "none"}
+
+# Common plain verbs that happen to have a high noun prior in Brown but do not
+# trigger real garden-path crash blossoms after a subject noun.
+SAFE_BODY_VERBS = {
+    "use", "uses", "make", "makes", "give", "gives", "take", "takes",
+    "show", "shows", "hold", "holds", "keep", "keeps", "set", "sets",
+    "run", "runs", "move", "moves", "play", "plays", "fall", "falls",
+    "rise", "rises", "drop", "drops", "stay", "stays", "live", "lives",
+    "need", "needs", "mean", "means", "help", "helps", "cause", "causes",
+    "change", "changes", "start", "starts", "end", "ends", "lead", "leads",
+    "cut", "cuts", "pull", "pulls", "push", "pushes", "turn", "turns",
+    "pay", "pays", "raise", "raises", "lower", "lowers", "grow", "grows",
+    "call", "calls", "reach", "reaches", "leave", "leaves", "break", "breaks",
+    "stop", "stops", "build", "builds", "stand", "stands", "carry", "carries",
+    "act", "acts", "work", "works", "fit", "fits", "last", "lasts",
+}
+
+# Common non-ambiguous gerund-like nouns/adjectives that aren't crash blossoms
+SAFE_ING_PREFIXES = {
+    "during", "including", "excluding", "following", "regarding", "concerning",
+    "according", "using", "being", "having", "aging", "ageing", "signaling",
+    "signalling", "existing", "remaining", "resulting", "underlying", "neighboring",
+    "surrounding", "dividing", "renewing", "developing", "competing", "expanding",
+    "working", "living", "feeding", "growing", "repeating", "increasing", "rising",
+    "falling", "leading", "supporting", "competing", "standing", "funding", "spending",
+}
+
+
+def _article_class(path: Path) -> str:
+    raw = path.read_text(encoding="utf-8", errors="ignore")
+    m = re.search(r"(?m)^class:\s*([A-Za-z]+)", raw)
+    return m.group(1).upper() if m else ""
+
+
+def _compute_mattr(words: list[str], window: int = 50) -> float:
+    if len(words) < window:
+        return 0.0
+    total = sum(len(set(words[i : i + window])) / window for i in range(len(words) - window + 1))
+    return total / (len(words) - window + 1)
+
+
+def _compute_mtld_dir(words: list[str], threshold: float = 0.72) -> float:
+    factors = 0.0
+    types: set[str] = set()
+    tokens = 0
+    for w in words:
+        tokens += 1
+        types.add(w)
+        ttr = len(types) / tokens
+        if ttr <= threshold:
+            factors += 1.0
+            types.clear()
+            tokens = 0
+    if tokens > 0:
+        ttr = len(types) / tokens
+        if ttr < 1.0:
+            factors += (1.0 - ttr) / (1.0 - threshold)
+    return len(words) / factors if factors > 0 else float(len(words))
+
+
+def _compute_mtld(words: list[str]) -> float:
+    if len(words) < 50:
+        return 0.0
+    seq = words[:2000]
+    return (_compute_mtld_dir(seq) + _compute_mtld_dir(list(reversed(seq)))) / 2.0
 
 
 def extract_prose_lines(path: Path) -> list[tuple[int, str, bool]]:
@@ -140,7 +219,7 @@ def extract_prose_lines(path: Path) -> list[tuple[int, str, bool]]:
             if line.strip() == "---":
                 in_frontmatter = False
             continue
-        if re.match(r"^##\s+References\b", line, re.I):
+        if re.match(r"^##\s+(?:See also|References)\b", line, re.I):
             break
         if re.match(r"^##\s+", line):
             seen_h2 = True
@@ -150,13 +229,15 @@ def extract_prose_lines(path: Path) -> list[tuple[int, str, bool]]:
             continue
         if in_code or re.match(r"^\s*[>|#]", line) or re.match(r"^\[\^", line):
             continue
+        if re.match(r"^\s*---+\s*$", line) or re.match(r"^\s*!\[\[", line):
+            continue
         if re.match(r"^\*(?:For |Part of |Main article:|Further information:)", line.strip(), re.I):
             continue
         clean = re.sub(r"\[\^[^\]]+\]", "", line)
         clean = re.sub(r"\[\[(?:[^\]|]+\|)?([^\]]+)\]\]", r"\1", clean)
         clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", clean)
         clean = re.sub(r"\[\s*\d+(?:\s*[-–,]\s*\d+)*\s*\]", "", clean)
-        clean = re.sub(r"https?://\S+|\$[^$]+\$", "", clean)
+        clean = re.sub(r"https?://\S+|\$\$[\s\S]*?\$\$|\$[^$]+\$", "", clean)
         clean = re.sub(r"[*_`]", "", clean)
         clean = re.sub(r"^\s*(?:[-*]|\d+\.)\s+", "", clean).strip()
         if len(clean.split()) >= 6:
@@ -182,17 +263,25 @@ def prep_chain_depth(token) -> int:
 
 def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
     rel = str(path.relative_to(REPO_ROOT)).replace("\\", "/")
+    article_cls = _article_class(path)
+    if path.name in SKIP_FILES or article_cls in ("LIST", "FL", "NA", "STUB"):
+        return {"file": rel, "class": article_cls, "skipped": True}, []
+
     prose_lines = extract_prose_lines(path)
     findings: list[dict] = []
 
     sent_lens: list[int] = []
+    alpha_words: list[str] = []
+    body_chunks: list[str] = []
     tok_cnt = 0
     noun_cnt = 0
     verb_cnt = 0
     prep_cnt = 0
     pass_cnt = 0
+    participle_clause_cnt = 0
 
     for line_num, text, is_lead in prose_lines:
+        body_chunks.append(text)
         doc = nlp(text)
         if is_lead:
             lead_match = LEAD_ACADEMESE_RE.search(text)
@@ -207,7 +296,7 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                 )
         for sent in doc.sents:
             toks = [t for t in sent if not t.is_space and not t.is_punct]
-            if len(toks) < 6:
+            if len(toks) < 4:
                 continue
             sent_lens.append(len(toks))
             sent_passives = 0
@@ -289,12 +378,114 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                             }
                         )
 
+            # Body-wide crash-blossom / garden-path ambiguity detection
+            reported_cb: set[int] = set()
+            for idx_t, tok in enumerate(toks):
+                if idx_t == 0:
+                    continue
+                prev = toks[idx_t - 1]
+                if prev.i + 1 != tok.i:
+                    continue
+                nr, vr, ns, vs = _token_nv_priors(tok)
+                if ns == 0 or vs == 0:
+                    continue
+                has_det = any(c.dep_ in ("det", "poss", "nummod") for c in tok.children)
+
+                # 1. Phrasal-verb particle + bare ambiguous noun-verb (e.g. "playing down wins")
+                if (
+                    tok.pos_ == "NOUN"
+                    and not has_det
+                    and vr >= 0.40
+                    and prev.dep_ == "prt"
+                    and prev.head.i + 1 == prev.i
+                ):
+                    reported_cb.add(tok.i)
+                    findings.append(
+                        {
+                            "file": rel,
+                            "line": line_num,
+                            "rule": "crash-blossom",
+                            "message": f"Crash-blossom phrasal-verb ambiguity `{prev.head.text} {prev.text} {tok.text}` (`{tok.text}` has {vr:.0%} verb prior with no determiner after particle `{prev.text}`; add a determiner or use an unambiguous noun).",
+                        }
+                    )
+                    continue
+
+                # 2. Gerund/-ing + bare ambiguous plural noun (e.g. "downplaying wins feels", "Crosslinking breaks")
+                if (
+                    tok.pos_ == "NOUN"
+                    and tok.tag_ == "NNS"
+                    and not has_det
+                    and vr >= 0.45
+                    and prev.text.lower().endswith("ing")
+                    and prev.text.lower() not in SAFE_ING_PREFIXES
+                ):
+                    reported_cb.add(tok.i)
+                    findings.append(
+                        {
+                            "file": rel,
+                            "line": line_num,
+                            "rule": "crash-blossom",
+                            "message": f"Crash-blossom gerund+plural ambiguity `{prev.text} {tok.text}` (`{tok.text}` has {vr:.0%} verb prior with no determiner after `{prev.text}`; add a determiner or use an unambiguous noun).",
+                        }
+                    )
+                    continue
+
+                # 3. Verb parsed right after a particle/gerund that looks like a crash-blossom noun object
+                if (
+                    tok.pos_ == "VERB"
+                    and tok.tag_ in ("VBZ", "VBP")
+                    and nr >= 0.30
+                    and (
+                        (prev.dep_ == "prt" and prev.head.i + 1 == prev.i)
+                        or (
+                            prev.tag_ == "VBG"
+                            and prev.text.lower() not in SAFE_ING_PREFIXES
+                            and idx_t + 1 < len(toks)
+                            and toks[idx_t + 1].pos_ in ("VERB", "AUX")
+                        )
+                    )
+                ):
+                    reported_cb.add(tok.i)
+                    findings.append(
+                        {
+                            "file": rel,
+                            "line": line_num,
+                            "rule": "crash-blossom",
+                            "message": f"Crash-blossom ambiguity `{prev.text} {tok.text}` (`{tok.text}` collides between noun and verb after `{prev.text}`; rewrite so object and main verb are unmistakable).",
+                        }
+                    )
+                    continue
+
+                # 4. Body-wide NOUN + strongly noun-dominant VERB (e.g. "gene patterns", "layer speeds", "pool backs", "dimers pair", "marks control")
+                if (
+                    not is_lead
+                    and tok.pos_ == "VERB"
+                    and tok.tag_ in ("VBZ", "VBP")
+                    and prev.pos_ in ("NOUN", "PROPN")
+                    and tok.text.lower() not in SAFE_BODY_VERBS
+                    and nr >= 0.72
+                    and ns >= 4
+                    and tok.i not in reported_cb
+                ):
+                    findings.append(
+                        {
+                            "file": rel,
+                            "line": line_num,
+                            "rule": "crash-blossom",
+                            "message": f"Crash-blossom noun-verb ambiguity `{prev.text} {tok.text}` (`{tok.text}` has {nr:.0%} noun prior / {ns} noun synsets directly after noun `{prev.text}`; use an unambiguous verb).",
+                        }
+                    )
+
             for t in toks:
                 tok_cnt += 1
+                if t.is_alpha:
+                    alpha_words.append(t.text.lower())
                 if t.pos_ == "NOUN":
                     noun_cnt += 1
                 elif t.pos_ == "VERB":
                     verb_cnt += 1
+                if t.tag_ == "VBG" and t.dep_ in ("advcl", "acl"):
+                    participle_clause_cnt += 1
                 if t.dep_ == "prep":
                     prep_cnt += 1
                     d = prep_chain_depth(t)
@@ -333,7 +524,6 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                 if a.i + 1 != b.i or b.i + 1 != c.i:
                     continue
                 if a.pos_ == b.pos_ == c.pos_ == "ADJ":
-                    # Skip hyphenated technical compounds (e.g. "negative frequency-dependent")
                     raw_span = doc.text[a.idx : c.idx + len(c.text)]
                     if "-" in raw_span:
                         continue
@@ -364,8 +554,7 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                     )
                     break
 
-            # 4. Author-led literature-review opener (PROPN ... reporting VERB,
-            #    including after a leading "In YYYY," date phrase)
+            # 4. Author-led literature-review opener
             author_start = 0
             if (
                 len(toks) >= 6
@@ -397,8 +586,7 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                     )
 
             # 4b. Bloodless possessive-author-year / paper-noun subject
-            # e.g. "Fisher's 1930 reproductive value supplied...", "Haldane's 1941 analysis applied..."
-            ABSTRACT_WORK_NOUNS = {
+            abstract_work_nouns = {
                 "discussion", "analysis", "proposal", "argument", "essay", "paper",
                 "lecture", "review", "critique", "formulation", "account", "framework",
                 "treatment", "work", "study", "model", "theory", "value",
@@ -410,7 +598,7 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                 if poss is None:
                     continue
                 has_year = any(re.match(r"^(?:1[6-9]\d\d|20\d\d)s?$", c.text) for c in t.children)
-                if has_year and t.lemma_.lower() in ABSTRACT_WORK_NOUNS:
+                if has_year and t.lemma_.lower() in abstract_work_nouns:
                     findings.append(
                         {
                             "file": rel,
@@ -421,28 +609,103 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
                     )
                     break
 
+    full_prose = "\n".join(body_chunks)
+    n_alpha = max(1, len(alpha_words))
     avg_sent_len = round(sum(sent_lens) / max(1, len(sent_lens)), 1)
+    if len(sent_lens) > 1:
+        var_sl = sum((x - avg_sent_len) ** 2 for x in sent_lens) / (len(sent_lens) - 1)
+        sd_sent_len = round(var_sl ** 0.5, 1)
+    else:
+        sd_sent_len = 0.0
+    cv_sent_len = round(sd_sent_len / avg_sent_len, 2) if avg_sent_len > 0 else 0.0
     noun_verb = round(noun_cnt / max(1, verb_cnt), 2)
     prep_1k = round(1000 * prep_cnt / max(1, tok_cnt), 1)
     pass_1k = round(1000 * pass_cnt / max(1, tok_cnt), 1)
+    part_1k = round(1000 * participle_clause_cnt / max(1, tok_cnt), 1)
+    mattr50 = round(_compute_mattr(alpha_words, 50), 3)
+    mtld = round(_compute_mtld(alpha_words), 1)
+
+    tp_hits = [m.group(1).lower() for m in TRAILING_PARTICIPLE_RE.finditer(full_prose) if m.group(1).lower() not in TRAILING_PARTICIPLE_STOP]
+    tp_1k = round(1000 * len(tp_hits) / n_alpha, 1)
+    cneg_cnt = len(CONTRASTIVE_NEG_RE.findall(full_prose))
+    cneg_1k = round(1000 * cneg_cnt / n_alpha, 1)
+    neg_1k = round(1000 * sum(1 for w in alpha_words if w in NEGATION_WORDS) / n_alpha, 1)
+    colon_cnt = len(re.findall(r"[A-Za-z)\]]\s*:\s+[a-z]", full_prose))
+    colon_1k = round(1000 * colon_cnt / n_alpha, 1)
 
     metrics = {
         "file": rel,
         "tokens": tok_cnt,
         "avg_sent_len": avg_sent_len,
+        "sd_sent_len": sd_sent_len,
+        "cv_sent_len": cv_sent_len,
+        "mattr50": mattr50,
+        "mtld": mtld,
         "noun_verb_ratio": noun_verb,
         "prep_per_1k": prep_1k,
         "pass_per_1k": pass_1k,
+        "participle_clause_per_1k": part_1k,
+        "trailing_participle_per_1k": tp_1k,
+        "contrastive_neg_per_1k": cneg_1k,
+        "negation_per_1k": neg_1k,
+        "rhetorical_colon_per_1k": colon_1k,
     }
 
-    if tok_cnt >= 250:
-        if avg_sent_len > 28.0:
+    # Quantitative stylometry gates calibrated against 8 Biology/Science Wikipedia FAs
+    # and 10 Brinedew B-class articles (0 false positives on either baseline).
+    if tok_cnt >= 250 and len(sent_lens) >= 8:
+        if avg_sent_len > 25.0 or avg_sent_len < 14.5:
             findings.append(
                 {
                     "file": rel,
                     "line": 1,
-                    "rule": "biber-sent-length",
-                    "message": f"Mean sentence length is {avg_sent_len} words (posts baseline: 20.1; threshold: 28.0).",
+                    "rule": "stylometry-sent-length",
+                    "message": f"Mean sentence length is {avg_sent_len} words (Wikipedia FA: 18.9–22.9; Brinedew B-class: 15.0–21.9; allowed band: 14.5–25.0).",
+                }
+            )
+        if sd_sent_len < 7.5 or cv_sent_len < 0.38:
+            findings.append(
+                {
+                    "file": rel,
+                    "line": 1,
+                    "rule": "stylometry-low-burstiness",
+                    "message": f"Sentence-length rhythm is too uniform (SD={sd_sent_len}, CV={cv_sent_len}; Wikipedia FA SD=9.0–11.0, Brinedew B-class SD=9.4–15.6). Mix concise statements with fuller explanations.",
+                }
+            )
+        if mattr50 > 0.865 and mtld > 165.0:
+            findings.append(
+                {
+                    "file": rel,
+                    "line": 1,
+                    "rule": "stylometry-synonym-cycling",
+                    "message": f"Over-synonymized LLM vocabulary signature (MATTR-50={mattr50}, MTLD={mtld}; Wikipedia FA MTLD=67–94, Brinedew B-class MATTR-50<=0.863, MTLD<=153). Reuse plain, concrete domain nouns.",
+                }
+            )
+        if (participle_clause_cnt >= 4 and part_1k > 10.0) or (len(tp_hits) >= 3 and tp_1k > 4.0):
+            findings.append(
+                {
+                    "file": rel,
+                    "line": 1,
+                    "rule": "stylometry-participle-density",
+                    "message": f"High present-participial clause rate (VBG advcl/acl={part_1k}/1k, trailing ', verb-ing'={tp_1k}/1k; Reinhart et al. PNAS 2025 LLM marker). Convert participial clauses into finite verbs.",
+                }
+            )
+        if (cneg_cnt >= 2 and cneg_1k > 3.0) or neg_1k > 11.5:
+            findings.append(
+                {
+                    "file": rel,
+                    "line": 1,
+                    "rule": "stylometry-contrastive-negation",
+                    "message": f"Overuse of contrastive negation / negative framing (contrastive={cneg_1k}/1k, raw negations={neg_1k}/1k; Wikipedia FA=0.3/1k & 3.6/1k, Brinedew B-class=0.8/1k & 7.4/1k). State mechanisms affirmatively.",
+                }
+            )
+        if colon_cnt >= 4 and colon_1k > 6.0:
+            findings.append(
+                {
+                    "file": rel,
+                    "line": 1,
+                    "rule": "stylometry-rhetorical-colons",
+                    "message": f"High mid-sentence rhetorical colon rate ({colon_1k}/1k words, {colon_cnt} hits; Wikipedia FA=0.9/1k, Brinedew B-class<=5.9/1k). Use periods or subordinate clauses.",
                 }
             )
         if prep_1k > 125.0:
@@ -468,14 +731,10 @@ def analyze_file(nlp, path: Path) -> tuple[dict, list[dict]]:
 
 
 def main(argv: list[str]) -> int:
-    as_json = "--json" in argv
-    args = [a for a in argv if a != "--json"]
-    if args:
-        targets = [Path(a).resolve() for a in args if Path(a).exists()]
-    else:
-        targets = sorted(
-            p for p in WIKI_DIR.glob("*.md") if p.name not in SKIP_FILES
-        )
+    targets = [Path(a).resolve() for a in argv if Path(a).exists()]
+    if not targets:
+        print(json.dumps({"metrics": [], "findings": []}))
+        return 0
 
     nlp = spacy.load("en_core_web_sm", disable=["ner"])
     all_metrics = []
@@ -485,15 +744,8 @@ def main(argv: list[str]) -> int:
         all_metrics.append(m)
         all_findings.extend(f)
 
-    if as_json:
-        print(json.dumps({"metrics": all_metrics, "findings": all_findings}, indent=2))
-    else:
-        for f in all_findings:
-            print(f"{f['file']}:{f['line']} [{f['rule']}] {f['message']}")
-        print(
-            f"\nlint-wiki-style: {len(targets)} file(s) checked, {len(all_findings)} stylometric finding(s)."
-        )
-    return 1 if all_findings else 0
+    print(json.dumps({"metrics": all_metrics, "findings": all_findings}))
+    return 0
 
 
 if __name__ == "__main__":

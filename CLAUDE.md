@@ -392,6 +392,13 @@ This site's audience pairs LessWrong-style rationalists and programmers with bio
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
+**LLM-voice anti-patterns to reject on sight (2026-11-25 wiki audit):**
+
+- **Metronomic "Not X. It is Y." epistemic-cop kickers:** Clipping every paragraph into short SVO punches capped with _"The data support a smaller claim."_, _"It does not prove..."_, or _"Calling X by name labels it. It does not test it."_ Write with varied sentence length and causal subordination (_because_, _while_, _yet_) and trust the reader.
+- **Shadow-boxing invisible chat strawmen:** Arguing against a loose claim from a daily note the reader never saw (e.g., reminding readers of a pension-economics page that _"asset ratios say nothing about the biology of aging"_, or repeating _"the future does not cause the past"_ five times in one article). State a distinction once, cleanly.
+- **Cookie-cutter `## Boundary` / `## Where the claim stops` templates & leaked pipeline notes:** Never bolt a generic disclaimer section onto the end of every article, and never write reader-facing sentences like _"Four examples from the source note are not covered here; they stay as leads"_ or laundry lists of topics _"not treated here."_
+- **"X and colleagues found that…" book-report paragraphs:** Lead with the mechanism, equation, or experimental test; move routine researcher names into `[^footnotes]`.
+
 ## current workflow (single vault)
 
 **Working publishing workflow:**
