@@ -56,6 +56,7 @@ Evaluating an article with ad-hoc, hand-authored prompts introduces coordinator 
    - `Cwd`: `D:\Coding\Website`
    - `Description`: `Convene local Wiki Court Judge for <Article Name>`
 2. `mode="judge"` automatically archives the full ruling to `.agents/wiki-court-rulings/<slug>/<YYYY-MM-DD>-<TARGET_CLASS>-<verdict>.md` (git-tracked) AND stamps `court_status`, `court_target`, `court_date`, and `court_ruling` directly into the article's YAML frontmatter so future editors, `pnpm run lint:wiki`, and subsequent Court sessions discover past rulings automatically without relying on memory.
-3. Read `.agents/wiki-court-rulings/<slug>/<YYYY-MM-DD>-<TARGET_CLASS>-<verdict>.md` (also copied to `.quartz-cache/wiki-court/<slug>/judge_ruling.md`) and act strictly on the binary verdict:
-   - `VERDICT: REMAND`: fix every sustained defect without bloating overruled trade-offs (and expand stub neighbors separately where the Judge rules material canonically belongs there), rebuild Quartz, and repeat Phases 1–3 until promoted.
+3. Read `.agents/wiki-court-rulings/<slug>/<YYYY-MM-DD>-<TARGET_CLASS>-<verdict>.md` (also copied to `.quartz-cache/wiki-court/<slug>/judge_ruling.md`) and act strictly on the 3-tier verdict:
+   - `VERDICT: MAJOR_REVISION`: structural, architectural, coverage, craft, or severe scientific/forensic gaps remain — overhaul the article, rebuild Quartz, and repeat Phases 1–3.
+   - `VERDICT: MINOR_REVISION` _(Conditional Accept)_: core architecture, coverage, and craft are sound; apply ONLY the closed `Essential Revisions` checklist, rebuild Quartz, and run `run_court.py` with `mode="verify"` (local Judge verification only — NO fresh AI Studio panel and NO goalpost-moving).
    - `VERDICT: PROMOTE`: update `class:` in frontmatter to `target_class` (leaving `draft:` untouched unless the user explicitly asks to publish/unpublish), then run a final Quartz build, `pnpm run lint:wiki`, `pnpm run check`, and `pnpm run test`.

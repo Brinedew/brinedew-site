@@ -318,7 +318,7 @@ def build_standards_digest(target_class: str) -> str:
     lines.extend(
         [
             "- **Dual-audience clarity:** Teach both field biologists and intelligent quantitative non-biologists cleanly—build the conceptual puzzle before dropping wet-lab jargon, and motivate mathematical formulas from why simpler intuition fails.",
-            "- **Level-indexed longevity terminology:** Never hide distinct biological levels under vague umbrella words (`aging`, `senescence`, `damage`, `immortality`, `rejuvenation`). Index the exact level (mortality hazard creep, frailty, somatic mutation load, replicative cell-cycle arrest, clonal selection) and watch for Level-2 (cell) vs. Level-3 (organism) fitness sign flips.",
+            "- **Level-indexed longevity terminology:** Never hide distinct biological levels under vague umbrella words (`aging`, `senescence`, `damage`, `immortality`, `rejuvenation`). Index the exact level (Gompertz slope, loss of functional reserve, somatic mutation load, replicative cell-cycle arrest, clonal selection) and watch for Level-2 (cell) vs. Level-3 (organism) fitness sign flips.",
             "- **Graph factoring & scope discipline:** Each experiment, model, or table belongs in detail on ONE canonical page; summarize and delegate covered subtopics via `[[wikilinks]]` / `*Main article:*` rather than cloning sibling pages. Earned hatnotes only (never defensive top disclaimers against unrelated topics, never `*Main article:*` pointing at thin stubs). **Neighbor article sizes are editable architectural choices, not constants of physics:** if a subtopic canonically belongs on a neighbor page that happens to be a stub today, keep this page concise and expand the neighbor rather than dumping off-scope material here.",
             "- **Draft status is independent of quality:** `draft: true/false` in YAML frontmatter is a separate publishing/visibility switch and has NOTHING to do with article quality or `GA`/`A`/`FA`/`FL` eligibility. Never penalize or flag `draft: true`.",
             "- **Source-Quality & Forensic Audit (Bik / Sholto David / Data Colada bar):** A cropped quote proves only what a paper printed, not that it is true. Actively audit pivotal studies via Google Search + Code Execution for PubPeer threads, Expressions of Concern, retractions, failed multi-site replications (e.g. NIA ITP, Phase II/III RCTs), blot/microscopy duplication, GRIM/GRIMMER/statistical anomalies, p-hacking, and longevity design traps (short-lived controls, mid-life start bias, progeroid extrapolation, promiscuous senescence markers).",
@@ -439,8 +439,8 @@ if not isinstance(args, dict) or not str(args.get("article") or "").strip():
 ARTICLE_QUERY = str(args["article"]).strip()
 TARGET_CLASS = str(args.get("target_class") or "GA").strip()
 MODE = str(args.get("mode") or "prepare").strip().lower()
-if MODE not in {"prepare", "judge"}:
-    raise ValueError(f"Unsupported mode '{MODE}'. Must be 'prepare' or 'judge'.")
+if MODE not in {"prepare", "judge", "verify"}:
+    raise ValueError(f"Unsupported mode '{MODE}'. Must be 'prepare', 'judge', or 'verify'.")
 
 phase("Assemble Dossier")
 WEBSITE_ROOT = locate_website_root()
@@ -509,7 +509,7 @@ if MODE == "prepare":
     aistudio_start_file = mcp_ws_dir / "aistudio_start.js"
     aistudio_poll_file = mcp_ws_dir / "aistudio_poll.js"
     if mcp_template_path.exists():
-        mcp_tpl = mcp_template_path.read_text(encoding="utf-8")
+        mcp_tpl = mcp_template_path.read_text(encoding="utf-8").lstrip("; \r\n")
         start_cfg = {
             "action": "start",
             "slug": target["slug"],
@@ -573,6 +573,88 @@ if MODE == "prepare":
         f"(advocate={len(advocate_ready)} chars, alex={len(alex_ready)} chars)."
     )
     print(json.dumps({"status": "prepared", **manifest}, indent=2, ensure_ascii=False))
+elif MODE == "verify":
+    phase("Local Conditional-Accept Verification (MINOR_REVISION)")
+    if not prior_rulings:
+        raise FileNotFoundError(
+            f"Cannot run mode='verify' for {target['title']}: no prior Court ruling found in .agents/wiki-court-rulings/{target['slug']}/."
+        )
+    latest_ruling_path = prior_rulings[-1]
+    latest_ruling_text = latest_ruling_path.read_text(encoding="utf-8")
+    verify_prompt = (
+        f"You are the **Handling Judge** performing a fast local **Conditional-Accept (`MINOR_REVISION`) verification** "
+        f"for `{target['title']}` (`class: {target['class']}` -> target `class: {TARGET_CLASS}`).\n\n"
+        f"Do NOT restart the architectural clock or invent new scope demands. Your job is strictly twofold:\n"
+        f"1. Read the updated candidate article (`{target['path']}`), relevant local sibling pages, and the fresh Quartz renders below, "
+        f"and verify **each item** in the prior ruling's `Essential Revisions` checklist.\n"
+        f"2. Check that the edits did not introduce any new factual, mathematical, citation, link, or rendering regressions.\n\n"
+        f"## Prior Binding Ruling (`{latest_ruling_path.relative_to(WEBSITE_ROOT).as_posix()}`)\n\n"
+        f"{latest_ruling_text}\n\n"
+        f"## Local Graph Dossier\n{local_dossier}\n\n"
+        f"## Fresh Quartz Render Preflight (inspect PNGs via `read_file`)\n{render_summary}\n\n"
+        f"Write a concise verification opinion confirming each checklist item (pass/fail) and any regression check. "
+        f"End with a final standalone line containing literally either:\n\n"
+        f"`VERDICT: PROMOTE`\n\n"
+        f"`VERDICT: MINOR_REVISION`\n\n"
+        f"`VERDICT: MAJOR_REVISION`"
+    )
+    ruling_text = await agent(
+        verify_prompt,
+        schema={"type": "string"},
+        role=f"Verify Judge: {target['title']}",
+        type_name="research",
+    )
+    judge_ruling_file.write_text(ruling_text, encoding="utf-8")
+    verdict_match = re.findall(
+        r"^VERDICT:\s*(PROMOTE|MINOR_REVISION|MAJOR_REVISION|REMAND)\b", ruling_text, re.MULTILINE
+    )
+    final_verdict = verdict_match[-1] if verdict_match else "UNKNOWN"
+    if final_verdict == "REMAND":
+        final_verdict = "MAJOR_REVISION"
+
+    ruling_date = date.today().isoformat()
+    verdict_slug = final_verdict.lower().replace("_", "-")
+    permanent_dir = WEBSITE_ROOT / ".agents" / "wiki-court-rulings" / target["slug"]
+    permanent_dir.mkdir(parents=True, exist_ok=True)
+    permanent_ruling_file = permanent_dir / f"{ruling_date}-{TARGET_CLASS}-{verdict_slug}.md"
+    permanent_ruling_file.write_text(ruling_text, encoding="utf-8")
+    ruling_rel_path = permanent_ruling_file.relative_to(WEBSITE_ROOT).as_posix()
+    status_map = {
+        "PROMOTE": "promoted",
+        "MINOR_REVISION": "minor_revision",
+        "MAJOR_REVISION": "major_revision",
+    }
+    court_status = status_map.get(final_verdict, "unknown")
+    update_article_court_frontmatter(
+        target["path"],
+        status=court_status,
+        target_class=TARGET_CLASS,
+        ruling_date=ruling_date,
+        ruling_rel_path=ruling_rel_path,
+    )
+    log(
+        f"Verify Judge verdict for {target['title']} -> {TARGET_CLASS}: {final_verdict} "
+        f"(archived to {ruling_rel_path} and stamped into frontmatter)"
+    )
+    print(
+        json.dumps(
+            {
+                "status": "verified",
+                "article": target["title"],
+                "article_path": str(target["path"]),
+                "target_class": TARGET_CLASS,
+                "verdict": final_verdict,
+                "court_status": court_status,
+                "permanent_ruling_file": str(permanent_ruling_file),
+                "court_ruling_rel": ruling_rel_path,
+                "artifacts_dir": str(cache_dir),
+                "judge_ruling_file": str(judge_ruling_file),
+                "judge_ruling": ruling_text,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 else:
     phase("Validate External AI Studio Briefs")
     missing: list[str] = []
@@ -583,9 +665,7 @@ else:
     if missing:
         raise FileNotFoundError(
             "Cannot convene local Judge before both external Google AI Studio briefs exist and are populated (>= 300 chars). "
-            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', then execute "
-            f"`node ./.agents/skills/wiki-court/scripts/run_aistudio_court.mjs --slug {target['slug']}` "
-            "(parallel AI Studio tabs on https://aistudio.google.com/prompts/new_chat with Gemini 4 Neon, Extra High thinking [High fallback], Code Execution ON, Grounding with Google Search ON, URL Context ON), then re-run mode='judge'."
+            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', then run the Playwright MCP start/poll scripts, then re-run mode='judge'."
         )
 
     if manifest_file.exists():
@@ -614,23 +694,28 @@ else:
     )
 
     judge_ruling_file.write_text(ruling_text, encoding="utf-8")
-    verdict_match = re.findall(r"^VERDICT:\s*(PROMOTE|REMAND)\b", ruling_text, re.MULTILINE)
+    verdict_match = re.findall(
+        r"^VERDICT:\s*(PROMOTE|MINOR_REVISION|MAJOR_REVISION|REMAND)\b", ruling_text, re.MULTILINE
+    )
     final_verdict = verdict_match[-1] if verdict_match else "UNKNOWN"
+    if final_verdict == "REMAND":
+        final_verdict = "MAJOR_REVISION"
 
     # Persist git-tracked ruling record and stamp article frontmatter so future
     # agents automatically discover open remands or past rulings without memory.
     ruling_date = date.today().isoformat()
-    verdict_slug = final_verdict.lower()
+    verdict_slug = final_verdict.lower().replace("_", "-")
     permanent_dir = WEBSITE_ROOT / ".agents" / "wiki-court-rulings" / target["slug"]
     permanent_dir.mkdir(parents=True, exist_ok=True)
     permanent_ruling_file = permanent_dir / f"{ruling_date}-{TARGET_CLASS}-{verdict_slug}.md"
     permanent_ruling_file.write_text(ruling_text, encoding="utf-8")
     ruling_rel_path = permanent_ruling_file.relative_to(WEBSITE_ROOT).as_posix()
-    court_status = (
-        "promoted"
-        if final_verdict == "PROMOTE"
-        else ("remanded" if final_verdict == "REMAND" else "unknown")
-    )
+    status_map = {
+        "PROMOTE": "promoted",
+        "MINOR_REVISION": "minor_revision",
+        "MAJOR_REVISION": "major_revision",
+    }
+    court_status = status_map.get(final_verdict, "unknown")
     update_article_court_frontmatter(
         target["path"],
         status=court_status,

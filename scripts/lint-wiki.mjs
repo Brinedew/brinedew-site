@@ -770,13 +770,15 @@ for (const filePath of targets) {
   if (!fmMatch) continue
   const fm = fmMatch[1]
   const statusMatch = fm.match(/^court_status:\s*(.+)$/m)
-  if (!statusMatch || statusMatch[1].trim().toLowerCase() !== "remanded") continue
+  const statusVal = statusMatch?.[1]?.trim().toLowerCase() || ""
+  if (!["remanded", "minor_revision", "major_revision"].includes(statusVal)) continue
   const targetMatch = fm.match(/^court_target:\s*(.+)$/m)
   const dateMatch = fm.match(/^court_date:\s*(.+)$/m)
   const rulingMatch = fm.match(/^court_ruling:\s*(.+)$/m)
   const relPath = path.relative(REPO_ROOT, filePath).replaceAll("\\", "/")
+  const statusLabel = statusVal.replaceAll("_", "-")
   courtNotes.push(
-    `NOTE [court-remanded] ${relPath}: open ${targetMatch?.[1]?.trim() || "Court"} remand (${dateMatch?.[1]?.trim() || "undated"}) -> read ${rulingMatch?.[1]?.trim() || ".agents/wiki-court-rulings/"}`,
+    `NOTE [court-${statusLabel}] ${relPath}: open ${targetMatch?.[1]?.trim() || "Court"} ${statusLabel} (${dateMatch?.[1]?.trim() || "undated"}) -> read ${rulingMatch?.[1]?.trim() || ".agents/wiki-court-rulings/"}`,
   )
 }
 

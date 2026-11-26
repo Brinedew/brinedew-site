@@ -281,6 +281,7 @@
 
   async function extractMarkdownViaCopyMenu(tab, role) {
     await tab.bringToFront()
+    await tab.keyboard.press("Escape").catch(() => {})
     await tab.waitForTimeout(400)
 
     await tab.evaluate(() => {
@@ -299,7 +300,7 @@
     if (await responseBody.count()) {
       await responseBody.scrollIntoViewIfNeeded()
       await tab.waitForTimeout(300)
-      await responseBody.hover({ position: { x: 80, y: 40 } })
+      await responseBody.hover({ position: { x: 80, y: 40 }, force: true })
     } else {
       await turn.scrollIntoViewIfNeeded()
       await turn.hover()
