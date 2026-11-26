@@ -1,11 +1,27 @@
 """Standardized Wiki Promotion Court workflow (`run_workflow`).
 
+Hybrid External-Counsel / Local-Judge architecture:
+- Phase 1 (`mode="prepare"`): deterministically builds the graph dossier,
+  self-contained neighborhood & standards digests, headless Quartz render
+  preflight, and ready-to-paste external AI Studio prompts for Advocate
+  (Trade-Off Defense Counsel) and Alex (Devil's Advocate).
+- Phase 2 (external): run both saved prompts in separate Google AI Studio chats
+  (`https://aistudio.google.com/`, Gemini Neon, Very High thinking, Google Search ON,
+  Code Execution ON) and save their verbatim outputs to:
+    - `.quartz-cache/wiki-court/<slug>/advocate_brief.md`
+    - `.quartz-cache/wiki-court/<slug>/alex_review.md`
+- Phase 3 (`mode="judge"`): verifies both external briefs exist and runs the
+  local internal Judge agent with full repo, sibling-graph, attachment, and
+  rendered screenshot access to issue `VERDICT: PROMOTE` or `VERDICT: REMAND`.
+
 Required input:
     args["article"]: Article title, filename stem, alias, or relative wiki path.
-Optional input:
+Optional inputs:
+    args["mode"]: "prepare" (default) or "judge".
     args["target_class"]: Target tier ("GA" default, "A", or "FA").
 """
 
+import hashlib
 import json
 import re
 import subprocess
@@ -80,6 +96,32 @@ def strip_markdown_code(text: str) -> str:
     return re.sub(r"```[\s\S]*?```", " ", text)
 
 
+def extract_lead_snippet(body: str, max_chars: int = 340) -> str:
+    clean = strip_markdown_code(body)
+    lines = clean.splitlines()
+    lead_lines: list[str] = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            if lead_lines:
+                break
+            continue
+        if s.startswith("## "):
+            break
+        if s.startswith("# ") or s.startswith("![[") or s.startswith(">"):
+            continue
+        if re.match(r"^\*(?!\*)(?:For |Part of |Main article:|Further information:)", s, re.I):
+            continue
+        lead_lines.append(s)
+    snippet = " ".join(lead_lines)
+    snippet = re.sub(r"\[\^[^\]]+\]", "", snippet)
+    snippet = re.sub(r"\[\[(?:[^\]|]+\|)?([^\]]+)\]\]", r"\1", snippet)
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    if len(snippet) > max_chars:
+        snippet = snippet[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+    return snippet or "(no lead text)"
+
+
 def extract_links_and_assets(body: str) -> tuple[list[str], list[str], list[str]]:
     clean_body = strip_markdown_code(body)
     attachments = sorted(
@@ -124,6 +166,7 @@ def build_wiki_index(wiki_dir: Path) -> list[dict]:
                 "keys": {k for k in keys if k},
                 "raw": raw,
                 "body": body,
+                "lead": extract_lead_snippet(body),
             }
         )
     return records
@@ -147,7 +190,9 @@ def resolve_article(records: list[dict], query: str) -> dict:
     raise ValueError(f"Ambiguous article query '{query}'; matched: {names}")
 
 
-def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path) -> str:
+def assemble_dossiers(
+    target: dict, records: list[dict], website_root: Path
+) -> tuple[str, str]:
     by_key: dict[str, list[dict]] = {}
     for rec in records:
         for key in rec["keys"]:
@@ -155,8 +200,10 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
 
     outlinks, attachments, footnotes = extract_links_and_assets(target["body"])
     resolved_neighbors: list[str] = []
+    neighbor_digest_out: list[str] = []
     broken_links: list[str] = []
     linked_stems: set[str] = {target["stem"].lower()}
+    seen_out_stems: set[str] = set()
 
     for link in outlinks:
         candidates = by_key.get(link.lower()) or by_key.get(slugify_segment(link)) or []
@@ -166,6 +213,11 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
             resolved_neighbors.append(
                 f"- `[[{link}]]` -> `{neighbor['path']}` (class: `{neighbor['class']}`)"
             )
+            if neighbor["stem"].lower() not in seen_out_stems:
+                seen_out_stems.add(neighbor["stem"].lower())
+                neighbor_digest_out.append(
+                    f"- **{neighbor['title']}** (`class: {neighbor['class']}`, `VL{neighbor['vital_level']}`): {neighbor['lead']}"
+                )
         else:
             broken_links.append(f"- BROKEN/UNRESOLVED: `[[{link}]]`")
 
@@ -176,14 +228,20 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
         re.IGNORECASE,
     )
     backlinks: list[str] = []
+    neighbor_digest_in: list[str] = []
     for rec in records:
         if rec["path"] == target["path"]:
             continue
         if target_pat.search(rec["raw"]):
             backlinks.append(f"- `{rec['path']}` (class: `{rec['class']}`)")
+            if rec["stem"].lower() not in seen_out_stems:
+                neighbor_digest_in.append(
+                    f"- **{rec['title']}** (`class: {rec['class']}`, `VL{rec['vital_level']}`): {rec['lead']}"
+                )
 
     body_lower = strip_markdown_code(target["body"]).lower()
     unlinked_candidates: list[str] = []
+    unlinked_digest: list[str] = []
     for rec in records:
         if rec["stem"].lower() in linked_stems:
             continue
@@ -195,6 +253,9 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
             if re.search(rf"\b{re.escape(t_clean.lower())}\b", body_lower):
                 unlinked_candidates.append(
                     f"- Unlinked match `{t_clean}` -> `{rec['path']}` (class: `{rec['class']}`)"
+                )
+                unlinked_digest.append(
+                    f"- **{rec['title']}** (matched `{t_clean}`, `class: {rec['class']}`): {rec['lead']}"
                 )
                 break
 
@@ -208,7 +269,7 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
         status = "EXISTS" if candidate.exists() else "MISSING"
         resolved_attachments.append(f"- `{att}` -> `{candidate}` ({status})")
 
-    sections = [
+    local_sections = [
         f"- **Target File:** `{target['path']}`",
         f"- **Current Class / Vital Level:** `class: {target['class']}` / `vital_level: {target['vital_level']}`",
         f"- **Footnotes Count:** `{len(footnotes)}`",
@@ -222,7 +283,34 @@ def assemble_graph_dossier(target: dict, records: list[dict], website_root: Path
         f"- **Embedded Attachments ({len(resolved_attachments)}):**",
         *(resolved_attachments or ["- (none)"]),
     ]
-    return "\n".join(sections)
+
+    external_sections = [
+        f"- **Candidate:** `{target['title']}` (`class: {target['class']}`, `vital_level: {target['vital_level']}`, `{len(footnotes)}` footnotes, `{len(resolved_attachments)}` embedded attachments)",
+        f"- **Broken outbound links detected:** `{len(broken_links)}`"
+        + (f" ({', '.join(broken_links)})" if broken_links else ""),
+        f"\n### Outbound Linked Neighbors ({len(neighbor_digest_out[:25])} shown)",
+        *(neighbor_digest_out[:25] or ["- (none)"]),
+        f"\n### Additional Inbound Backlink Neighbors ({len(neighbor_digest_in[:15])} shown)",
+        *(neighbor_digest_in[:15] or ["- (none beyond outbound neighbors)"]),
+        f"\n### Unlinked Existing Wiki Pages Mentioned in Prose ({len(unlinked_digest[:12])} shown)",
+        *(unlinked_digest[:12] or ["- (none detected)"]),
+    ]
+
+    return "\n".join(local_sections), "\n".join(external_sections)
+
+
+def build_standards_digest(target_class: str) -> str:
+    return "\n".join(
+        [
+            f"- **Target tier:** `class: {target_class}` (Court-gated promotion above `B`; promotes ONLY if the page makes the whole wiki stronger).",
+            "- **Voice & Craft (Wikipedia Featured Article standard):** Calm, concrete, authoritative third-person encyclopedic prose. Standalone 2–4 paragraph lead previewing every major section. Open body with historical/observational grounding before abstract models. Flowing 4–7 sentence paragraphs with natural burstiness; NO CYA semicolon-packed academese, NO inline `Author (Year)` clutter (keep bibliographic tags in footnotes unless priority/attribution is conceptual), NO blog-essay first-person or rhetorical Q&A headers, NO bold-lead executive bullet catalogs, NO mid-body `**bold buzzwords**`, NO didactic `therefore/thus` wrap-up morals, and NO meta-scaffolding (`Editorial synthesis`, `Wiki adjudication:`).",
+            "- **Dual-audience clarity:** Teach both field biologists and intelligent quantitative non-biologists cleanly—build the conceptual puzzle before dropping wet-lab jargon, and motivate mathematical formulas from why simpler intuition fails.",
+            "- **Level-indexed longevity terminology:** Never hide distinct biological levels under vague umbrella words (`aging`, `senescence`, `damage`, `immortality`, `rejuvenation`). Index the exact level (mortality hazard creep, frailty, somatic mutation load, replicative cell-cycle arrest, clonal selection) and watch for Level-2 (cell) vs. Level-3 (organism) fitness sign flips.",
+            "- **Graph factoring & scope discipline:** Each experiment, model, or table belongs in detail on ONE canonical page; summarize and delegate covered subtopics via `[[wikilinks]]` / `*Main article:*` rather than cloning sibling pages. Earned hatnotes only (never defensive top disclaimers against unrelated topics, never `*Main article:*` pointing at thin stubs).",
+            "- **Source-Quality & Forensic Audit (Bik / Sholto David / Data Colada bar):** A cropped quote proves only what a paper printed, not that it is true. Actively audit pivotal studies via Google Search + Code Execution for PubPeer threads, Expressions of Concern, retractions, failed multi-site replications (e.g. NIA ITP, Phase II/III RCTs), blot/microscopy duplication, GRIM/GRIMMER/statistical anomalies, p-hacking, and longevity design traps (short-lived controls, mid-life start bias, progeroid extrapolation, promiscuous senescence markers).",
+            "- **Honest conflict mapping:** Never smooth over real experimental divergence into `'all studies agree'` OR lazy `'evidence is mixed'` fence-sitting; partition why studies disagree by assay, species, dose, or methodological rigor directly inside the main narrative.",
+        ]
+    )
 
 
 async def run_render_preflight(slug: str, website_root: Path) -> tuple[str, Path]:
@@ -287,10 +375,15 @@ def fill_template(template_text: str, mapping: dict[str, str]) -> str:
 
 # === Main workflow execution ===
 if not isinstance(args, dict) or not str(args.get("article") or "").strip():
-    raise ValueError('Args[\'article\'] is required (e.g. {"article": "Compensatory proliferation"}).')
+    raise ValueError(
+        'Args[\'article\'] is required (e.g. {"article": "Peto\'s paradox", "mode": "prepare"}).'
+    )
 
 ARTICLE_QUERY = str(args["article"]).strip()
 TARGET_CLASS = str(args.get("target_class") or "GA").strip()
+MODE = str(args.get("mode") or "prepare").strip().lower()
+if MODE not in {"prepare", "judge"}:
+    raise ValueError(f"Unsupported mode '{MODE}'. Must be 'prepare' or 'judge'.")
 
 phase("Assemble Dossier")
 WEBSITE_ROOT = locate_website_root()
@@ -299,10 +392,15 @@ REF_DIR = WEBSITE_ROOT / ".agents" / "skills" / "wiki-court" / "references"
 
 records = build_wiki_index(WIKI_DIR)
 target = resolve_article(records, ARTICLE_QUERY)
-graph_dossier = assemble_graph_dossier(target, records, WEBSITE_ROOT)
+local_dossier, external_digest = assemble_dossiers(target, records, WEBSITE_ROOT)
+standards_digest = build_standards_digest(TARGET_CLASS)
 render_summary, cache_dir = await run_render_preflight(target["slug"], WEBSITE_ROOT)
+article_sha256 = hashlib.sha256(target["raw"].encode("utf-8")).hexdigest()
 
-log(f"Resolved article: {target['title']} ({target['path']}), class={target['class']} -> target={TARGET_CLASS}")
+log(
+    f"Resolved article: {target['title']} ({target['path']}), "
+    f"class={target['class']} -> target={TARGET_CLASS}, mode={MODE}"
+)
 
 base_vars = {
     "ARTICLE_NAME": target["title"],
@@ -310,70 +408,122 @@ base_vars = {
     "CURRENT_CLASS": target["class"],
     "VITAL_LEVEL": target["vital_level"],
     "TARGET_CLASS": TARGET_CLASS,
-    "GRAPH_DOSSIER": graph_dossier,
+    "GRAPH_DOSSIER": local_dossier,
+    "GRAPH_NEIGHBORHOOD_DIGEST": external_digest,
+    "STANDARDS_DIGEST": standards_digest,
+    "ARTICLE_MARKDOWN": target["raw"],
     "RENDER_SUMMARY": render_summary,
 }
 
-advocate_template = (REF_DIR / "advocate_prompt.md").read_text(encoding="utf-8")
-devil_template = (REF_DIR / "devils_advocate_prompt.md").read_text(encoding="utf-8")
-judge_template = (REF_DIR / "judge_prompt.md").read_text(encoding="utf-8")
+advocate_prompt_file = cache_dir / "advocate_prompt_ready.md"
+alex_prompt_file = cache_dir / "alex_prompt_ready.md"
+advocate_brief_file = cache_dir / "advocate_brief.md"
+alex_review_file = cache_dir / "alex_review.md"
+judge_ruling_file = cache_dir / "judge_ruling.md"
+manifest_file = cache_dir / "manifest.json"
 
-free_prose_schema = {"type": "string"}
+if MODE == "prepare":
+    phase("Build External AI Studio Packets")
+    advocate_template = (REF_DIR / "advocate_prompt.md").read_text(encoding="utf-8")
+    devil_template = (REF_DIR / "devils_advocate_prompt.md").read_text(encoding="utf-8")
 
-phase("Adversarial Hearings")
-advocate_brief, alex_review = await parallel(
-    [0, 1],
-    lambda idx: agent(
-        fill_template(advocate_template, base_vars),
-        schema=free_prose_schema,
-        role=f"Advocate: {target['title']}",
-        type_name="research",
-    )
-    if idx == 0
-    else agent(
-        fill_template(devil_template, base_vars),
-        schema=free_prose_schema,
-        role=f"Alex (Devil's Advocate): {target['title']}",
-        type_name="research",
-    ),
-)
+    advocate_ready = fill_template(advocate_template, base_vars)
+    alex_ready = fill_template(devil_template, base_vars)
 
-(cache_dir / "advocate_brief.md").write_text(advocate_brief, encoding="utf-8")
-(cache_dir / "alex_review.md").write_text(alex_review, encoding="utf-8")
-log(f"Saved Advocate brief ({len(advocate_brief)} chars) and Alex review ({len(alex_review)} chars) to {cache_dir}")
+    advocate_prompt_file.write_text(advocate_ready, encoding="utf-8")
+    alex_prompt_file.write_text(alex_ready, encoding="utf-8")
 
-phase("Judicial Ruling")
-judge_vars = {
-    **base_vars,
-    "ADVOCATE_JSON": advocate_brief,
-    "DEVILS_ADVOCATE_JSON": alex_review,
-}
-ruling_text = await agent(
-    fill_template(judge_template, judge_vars),
-    schema=free_prose_schema,
-    role=f"Judge: {target['title']}",
-    type_name="research",
-)
+    # Remove stale judge ruling so a new review cycle cannot misread an old verdict
+    if judge_ruling_file.exists():
+        judge_ruling_file.unlink()
 
-(cache_dir / "judge_ruling.md").write_text(ruling_text, encoding="utf-8")
-verdict_match = re.findall(r"^VERDICT:\s*(PROMOTE|REMAND)\b", ruling_text, re.MULTILINE)
-final_verdict = verdict_match[-1] if verdict_match else "UNKNOWN"
-log(f"Judge verdict for {target['title']} -> {TARGET_CLASS}: {final_verdict}")
-
-print(
-    json.dumps(
-        {
-            "article": target["title"],
-            "article_path": str(target["path"]),
-            "target_class": TARGET_CLASS,
-            "verdict": final_verdict,
-            "artifacts_dir": str(cache_dir),
-            "judge_ruling_file": str(cache_dir / "judge_ruling.md"),
-            "alex_review_file": str(cache_dir / "alex_review.md"),
-            "advocate_brief_file": str(cache_dir / "advocate_brief.md"),
-            "judge_ruling": ruling_text,
+    manifest = {
+        "article": target["title"],
+        "slug": target["slug"],
+        "article_path": str(target["path"]),
+        "article_sha256": article_sha256,
+        "current_class": target["class"],
+        "target_class": TARGET_CLASS,
+        "ai_studio": {
+            "url": "https://aistudio.google.com/",
+            "model": "Gemini Neon",
+            "thinking_level": "Very High",
+            "google_search": True,
+            "code_execution": True,
         },
-        indent=2,
-        ensure_ascii=False,
+        "advocate_prompt_file": str(advocate_prompt_file),
+        "alex_prompt_file": str(alex_prompt_file),
+        "expected_advocate_brief_file": str(advocate_brief_file),
+        "expected_alex_review_file": str(alex_review_file),
+        "advocate_prompt_chars": len(advocate_ready),
+        "alex_prompt_chars": len(alex_ready),
+        "artifacts_dir": str(cache_dir),
+    }
+    manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    log(
+        f"Prepared self-contained AI Studio packets in {cache_dir} "
+        f"(advocate={len(advocate_ready)} chars, alex={len(alex_ready)} chars)."
     )
-)
+    print(json.dumps({"status": "prepared", **manifest}, indent=2, ensure_ascii=False))
+else:
+    phase("Validate External AI Studio Briefs")
+    missing: list[str] = []
+    if not advocate_brief_file.exists() or len(advocate_brief_file.read_text(encoding="utf-8").strip()) < 300:
+        missing.append(str(advocate_brief_file))
+    if not alex_review_file.exists() or len(alex_review_file.read_text(encoding="utf-8").strip()) < 300:
+        missing.append(str(alex_review_file))
+    if missing:
+        raise FileNotFoundError(
+            "Cannot convene local Judge before both external Google AI Studio briefs exist and are populated (>= 300 chars). "
+            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', execute both prompts on https://aistudio.google.com/ "
+            "(Gemini Neon, Very High thinking, Google Search ON, Code Execution ON), save outputs to those paths, then re-run mode='judge'."
+        )
+
+    if manifest_file.exists():
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        if manifest.get("article_sha256") and manifest["article_sha256"] != article_sha256:
+            log(
+                "WARNING: Candidate article changed on disk after mode='prepare' was run. "
+                "Re-run mode='prepare' and AI Studio counsels if substantive edits occurred."
+            )
+
+    advocate_brief = advocate_brief_file.read_text(encoding="utf-8")
+    alex_review = alex_review_file.read_text(encoding="utf-8")
+
+    phase("Local Judicial Ruling")
+    judge_template = (REF_DIR / "judge_prompt.md").read_text(encoding="utf-8")
+    judge_vars = {
+        **base_vars,
+        "ADVOCATE_BRIEF": advocate_brief,
+        "DEVILS_ADVOCATE_BRIEF": alex_review,
+    }
+    ruling_text = await agent(
+        fill_template(judge_template, judge_vars),
+        schema={"type": "string"},
+        role=f"Judge: {target['title']}",
+        type_name="research",
+    )
+
+    judge_ruling_file.write_text(ruling_text, encoding="utf-8")
+    verdict_match = re.findall(r"^VERDICT:\s*(PROMOTE|REMAND)\b", ruling_text, re.MULTILINE)
+    final_verdict = verdict_match[-1] if verdict_match else "UNKNOWN"
+    log(f"Judge verdict for {target['title']} -> {TARGET_CLASS}: {final_verdict}")
+
+    print(
+        json.dumps(
+            {
+                "status": "ruled",
+                "article": target["title"],
+                "article_path": str(target["path"]),
+                "target_class": TARGET_CLASS,
+                "verdict": final_verdict,
+                "artifacts_dir": str(cache_dir),
+                "judge_ruling_file": str(judge_ruling_file),
+                "alex_review_file": str(alex_review_file),
+                "advocate_brief_file": str(advocate_brief_file),
+                "judge_ruling": ruling_text,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
