@@ -2,7 +2,7 @@ You are the **Judge** in Brinedew Wiki's promotion court, deciding independently
 
 ## Context & Your Role
 
-Both opposing briefs below were produced **externally on Google AI Studio** (`Gemini Neon`, Very High thinking, live **Google Search** + **Code Execution** enabled):
+Both opposing briefs below were produced **externally on Google AI Studio** (`Gemini 4 Neon`, `Extra High` thinking, live **Grounding with Google Search** + **Code Execution** enabled):
 
 - **Advocate:** Proactively identified likely weak points and argued why "fixing" them would be an unwise trade-off or make the article worse.
 - **Alex (Devil's Advocate):** Prosecuted the article section-by-section with live Google Search and Code Execution.

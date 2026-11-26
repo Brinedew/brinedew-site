@@ -6,8 +6,8 @@ Hybrid External-Counsel / Local-Judge architecture:
   preflight, and ready-to-paste external AI Studio prompts for Advocate
   (Trade-Off Defense Counsel) and Alex (Devil's Advocate).
 - Phase 2 (external): run both saved prompts in separate Google AI Studio chats
-  (`https://aistudio.google.com/`, Gemini Neon, Very High thinking, Google Search ON,
-  Code Execution ON) and save their verbatim outputs to:
+  (`https://aistudio.google.com/prompts/new_chat`, Gemini 4 Neon, Extra High thinking,
+  Grounding with Google Search ON, Code Execution ON) and save their verbatim outputs to:
     - `.quartz-cache/wiki-court/<slug>/advocate_brief.md`
     - `.quartz-cache/wiki-court/<slug>/alex_review.md`
 - Phase 3 (`mode="judge"`): verifies both external briefs exist and runs the
@@ -445,9 +445,9 @@ if MODE == "prepare":
         "current_class": target["class"],
         "target_class": TARGET_CLASS,
         "ai_studio": {
-            "url": "https://aistudio.google.com/",
-            "model": "Gemini Neon",
-            "thinking_level": "Very High",
+            "url": "https://aistudio.google.com/prompts/new_chat",
+            "model": "Gemini 4 Neon",
+            "thinking_level": "Extra High",
             "google_search": True,
             "code_execution": True,
         },
@@ -475,8 +475,8 @@ else:
     if missing:
         raise FileNotFoundError(
             "Cannot convene local Judge before both external Google AI Studio briefs exist and are populated (>= 300 chars). "
-            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', execute both prompts on https://aistudio.google.com/ "
-            "(Gemini Neon, Very High thinking, Google Search ON, Code Execution ON), save outputs to those paths, then re-run mode='judge'."
+            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', execute both prompts on https://aistudio.google.com/prompts/new_chat "
+            "(Gemini 4 Neon, Extra High thinking, Grounding with Google Search ON, Code Execution ON), save outputs to those paths, then re-run mode='judge'."
         )
 
     if manifest_file.exists():

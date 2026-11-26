@@ -32,17 +32,18 @@ Evaluating an article with ad-hoc, hand-authored prompts introduces coordinator 
    - `.quartz-cache/wiki-court/<slug>/advocate_prompt_ready.md`
    - `.quartz-cache/wiki-court/<slug>/alex_prompt_ready.md`
 
-### Phase 2 — Run Both Counsels on Google AI Studio (`https://aistudio.google.com/`)
+### Phase 2 — Run Both Counsels on Google AI Studio (`https://aistudio.google.com/prompts/new_chat`)
 
 1. Stage both prompt files under `<Artifact Directory Path>/browser_sandbox/references/` (`advocate_prompt_ready.md` and `alex_prompt_ready.md`) so the `browser` subagent can read their exact contents verbatim.
-2. Delegate to the `browser` subagent to open `https://aistudio.google.com/`:
+2. Delegate to the `browser` subagent to open `https://aistudio.google.com/prompts/new_chat` (always use `/prompts/new_chat`; bare `https://aistudio.google.com/` opens the app maker):
    - If the user is not signed in, pause immediately and ask the user to log into their paid Google account in the browser pane, then resume the same subagent via `send_message`.
+   - Note: both prepared prompt packets are ~65–75 KB (exceeding `read_file`'s 46,080-byte per-call cap), so explicitly instruct the browser subagent to read every chunk of each file without truncation before pasting.
    - In a **fresh AI Studio chat**, configure the right-hand Run Settings panel:
-     - **Model:** `Gemini Neon`
-     - **Thinking level:** `Very High`
-     - **Tools:** `Google Search` **ON** and `Code execution` **ON**
+     - **Model:** `Gemini 4 Neon` (`gemini-4-neon`)
+     - **Thinking level:** `Extra High`
+     - **Tools:** `Grounding with Google Search` **ON** and `Code execution` **ON** (note: `Code execution` defaults to OFF on every new chat and must be toggled ON each time)
    - Paste the exact verbatim text of `advocate_prompt_ready.md`, submit, wait for the complete final response (after thinking/search/code finishes), and return the full verbatim Markdown response.
-   - Open a **second fresh AI Studio chat** with the identical settings (`Gemini Neon`, `Very High` thinking, `Google Search` ON, `Code execution` ON), submit the exact verbatim text of `alex_prompt_ready.md`, wait for completion, and return the full verbatim Markdown response.
+   - Navigate directly to `https://aistudio.google.com/prompts/new_chat` for a **second fresh isolated AI Studio chat** with the identical settings (`Gemini 4 Neon`, `Extra High` thinking, `Grounding with Google Search` ON, `Code execution` ON), submit the exact verbatim text of `alex_prompt_ready.md`, wait for completion, and return the full verbatim Markdown response.
 3. Save the verbatim responses to:
    - `D:\Coding\Website\.quartz-cache\wiki-court\<slug>\advocate_brief.md`
    - `D:\Coding\Website\.quartz-cache\wiki-court\<slug>\alex_review.md`
