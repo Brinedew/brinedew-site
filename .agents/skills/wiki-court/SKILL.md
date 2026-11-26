@@ -32,25 +32,19 @@ Evaluating an article with ad-hoc, hand-authored prompts introduces coordinator 
    - `.quartz-cache/wiki-court/<slug>/advocate_prompt_ready.md`
    - `.quartz-cache/wiki-court/<slug>/alex_prompt_ready.md`
 
-### Phase 2 — Run Both Counsels in Parallel on Google AI Studio (Deterministic Playwright)
+### Phase 2 — Run Both Counsels in Parallel on Google AI Studio (Deterministic Playwright MCP)
 
-Run the deterministic Node.js Playwright operator instead of delegating to an LLM browser subagent:
+`mode="prepare"` generates two self-contained Playwright MCP scripts (`aistudio_start.js` and `aistudio_poll.js`) from [`aistudio_mcp_template.js`](file:///D:/Coding/Website/.agents/skills/wiki-court/scripts/aistudio_mcp_template.js). Execute them via **Playwright MCP** `browser_run_code_unsafe({ filename })` — reusing the already-authenticated Playwright MCP Chrome session (never an LLM browser subagent and never a hidden headless-session `run_command` Chrome):
 
-```powershell
-cd D:\Coding\Website
-node ./.agents/skills/wiki-court/scripts/run_aistudio_court.mjs --slug <slug>
-```
-
-What `run_aistudio_court.mjs` handles deterministically:
-
-1. Launches system Chrome (`channel: "chrome"`, `chromiumSandbox: true`) with persistent profile `.quartz-cache/aistudio-chrome-profile` (if not signed in yet, pauses cleanly for the user to log in once interactively — or pre-authenticate with `--login-only`).
-2. Opens **two isolated tabs in parallel** at `https://aistudio.google.com/prompts/new_chat` (never bare `https://aistudio.google.com/`, which opens the app maker).
-3. Configures exact Run Settings on **each** tab:
-   - **Model:** `Gemini 4 Neon` (`gemini-4-neon`)
-   - **Thinking level:** `Extra High` (with automatic per-tab retry downgraded to `High` if a conversation hits repeated errors or stalls past ~11 min of thinking)
-   - **Tools:** `Code execution` **ON**, `Grounding with Google Search` **ON**, and `URL context` (`Browse the url context`) **ON**
-4. Submits the full untruncated `advocate_prompt_ready.md` and `alex_prompt_ready.md` concurrently via `.fill()`, waits patiently through thinking/search/code streaming, and **does NOT abort or reload** on transient mid-stream `"Model isn't available right now"` banners while tokens are still streaming.
-5. Extracts verbatim Markdown cleanly via **hover over response body → triple-dots (`Open options`) → `Copy as markdown`** (captured directly via a per-page clipboard hook + mutex — zero textbox pasting, zero modal hacks) and saves directly to:
+1. **Launch both counsels in parallel (~15s):** call `playwright` MCP `browser_run_code_unsafe` with `filename: "D:\\Coding\\.playwright-mcp\\workspace\\wiki-court\\<slug>\\aistudio_start.js"`:
+   - Opens **two isolated tabs in parallel** at `https://aistudio.google.com/prompts/new_chat` (never bare `https://aistudio.google.com/`, which opens the app maker).
+   - Configures exact Run Settings on **each** tab: **Gemini 4 Neon** (`gemini-4-neon`), **Extra High** thinking, and **all three tools ON**: `Code execution`, `Grounding with Google Search`, and **`URL context`** (`Browse the url context`).
+   - Fills the full untruncated `advocate_prompt_ready.md` and `alex_prompt_ready.md` via `.fill()` and submits both concurrently.
+2. **Poll & collect verbatim Markdown in bounded ~45s slices (zero MCP timeout risk):** call `playwright` MCP `browser_run_code_unsafe` with `filename: "D:\\Coding\\.playwright-mcp\\workspace\\wiki-court\\<slug>\\aistudio_poll.js"` until `status === "done"`:
+   - Ignores transient mid-stream `"Model isn't available right now"` banners while the Stop button is active or output is growing.
+   - If a specific tab stalls past ~11 minutes on `Extra High` or hits a fatal error, automatically retries **only that tab** in a fresh chat downgraded to **`High`**.
+   - Once finished (3 consecutive idle polls = 15s stable), hovers directly over the response body → clicks triple-dots (`Open options`) → clicks **`Copy as markdown`** (captured via per-page clipboard hook — zero textbox pasting, zero modal hacks) and returns `{ advocate_markdown, alex_markdown }`.
+3. Save `advocate_markdown` and `alex_markdown` directly to:
    - `D:\Coding\Website\.quartz-cache\wiki-court\<slug>\advocate_brief.md`
    - `D:\Coding\Website\.quartz-cache\wiki-court\<slug>\alex_review.md`
 

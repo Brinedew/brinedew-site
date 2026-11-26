@@ -499,6 +499,43 @@ if MODE == "prepare":
     advocate_prompt_file.write_text(advocate_ready, encoding="utf-8")
     alex_prompt_file.write_text(alex_ready, encoding="utf-8")
 
+    # Emit self-contained Playwright MCP `browser_run_code_unsafe` scripts
+    # (Playwright MCP executes inside a sandboxed VM without fs/require/import).
+    mcp_template_path = (
+        WEBSITE_ROOT / ".agents" / "skills" / "wiki-court" / "scripts" / "aistudio_mcp_template.js"
+    )
+    mcp_ws_dir = WEBSITE_ROOT.parent / ".playwright-mcp" / "workspace" / "wiki-court" / target["slug"]
+    mcp_ws_dir.mkdir(parents=True, exist_ok=True)
+    aistudio_start_file = mcp_ws_dir / "aistudio_start.js"
+    aistudio_poll_file = mcp_ws_dir / "aistudio_poll.js"
+    if mcp_template_path.exists():
+        mcp_tpl = mcp_template_path.read_text(encoding="utf-8")
+        start_cfg = {
+            "action": "start",
+            "slug": target["slug"],
+            "model": "Gemini 4 Neon",
+            "thinking": "Extra High",
+            "fallbackThinking": "High",
+            "advocatePrompt": advocate_ready,
+            "alexPrompt": alex_ready,
+        }
+        poll_cfg = {
+            "action": "poll",
+            "slug": target["slug"],
+            "waitSeconds": 45,
+            "extraHighRiskMin": 11,
+            "stallMin": 5,
+            "timeoutMin": 18,
+        }
+        aistudio_start_file.write_text(
+            mcp_tpl.replace("__WIKI_COURT_CONFIG__", json.dumps(start_cfg, ensure_ascii=False)),
+            encoding="utf-8",
+        )
+        aistudio_poll_file.write_text(
+            mcp_tpl.replace("__WIKI_COURT_CONFIG__", json.dumps(poll_cfg, ensure_ascii=False)),
+            encoding="utf-8",
+        )
+
     # Remove stale judge ruling so a new review cycle cannot misread an old verdict
     if judge_ruling_file.exists():
         judge_ruling_file.unlink()
@@ -512,9 +549,8 @@ if MODE == "prepare":
         "target_class": TARGET_CLASS,
         "ai_studio": {
             "url": "https://aistudio.google.com/prompts/new_chat",
-            "runner_script": str(
-                WEBSITE_ROOT / ".agents" / "skills" / "wiki-court" / "scripts" / "run_aistudio_court.mjs"
-            ),
+            "mcp_start_script": str(aistudio_start_file),
+            "mcp_poll_script": str(aistudio_poll_file),
             "model": "Gemini 4 Neon",
             "thinking_level": "Extra High",
             "fallback_thinking_level": "High",
