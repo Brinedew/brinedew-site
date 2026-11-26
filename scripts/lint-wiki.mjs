@@ -189,12 +189,13 @@ function lintFile(filePath) {
     })
   }
 
-  // Count lead paragraphs (prose paragraphs between `# Title` and first `##` heading)
+  // Count lead paragraphs & lead words (prose paragraphs between `# Title` and first `##` heading)
   // and high-effort body visuals (excluding References and > [!info]- excerpt callouts)
   let inFrontmatter = false
   let seenH1 = false
   let seenH2 = false
   let leadParas = 0
+  let leadWords = 0
   let inLeadPara = false
   let bodyVisuals = 0
   let inBodyCode = false
@@ -227,14 +228,19 @@ function lintFile(filePath) {
         seenH2 = true
       } else if (
         l.trim() &&
-        !/^\*(?:For |Part of |Main article:|Further information:)/i.test(l.trim()) &&
+        !/^\*(?!\*)(?:For |Part of |Main article:|Further information:)/i.test(l.trim()) &&
         !/^>/.test(l.trim()) &&
-        !/^```/.test(l.trim())
+        !/^```/.test(l.trim()) &&
+        !/^!\[\[/.test(l.trim())
       ) {
         if (!inLeadPara) {
           leadParas++
           inLeadPara = true
         }
+        const cleanLeadLine = l
+          .replace(/\[\^[^\]]+\]/g, "")
+          .replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1")
+        leadWords += (cleanLeadLine.match(/\b\w+\b/g) || []).length
       } else if (!l.trim()) {
         inLeadPara = false
       }
@@ -262,6 +268,147 @@ function lintFile(filePath) {
         line: 1,
         rule: "b-class-missing-visuals",
         message: `Article is marked \`class: ${articleClass}\` but has only ${bodyVisuals} body figure/vega-lite visual(s) (B-class requires >= 2 high-craft visuals/interactives; excerpt callouts and lone Mermaid flowcharts do not satisfy this gate).`,
+      })
+    }
+  }
+
+  // Macro / Meso / Micro Wikipedia FA structural hallmarks (calibrated against 10 non-bio FAs
+  // + 8 bio FAs + 11 Brinedew B-class articles; skipped for List, FL, NA, Stub, and fiction).
+  if (seenH1 && !["LIST", "FL", "NA", "STUB"].includes(articleClass) && !isFiction) {
+    const fmStrip = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
+    const bodyBeforeEnd = fmStrip.split(/^##\s+(?:See also|References|Data and figures)\b/im)[0]
+    const bodyNoCode = bodyBeforeEnd.replace(/```[\s\S]*?```/g, "")
+    const bodyWordsTotal = (
+      bodyNoCode
+        .replace(/\[\^[^\]]+\]/g, "")
+        .replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1")
+        .match(/\b\w+\b/g) || []
+    ).length
+    const bodyNoMath = bodyNoCode.replace(/\$\$[\s\S]*?\$\$/g, "\n__MATH__\n")
+    const h2Idx = bodyNoMath.search(/^##\s+/m)
+    const restAfterLead = h2Idx >= 0 ? bodyNoMath.slice(h2Idx) : ""
+    const blocks = restAfterLead
+      .split(/\r?\n\s*\r?\n/)
+      .map((b) => b.trim())
+      .filter(Boolean)
+
+    let inTerminology = false
+    let midBodyBoldCount = 0
+    let boldBulletCount = 0
+    let boldBulletWords = 0
+    const bodyProseParas = []
+    for (let idx = 0; idx < blocks.length; idx++) {
+      const b = blocks[idx]
+      if (/^##\s+/.test(b)) {
+        inTerminology = /^##\s+(?:Terminology|Definitions|Glossary)\b/i.test(b)
+        continue
+      }
+      if (/^(?:#|\||>|!\[\[|__MATH__|---+$)/.test(b)) continue
+      if (/^\*(?!\*)(?:For |Part of |Main article:|Further information:)/i.test(b)) continue
+      if (/^(?:[-*]|\d+\.)\s+/.test(b)) {
+        if (!inTerminology) {
+          for (const bl of b.split(/\r?\n/)) {
+            if (/^\s*(?:[-*]|\d+\.)\s+\*\*[^*]+\*\*/.test(bl)) {
+              boldBulletCount++
+              boldBulletWords += (bl.match(/\b\w+\b/g) || []).length
+            }
+          }
+        }
+        continue
+      }
+      if (!inTerminology) {
+        const bNoLinks = b.replace(/\[\^[^\]]+\]/g, "")
+        midBodyBoldCount += (bNoLinks.match(/\*\*[^*\n]{2,60}\*\*/g) || []).length
+      }
+      const nextBlock = blocks[idx + 1] || ""
+      if (/^(?:__MATH__|\|)/.test(nextBlock) && b.split(/\s+/).length < 35) continue
+      bodyProseParas.push(b)
+    }
+
+    // 1. Macro: underdeveloped lead on substantial articles
+    if (!isBOrAbove && isCOrAbove && bodyWordsTotal >= 1000 && leadParas < 2 && leadWords < 110) {
+      findings.push({
+        file: relPath,
+        line: 1,
+        rule: "macro-underdeveloped-lead",
+        message: `Substantial article (${bodyWordsTotal} words) opens with only ${leadParas} lead paragraph (${leadWords} words). Wikipedia FAs open with a 2–4 paragraph standalone lead previewing every major section.`,
+      })
+    } else if (isBOrAbove && leadParas >= 2 && bodyWordsTotal >= 1500 && leadWords < 150) {
+      findings.push({
+        file: relPath,
+        line: 1,
+        rule: "macro-underdeveloped-lead",
+        message: `Long B+ article (${bodyWordsTotal} words) has only ${leadWords} words in its lead. Expand the lead to preview origins, mechanism, evidence, and consequences.`,
+      })
+    }
+
+    // 2. Meso: didactic "Therefore / Thus / Consequently" paragraph-ending wrap-up morals
+    const MORAL_CLOSER_RE =
+      /\b(?:therefore|thus|consequently|hence|taken together|in short|in summary)\b|(?:^|[,;]\s*)overall\b/i
+    if (bodyProseParas.length >= 5) {
+      let moralEnds = 0
+      let shortParas = 0
+      const paraWordLens = []
+      for (const b of bodyProseParas) {
+        const clean = b
+          .replace(/\[\^[^\]]+\]/g, "")
+          .replace(/\[\[(?:[^\]|]+\|)?([^\]]+)\]\]/g, "$1")
+          .replace(/"[^"\n]{2,}"/g, "QUOTE")
+          .replace(/“[^”\n]{2,}”/g, "QUOTE")
+          .replace(/[*_`]/g, "")
+        const sents = clean
+          .split(/(?<=[.!?])\s+/)
+          .map((s) => s.trim())
+          .filter((s) => s.split(/\s+/).length >= 3)
+        paraWordLens.push((clean.match(/\b\w+\b/g) || []).length)
+        if (sents.length <= 2) shortParas++
+        if (sents.length > 0 && MORAL_CLOSER_RE.test(sents[sents.length - 1])) {
+          moralEnds++
+        }
+      }
+      const moralRate = moralEnds / bodyProseParas.length
+      if ((moralEnds >= 2 && moralRate >= 0.25) || (moralEnds >= 3 && moralRate >= 0.2)) {
+        findings.push({
+          file: relPath,
+          line: 1,
+          rule: "meso-moral-closer",
+          message: `${moralEnds}/${bodyProseParas.length} body paragraphs (${Math.round(moralRate * 100)}%) end on a didactic summary-moral connector (\`therefore/thus/consequently/hence\`; 10 Wikipedia FAs <= 3.3%). End on the last concrete fact or qualification instead.`,
+        })
+      }
+      // 3. Meso: choppy 1–2 sentence slogan paragraphs instead of connected FA paragraphs
+      const sortedLens = [...paraWordLens].sort((a, b) => a - b)
+      const medianParaWords = sortedLens[Math.floor(sortedLens.length / 2)] || 0
+      const shortRatio = shortParas / bodyProseParas.length
+      if (bodyProseParas.length >= 6 && medianParaWords < 52 && shortRatio >= 0.75) {
+        findings.push({
+          file: relPath,
+          line: 1,
+          rule: "meso-choppy-paragraphs",
+          message: `Choppy outline paragraphs (median ${medianParaWords} words; ${shortParas}/${bodyProseParas.length} paragraphs <= 2 sentences; Wikipedia FAs median 77–126 words). Develop ideas into flowing 4–7 sentence paragraphs.`,
+        })
+      }
+    }
+
+    // 4. Meso: executive-briefing `- **Bold label.**` bullet catalogs dominating body prose
+    const boldBulletRate = (boldBulletCount * 1000) / Math.max(1, bodyWordsTotal)
+    const boldBulletWordShare = boldBulletWords / Math.max(1, bodyWordsTotal)
+    if (boldBulletCount >= 5 && (boldBulletWordShare >= 0.35 || boldBulletRate >= 7.0)) {
+      findings.push({
+        file: relPath,
+        line: 1,
+        rule: "meso-bullet-catalog",
+        message: `Body prose relies heavily on bold-lead bullet catalogs (${boldBulletCount} items, ${Math.round(boldBulletWordShare * 100)}% of body words, ${boldBulletRate.toFixed(1)}/1k). Convert body sections into connected encyclopedic prose (reserve bullet catalogs for Terminology/List pages).`,
+      })
+    }
+
+    // 5. Micro: AI study-guide mid-body `**bold buzzword**` clutter
+    const midBoldRate = (midBodyBoldCount * 1000) / Math.max(1, bodyWordsTotal)
+    if (isCOrAbove && midBodyBoldCount >= 6 && midBoldRate >= 4.0) {
+      findings.push({
+        file: relPath,
+        line: 1,
+        rule: "micro-mid-body-bold",
+        message: `AI study-guide bolding clutter (${midBodyBoldCount} inline \`**bold**\` terms in body paragraphs, ${midBoldRate.toFixed(1)}/1k; Wikipedia FAs reserve bold for the lead title and table/glossary headers). Use plain text, wikilinks, or *italics* on first use.`,
       })
     }
   }
