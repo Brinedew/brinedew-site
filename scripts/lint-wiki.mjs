@@ -429,14 +429,16 @@ function lintFile(filePath) {
       !/^\s*!\[\[/.test(line) &&
       !/^\s*!\[/.test(line) &&
       !/^\s*\|/.test(line) &&
+      !/^\s*\$\$/.test(line) &&
       !/^#{1,6}\s/.test(line) &&
       !/^\s*---+\s*$/.test(line)
 
     if (isBodyProse) {
-      // Strip verbatim quoted text, inline code, and inline math once for all prose rules
+      // Strip verbatim quoted text, inline code, and display/inline math once for all prose rules
       const proseText = line
         .replace(/`[^`]*`/g, "")
-        .replace(/\$[^$]*\$/g, "")
+        .replace(/\$\$[^]*?\$\$/g, "")
+        .replace(/\$[^$\n]*\$/g, "")
         .replace(/"[^"\n]{2,}"/g, "")
         .replace(/“[^”\n]{2,}”/g, "")
         .replace(/\[\^[^\]]+\]/g, "")
