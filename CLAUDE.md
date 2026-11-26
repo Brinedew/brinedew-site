@@ -392,12 +392,22 @@ This site's audience pairs LessWrong-style rationalists and programmers with bio
 Wrong: "Think of it as evolution turning against itself to stop cells from competing"
 Right: "Multicellular organisms suppress intra-organismal evolution through..."
 
-**LLM-voice anti-patterns to reject on sight (2026-11-25 wiki audit):**
+**LLM-voice anti-patterns to reject on sight (2026-11-25 & 2026-11-26 wiki audits):**
 
 - **Metronomic "Not X. It is Y." epistemic-cop kickers:** Clipping every paragraph into short SVO punches capped with _"The data support a smaller claim."_, _"It does not prove..."_, or _"Calling X by name labels it. It does not test it."_ Write with varied sentence length and causal subordination (_because_, _while_, _yet_) and trust the reader.
 - **Shadow-boxing invisible chat strawmen:** Arguing against a loose claim from a daily note the reader never saw (e.g., reminding readers of a pension-economics page that _"asset ratios say nothing about the biology of aging"_, or repeating _"the future does not cause the past"_ five times in one article). State a distinction once, cleanly.
 - **Cookie-cutter `## Boundary` / `## Where the claim stops` templates & leaked pipeline notes:** Never bolt a generic disclaimer section onto the end of every article, and never write reader-facing sentences like _"Four examples from the source note are not covered here; they stay as leads"_ or laundry lists of topics _"not treated here."_
-- **"X and colleagues found that…" book-report paragraphs:** Lead with the mechanism, equation, or experimental test; move routine researcher names into `[^footnotes]`.
+- **"X and colleagues found that…" book-report paragraphs:** Lead with the mechanism, equation, or experimental test; move routine researcher names into `[^footnotes]`. (Historical discovery sections—such as Muller 1938 → McClintock 1941 → Blackburn 1978 in `telomeres.md`, or Payen → Pasteur → Buchner in Wikipedia's _Enzyme_—are the earned exception where naming the discoverer carries narrative and priority weight.)
+
+**Encyclopedic FA voice vs. "executive-briefing / essayist" prose (2026-11-26 audit of Wikipedia FAs _Evolution_, _Enzyme_, _Virus_, _Archaea_, _Immune system_, _DNA_ alongside Brinedew `B`-class `petos-paradox.md` and `telomeres.md`):**
+
+Passing stylometric numbers alone does not produce Wikipedia Featured Article voice—an LLM can hit every numerical target while still sounding like a Substack summary or slide deck. Match the actual prose craft of Wikipedia biology FAs and Brinedew's `B`-class pillars:
+
+1. **Continuous explanatory paragraphs, not 2-sentence slogan blocks:** FA body paragraphs run roughly 80–160 words (4–7 sentences), developing one biological idea patiently from setup through concrete mechanism or measurement to qualification. Never cap paragraphs with aphoristic bumper-sticker closers (_"Rigid PAYG hits fiscal deadlock first."_, _"The stagnation applies to mammals."_, _"NDC works as an automatic stabilizer."_, _"Shifting an aging biomarker falls short of extending the survival tail."_). End on the concrete fact or empirical consequence.
+2. **Real prose instead of bold-lead bullet catalogs:** In Wikipedia FAs and Brinedew's `telomeres.md`/`petos-paradox.md`, bullet lists are reserved for explicit `## Terminology` glossaries or formal taxonomic classifications (such as EC enzyme classes 1–7). Do not turn body sections into `- **Catchy label.** Two sentences.` lists; write connected paragraphs.
+3. **Earn structure organically instead of `"N patterns"` + lead-adjacent summary tables:** Avoid opening leads and sections with meta-counting containers (_"Four regimes break..."_, _"Two findings explain..."_, _"Every system relies on one of three designs"_) followed immediately by a comparison table before the prose has explained the subject. Build a 2–3 paragraph lead that defines the subject, states its core mechanism and empirical record, and names the open questions in the field; place comparison tables after the concepts have been introduced (or on dedicated `class: List` pages).
+4. **Calm, ordinary verbs over punchy essayist metaphors:** Wikipedia FAs rely on plain, unhurried English (_is, occurs, rises, falls, remains, depends on, differs, was found_) and patient logical connectors (_however, although, because, while, for example, by contrast_). Reject compressed journalistic/essay verbs (_hits deadlock_, _wipes out_, _empties out_, _flips sign_, _exposes sharp divergence_, _tunes outputs_).
+5. **State the biological question and exact measurement before generalizing:** Rather than disembodied textbook slogans (_"Two genetic tests separate the two arms."_), show the open question, the organism/assay, the measured numbers, and what remains unresolved—the way `telomeres.md` (_"Whether this caused senescence was then open. ... human cells given the TERT gene..."_) and Wikipedia's _DNA_ / _Immune system_ do.
 
 ## current workflow (single vault)
 

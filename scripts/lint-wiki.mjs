@@ -117,10 +117,11 @@ function lintFile(filePath) {
   const findings = []
 
   // Category taxonomy check (every wiki article except index.md must have >= 1 canonical category/... tag)
+  let catTags = []
   if (baseName !== "index.md") {
     const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/)
     const fm = fmMatch ? fmMatch[1] : ""
-    const catTags = [...fm.matchAll(/^\s*-\s*(category\/[^\s#]+)\s*$/gm)].map((m) => m[1].trim())
+    catTags = [...fm.matchAll(/^\s*-\s*(category\/[^\s#]+)\s*$/gm)].map((m) => m[1].trim())
     if (catTags.length === 0) {
       findings.push({
         file: relPath,
@@ -145,7 +146,18 @@ function lintFile(filePath) {
 
   const classMatch = raw.match(/^class:\s*([A-Za-z]+)/m)
   const articleClass = classMatch ? classMatch[1].toUpperCase() : ""
+  const isCOrAbove = ["C", "B", "GA", "A", "FA"].includes(articleClass)
   const isBOrAbove = ["B", "GA", "A", "FA"].includes(articleClass)
+  const isFiction = catTags.includes("category/fiction")
+  const footnoteDefCount = (raw.match(/^\[\^[^\]]+\]:/gm) || []).length
+  if (isCOrAbove && !isFiction && footnoteDefCount < 5) {
+    findings.push({
+      file: relPath,
+      line: 1,
+      rule: "c-class-missing-citations",
+      message: `Article is marked \`class: ${articleClass}\` but has only ${footnoteDefCount} footnote citation(s) (Wiki Assessment requires >= 5 verified \`[^key]\` citations for \`C\` and above; downgrade to \`Start\` or add primary sources).`,
+    })
+  }
 
   // Count lead paragraphs (prose paragraphs between `# Title` and first `##` heading)
   // and high-effort body visuals (excluding References and > [!info]- excerpt callouts)
