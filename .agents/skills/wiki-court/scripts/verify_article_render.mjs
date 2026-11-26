@@ -112,15 +112,24 @@ async function main() {
   const port = server.address().port
   const targetUrl = `http://127.0.0.1:${port}/wiki/${encodeURIComponent(slug)}`
   const browser = await chromium.launch({
-    executablePath: findBrowserExecutable(),
+    channel: "chrome",
+    chromiumSandbox: true,
     headless: true,
-    args: ["--no-sandbox", "--disable-gpu"],
+    args: ["--disable-gpu"],
   })
 
   const consoleErrors = []
   const pageErrors = []
   const failedRequests = []
+  const httpErrors = []
   const screenshots = []
+
+  const unlockDraftCurtain = async (targetPage) => {
+    await targetPage.evaluate(() => {
+      document.body.classList.add("draft-unlocked")
+    })
+    await targetPage.waitForTimeout(150)
+  }
 
   try {
     const ctx = await browser.newContext({
@@ -135,8 +144,16 @@ async function main() {
     page.on("requestfailed", (req) =>
       failedRequests.push(`${req.url()} :: ${req.failure()?.errorText}`),
     )
+    page.on("response", (res) => {
+      if (res.status() >= 400) {
+        httpErrors.push(`${res.status()} ${res.url()}`)
+      }
+    })
 
     await page.goto(targetUrl, { waitUntil: "networkidle" })
+    // `draft: true` is an independent publishing flag, not a quality gate —
+    // unlock `.draft-locked` in headless verification so charts and body render.
+    await unlockDraftCurtain(page)
     await setTheme(page, "light")
 
     const chartFigs = page.locator("figure.vega-figure")
@@ -240,6 +257,7 @@ async function main() {
     })
     const mpage = await mctx.newPage()
     await mpage.goto(targetUrl, { waitUntil: "networkidle" })
+    await unlockDraftCurtain(mpage)
     const mFigs = mpage.locator("figure.vega-figure")
     if ((await mFigs.count()) > 0) {
       await mFigs.first().scrollIntoViewIfNeeded()
@@ -267,6 +285,7 @@ async function main() {
       consoleErrors,
       pageErrors,
       failedRequests,
+      httpErrors,
     }
     fs.writeFileSync(
       path.join(outDir, "render_report.json"),

@@ -5,9 +5,11 @@ Hybrid External-Counsel / Local-Judge architecture:
   self-contained neighborhood & standards digests, headless Quartz render
   preflight, and ready-to-paste external AI Studio prompts for Advocate
   (Trade-Off Defense Counsel) and Alex (Devil's Advocate).
-- Phase 2 (external): run both saved prompts in separate Google AI Studio chats
-  (`https://aistudio.google.com/prompts/new_chat`, Gemini 4 Neon, Extra High thinking,
-  Grounding with Google Search ON, Code Execution ON) and save their verbatim outputs to:
+- Phase 2 (external, deterministic Playwright): run both saved prompts in parallel
+  across two isolated Google AI Studio tabs via `run_aistudio_court.mjs`
+  (`https://aistudio.google.com/prompts/new_chat`, Gemini 4 Neon, Extra High thinking
+  with per-tab High fallback on timeout, Code Execution ON, Grounding with Google
+  Search ON, URL Context ON), saving verbatim Markdown outputs to:
     - `.quartz-cache/wiki-court/<slug>/advocate_brief.md`
     - `.quartz-cache/wiki-court/<slug>/alex_review.md`
 - Phase 3 (`mode="judge"`): verifies both external briefs exist and runs the
@@ -306,7 +308,8 @@ def build_standards_digest(target_class: str) -> str:
             "- **Voice & Craft (Wikipedia Featured Article standard):** Calm, concrete, authoritative third-person encyclopedic prose. Standalone 2–4 paragraph lead previewing every major section. Open body with historical/observational grounding before abstract models. Flowing 4–7 sentence paragraphs with natural burstiness; NO CYA semicolon-packed academese, NO inline `Author (Year)` clutter (keep bibliographic tags in footnotes unless priority/attribution is conceptual), NO blog-essay first-person or rhetorical Q&A headers, NO bold-lead executive bullet catalogs, NO mid-body `**bold buzzwords**`, NO didactic `therefore/thus` wrap-up morals, and NO meta-scaffolding (`Editorial synthesis`, `Wiki adjudication:`).",
             "- **Dual-audience clarity:** Teach both field biologists and intelligent quantitative non-biologists cleanly—build the conceptual puzzle before dropping wet-lab jargon, and motivate mathematical formulas from why simpler intuition fails.",
             "- **Level-indexed longevity terminology:** Never hide distinct biological levels under vague umbrella words (`aging`, `senescence`, `damage`, `immortality`, `rejuvenation`). Index the exact level (mortality hazard creep, frailty, somatic mutation load, replicative cell-cycle arrest, clonal selection) and watch for Level-2 (cell) vs. Level-3 (organism) fitness sign flips.",
-            "- **Graph factoring & scope discipline:** Each experiment, model, or table belongs in detail on ONE canonical page; summarize and delegate covered subtopics via `[[wikilinks]]` / `*Main article:*` rather than cloning sibling pages. Earned hatnotes only (never defensive top disclaimers against unrelated topics, never `*Main article:*` pointing at thin stubs).",
+            "- **Graph factoring & scope discipline:** Each experiment, model, or table belongs in detail on ONE canonical page; summarize and delegate covered subtopics via `[[wikilinks]]` / `*Main article:*` rather than cloning sibling pages. Earned hatnotes only (never defensive top disclaimers against unrelated topics, never `*Main article:*` pointing at thin stubs). **Neighbor article sizes are editable architectural choices, not constants of physics:** if a subtopic canonically belongs on a neighbor page that happens to be a stub today, keep this page concise and expand the neighbor rather than dumping off-scope material here.",
+            "- **Draft status is independent of quality:** `draft: true/false` in YAML frontmatter is a separate publishing/visibility switch and has NOTHING to do with article quality or `GA`/`A`/`FA` eligibility. Never penalize or flag `draft: true`.",
             "- **Source-Quality & Forensic Audit (Bik / Sholto David / Data Colada bar):** A cropped quote proves only what a paper printed, not that it is true. Actively audit pivotal studies via Google Search + Code Execution for PubPeer threads, Expressions of Concern, retractions, failed multi-site replications (e.g. NIA ITP, Phase II/III RCTs), blot/microscopy duplication, GRIM/GRIMMER/statistical anomalies, p-hacking, and longevity design traps (short-lived controls, mid-life start bias, progeroid extrapolation, promiscuous senescence markers).",
             "- **Honest conflict mapping:** Never smooth over real experimental divergence into `'all studies agree'` OR lazy `'evidence is mixed'` fence-sitting; partition why studies disagree by assay, species, dose, or methodological rigor directly inside the main narrative.",
         ]
@@ -446,10 +449,16 @@ if MODE == "prepare":
         "target_class": TARGET_CLASS,
         "ai_studio": {
             "url": "https://aistudio.google.com/prompts/new_chat",
+            "runner_script": str(
+                WEBSITE_ROOT / ".agents" / "skills" / "wiki-court" / "scripts" / "run_aistudio_court.mjs"
+            ),
             "model": "Gemini 4 Neon",
             "thinking_level": "Extra High",
+            "fallback_thinking_level": "High",
             "google_search": True,
             "code_execution": True,
+            "url_context": True,
+            "parallel": True,
         },
         "advocate_prompt_file": str(advocate_prompt_file),
         "alex_prompt_file": str(alex_prompt_file),
@@ -475,8 +484,9 @@ else:
     if missing:
         raise FileNotFoundError(
             "Cannot convene local Judge before both external Google AI Studio briefs exist and are populated (>= 300 chars). "
-            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', execute both prompts on https://aistudio.google.com/prompts/new_chat "
-            "(Gemini 4 Neon, Extra High thinking, Grounding with Google Search ON, Code Execution ON), save outputs to those paths, then re-run mode='judge'."
+            f"Missing/empty: {', '.join(missing)}. Run mode='prepare', then execute "
+            f"`node ./.agents/skills/wiki-court/scripts/run_aistudio_court.mjs --slug {target['slug']}` "
+            "(parallel AI Studio tabs on https://aistudio.google.com/prompts/new_chat with Gemini 4 Neon, Extra High thinking [High fallback], Code Execution ON, Grounding with Google Search ON, URL Context ON), then re-run mode='judge'."
         )
 
     if manifest_file.exists():

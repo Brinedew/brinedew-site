@@ -8,7 +8,41 @@ import { Argv, BuildCtx } from "../../util/ctx"
 import { unreadableFileError } from "../../util/pluginErrors"
 import { QuartzConfig } from "../../cfg"
 import { visit } from "unist-util-visit"
-import { Element } from "hast"
+import { Element, ElementContent } from "hast"
+
+function collectNodeText(node: ElementContent): string {
+  if (node.type === "text") return node.value
+  if (node.type === "element" && Array.isArray(node.children)) {
+    return node.children.map(collectNodeText).join("")
+  }
+  return ""
+}
+
+function isVegaLiteCodeElement(node: Element): boolean {
+  if (node.tagName !== "code") return false
+  const props = node.properties
+  if (!props) return false
+  if (props.dataLanguage === "vega-lite" || props["data-language"] === "vega-lite") return true
+  const cls: unknown = props.className
+  if (Array.isArray(cls)) return cls.some((c) => String(c) === "language-vega-lite")
+  if (typeof cls === "string") return cls.split(/\s+/).includes("language-vega-lite")
+  return false
+}
+
+function extractVegaDataUrls(value: unknown, add: (raw: string) => void, parentKey?: string) {
+  if (!value || typeof value !== "object") return
+  if (Array.isArray(value)) {
+    for (const item of value) extractVegaDataUrls(item, add, parentKey)
+    return
+  }
+  const obj = value as Record<string, unknown>
+  if (parentKey === "data" && typeof obj.url === "string") {
+    add(obj.url)
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    extractVegaDataUrls(v, add, k)
+  }
+}
 
 function getPageTypeExtensions(ctx: BuildCtx): Set<string> {
   const extensions = new Set<string>()
@@ -71,6 +105,14 @@ function extractAssetReferences(content: ProcessedContent[]): Set<string> {
           : []) {
         const url = String(candidate).trim().split(/\s+/)[0]
         if (url) add(url)
+      }
+      if (isVegaLiteCodeElement(node)) {
+        try {
+          const parsed = JSON.parse(collectNodeText(node))
+          extractVegaDataUrls(parsed, add)
+        } catch {
+          // Malformed Vega-Lite JSON is ignored here; runtime chart mounting reports it
+        }
       }
     })
   }
