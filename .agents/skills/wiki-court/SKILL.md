@@ -14,9 +14,9 @@ Evaluating an article with ad-hoc, hand-authored prompts introduces coordinator 
 
 ## Architecture
 
-1. **External Advocate (Trade-Off & Over-Correction Defense Counsel — Google AI Studio):** NOT a hype man. Proactively hunts the same weak points, simplifications, and omissions that Devil's Advocate will likely attack, uses **Google Search + Code Execution** to separate genuine errors (which it must concede) from deliberate editorial trade-offs, and argues concretely why "fixing" defensible weak points would degrade the article, bloat scope, duplicate a sibling page, or break Wikipedia FA craft.
+1. **External Advocate (Trade-Off Defense Counsel — Google AI Studio):** NOT a hype man. Proactively hunts the same weak points, simplifications, and omissions that Devil's Advocate will likely attack, uses **Google Search + Code Execution** to ground its arguments, and justifies concretely why "fixing" those apparent weak points would degrade the article, bloat scope, duplicate a sibling page, or be an unwise trade-off.
 2. **External Alex (Devil's Advocate — Google AI Studio):** Abrasive first-principles prosecutor armed with live **Google Search** (PubPeer, retractions, replications, Bik/Sholto David forensics, omitted counter-evidence) and **Code Execution** (verifying equations, units, Data Colada / GRIM stats), reviewing section-by-section against Wikipedia Featured Article clarity and level-indexed rigor.
-3. **Internal Local Judge (Local `research` Agent):** The sole role with full local access to `content/wiki/`, `content/Attachments/`, `Wiki Assessment.md`, `CLAUDE.md`, full sibling pages, local OCR/HTML excerpt PNGs, and headless Quartz renders (`desktop`, `dark`, `390px` mobile). Weighs both external AI Studio briefs against local wiki harmony, visual rendering, and tooling compliance to issue the binding `VERDICT: PROMOTE` or `VERDICT: REMAND`.
+3. **Internal Local Judge (Local `research` Agent):** The sole role with full local access to `content/wiki/`, `content/Attachments/`, `Wiki Assessment.md`, `CLAUDE.md`, full sibling pages, local OCR/HTML excerpt PNGs, and headless Quartz renders (`desktop`, `dark`, `390px` mobile). Treats both external briefs skeptically, checks local wiki harmony and renders directly, and uses independent judgment to issue `VERDICT: PROMOTE` or `VERDICT: REMAND`.
 
 ## Procedure
 
