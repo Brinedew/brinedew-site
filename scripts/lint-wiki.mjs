@@ -762,6 +762,24 @@ function collectTargets(args) {
 const targets = collectTargets(process.argv.slice(2))
 const allFindings = targets.flatMap(lintFile)
 
+// Surface open Court remands automatically so editors discover them without relying on memory
+const courtNotes = []
+for (const filePath of targets) {
+  const raw = fs.readFileSync(filePath, "utf8")
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  if (!fmMatch) continue
+  const fm = fmMatch[1]
+  const statusMatch = fm.match(/^court_status:\s*(.+)$/m)
+  if (!statusMatch || statusMatch[1].trim().toLowerCase() !== "remanded") continue
+  const targetMatch = fm.match(/^court_target:\s*(.+)$/m)
+  const dateMatch = fm.match(/^court_date:\s*(.+)$/m)
+  const rulingMatch = fm.match(/^court_ruling:\s*(.+)$/m)
+  const relPath = path.relative(REPO_ROOT, filePath).replaceAll("\\", "/")
+  courtNotes.push(
+    `NOTE [court-remanded] ${relPath}: open ${targetMatch?.[1]?.trim() || "Court"} remand (${dateMatch?.[1]?.trim() || "undated"}) -> read ${rulingMatch?.[1]?.trim() || ".agents/wiki-court-rulings/"}`,
+  )
+}
+
 // Phase 2: Internal spaCy stylometry, Biber syntax, and crash-blossom engine
 const styleRun = spawnSync("python", [STYLE_ENGINE_PATH, ...targets], {
   cwd: REPO_ROOT,
@@ -800,6 +818,10 @@ if (valeRun.error?.code === "ENOENT") {
   process.exit(1)
 }
 const valeFailed = valeRun.status !== null && valeRun.status !== 0
+
+if (courtNotes.length > 0) {
+  for (const note of courtNotes) console.log(note)
+}
 
 if (allFindings.length === 0 && !valeFailed) {
   console.log(`lint-wiki: ${targets.length} file(s) checked, 0 issues found.`)

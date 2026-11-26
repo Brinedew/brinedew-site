@@ -27,6 +27,7 @@ import hashlib
 import json
 import re
 import subprocess
+from datetime import date
 from pathlib import Path
 
 
@@ -302,18 +303,71 @@ def assemble_dossiers(
 
 
 def build_standards_digest(target_class: str) -> str:
-    return "\n".join(
+    is_featured_list = target_class.upper() == "FL"
+    lines = [
+        f"- **Target tier:** `class: {target_class}` (Court-gated promotion; promotes ONLY if the page makes the whole wiki stronger).",
+    ]
+    if is_featured_list:
+        lines.append(
+            "- **Featured List (`FL`) format & craft:** This is a **structured reference artifact** (glossary, taxonomy, spectrum, conversion table, or cheatsheet)—NOT a narrative essay. A scannable primary layout (tables, structured lists, concise thought experiments, explicit classification/inclusion criteria) is EXPECTED and PREFERRED over padded prose. Judge rigorously on conceptual airtightness, crystal-clear criteria, primary-source verification on every entry, edge-case robustness, and zero internal contradictions—especially when other wiki pages and Court Judges rely on it as a canonical baseline."
+        )
+    else:
+        lines.append(
+            "- **Voice & Craft (Wikipedia Featured Article standard):** Calm, concrete, authoritative third-person encyclopedic prose. Standalone 2–4 paragraph lead previewing every major section. Open body with historical/observational grounding before abstract models. Flowing 4–7 sentence paragraphs with natural burstiness; NO CYA semicolon-packed academese, NO inline `Author (Year)` clutter (keep bibliographic tags in footnotes unless priority/attribution is conceptual), NO blog-essay first-person or rhetorical Q&A headers, NO bold-lead executive bullet catalogs, NO mid-body `**bold buzzwords**`, NO didactic `therefore/thus` wrap-up morals, and NO meta-scaffolding (`Editorial synthesis`, `Wiki adjudication:`)."
+        )
+    lines.extend(
         [
-            f"- **Target tier:** `class: {target_class}` (Court-gated promotion above `B`; promotes ONLY if the page makes the whole wiki stronger).",
-            "- **Voice & Craft (Wikipedia Featured Article standard):** Calm, concrete, authoritative third-person encyclopedic prose. Standalone 2–4 paragraph lead previewing every major section. Open body with historical/observational grounding before abstract models. Flowing 4–7 sentence paragraphs with natural burstiness; NO CYA semicolon-packed academese, NO inline `Author (Year)` clutter (keep bibliographic tags in footnotes unless priority/attribution is conceptual), NO blog-essay first-person or rhetorical Q&A headers, NO bold-lead executive bullet catalogs, NO mid-body `**bold buzzwords**`, NO didactic `therefore/thus` wrap-up morals, and NO meta-scaffolding (`Editorial synthesis`, `Wiki adjudication:`).",
             "- **Dual-audience clarity:** Teach both field biologists and intelligent quantitative non-biologists cleanly—build the conceptual puzzle before dropping wet-lab jargon, and motivate mathematical formulas from why simpler intuition fails.",
             "- **Level-indexed longevity terminology:** Never hide distinct biological levels under vague umbrella words (`aging`, `senescence`, `damage`, `immortality`, `rejuvenation`). Index the exact level (mortality hazard creep, frailty, somatic mutation load, replicative cell-cycle arrest, clonal selection) and watch for Level-2 (cell) vs. Level-3 (organism) fitness sign flips.",
             "- **Graph factoring & scope discipline:** Each experiment, model, or table belongs in detail on ONE canonical page; summarize and delegate covered subtopics via `[[wikilinks]]` / `*Main article:*` rather than cloning sibling pages. Earned hatnotes only (never defensive top disclaimers against unrelated topics, never `*Main article:*` pointing at thin stubs). **Neighbor article sizes are editable architectural choices, not constants of physics:** if a subtopic canonically belongs on a neighbor page that happens to be a stub today, keep this page concise and expand the neighbor rather than dumping off-scope material here.",
-            "- **Draft status is independent of quality:** `draft: true/false` in YAML frontmatter is a separate publishing/visibility switch and has NOTHING to do with article quality or `GA`/`A`/`FA` eligibility. Never penalize or flag `draft: true`.",
+            "- **Draft status is independent of quality:** `draft: true/false` in YAML frontmatter is a separate publishing/visibility switch and has NOTHING to do with article quality or `GA`/`A`/`FA`/`FL` eligibility. Never penalize or flag `draft: true`.",
             "- **Source-Quality & Forensic Audit (Bik / Sholto David / Data Colada bar):** A cropped quote proves only what a paper printed, not that it is true. Actively audit pivotal studies via Google Search + Code Execution for PubPeer threads, Expressions of Concern, retractions, failed multi-site replications (e.g. NIA ITP, Phase II/III RCTs), blot/microscopy duplication, GRIM/GRIMMER/statistical anomalies, p-hacking, and longevity design traps (short-lived controls, mid-life start bias, progeroid extrapolation, promiscuous senescence markers).",
             "- **Honest conflict mapping:** Never smooth over real experimental divergence into `'all studies agree'` OR lazy `'evidence is mixed'` fence-sitting; partition why studies disagree by assay, species, dose, or methodological rigor directly inside the main narrative.",
         ]
     )
+    return "\n".join(lines)
+
+
+def find_prior_rulings(website_root: Path, slug: str) -> list[Path]:
+    rulings_dir = website_root / ".agents" / "wiki-court-rulings" / slug
+    if not rulings_dir.is_dir():
+        return []
+    return sorted(rulings_dir.glob("*.md"))
+
+
+def update_article_court_frontmatter(
+    article_path: Path,
+    *,
+    status: str,
+    target_class: str,
+    ruling_date: str,
+    ruling_rel_path: str,
+) -> None:
+    raw = article_path.read_text(encoding="utf-8")
+    newline = "\r\n" if "\r\n" in raw else "\n"
+    match = re.match(r"^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)", raw)
+    if not match:
+        return
+    fm_lines = [
+        line
+        for line in match.group(1).splitlines()
+        if not re.match(r"^court_(?:status|target|date|ruling)\s*:", line)
+    ]
+    fm_lines.extend(
+        [
+            f"court_status: {status}",
+            f"court_target: {target_class}",
+            f"court_date: {ruling_date}",
+            f"court_ruling: {ruling_rel_path}",
+        ]
+    )
+    updated = (
+        f"---{newline}"
+        + newline.join(fm_lines)
+        + f"{newline}---{match.group(2)}"
+        + raw[match.end() :]
+    )
+    article_path.write_text(updated, encoding="utf-8")
 
 
 async def run_render_preflight(slug: str, website_root: Path) -> tuple[str, Path]:
@@ -396,6 +450,15 @@ REF_DIR = WEBSITE_ROOT / ".agents" / "skills" / "wiki-court" / "references"
 records = build_wiki_index(WIKI_DIR)
 target = resolve_article(records, ARTICLE_QUERY)
 local_dossier, external_digest = assemble_dossiers(target, records, WEBSITE_ROOT)
+prior_rulings = find_prior_rulings(WEBSITE_ROOT, target["slug"])
+if prior_rulings:
+    prior_lines = "\n".join(
+        f"- `{p.relative_to(WEBSITE_ROOT).as_posix()}`" for p in prior_rulings[-5:]
+    )
+    local_dossier += (
+        f"\n- **Prior Court Rulings on Record ({len(prior_rulings)} total — inspect latest to verify prior remand orders!):**\n"
+        + prior_lines
+    )
 standards_digest = build_standards_digest(TARGET_CLASS)
 render_summary, cache_dir = await run_render_preflight(target["slug"], WEBSITE_ROOT)
 article_sha256 = hashlib.sha256(target["raw"].encode("utf-8")).hexdigest()
@@ -517,7 +580,32 @@ else:
     judge_ruling_file.write_text(ruling_text, encoding="utf-8")
     verdict_match = re.findall(r"^VERDICT:\s*(PROMOTE|REMAND)\b", ruling_text, re.MULTILINE)
     final_verdict = verdict_match[-1] if verdict_match else "UNKNOWN"
-    log(f"Judge verdict for {target['title']} -> {TARGET_CLASS}: {final_verdict}")
+
+    # Persist git-tracked ruling record and stamp article frontmatter so future
+    # agents automatically discover open remands or past rulings without memory.
+    ruling_date = date.today().isoformat()
+    verdict_slug = final_verdict.lower()
+    permanent_dir = WEBSITE_ROOT / ".agents" / "wiki-court-rulings" / target["slug"]
+    permanent_dir.mkdir(parents=True, exist_ok=True)
+    permanent_ruling_file = permanent_dir / f"{ruling_date}-{TARGET_CLASS}-{verdict_slug}.md"
+    permanent_ruling_file.write_text(ruling_text, encoding="utf-8")
+    ruling_rel_path = permanent_ruling_file.relative_to(WEBSITE_ROOT).as_posix()
+    court_status = (
+        "promoted"
+        if final_verdict == "PROMOTE"
+        else ("remanded" if final_verdict == "REMAND" else "unknown")
+    )
+    update_article_court_frontmatter(
+        target["path"],
+        status=court_status,
+        target_class=TARGET_CLASS,
+        ruling_date=ruling_date,
+        ruling_rel_path=ruling_rel_path,
+    )
+    log(
+        f"Judge verdict for {target['title']} -> {TARGET_CLASS}: {final_verdict} "
+        f"(archived to {ruling_rel_path} and stamped into frontmatter)"
+    )
 
     print(
         json.dumps(
@@ -527,6 +615,9 @@ else:
                 "article_path": str(target["path"]),
                 "target_class": TARGET_CLASS,
                 "verdict": final_verdict,
+                "court_status": court_status,
+                "permanent_ruling_file": str(permanent_ruling_file),
+                "court_ruling_rel": ruling_rel_path,
                 "artifacts_dir": str(cache_dir),
                 "judge_ruling_file": str(judge_ruling_file),
                 "alex_review_file": str(alex_review_file),

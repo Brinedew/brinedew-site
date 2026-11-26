@@ -25,7 +25,7 @@ Evaluating an article with ad-hoc, hand-authored prompts introduces coordinator 
 1. Ensure the latest Quartz static build exists (`node ./quartz/bootstrap-cli.mjs build -d content` inside `D:\Coding\Website`) if prose, formulas, or Vega-Lite charts changed.
 2. Call `run_workflow` with:
    - `ScriptPath`: `D:\Coding\Website\.agents\skills\wiki-court\scripts\run_court.py`
-   - `Args`: `{"article": "<Article Name>", "mode": "prepare"}` (optional: `"target_class": "GA" | "A" | "FA"`, default `"GA"`)
+   - `Args`: `{"article": "<Article Name>", "mode": "prepare"}` (optional: `"target_class": "GA" | "A" | "FA" | "FL"`, default `"GA"`; use `"FL"` for `class: List` reference artifacts)
    - `Cwd`: `D:\Coding\Website`
    - `Description`: `Prepare Wiki Court dossier for <Article Name>`
 3. Never inject per-article hints or author framing. The script deterministically builds the render preflight and writes self-contained external prompt packets (inlining the article Markdown, a compact standards & forensics digest, and a neighborhood digest of outbound/inbound/unlinked wiki pages):
@@ -61,6 +61,7 @@ What `run_aistudio_court.mjs` handles deterministically:
    - `Args`: `{"article": "<Article Name>", "mode": "judge"}` (matching `"target_class"`)
    - `Cwd`: `D:\Coding\Website`
    - `Description`: `Convene local Wiki Court Judge for <Article Name>`
-2. Read `.quartz-cache/wiki-court/<slug>/judge_ruling.md` and act strictly on the binary verdict:
+2. `mode="judge"` automatically archives the full ruling to `.agents/wiki-court-rulings/<slug>/<YYYY-MM-DD>-<TARGET_CLASS>-<verdict>.md` (git-tracked) AND stamps `court_status`, `court_target`, `court_date`, and `court_ruling` directly into the article's YAML frontmatter so future editors, `pnpm run lint:wiki`, and subsequent Court sessions discover past rulings automatically without relying on memory.
+3. Read `.agents/wiki-court-rulings/<slug>/<YYYY-MM-DD>-<TARGET_CLASS>-<verdict>.md` (also copied to `.quartz-cache/wiki-court/<slug>/judge_ruling.md`) and act strictly on the binary verdict:
    - `VERDICT: REMAND`: fix every sustained defect without bloating overruled trade-offs (and expand stub neighbors separately where the Judge rules material canonically belongs there), rebuild Quartz, and repeat Phases 1–3 until promoted.
    - `VERDICT: PROMOTE`: update `class:` in frontmatter to `target_class` (leaving `draft:` untouched unless the user explicitly asks to publish/unpublish), then run a final Quartz build, `pnpm run lint:wiki`, `pnpm run check`, and `pnpm run test`.
