@@ -149,13 +149,43 @@ function lintFile(filePath) {
   const isCOrAbove = ["C", "B", "GA", "A", "FA"].includes(articleClass)
   const isBOrAbove = ["B", "GA", "A", "FA"].includes(articleClass)
   const isFiction = catTags.includes("category/fiction")
-  const footnoteDefCount = (raw.match(/^\[\^[^\]]+\]:/gm) || []).length
-  if (isCOrAbove && !isFiction && footnoteDefCount < 5) {
+  // Count distinct cited sources (deduplicating passage-specific footnotes from the same paper,
+  // e.g. `[^harrison1987-record]` and `[^harrison1987-b6]` sharing a DOI or base `authorYYYY` key).
+  const footnoteDefLines = [...raw.matchAll(/^(\[\^([^\]]+)\]:.*)$/gm)]
+  const distinctSources = new Set()
+  for (const [, fullLine, rawKey] of footnoteDefLines) {
+    const doiMatch = fullLine.match(/\b(10\.\d{4,9}\/[^\s)\]>]+)/i)
+    if (doiMatch) {
+      distinctSources.add("doi:" + doiMatch[1].toLowerCase().replace(/[.,;)\]]+$/, ""))
+      continue
+    }
+    const pmidMatch = fullLine.match(/\bPMID\s*:?\s*(\d+)/i)
+    if (pmidMatch) {
+      distinctSources.add("pmid:" + pmidMatch[1])
+      continue
+    }
+    const baseKey = rawKey
+      .toLowerCase()
+      .replace(/^([a-z0-9_]+?(?:1[6-9]\d\d|20\d\d)[a-z]?)[-_].+$/, "$1")
+    distinctSources.add("key:" + baseKey)
+  }
+  const distinctSourceCount = distinctSources.size
+  if (isCOrAbove && !isFiction && distinctSourceCount < 5) {
     findings.push({
       file: relPath,
       line: 1,
       rule: "c-class-missing-citations",
-      message: `Article is marked \`class: ${articleClass}\` but has only ${footnoteDefCount} footnote citation(s) (Wiki Assessment requires >= 5 verified \`[^key]\` citations for \`C\` and above; downgrade to \`Start\` or add primary sources).`,
+      message: `Article is marked \`class: ${articleClass}\` but cites only ${distinctSourceCount} distinct source(s) (${footnoteDefLines.length} footnote definition(s); Wiki Assessment requires >= 5 distinct verified \`[^key]\` sources for \`C\` and above; downgrade to \`Start\` or add primary sources).`,
+    })
+  }
+  if (footnoteDefLines.length > 0 && !/^##\s+References\b/im.test(raw)) {
+    const firstFnLine = lines.findIndex((l) => /^\[\^[^\]]+\]:/.test(l)) + 1
+    findings.push({
+      file: relPath,
+      line: firstFnLine || 1,
+      rule: "missing-references-heading",
+      message:
+        "Article contains footnote definitions (`[^key]:`) without a `## References` heading above them, which merges footnotes into the preceding section and exposes bibliography titles to body-prose linting.",
     })
   }
 
