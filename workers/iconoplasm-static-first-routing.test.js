@@ -129,7 +129,8 @@ test("the deterministic asset bundle is complete, secure, and within Free-plan l
   const sitemap = readFileSync(path.join(target, "sitemap.xml"), "utf8")
   const redirects = readFileSync(path.join(target, "_redirects"), "utf8")
 
-  assert.ok(report.fileCount < 26)
+  // Includes the root IndexNow key file (<key>.txt) alongside the 25 baseline bundle files.
+  assert.ok(report.fileCount < 27)
   assert.match(home, /id="iconoplasm-root"/)
   assert.match(home, /href="\/privacy"/)
   assert.match(home, /href="\/license"/)
