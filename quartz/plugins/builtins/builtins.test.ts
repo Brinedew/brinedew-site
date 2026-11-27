@@ -22,6 +22,8 @@ import {
   applyContentIndexExtensions,
   buildContentIndex,
   contentIndexOptions,
+  generateSiteMap,
+  isCanonicalSiteMapSlug,
   prepareContentIndex,
   serializeContentIndex,
 } from "./contentIndex"
@@ -596,6 +598,59 @@ describe("ctx.contentIndex", () => {
     } finally {
       await fs.rm(out, { recursive: true, force: true })
     }
+  })
+
+  test("generateSiteMap emits only high-signal editorial pages and drops vault/app noise", () => {
+    assert.strictEqual(isCanonicalSiteMapSlug("" as never), true)
+    assert.strictEqual(isCanonicalSiteMapSlug("/" as never), true)
+    assert.strictEqual(isCanonicalSiteMapSlug("about" as never), true)
+    assert.strictEqual(isCanonicalSiteMapSlug("posts/iconoplasm-faq" as never), true)
+    assert.strictEqual(isCanonicalSiteMapSlug("wiki/tp53" as never), true)
+    assert.strictEqual(isCanonicalSiteMapSlug("tags/draft" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("tags/2-10" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("attachments/drawing.excalidraw" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("settings/" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("apps/" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("apps/iconoplasm" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("apps/iconoplasm/docs/faq" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("apps/geneguessr/" as never), false)
+    assert.strictEqual(isCanonicalSiteMapSlug("apps/geneguessr/privacy" as never), false)
+
+    const mk = (slug: string, filePath: string, title: string): [FullSlug, ContentDetails] => [
+      slug as FullSlug,
+      {
+        slug: slug as FullSlug,
+        filePath: filePath as never,
+        title,
+        links: [],
+        tags: [],
+        content: "",
+        date: new Date("2026-01-01T00:00:00Z"),
+      },
+    ]
+
+    const idx = new Map<FullSlug, ContentDetails>([
+      mk("index", "index.md", "Home"),
+      mk("about", "About.md", "About"),
+      mk("posts/note", "posts/note.md", "Note"),
+      mk("wiki/tp53", "wiki/tp53.md", "TP53"),
+      mk("tags/draft", "tags/draft.md", "draft"),
+      mk("tags/2-10", "tags/2-10.md", "2-10"),
+      mk("attachments/drawing.excalidraw", "Attachments/drawing.excalidraw", "Drawing"),
+      mk("settings/index", "settings/index.md", "Settings"),
+      mk("apps/index", "apps/index.md", "Apps"),
+      mk("apps/geneguessr/index", "apps/geneguessr/index.md", "GeneGuessr"),
+      mk("apps/iconoplasm/docs/faq", "apps/iconoplasm/docs/faq.md", "FAQ"),
+    ])
+    const xml = generateSiteMap({ baseUrl: "brinedew.bio" } as never, idx)
+    assert.match(xml, /https:\/\/brinedew\.bio\//)
+    assert.match(xml, /https:\/\/brinedew\.bio\/about/)
+    assert.match(xml, /https:\/\/brinedew\.bio\/posts\/note/)
+    assert.match(xml, /https:\/\/brinedew\.bio\/wiki\/tp53/)
+    assert.doesNotMatch(xml, /tags\//)
+    assert.doesNotMatch(xml, /attachments\//)
+    assert.doesNotMatch(xml, /settings\//)
+    assert.doesNotMatch(xml, /apps\//)
   })
 })
 

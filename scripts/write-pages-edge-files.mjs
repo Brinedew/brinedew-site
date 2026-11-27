@@ -17,6 +17,9 @@ import {
   PUBLIC_SECURITY_HEADERS,
   publicContentSecurityPolicy,
 } from "../workers/lib/the-only-public-document-policy-do-not-duplicate.js"
+import { INDEXNOW_KEY, INDEXNOW_KEY_FILENAME } from "./lib/indexnow.mjs"
+
+export { INDEXNOW_KEY, INDEXNOW_KEY_FILENAME }
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 
@@ -156,6 +159,10 @@ export function pagesRobotsFile() {
   )
 }
 
+export function pagesIndexNowKeyFile() {
+  return `${INDEXNOW_KEY}\n`
+}
+
 async function vendorMolstar(publicRoot) {
   for (const entry of MOLSTAR_VENDOR_FILES) {
     const target = path.join(publicRoot, molstarVendorPath(entry.version, entry.file))
@@ -185,12 +192,13 @@ export async function writePagesEdgeFiles({ publicRoot = path.join(root, "public
   await writeFile(path.join(publicRoot, "_headers"), pagesHeadersFile(), "utf8")
   await writeFile(path.join(publicRoot, "_redirects"), pagesRedirectsFile(), "utf8")
   await writeFile(path.join(publicRoot, "robots.txt"), pagesRobotsFile(), "utf8")
+  await writeFile(path.join(publicRoot, INDEXNOW_KEY_FILENAME), pagesIndexNowKeyFile(), "utf8")
   await vendorMolstar(publicRoot)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await writePagesEdgeFiles()
   console.log(
-    "Wrote public/_headers, public/_redirects, public/robots.txt and pinned Mol* vendor files",
+    `Wrote public/_headers, public/_redirects, public/robots.txt, public/${INDEXNOW_KEY_FILENAME} and pinned Mol* vendor files`,
   )
 }

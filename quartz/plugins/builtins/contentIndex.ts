@@ -191,13 +191,29 @@ async function write(ctx: BuildCtx, slug: string, ext: string, content: string):
   return pathToPage
 }
 
-function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
+/**
+ * Only emit high-signal editorial pages in brinedew.bio's sitemap.xml
+ * (/, /about, /posts/*, /wiki/*), omitting Obsidian tag/attachment/settings
+ * noise and redirected app paths while keeping contentIndex.json intact.
+ */
+export function isCanonicalSiteMapSlug(slug: SimpleSlug): boolean {
+  const normalized = slug.replace(/^\/+|\/+$/g, "")
+  return (
+    normalized === "" ||
+    normalized === "about" ||
+    normalized.startsWith("posts/") ||
+    normalized.startsWith("wiki/")
+  )
+}
+
+export function generateSiteMap(cfg: GlobalConfiguration, idx: ContentIndexMap): string {
   const base = cfg.baseUrl ?? ""
   const createURLEntry = (slug: SimpleSlug, content: ContentDetails): string => `<url>
     <loc>https://${joinSegments(base, encodeURI(slug))}</loc>
     ${content.date && `<lastmod>${content.date.toISOString()}</lastmod>`}
   </url>`
   const urls = Array.from(idx)
+    .filter(([slug]) => isCanonicalSiteMapSlug(simplifySlug(slug)))
     .map(([slug, content]) => createURLEntry(simplifySlug(slug), content))
     .join("")
   return `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls}</urlset>`

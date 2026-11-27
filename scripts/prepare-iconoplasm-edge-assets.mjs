@@ -15,6 +15,7 @@ import {
   iconoplasmGenePageTitle,
   iconoplasmPageTitle,
 } from "../quartz/static/iconoplasm/page-title.js"
+import { INDEXNOW_KEY, INDEXNOW_KEY_FILENAME } from "./lib/indexnow.mjs"
 
 // ARCHITECTURE FENCE [IPD-007]: this bundle is the static half of the
 // Iconoplasm failure boundary. Keep its security headers and platform-limit
@@ -815,6 +816,12 @@ export async function prepareIconoplasmEdgeAssets({
   await writeFile(path.join(resolvedOutput, "_headers"), headersFile, "utf8")
   await writeFile(path.join(resolvedOutput, "robots.txt"), iconoplasmRobots, "utf8")
   await writeFile(path.join(resolvedOutput, "llms.txt"), iconoplasmLlms, "utf8")
+  await writeFile(path.join(resolvedOutput, INDEXNOW_KEY_FILENAME), `${INDEXNOW_KEY}\n`, "utf8")
+  await writeFile(
+    path.join(resolvedOutput, "BingSiteAuth.xml"),
+    `<?xml version="1.0"?>\n<users>\n\t<user>38B585DFB3AB9D4F912BDE56B9324940</user>\n</users>\n`,
+    "utf8",
+  )
   await writeIconoplasmCompatibilityArtifacts({
     outputRoot: resolvedOutput,
     publishedGenes,

@@ -2,7 +2,14 @@ import assert from "node:assert/strict"
 
 import test from "node:test"
 
-import { pagesHeadersFile, pagesRedirectsFile, pagesRobotsFile } from "./write-pages-edge-files.mjs"
+import {
+  INDEXNOW_KEY,
+  INDEXNOW_KEY_FILENAME,
+  pagesHeadersFile,
+  pagesIndexNowKeyFile,
+  pagesRedirectsFile,
+  pagesRobotsFile,
+} from "./write-pages-edge-files.mjs"
 
 // B-834: brinedew.bio and geneguessr.brinedew.bio documents and assets are
 // served by Pages directly. These files replace what the edge Worker did on
@@ -42,4 +49,10 @@ test("robots.txt allows root, disallows /api/, blocks SEO scrapers, and points t
   assert.match(robots, /^User-agent: \*\nAllow: \/\nDisallow: \/api\//m)
   assert.match(robots, /^User-agent: AhrefsBot\nDisallow: \//m)
   assert.match(robots, /^Sitemap: https:\/\/brinedew\.bio\/sitemap\.xml$/m)
+})
+
+test("IndexNow key file matches a 32-hex key and its filename", () => {
+  assert.match(INDEXNOW_KEY, /^[0-9a-f]{32}$/)
+  assert.equal(INDEXNOW_KEY_FILENAME, `${INDEXNOW_KEY}.txt`)
+  assert.equal(pagesIndexNowKeyFile(), `${INDEXNOW_KEY}\n`)
 })
